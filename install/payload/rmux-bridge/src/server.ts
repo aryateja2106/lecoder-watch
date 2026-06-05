@@ -2,7 +2,13 @@ import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-type WsData = { session: string };
+type WsData = { session: string; pane?: string };
+
+// What to attach/stream/send to: a specific pane id (e.g. "%2") if given,
+// else the whole session. tmux/rmux accept a pane id directly as a -t target.
+function wsTarget(data: WsData): string {
+  return data.pane && data.pane.length > 0 ? data.pane : data.session;
+}
 
 type InputMessage = { type: "input"; data: string };
 type ResizeMessage = { type: "resize"; cols: number; rows: number };
@@ -228,26 +234,27 @@ async function teardownSession(session: string): Promise<void> {
 
 async function handleOpen(ws: ServerWebSocket<WsData>): Promise<void> {
   const session = ws.data.session;
+  const target = wsTarget(ws.data);
   const exists = await runRmux(["has-session", "-t", session]);
   if (exists.code !== 0) {
     ws.close(1008, "no such session");
     return;
   }
-  const snapshot = await runRmux(["capture-pane", "-p", "-e", "-t", session]);
+  const snapshot = await runRmux(["capture-pane", "-p", "-e", "-t", target]);
   if (snapshot.code !== 0) {
     ws.close(1011, "snapshot failed");
     return;
   }
   ws.send(snapshot.stdout);
   try {
-    await ensureSession(session);
+    await ensureSession(target);
   } catch (error) {
     console.error(error);
     ws.close(1011, "attach failed");
     return;
   }
-  ws.subscribe(session);
-  getRuntime(session).clients.add(ws);
+  ws.subscribe(target);
+  getRuntime(target).clients.add(ws);
 }
 
 async function handleMessage(
@@ -259,24 +266,26 @@ async function handleMessage(
     return;
   }
   const session = ws.data.session;
+  const target = wsTarget(ws.data);
   if (parsed.type === "input") {
     const hexBytes = toHexBytes(parsed.data);
     if (hexBytes.length === 0) {
       return;
     }
-    await runRmux(["send-keys", "-t", session, "-H", "--", ...hexBytes]);
+    await runRmux(["send-keys", "-t", target, "-H", "--", ...hexBytes]);
     return;
   }
   if (parsed.type === "resize") {
+    // Resize the window (panes share the window geometry).
     await runRmux(["resize-window", "-t", session, "-x", String(parsed.cols), "-y", String(parsed.rows)]);
     return;
   }
   if (parsed.type === "split") {
     const flag = parsed.dir === "h" ? "-h" : "-v";
-    await runRmux(["split-window", flag, "-t", session]);
+    await runRmux(["split-window", flag, "-t", target]);
     return;
   }
-  await runRmux(["split-window", "-t", session]);
+  await runRmux(["split-window", "-t", target]);
 }
 
 function serveStatic(file: Bun.BunFile, contentType: string): Response {
@@ -310,8 +319,9 @@ server = Bun.serve<WsData>({
     }
     if (url.pathname === "/attach") {
       const session = url.searchParams.get("session") || "spine-test";
+      const pane = url.searchParams.get("pane") || undefined;
       const upgraded = server.upgrade(req, {
-        data: { session },
+        data: { session, pane },
       });
       return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
     }
@@ -325,15 +335,15 @@ server = Bun.serve<WsData>({
       void handleMessage(ws, message);
     },
     close(ws) {
-      const session = ws.data.session;
-      ws.unsubscribe(session);
-      const runtime = sessions.get(session);
+      const target = wsTarget(ws.data);
+      ws.unsubscribe(target);
+      const runtime = sessions.get(target);
       if (!runtime) {
         return;
       }
       runtime.clients.delete(ws);
       if (runtime.clients.size === 0) {
-        void teardownSession(session);
+        void teardownSession(target);
       }
     },
   },

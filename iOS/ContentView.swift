@@ -29,7 +29,7 @@ private struct MachinesTab: View {
                             StatRow(label: "Memory", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.mem.usedMB/1024, s.mem.totalMB/1024, s.mem.pct))
                             StatRow(label: "Disk", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.disk.usedGB, s.disk.totalGB, s.disk.pct))
                             StatRow(label: "Load", value: s.load.map { String(format: "%.2f", $0) }.joined(separator: " "))
-                            StatRow(label: "Agents", value: "\(s.agentsCount)")
+                            StatRow(label: "Sessions", value: "\(s.agentsCount)")
                         } else {
                             Text("unreachable").foregroundStyle(.secondary)
                         }

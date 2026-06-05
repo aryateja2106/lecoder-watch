@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
     <title>rmux bridge</title>
     <link rel="stylesheet" href="/xterm/xterm.css" />
     <style>
@@ -26,7 +26,10 @@
       body {
         margin: 0;
         min-width: 190px;
-        min-height: 100%;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
         background:
           radial-gradient(circle at top, rgba(102, 217, 239, 0.16), transparent 32%),
           linear-gradient(180deg, #10151d 0%, #0b0f15 100%);
@@ -40,10 +43,16 @@
       }
 
       body {
-        display: flex;
-        flex-direction: column;
+        --page-pad: 10px;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
         gap: 10px;
-        padding: 10px;
+        height: 100vh;
+        height: 100dvh;
+        padding-top: calc(var(--page-pad) + env(safe-area-inset-top));
+        padding-right: calc(var(--page-pad) + env(safe-area-inset-right));
+        padding-bottom: calc(var(--page-pad) + env(safe-area-inset-bottom));
+        padding-left: calc(var(--page-pad) + env(safe-area-inset-left));
       }
 
       .toolbar {
@@ -51,6 +60,7 @@
         flex-wrap: wrap;
         gap: 8px;
         align-items: center;
+        min-width: 0;
       }
 
       .group {
@@ -101,34 +111,42 @@
       }
 
       #terminal {
-        flex: 1;
-        min-height: calc(100vh - 136px);
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        width: 100%;
+        height: 100%;
         border: 1px solid var(--border);
         border-radius: 14px;
         overflow: hidden;
         background: rgba(11, 15, 21, 0.84);
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+        touch-action: pan-y;
       }
 
-      .xterm,
-      .xterm-viewport {
+      #terminal .xterm {
         height: 100%;
+        width: 100%;
       }
 
-      .xterm-viewport {
-        overflow: auto !important;
+      #terminal .xterm-viewport {
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        max-width: 100%;
         -webkit-overflow-scrolling: touch;
-        touch-action: pan-x pan-y;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
       }
 
-      .xterm .xterm-screen,
-      .xterm .xterm-helpers {
-        touch-action: pan-x pan-y;
+      #terminal .xterm-screen,
+      #terminal .xterm-helpers {
+        touch-action: pan-y;
       }
 
       @media (max-width: 520px) {
         body {
-          padding: 8px;
+          --page-pad: 8px;
+          gap: 8px;
         }
 
         .group {
@@ -139,9 +157,6 @@
           flex: 1 0 auto;
         }
 
-        #terminal {
-          min-height: calc(100vh - 180px);
-        }
       }
     </style>
   </head>
@@ -174,10 +189,13 @@
       const params = new URLSearchParams(location.search);
       const session = params.get("session") || "spine-test";
       const statusEl = document.getElementById("status");
+      const terminalEl = document.getElementById("terminal");
+      const textDecoder = new TextDecoder();
       const term = new window.Terminal({
         cursorBlink: true,
         scrollback: 10000,
         allowTransparency: true,
+        fontSize: 12,
         fontFamily:
           'ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
         theme: {
@@ -188,8 +206,7 @@
       });
       const fitAddon = new window.FitAddon.FitAddon();
       term.loadAddon(fitAddon);
-      term.open(document.getElementById("terminal"));
-      fitAddon.fit();
+      term.open(terminalEl);
 
       const ws = new WebSocket(`ws://${location.host}/attach?session=${encodeURIComponent(session)}`);
       ws.binaryType = "arraybuffer";
@@ -244,6 +261,35 @@
         }
       }
 
+      let fitTimer = 0;
+      let fitFrame = 0;
+      let firstSocketMessageHandled = false;
+
+      function runFit() {
+        fitFrame = 0;
+        fitAddon.fit();
+        sendResize();
+      }
+
+      function scheduleFit(delay = 48) {
+        if (fitTimer) {
+          window.clearTimeout(fitTimer);
+        }
+        if (fitFrame) {
+          window.cancelAnimationFrame(fitFrame);
+        }
+        fitTimer = window.setTimeout(() => {
+          fitTimer = 0;
+          fitFrame = window.requestAnimationFrame(runFit);
+        }, delay);
+      }
+
+      function writeToTerminal(data) {
+        return new Promise((resolve) => {
+          term.write(data, resolve);
+        });
+      }
+
       document.querySelectorAll("[data-mod]").forEach((button) => {
         button.addEventListener("click", () => {
           const key = button.getAttribute("data-mod");
@@ -283,7 +329,7 @@
 
       ws.addEventListener("open", () => {
         setStatus("connected", "var(--accent)");
-        sendResize();
+        scheduleFit();
         term.focus();
       });
 
@@ -296,33 +342,37 @@
       });
 
       ws.addEventListener("message", async (event) => {
+        let output = "";
         if (typeof event.data === "string") {
-          term.write(event.data);
+          output = event.data;
+        } else if (event.data instanceof ArrayBuffer) {
+          output = textDecoder.decode(event.data);
+        } else if (event.data instanceof Blob) {
+          output = await event.data.text();
+        } else {
           return;
         }
-        if (event.data instanceof ArrayBuffer) {
-          term.write(new TextDecoder().decode(event.data));
-          return;
-        }
-        if (event.data instanceof Blob) {
-          term.write(await event.data.text());
+        await writeToTerminal(output);
+        if (!firstSocketMessageHandled) {
+          firstSocketMessageHandled = true;
+          scheduleFit();
         }
       });
 
       const resizeObserver = new ResizeObserver(() => {
-        fitAddon.fit();
-        sendResize();
+        scheduleFit();
       });
-      resizeObserver.observe(document.body);
+      resizeObserver.observe(terminalEl);
+      window.addEventListener("resize", () => {
+        scheduleFit();
+      });
       window.addEventListener("orientationchange", () => {
-        setTimeout(() => {
-          fitAddon.fit();
-          sendResize();
-        }, 60);
+        scheduleFit();
       });
 
       syncModifiers();
       setStatus("connecting", "var(--muted)");
+      scheduleFit(0);
     </script>
   </body>
 </html>
