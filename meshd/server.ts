@@ -122,21 +122,41 @@ function mapAgent(cmd: string): string {
 function shq(s: string) { return `'${s.replace(/'/g, `'\\''`)}'`; }
 function sanitize(s: string) { return s.replace(/[^a-zA-Z0-9._-]+/g, "-"); }
 
-async function agentOutput(name: string, lines: number) {
+async function agentPanes(name: string) {
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
-  const out = await sh(`${MUX} capture-pane -p -t ${shq(name)} 2>/dev/null`);
+  const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{window_index}.#{pane_index}|#{pane_id}|#{pane_current_command}|#{pane_active}|#{window_name}' 2>/dev/null`);
+  const panes = out.trim().split("\n").filter(Boolean).map((line) => {
+    const f = line.split("|");
+    const [windowIndex, paneIndex] = (f[0] ?? "").split(".");
+    return {
+      paneId: f[1],
+      windowIndex: num(windowIndex),
+      paneIndex: num(paneIndex),
+      command: f[2] ?? "",
+      active: f[3] === "1",
+      windowName: f[4] ?? "",
+    };
+  });
+  return { name, panes };
+}
+async function agentOutput(name: string, lines: number, pane?: string) {
+  const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
+  if (!has.trim().endsWith("0")) return null;
+  const target = pane ? shq(pane) : shq(name);
+  const out = await sh(`${MUX} capture-pane -p -t ${target} 2>/dev/null`);
   const arr = out.replace(/\n+$/, "").split("\n");
   return { name, lines: arr.slice(-lines) };
 }
-async function agentSend(name: string, text?: string, key?: string) {
-  if (key === "enter") await sh(`${MUX} send-keys -t ${shq(name)} Enter`);
-  else if (key === "ctrl-c") await sh(`${MUX} send-keys -t ${shq(name)} C-c`);
-  else if (key === "up") await sh(`${MUX} send-keys -t ${shq(name)} Up`);
-  else if (key === "down") await sh(`${MUX} send-keys -t ${shq(name)} Down`);
+async function agentSend(name: string, text?: string, key?: string, pane?: string) {
+  const target = pane ? shq(pane) : shq(name);
+  if (key === "enter") await sh(`${MUX} send-keys -t ${target} Enter`);
+  else if (key === "ctrl-c") await sh(`${MUX} send-keys -t ${target} C-c`);
+  else if (key === "up") await sh(`${MUX} send-keys -t ${target} Up`);
+  else if (key === "down") await sh(`${MUX} send-keys -t ${target} Down`);
   else if (text) {
     const hex = Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")).join(" ");
-    await sh(`${MUX} send-keys -t ${shq(name)} -H -- ${hex}`);
+    await sh(`${MUX} send-keys -t ${target} -H -- ${hex}`);
   }
   return { ok: true };
 }
@@ -192,15 +212,20 @@ Bun.serve({
       if (path === "/stats") return json(await getStats());
       if (path === "/agents") return json(await rmuxSessions());
       if (path === "/usage") return json(await getUsage());
+      const panesM = path.match(/^\/agents\/([^/]+)\/panes$/);
+      if (panesM && req.method === "GET") {
+        const res = await agentPanes(decodeURIComponent(panesM[1]));
+        return res ? json(res) : json({ error: "no such session" }, 404);
+      }
       const outM = path.match(/^\/agents\/([^/]+)\/output$/);
       if (outM && req.method === "GET") {
-        const res = await agentOutput(decodeURIComponent(outM[1]), Number(url.searchParams.get("lines") ?? "80"));
+        const res = await agentOutput(decodeURIComponent(outM[1]), Number(url.searchParams.get("lines") ?? "80"), url.searchParams.get("pane") ?? undefined);
         return res ? json(res) : json({ error: "no such session" }, 404);
       }
       const sendM = path.match(/^\/agents\/([^/]+)\/send$/);
       if (sendM && req.method === "POST") {
         const body = await req.json().catch(() => ({}));
-        return json(await agentSend(decodeURIComponent(sendM[1]), body.text, body.key));
+        return json(await agentSend(decodeURIComponent(sendM[1]), body.text, body.key, body.pane));
       }
       if (path === "/agents/new" && req.method === "POST") {
         const b = await req.json().catch(() => ({}));

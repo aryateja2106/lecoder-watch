@@ -32,7 +32,7 @@ struct MachinesListView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(shortName(m.host)).font(.headline)
                             if let s = m.stats {
-                                Text("CPU \(Int(s.cpuPct))%  ·  \(Int(s.mem.pct))% mem  ·  \(m.agents.count) agt")
+                                Text("CPU \(Int(s.cpuPct))%  ·  \(Int(s.mem.pct))% mem  ·  \(m.agents.count) sess")
                                     .font(.caption2).foregroundStyle(.secondary)
                             } else {
                                 Text("unreachable").font(.caption2).foregroundStyle(.secondary)
@@ -72,16 +72,19 @@ struct SessionsView: View {
                     GaugeRow(label: "Disk", value: s.disk.pct, text: "\(Int(s.disk.usedGB))/\(Int(s.disk.totalGB))G")
                 }
             }
-            Section("Agents") {
+            Section("Sessions (\(snap?.agents.count ?? 0))") {
                 ForEach(snap?.agents ?? []) { a in
                     NavigationLink {
                         AgentLiveView(host: host, agent: a.name).environmentObject(store)
                     } label: {
-                        HStack {
-                            Image(systemName: "terminal")
-                            Text(a.name)
-                            Spacer()
-                            if a.attached { Image(systemName: "dot.radiowaves.left.and.right").foregroundStyle(.green) }
+                        HStack(spacing: 6) {
+                            Image(systemName: a.attached ? "dot.radiowaves.left.and.right" : "terminal")
+                                .foregroundStyle(a.attached ? .green : .secondary)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(a.name)
+                                Text("\(a.windows) pane\(a.windows == 1 ? "" : "s")\(a.attached ? " · live" : "")")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -103,17 +106,22 @@ struct AgentLiveView: View {
 
     @State private var dictation = ""
     @State private var showType = false
+    @State private var zoom = false
+    @State private var fontSize: CGFloat = 14
 
-    // Approvals + common nudges, sent as text + Enter.
-    private let presets = ["yes", "continue", "1", "list files", "git status"]
+    // Genuinely useful commands. `arg: true` → prefill the keyboard so you can
+    // complete it (cd <dir>); otherwise send immediately.
+    private let presets: [(cmd: String, arg: Bool)] = [
+        ("ls", false), ("git status", false), ("pwd", false), ("clear", false),
+        ("cd ", true), ("mkdir ", true), ("yes", false), ("continue", false),
+    ]
 
     var body: some View {
-        VStack(spacing: 4) {
-            // Live output
+        VStack(spacing: 3) {
             ScrollViewReader { proxy in
                 ScrollView {
                     Text(store.output.joined(separator: "\n"))
-                        .font(.system(.caption2, design: .monospaced))
+                        .font(.system(size: fontSize, design: .monospaced))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -121,15 +129,17 @@ struct AgentLiveView: View {
                     withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
-            // Controls
-            HStack(spacing: 6) {
+            .contentShape(Rectangle())
+            .onTapGesture { zoom = true }     // tap output → full-screen zoom
+
+            HStack(spacing: 5) {
                 Button { store.send(key: "enter") } label: { Image(systemName: "return") }
                 Button(role: .destructive) { store.send(key: "ctrl-c") } label: { Image(systemName: "xmark.octagon") }
                 Button { store.send(key: "up") } label: { Image(systemName: "arrow.up") }
+                Button { zoom = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                 Button { showType = true } label: { Image(systemName: "keyboard") }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
+            .buttonStyle(.bordered).controlSize(.mini)
         }
         .navigationTitle(agent)
         .navigationBarTitleDisplayMode(.inline)
@@ -138,11 +148,13 @@ struct AgentLiveView: View {
         .toolbar {
             ToolbarItemGroup(placement: .bottomBar) {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(presets, id: \.self) { p in
-                            Button(p) { store.send(text: p + "\n") }
-                                .buttonStyle(.borderedProminent)
-                                .controlSize(.mini)
+                    HStack(spacing: 5) {
+                        ForEach(presets, id: \.cmd) { p in
+                            Button(p.cmd.trimmingCharacters(in: .whitespaces)) {
+                                if p.arg { dictation = p.cmd; showType = true }
+                                else { store.send(text: p.cmd + "\n") }
+                            }
+                            .buttonStyle(.borderedProminent).controlSize(.mini)
                         }
                     }
                 }
@@ -151,7 +163,7 @@ struct AgentLiveView: View {
         .sheet(isPresented: $showType) {
             NavigationStack {
                 VStack {
-                    TextField("Say or scribble…", text: $dictation)
+                    TextField("Say, scribble, or type…", text: $dictation)
                         .autocorrectionDisabled()
                     Button("Send") {
                         if !dictation.isEmpty { store.send(text: dictation + "\n"); dictation = ""; showType = false }
@@ -162,6 +174,31 @@ struct AgentLiveView: View {
                 .padding()
                 .navigationTitle("To \(agent)")
                 .navigationBarTitleDisplayMode(.inline)
+            }
+        }
+        .sheet(isPresented: $zoom) { zoomSheet }
+    }
+
+    // Full-screen, zoomable, NON-wrapping output — read a TUI/diff/long lines
+    // clearly by scrolling both axes and bumping the font (WhatsApp-image style).
+    private var zoomSheet: some View {
+        NavigationStack {
+            ScrollView([.vertical, .horizontal]) {
+                Text(store.output.joined(separator: "\n"))
+                    .font(.system(size: fontSize + 3, design: .monospaced))
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(6)
+            }
+            .navigationTitle(agent)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    Button { fontSize = max(9, fontSize - 1) } label: { Image(systemName: "textformat.size.smaller") }
+                    Text("\(Int(fontSize))pt").font(.caption2).monospacedDigit()
+                    Button { fontSize = min(26, fontSize + 1) } label: { Image(systemName: "textformat.size.larger") }
+                    Spacer()
+                    Button("Done") { zoom = false }
+                }
             }
         }
     }

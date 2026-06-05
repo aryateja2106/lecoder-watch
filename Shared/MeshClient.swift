@@ -45,6 +45,11 @@ struct MeshClient {
         return try JSONDecoder().decode(UsageSnapshot.self, from: data)
     }
 
+    func panes(agent: String) async throws -> [Pane] {
+        let data = try await request("/agents/\(agent)/panes")
+        return try JSONDecoder().decode(PaneList.self, from: data).panes
+    }
+
     func output(agent: String, lines: Int = 80) async throws -> AgentOutput {
         let data = try await request("/agents/\(agent)/output?lines=\(lines)")
         return try JSONDecoder().decode(AgentOutput.self, from: data)

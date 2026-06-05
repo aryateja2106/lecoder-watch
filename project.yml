@@ -13,6 +13,19 @@ settings:
     GENERATE_INFOPLIST_FILE: NO
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
+schemes:
+  MeshWatch:
+    build:
+      targets:
+        MeshWatch: all
+    run:
+      config: Debug
+  MeshWatch Watch App:
+    build:
+      targets:
+        MeshWatch Watch App: all
+    run:
+      config: Debug
 targets:
   MeshWatch:
     type: application

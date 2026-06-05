@@ -141,9 +141,15 @@ private struct BridgeTerminalScreen: View {
     let machine: Machine
     let session: String
 
+    @State private var panes: [Pane] = []
+    @State private var selectedPane: String?   // nil = whole session (default)
+
     var body: some View {
-        Group {
-            if let url = machine.terminalURL(session: session) {
+        VStack(spacing: 0) {
+            if panes.count > 1 {
+                paneSwitcher
+            }
+            if let url = machine.terminalURL(session: session, pane: selectedPane) {
                 BridgeWebView(url: url)
                     .ignoresSafeArea(edges: .bottom)
             } else {
@@ -152,11 +158,52 @@ private struct BridgeTerminalScreen: View {
         }
         .navigationTitle(session)
         .navigationBarTitleDisplayMode(.inline)
+        .task { await loadPanes() }
+    }
+
+    private var paneSwitcher: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(panes) { pane in
+                    Button {
+                        selectedPane = pane.paneId
+                    } label: {
+                        Text(pane.label)
+                            .font(.caption.monospaced())
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selectedPane == pane.paneId ? Color.accentColor : Color(.secondarySystemBackground))
+                            .foregroundStyle(selectedPane == pane.paneId ? Color.white : Color.primary)
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .background(.black)
+    }
+
+    private func loadPanes() async {
+        do {
+            let fetched = try await MeshClient(machine: machine).panes(agent: session)
+            panes = fetched
+            // Default to the active pane so the chip selection matches the bridge's view.
+            if selectedPane == nil { selectedPane = fetched.first(where: { $0.active })?.paneId }
+        } catch {
+            panes = []
+        }
     }
 }
 
 /// WKWebView wrapper. The bridge page (xterm + keybar + splits) handles all
 /// touch input, scroll/select/copy, and the WebSocket stream itself.
+///
+/// BRIDGE CHANGE NEEDED (rmux-bridge, owned by another agent): the bridge today
+/// reads only `?session=`. To honor pane focus, after reading the session it must
+/// also read `pane` and pass it to its rmux target, e.g. add one line:
+///   const pane = new URL(req.url, "http://x").searchParams.get("pane");
+/// then target `pane ?? session` when attaching/capturing (rmux `-t <pane>`).
 private struct BridgeWebView: UIViewRepresentable {
     let url: URL
 

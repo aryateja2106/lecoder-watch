@@ -22,10 +22,16 @@ struct Machine: Codable, Identifiable, Hashable {
     }
 
     /// Live terminal URL for an rmux session on this machine's bridge.
-    func terminalURL(session: String) -> URL? {
+    /// Pass `pane` to focus a specific pane (bridge must honor `&pane=`; see TerminalView note).
+    func terminalURL(session: String, pane: String? = nil) -> URL? {
         guard let base = resolvedBridge else { return nil }
         let q = session.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? session
-        return URL(string: "\(base)/?session=\(q)")
+        var s = "\(base)/?session=\(q)"
+        if let pane, !pane.isEmpty {
+            let pq = pane.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? pane
+            s += "&pane=\(pq)"
+        }
+        return URL(string: s)
     }
 
     // NOTE: "testtoken" is a dev placeholder for local simulator verification.
@@ -86,6 +92,28 @@ struct Agent: Codable, Hashable, Identifiable {
 struct AgentOutput: Codable, Hashable {
     var name: String
     var lines: [String]
+}
+
+/// One pane within a session (a session may hold several windows/panes).
+struct Pane: Codable, Hashable, Identifiable {
+    var id: String { paneId }
+    var paneId: String
+    var windowIndex: Int
+    var paneIndex: Int
+    var command: String
+    var active: Bool
+    var windowName: String
+
+    /// e.g. "0.1 claude" — short label for a chip.
+    var label: String {
+        let cmd = command.isEmpty ? "shell" : command
+        return "\(windowIndex).\(paneIndex) \(cmd)"
+    }
+}
+
+struct PaneList: Codable, Hashable {
+    var name: String
+    var panes: [Pane]
 }
 
 // MARK: - Usage (OpenUsage)
