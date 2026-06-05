@@ -1,0 +1,62 @@
+name: MeshWatch
+options:
+  bundleIdPrefix: com.lecoder.meshwatch
+  deploymentTarget:
+    iOS: "26.0"
+    watchOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    GENERATE_INFOPLIST_FILE: NO
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+targets:
+  MeshWatch:
+    type: application
+    platform: iOS
+    sources:
+      - path: Shared
+      - path: iOS
+    info:
+      path: Generated/iOS-Info.plist
+      properties:
+        CFBundleDisplayName: MeshWatch
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private Tailscale network."
+        NSMicrophoneUsageDescription: "Dictate commands to your agents."
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - target: MeshWatch Watch App
+        embed: true
+  MeshWatch Watch App:
+    type: application
+    platform: watchOS
+    sources:
+      - path: Shared
+      - path: Watch
+    info:
+      path: Generated/Watch-Info.plist
+      properties:
+        CFBundleDisplayName: MeshWatch
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: com.lecoder.meshwatch
+        NSMicrophoneUsageDescription: "Dictate commands to your agents."
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.watchkitapp
+        TARGETED_DEVICE_FAMILY: "4"
