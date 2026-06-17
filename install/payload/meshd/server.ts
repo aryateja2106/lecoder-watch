@@ -368,7 +368,8 @@ async function getTailnet() {
 // ---------- screen ----------
 async function screenJpeg(): Promise<Uint8Array> {
   if (IS_MAC) {
-    return shBytes(`tmp=$(mktemp -t meshd-screen); out=$(mktemp -t meshd-screen); trap 'rm -f "$tmp" "$out"' EXIT; screencapture -x -t jpg - > "$tmp" 2>/dev/null && sips -Z 480 -s format jpeg "$tmp" --out "$out" >/dev/null 2>&1 && cat "$out"`);
+    // screencapture to stdout ("-") yields 0 bytes on macOS; capture to a real file path, then resize.
+    return shBytes(`tmp=$(mktemp -t meshd-screen); out=$(mktemp -t meshd-screen); trap 'rm -f "$tmp" "$out"' EXIT; screencapture -x -t jpg "$tmp" 2>/dev/null && sips -Z 480 -s format jpeg "$tmp" --out "$out" >/dev/null 2>&1 && cat "$out"`);
   }
   if (IS_LINUX) {
     return shBytes(`tmp=$(mktemp); out=$(mktemp); trap 'rm -f "$tmp" "$out"' EXIT; if command -v grim >/dev/null 2>&1; then grim -t jpeg "$tmp"; elif command -v scrot >/dev/null 2>&1; then scrot -q 70 "$tmp"; else exit 127; fi; if command -v magick >/dev/null 2>&1; then magick "$tmp" -resize 480x "$out"; elif command -v convert >/dev/null 2>&1; then convert "$tmp" -resize 480x "$out"; else exit 127; fi; cat "$out"`);
