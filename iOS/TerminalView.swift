@@ -108,6 +108,19 @@ struct TerminalTab: View {
                 }
             }
             .navigationTitle("Terminal")
+            // Notification tap (MeshStore.pendingSession) lands on the session's control
+            // surface (output preview + Reply/Command + Kill), not a raw terminal — so a
+            // dead/closed session can still be acted on. Use the live agent if we have it,
+            // else a stub by name (SessionPeekScreen polls its own state).
+            .navigationDestination(item: $store.pendingSession) { route in
+                if let m = machine(for: route.host) {
+                    let agent = store.snapshot?.machines.first(where: { $0.host == route.host })?
+                        .agents.first(where: { $0.name == route.session })
+                        ?? Agent(name: route.session, windows: 1, createdISO: nil, attached: false,
+                                 agentType: nil, memMB: nil, cpuPct: nil, panes: nil)
+                    SessionPeekScreen(machine: m, session: agent)
+                }
+            }
             .toolbar {
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
