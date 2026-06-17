@@ -18,6 +18,9 @@ schemes:
     build:
       targets:
         MeshWatch: all
+    test:
+      targets:
+        - MeshWatchUITests
     run:
       config: Debug
   MeshWatch Watch App:
@@ -82,6 +85,23 @@ targets:
       - sdk: SwiftUI.framework
       - sdk: WidgetKit.framework
       - sdk: ActivityKit.framework
+  MeshWatchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MeshWatchUITests
+    info:
+      path: MeshWatchUITests/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.uitests
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_TARGET_NAME: MeshWatch
+    dependencies:
+      - target: MeshWatch
   MeshWatch Watch App:
     type: application
     platform: watchOS
