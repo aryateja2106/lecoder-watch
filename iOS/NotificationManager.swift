@@ -14,10 +14,35 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     /// Tap routing — set by MeshStore. Receives (appHost, session?).
     var onOpen: ((String, String?) -> Void)?
+    /// Notification-action routing — set by MeshStore. Reuses the WatchCommand router so a
+    /// quick-reply / Enter / Kill from a notification takes the same path as a watch command.
+    var onAction: ((WatchCommand) -> Void)?
+
+    // Action identifiers.
+    private enum Action { static let reply = "REPLY", enter = "ENTER", kill = "KILL" }
 
     func requestAuthorization() {
-        UNUserNotificationCenter.current().delegate = self
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.setNotificationCategories(Self.categories())
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    /// Per-kind action sets: needs-input → Reply + Enter; error → Reply + Kill. Category id
+    /// is the NotifKind rawValue, matched to `content.categoryIdentifier` at post time.
+    private static func categories() -> Set<UNNotificationCategory> {
+        let reply = UNTextInputNotificationAction(
+            identifier: Action.reply, title: "Reply", options: [],
+            textInputButtonTitle: "Send", textInputPlaceholder: "Reply to the agent")
+        let enter = UNNotificationAction(identifier: Action.enter, title: "Press Enter", options: [])
+        let kill = UNNotificationAction(identifier: Action.kill, title: "Stop session",
+                                        options: [.destructive, .authenticationRequired])
+        return [
+            UNNotificationCategory(identifier: NotifKind.needsInput.rawValue,
+                                   actions: [reply, enter], intentIdentifiers: [], options: []),
+            UNNotificationCategory(identifier: NotifKind.error.rawValue,
+                                   actions: [reply, kill], intentIdentifiers: [], options: []),
+        ]
     }
 
     /// Inspect a fresh snapshot and fire notifications for noteworthy changes.
@@ -117,6 +142,8 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         // entitlement; without it iOS quietly downgrades to .active — no crash. Add
         // the entitlement when shipping if DND break-through matters.
         content.interruptionLevel = kind.isLoud ? .timeSensitive : .active
+        // Attach quick-reply/Enter/Kill actions for the kinds that have them.
+        if kind == .needsInput || kind == .error { content.categoryIdentifier = kind.rawValue }
         if let host { content.threadIdentifier = host }
         var info: [String: String] = [:]
         if let host { info["host"] = host }
@@ -142,9 +169,23 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
-        if let host = info["host"] as? String {
-            let session = (info["session"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-            onOpen?(host, session)
+        let host = info["host"] as? String
+        let session = (info["session"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+
+        switch response.actionIdentifier {
+        case Action.reply:
+            // Quick-reply text → inject into the originating session.
+            if let host, let text = (response as? UNTextInputNotificationResponse)?.userText,
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                onAction?(WatchCommand(kind: .agentSend, host: host, agent: session, text: text + "\n"))
+            }
+        case Action.enter:
+            if let host { onAction?(WatchCommand(kind: .agentSend, host: host, agent: session, key: "enter")) }
+        case Action.kill:
+            if let host, let session { onAction?(WatchCommand(kind: .killAgent, host: host, agent: session)) }
+        default:
+            // Default tap (or any other) → open the session, as before.
+            if let host { onOpen?(host, session) }
         }
         completionHandler()
     }

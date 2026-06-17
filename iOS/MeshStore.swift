@@ -56,6 +56,10 @@ final class MeshStore: ObservableObject {
         NotificationManager.shared.onOpen = { [weak self] host, session in
             Task { @MainActor in self?.openSession(host: host, session: session) }
         }
+        // A notification action (Reply / Enter / Kill) runs through the WatchCommand router.
+        NotificationManager.shared.onAction = { [weak self] command in
+            Task { await self?.handle(command) }
+        }
     }
 
     /// Deep-link from a tapped notification to the originating session.
