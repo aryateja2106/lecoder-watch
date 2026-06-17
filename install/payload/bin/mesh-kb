@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""mesh-kb — read/write the meshd shared knowledge base from any agent/machine.
+
+  mesh-kb put --scope project/x --key decision-1 --kind decision "Use fit-addon" "details..."
+  mesh-kb search "fit addon" [--scope project/x] [--kind decision] [--limit 20] [--local]
+  mesh-kb get project/x decision-1
+
+Env: MESHD_HOST (127.0.0.1), MESHD_PORT (8899), MESHD_TOKEN (or ~/.mesh/token).
+Search federates across online tailnet peers by default; --local for this machine only.
+"""
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+
+def base():
+    return f"http://{os.getenv('MESHD_HOST', '127.0.0.1')}:{os.getenv('MESHD_PORT', '8899')}"
+
+
+def token():
+    t = os.getenv("MESHD_TOKEN")
+    if t:
+        return t
+    f = os.path.join(os.getenv("MESH_HOME", os.path.expanduser("~/.mesh")), "token")
+    if os.path.exists(f):
+        with open(f, encoding="utf-8") as fh:
+            return fh.readline().strip()
+    return ""
+
+
+def req(method, path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"content-type": "application/json"}
+    if token():
+        headers["authorization"] = f"Bearer {token()}"
+    r = urllib.request.Request(base() + path, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(r, timeout=6) as resp:
+            return resp.read().decode()
+    except urllib.error.HTTPError as e:
+        sys.stderr.write(f"mesh-kb: HTTP {e.code} {e.read().decode()[:200]}\n")
+        sys.exit(1)
+    except OSError as e:
+        sys.stderr.write(f"mesh-kb: {e}\n")
+        sys.exit(1)
+
+
+def main():
+    p = argparse.ArgumentParser(prog="mesh-kb", description="meshd knowledge base client")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    pp = sub.add_parser("put", help="upsert an entry (dedupes by scope+key)")
+    pp.add_argument("--scope", required=True)
+    pp.add_argument("--key", required=True)
+    pp.add_argument("--kind")
+    pp.add_argument("--tags")
+    pp.add_argument("--source", default=os.getenv("MESH_KB_SOURCE", "agent"))
+    pp.add_argument("title")
+    pp.add_argument("body", nargs="?")
+
+    ps = sub.add_parser("search", help="full-text search across the mesh")
+    ps.add_argument("query")
+    ps.add_argument("--scope")
+    ps.add_argument("--kind")
+    ps.add_argument("--limit", default="30")
+    ps.add_argument("--local", action="store_true", help="this machine only (no federation)")
+
+    pg = sub.add_parser("get", help="fetch one entry by scope + key")
+    pg.add_argument("scope")
+    pg.add_argument("key")
+
+    a = p.parse_args()
+    if a.cmd == "put":
+        doc = {"scope": a.scope, "key": a.key, "kind": a.kind, "title": a.title,
+               "body": a.body, "tags": a.tags, "source": a.source}
+        print(req("PUT", "/kb", {k: v for k, v in doc.items() if v is not None}))
+    elif a.cmd == "search":
+        qs = {"q": a.query, "limit": a.limit}
+        if a.scope:
+            qs["scope"] = a.scope
+        if a.kind:
+            qs["kind"] = a.kind
+        if a.local:
+            qs["federate"] = "0"
+        print(req("GET", "/kb/search?" + urllib.parse.urlencode(qs)))
+    elif a.cmd == "get":
+        print(req("GET", f"/kb/{urllib.parse.quote(a.scope, safe='')}/{urllib.parse.quote(a.key, safe='')}"))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

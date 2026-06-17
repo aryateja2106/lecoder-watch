@@ -4,12 +4,13 @@ import os from "node:os";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { kbPut, kbGet, kbSearch } from "./kb";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
 const VERSION = "0.2.0";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "tailscale"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "tailscale", "kb"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -328,6 +329,46 @@ function authed(req: Request): boolean {
   return h === `Bearer ${TOKEN}` || q === TOKEN;
 }
 
+function localIPs(): Set<string> {
+  const set = new Set<string>();
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const i of list ?? []) if (i.address) set.add(i.address);
+  }
+  return set;
+}
+
+// Cross-machine KB search = read-federation: each machine owns its own kb.sqlite;
+// we fan the same query out to online tailnet peers (federate=0 so they don't recurse),
+// merge, and dedupe by (host,scope,key). No file sync, no corruption risk.
+async function kbFederateSearch(local: any[], sp: URLSearchParams): Promise<any[]> {
+  const tn = await getTailnet().catch(() => ({ ok: false, peers: [] as any[] }));
+  const mine = localIPs();
+  const qs = new URLSearchParams();
+  for (const k of ["q", "scope", "kind", "limit"]) { const v = sp.get(k); if (v) qs.set(k, v); }
+  qs.set("federate", "0");
+  const peers = ((tn as any).peers ?? []).filter(
+    (p: any) => p.online && p.ips?.length && !p.ips.some((ip: string) => mine.has(ip)),
+  );
+  const settled = await Promise.allSettled(peers.map((p: any) => {
+    const ip = p.ips.find((x: string) => x.includes(".")) ?? p.ips[0];
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2000);
+    return fetch(`http://${ip}:${PORT}/kb/search?${qs.toString()}`, {
+      headers: TOKEN ? { authorization: `Bearer ${TOKEN}` } : {},
+      signal: ctrl.signal,
+    }).then((r) => (r.ok ? r.json() : { results: [] })).finally(() => clearTimeout(t));
+  }));
+  const merged = [...local];
+  for (const r of settled) if (r.status === "fulfilled") merged.push(...((r.value as any)?.results ?? []));
+  const seen = new Set<string>();
+  const out: any[] = [];
+  for (const e of merged) {
+    const k = `${e.host} ${e.scope} ${e.key}`;
+    if (!seen.has(k)) { seen.add(k); out.push(e); }
+  }
+  return out;
+}
+
 Bun.serve({
   port: PORT,
   hostname: HOST,
@@ -345,6 +386,24 @@ Bun.serve({
       if (path === "/usage") return json(await getUsage());
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));
       if (path === "/events" && req.method === "POST") return json(await addEvent(await req.json().catch(() => ({}))), 201);
+      if (path === "/kb" && (req.method === "PUT" || req.method === "POST")) {
+        try { return json(kbPut(await req.json().catch(() => ({})), os.hostname()), 201); }
+        catch (e: any) { return json({ error: String(e?.message ?? e) }, 400); }
+      }
+      if (path === "/kb/search" && req.method === "GET") {
+        const sp = url.searchParams;
+        const local = kbSearch({
+          q: sp.get("q") ?? undefined, scope: sp.get("scope") ?? undefined,
+          kind: sp.get("kind") ?? undefined, limit: Number(sp.get("limit") ?? "30"),
+        }).map((r) => ({ ...r, host: r.host ?? os.hostname() }));
+        if (sp.get("federate") === "0") return json({ results: local });
+        return json({ results: await kbFederateSearch(local, sp) });
+      }
+      const kbGetM = path.match(/^\/kb\/([^/]+)\/([^/]+)$/);
+      if (kbGetM && req.method === "GET") {
+        const row = kbGet(decodeURIComponent(kbGetM[1]), decodeURIComponent(kbGetM[2]));
+        return row ? json(row) : json({ error: "not found" }, 404);
+      }
       const panesM = path.match(/^\/agents\/([^/]+)\/panes$/);
       if (panesM && req.method === "GET") {
         const res = await agentPanes(decodeURIComponent(panesM[1]));
