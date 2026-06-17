@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct MeshRelayApp: App {
     @StateObject private var store = MeshStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -10,7 +11,13 @@ struct MeshRelayApp: App {
                 .environmentObject(store)
                 .onAppear {
                     NotificationManager.shared.requestAuthorization()
-                    store.start()
+                }
+                // Poll only while the app is in front; pause when inactive/backgrounded so the
+                // 8s fan-out doesn't keep waking the radio in the background.
+                // ponytail: per-machine exponential backoff (brief #8) skipped — for a handful
+                // of machines a flat in-foreground poll is cheap; add backoff if the mesh grows.
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { store.start() } else { store.stop() }
                 }
                 // Dynamic Island / Lock Screen tap → meshwatch://session/<host>/<session>
                 .onOpenURL { url in
