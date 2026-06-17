@@ -1,0 +1,80 @@
+#!/bin/sh
+
+set -eu
+
+usage() {
+  cat <<EOF
+Usage: mesh-event [--dry-run] SOURCE TITLE [BODY]
+
+Posts a small agent notification to the local meshd event feed.
+
+Environment:
+  MESHD_HOST   meshd host, default 127.0.0.1
+  MESHD_PORT   meshd port, default 8899
+  MESHD_TOKEN  bearer token; falls back to ~/.mesh/token
+  MESHD_SESSION optional session name
+  MESHD_LEVEL  optional level, e.g. info, warning, error
+EOF
+}
+
+DRY_RUN=0
+if [ "${1:-}" = "--dry-run" ]; then
+  DRY_RUN=1
+  shift
+fi
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+  usage
+  exit 0
+fi
+
+[ "$#" -ge 2 ] || {
+  usage >&2
+  exit 2
+}
+
+HOST="${MESHD_HOST:-127.0.0.1}"
+PORT="${MESHD_PORT:-8899}"
+
+SOURCE="$1"
+TITLE="$2"
+BODY="${3:-}"
+
+payload=$(/usr/bin/python3 - "$SOURCE" "$TITLE" "$BODY" "${MESHD_SESSION:-}" "${MESHD_LEVEL:-info}" <<'PY'
+import json
+import sys
+
+source, title, body, session, level = sys.argv[1:]
+doc = {
+    "source": source,
+    "title": title,
+    "body": body,
+    "session": session or None,
+    "level": level or "info",
+}
+print(json.dumps(doc, separators=(",", ":")))
+PY
+)
+
+if [ "$DRY_RUN" = "1" ]; then
+  printf '%s\n' "$payload"
+  exit 0
+fi
+
+TOKEN="${MESHD_TOKEN:-}"
+TOKEN_FILE="${MESH_HOME:-$HOME/.mesh}/token"
+
+if [ -z "$TOKEN" ] && [ -r "$TOKEN_FILE" ]; then
+  TOKEN=$(sed -n '1p' "$TOKEN_FILE")
+fi
+
+if [ -z "$TOKEN" ]; then
+  printf '%s\n' "mesh-event: missing MESHD_TOKEN and unreadable $TOKEN_FILE" >&2
+  exit 2
+fi
+
+curl -fsS \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "$payload" \
+  "http://$HOST:$PORT/events" >/dev/null

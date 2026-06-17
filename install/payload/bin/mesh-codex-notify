@@ -1,0 +1,24 @@
+#!/bin/sh
+
+dry_run=0
+if [ "${1:-}" = "--dry-run" ]; then
+  dry_run=1
+  shift
+fi
+
+if [ "$#" -gt 0 ] && [ -x "$1" ]; then
+  original="$1"
+  shift
+  "$original" "$@" >/dev/null 2>&1 || true
+fi
+
+event_bin="${MESH_HOME:-$HOME/.mesh}/bin/mesh-event"
+if [ ! -x "$event_bin" ]; then
+  event_bin="$(CDPATH= cd -- "$(dirname "$0")" >/dev/null 2>&1 && pwd)/mesh-event"
+fi
+
+if [ "$dry_run" = "1" ]; then
+  "$event_bin" --dry-run codex "Codex turn ended" "${*:-turn-ended}"
+else
+  "$event_bin" codex "Codex turn ended" "${*:-turn-ended}" >/dev/null 2>&1 || true
+fi

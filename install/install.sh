@@ -169,9 +169,17 @@ resolve_script_dir() {
 
 install_payload() {
   mkdir -p "$MESH_HOME"
-  rm -rf "$MESH_HOME/meshd" "$MESH_HOME/rmux-bridge"
+  rm -rf "$MESH_HOME/meshd" "$MESH_HOME/rmux-bridge" "$MESH_HOME/bin"
   cp -R "$PAYLOAD_DIR/meshd" "$MESH_HOME/"
   cp -R "$PAYLOAD_DIR/rmux-bridge" "$MESH_HOME/"
+  if [ -d "$PAYLOAD_DIR/bin" ]; then
+    cp -R "$PAYLOAD_DIR/bin" "$MESH_HOME/"
+    chmod +x "$MESH_HOME"/bin/* 2>/dev/null || true
+  fi
+  if [ -d "$SCRIPT_DIR/hooks" ]; then
+    rm -rf "$MESH_HOME/hooks"
+    cp -R "$SCRIPT_DIR/hooks" "$MESH_HOME/"
+  fi
 }
 
 install_deps() {
@@ -259,6 +267,11 @@ PAYLOAD_DIR="$SCRIPT_DIR/payload"
 [ -f "$PAYLOAD_DIR/rmux-bridge/package.json" ] || die "missing payload file: $PAYLOAD_DIR/rmux-bridge/package.json"
 [ -f "$PAYLOAD_DIR/rmux-bridge/public/index.html" ] || die "missing payload file: $PAYLOAD_DIR/rmux-bridge/public/index.html"
 [ -f "$PAYLOAD_DIR/rmux-bridge/public/vendor/xterm.js" ] || die "missing payload file: $PAYLOAD_DIR/rmux-bridge/public/vendor/xterm.js"
+[ -f "$PAYLOAD_DIR/bin/mesh-event" ] || die "missing payload file: $PAYLOAD_DIR/bin/mesh-event"
+[ -f "$PAYLOAD_DIR/bin/mesh-hook" ] || die "missing payload file: $PAYLOAD_DIR/bin/mesh-hook"
+[ -f "$PAYLOAD_DIR/bin/mesh-agent-run" ] || die "missing payload file: $PAYLOAD_DIR/bin/mesh-agent-run"
+[ -f "$PAYLOAD_DIR/bin/mesh-codex-notify" ] || die "missing payload file: $PAYLOAD_DIR/bin/mesh-codex-notify"
+[ -f "$PAYLOAD_DIR/bin/mesh-self-check" ] || die "missing payload file: $PAYLOAD_DIR/bin/mesh-self-check"
 
 TOKEN_VALUE="${TOKEN_FLAG:-${MESHD_TOKEN:-}}"
 if [ -z "$TOKEN_VALUE" ]; then
@@ -285,10 +298,13 @@ if [ "$OS_NAME" = "Darwin" ]; then
 fi
 
 install_payload
+printf '%s\n' "$TOKEN_VALUE" > "$MESH_HOME/token"
+chmod 600 "$MESH_HOME/token" 2>/dev/null || true
 install_deps "$MESH_HOME/meshd"
 install_deps "$MESH_HOME/rmux-bridge"
 
 meshd_cmd="env PATH=$(shell_quote "$PATH") MESHD_TOKEN=$(shell_quote "$TOKEN_VALUE") MESHD_PORT=$(shell_quote "$MESHD_PORT_VALUE")"
+meshd_cmd=$(append_env "$meshd_cmd" "MESHD_HOST" "${MESHD_HOST:-}")
 meshd_cmd=$(append_env "$meshd_cmd" "MESH_MUX" "$EFFECTIVE_MESHD_MUX")
 meshd_cmd="$meshd_cmd bun run server.ts"
 
@@ -326,6 +342,16 @@ else
   printf 'Tailscale IPv4: unavailable (run "tailscale ip -4" after Tailscale is connected)\n'
 fi
 printf 'MESHD token: %s\n' "$TOKEN_VALUE"
+printf 'Notification test: %s/bin/mesh-event codex "Codex needs attention" "phone/watch smoke test"\n' "$MESH_HOME"
+printf 'Agent hook: %s/bin/mesh-event claude "Needs input" "Review the terminal"\n' "$MESH_HOME"
+printf 'JSON hook: printf %s | %s/bin/mesh-hook --source codex\n' "'{\"title\":\"Needs input\"}'" "$MESH_HOME"
+printf 'Agent wrapper: %s/bin/mesh-agent-run codex codex\n' "$MESH_HOME"
+if [ -d "$MESH_HOME/hooks" ]; then
+  printf 'Claude hook config: %s/hooks/claude-settings.meshwatch.example.json\n' "$MESH_HOME"
+  printf 'Codex notify config: %s/hooks/codex-config.meshwatch.example.toml\n' "$MESH_HOME"
+  printf 'Wrapper examples: %s/hooks/agent-wrapper-examples.sh\n' "$MESH_HOME"
+fi
+printf 'Self-check: %s/bin/mesh-self-check\n' "$MESH_HOME"
 
 if [ "$MESHD_STATUS" != "up" ] || [ "$BRIDGE_STATUS" != "up" ]; then
   exit 1

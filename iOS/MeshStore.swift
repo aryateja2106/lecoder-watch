@@ -6,15 +6,23 @@ import Combine
 @MainActor
 final class MeshStore: ObservableObject {
     @Published var machines: [Machine] = []
+    @Published var quickCommands: [String] = MeshStore.defaultQuickCommands
     @Published var snapshot: MeshSnapshot?
+    @Published var events: [AgentEvent] = []
     @Published var lastError: String?
     @Published var polling = false
 
     private var timer: Timer?
     private let defaultsKey = "mesh.machines.v1"
+    private let installTokenKey = "mesh.installToken.v1"
+    private let quickCommandsKey = "mesh.quickCommands.v1"
+    static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
     private var watchedAgent: String?
+    private var watchedPane: String?
+    private var lastEventISOByHost: [String: String] = [:]
+    private var initializedEventHosts = Set<String>()
 
     init() {
         load()
@@ -33,12 +41,43 @@ final class MeshStore: ObservableObject {
         } else {
             machines = Machine.defaults
         }
+        let generated = UserDefaults.standard.string(forKey: installTokenKey)
+        var changed = false
+        for idx in machines.indices {
+            if generated == machines[idx].token, Machine.defaults.contains(where: { $0.host == machines[idx].host }) {
+                machines[idx].token = "testtoken"
+                changed = true
+            }
+        }
+        if changed { save() }
+        if let decoded = UserDefaults.standard.stringArray(forKey: quickCommandsKey), !decoded.isEmpty {
+            quickCommands = Self.mergedQuickCommands(decoded)
+            UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
+        }
+    }
+
+    func installToken() -> String {
+        if let saved = UserDefaults.standard.string(forKey: installTokenKey), !saved.isEmpty {
+            return saved
+        }
+        let token = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        UserDefaults.standard.set(token, forKey: installTokenKey)
+        return token
+    }
+
+    private static func mergedQuickCommands(_ saved: [String]) -> [String] {
+        var commands = saved
+        for command in defaultQuickCommands where !commands.contains(command) {
+            commands.append(command)
+        }
+        return commands
     }
 
     func save() {
         if let data = try? JSONEncoder().encode(machines) {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
+        UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
     }
 
     func update(_ machine: Machine) {
@@ -47,6 +86,11 @@ final class MeshStore: ObservableObject {
         } else {
             machines.append(machine)
         }
+        save()
+    }
+
+    func addMachine() {
+        machines.append(Machine(host: "new-machine", ip: "", port: 8899, token: installToken()))
         save()
     }
 
@@ -74,14 +118,57 @@ final class MeshStore: ObservableObject {
             for machine in targets {
                 group.addTask {
                     let client = MeshClient(machine: machine)
-                    async let statsResult = try? await client.stats()
-                    async let agentsResult = try? await client.agents()
-                    let stats = await statsResult
-                    let agents = await agentsResult ?? []
+                    var stats: Stats?
+                    var health: HealthInfo?
+                    var tailnetPeers: [TailnetPeer]?
+                    var tailnetError: String?
+                    var errorText: String?
+                    var authError: String?
+                    do {
+                        health = try? await client.healthInfo()
+                        stats = try await client.stats()
+                    } catch {
+                        errorText = Self.describe(error)
+                        if Self.isAuthError(error) { authError = "token rejected" }
+                    }
+                    do {
+                        let tailnet = try await client.tailnet()
+                        if tailnet.ok {
+                            tailnetPeers = tailnet.peers
+                        } else {
+                            tailnetError = tailnet.error ?? "not available"
+                        }
+                    } catch {
+                        tailnetError = Self.describe(error)
+                    }
+                    async let bridge = Self.probe(machine.resolvedBridge)
+                    async let vnc = Self.probe(machine.resolvedVNC)
+                    let bridgeStatus = await bridge
+                    let vncStatus = await vnc
+                    var agents: [Agent] = []
+                    do {
+                        agents = try await client.agents()
+                    } catch {
+                        if Self.isAuthError(error) { authError = "token rejected" }
+                    }
+                    for idx in agents.indices {
+                        agents[idx].panes = try? await client.panes(agent: agents[idx].name)
+                    }
+                    let reachable = stats != nil || health?.ok == true
                     return MachineSnapshot(host: machine.host,
-                                           reachable: stats != nil,
+                                           reachable: reachable,
                                            stats: stats,
-                                           agents: agents)
+                                           agents: agents,
+                                           error: reachable ? nil : errorText,
+                                           authError: authError,
+                                           bridgeReachable: bridgeStatus.ok,
+                                           bridgeError: bridgeStatus.error,
+                                           vncReachable: vncStatus.ok,
+                                           vncError: vncStatus.error,
+                                           meshdVersion: health?.meshdVersion,
+                                           capabilities: health?.capabilities,
+                                           tailnetPeers: tailnetPeers,
+                                           tailnetError: tailnetError)
                 }
             }
             for await snap in group { results.append(snap) }
@@ -90,37 +177,89 @@ final class MeshStore: ObservableObject {
         let ordered = targets.compactMap { m in results.first { $0.host == m.host } }
 
         var usage: UsageSnapshot?
-        if let mac = targets.first(where: { $0.host.contains("macbook") }) {
-            usage = try? await MeshClient(machine: mac).usage()
+        for machine in targets {
+            guard let fetched = try? await MeshClient(machine: machine).usage(),
+                  !fetched.providers.isEmpty else { continue }
+            usage = fetched
+            break
         }
 
         // Relay live output for whatever agent the watch is watching.
         var watchedOutput: [String]?
         if let host = watchedHost, let agent = watchedAgent,
            let m = targets.first(where: { $0.host == host }) {
-            watchedOutput = (try? await MeshClient(machine: m).output(agent: agent, lines: 60))?.lines
+            watchedOutput = (try? await MeshClient(machine: m).output(agent: agent, lines: 60, pane: watchedPane))?.lines
         }
+        await refreshEvents(from: targets)
 
         let snap = MeshSnapshot(updatedISO: ISO8601DateFormatter().string(from: Date()),
                                 machines: ordered,
                                 usage: usage,
+                                quickCommands: quickCommands,
+                                events: events,
                                 watchedHost: watchedHost,
                                 watchedAgent: watchedAgent,
+                                watchedPane: watchedPane,
                                 watchedOutput: watchedOutput)
         snapshot = snap
         PhoneConnectivity.shared.push(snap)
         NotificationManager.shared.evaluate(snap)
     }
 
+    private func refreshEvents(from targets: [Machine]) async {
+        var fetched: [AgentEvent] = []
+        var notifyEvents: [AgentEvent] = []
+        for machine in targets {
+            let previousSince = lastEventISOByHost[machine.host]
+            guard let machineEvents = try? await MeshClient(machine: machine).events(since: previousSince) else { continue }
+            let shouldNotify = initializedEventHosts.contains(machine.host)
+            initializedEventHosts.insert(machine.host)
+            guard !machineEvents.isEmpty else {
+                if previousSince == nil && !shouldNotify {
+                    lastEventISOByHost[machine.host] = ISO8601DateFormatter().string(from: Date())
+                }
+                continue
+            }
+            let tagged = machineEvents.map { event in
+                AgentEvent(id: event.id,
+                           host: event.host ?? machine.host,
+                           source: event.source,
+                           session: event.session,
+                           level: event.level,
+                           title: event.title,
+                           body: event.body,
+                           createdISO: event.createdISO)
+            }
+            fetched.append(contentsOf: tagged)
+            if shouldNotify {
+                notifyEvents.append(contentsOf: tagged)
+            }
+            lastEventISOByHost[machine.host] = tagged.map(\.createdISO).max()
+        }
+        guard !fetched.isEmpty else { return }
+        events = Array((events + fetched).suffix(100))
+        NotificationManager.shared.evaluate(events: notifyEvents)
+    }
+
     // MARK: Sessions
 
     /// Create a new rmux session on a machine, then refresh so it appears in the list.
-    func newSession(on machine: Machine, name: String, cmd: String?) async {
+    func newSession(on machine: Machine, name: String, cmd: String?, initialText: String? = nil) async {
         do {
-            try await MeshClient(machine: machine).newSession(name: name, cmd: cmd)
+            try await MeshClient(machine: machine).newSession(name: name, cmd: cmd, initialText: initialText)
             await refresh()
         } catch {
             lastError = "create session failed: \(error)"
+        }
+    }
+
+    /// Kill a session on a machine, then refresh so it drops out of every client's list.
+    func kill(on machine: Machine, name: String) async {
+        do {
+            try await MeshClient(machine: machine).kill(agent: name)
+            await refresh()
+        } catch {
+            lastError = "kill session failed: \(error)"
         }
     }
 
@@ -133,14 +272,86 @@ final class MeshStore: ObservableObject {
         case .agentSend:
             guard let host = command.host, let agent = command.agent,
                   let machine = machines.first(where: { $0.host == host }) else { return }
-            try? await MeshClient(machine: machine).send(agent: agent, text: command.text, key: command.key)
+            try? await MeshClient(machine: machine).send(agent: agent, text: command.text, key: command.key, pane: command.pane)
+            await refresh()
+        case .killAgent:
+            guard let host = command.host, let agent = command.agent,
+                  let machine = machines.first(where: { $0.host == host }) else { return }
+            await kill(on: machine, name: agent)
+        case .killPane:
+            guard let host = command.host, let agent = command.agent, let pane = command.pane,
+                  let machine = machines.first(where: { $0.host == host }) else { return }
+            try? await MeshClient(machine: machine).killPane(agent: agent, paneId: pane)
+            if watchedHost == host, watchedAgent == agent, watchedPane == pane {
+                watchedPane = nil
+            }
+            await refresh()
         case .agentOutput:
             // Watch asked to watch (or stop watching) an agent's live output.
             watchedHost = command.host
             watchedAgent = command.agent
+            watchedPane = command.pane
             await refresh()
         case .newAgent:
-            break
+            guard let host = command.host, let name = command.text,
+                  let machine = machines.first(where: { $0.host == host }) else { return }
+            await newSession(on: machine, name: name, cmd: command.cmd, initialText: command.initialText)
+        case .newPane:
+            guard let host = command.host, let agent = command.agent,
+                  let machine = machines.first(where: { $0.host == host }) else { return }
+            try? await MeshClient(machine: machine).newPane(agent: agent)
+            await refresh()
+        }
+    }
+
+    private nonisolated static func describe(_ error: Error) -> String {
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cannotConnectToHost: return "connection refused"
+            case .timedOut: return "timed out"
+            case .notConnectedToInternet, .networkConnectionLost: return "network unavailable"
+            default: return urlError.localizedDescription
+            }
+        }
+        if let meshError = error as? MeshClient.MeshError {
+            switch meshError {
+            case .http(let code): return "HTTP \(code)"
+            case .badURL: return "bad URL"
+            case .decode: return "bad response"
+            }
+        }
+        return error.localizedDescription
+    }
+
+    private nonisolated static func isAuthError(_ error: Error) -> Bool {
+        if case MeshClient.MeshError.http(let code) = error {
+            return code == 401 || code == 403
+        }
+        return false
+    }
+
+    private nonisolated static func probe(_ urlString: String?) async -> (ok: Bool, error: String?) {
+        guard let urlString, let url = URL(string: urlString) else { return (false, "bad URL") }
+        return await withTaskGroup(of: (ok: Bool, error: String?).self) { group in
+            group.addTask {
+                var req = URLRequest(url: url)
+                req.timeoutInterval = 2
+                do {
+                    let (_, resp) = try await URLSession.shared.data(for: req)
+                    guard let http = resp as? HTTPURLResponse else { return (true, nil) }
+                    let ok = (200...399).contains(http.statusCode)
+                    return (ok, ok ? nil : "HTTP \(http.statusCode)")
+                } catch {
+                    return (false, describe(error))
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(2))
+                return (false, "timed out")
+            }
+            let first = await group.next() ?? (false, "timed out")
+            group.cancelAll()
+            return first
         }
     }
 }

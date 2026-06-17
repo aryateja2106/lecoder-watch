@@ -1,0 +1,8 @@
+# Merge this into ~/.codex/config.toml.
+# Keep your existing notify command as the second argv if you already have one.
+
+notify = [
+  "/Users/you/.mesh/bin/mesh-codex-notify",
+  "/path/to/existing/notify-command",
+  "turn-ended"
+]

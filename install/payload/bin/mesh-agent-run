@@ -1,0 +1,43 @@
+#!/bin/sh
+
+set -u
+
+dry_run=0
+if [ "${1:-}" = "--dry-run" ]; then
+  dry_run=1
+  shift
+fi
+
+if [ "$#" -lt 2 ]; then
+  printf '%s\n' "Usage: mesh-agent-run [--dry-run] SOURCE COMMAND [ARG...]" >&2
+  exit 2
+fi
+
+SOURCE="$1"
+shift
+
+SESSION="${MESHD_SESSION:-$(basename "${PWD:-session}")}"
+export MESHD_SESSION="$SESSION"
+
+event_bin="${MESH_HOME:-$HOME/.mesh}/bin/mesh-event"
+if [ ! -x "$event_bin" ]; then
+  event_bin="$(CDPATH= cd -- "$(dirname "$0")" >/dev/null 2>&1 && pwd)/mesh-event"
+fi
+
+if [ "$dry_run" = "1" ]; then
+  "$event_bin" --dry-run "$SOURCE" "Started" "$*"
+  "$event_bin" --dry-run "$SOURCE" "Completed" "$SESSION"
+  exit 0
+fi
+
+"$event_bin" "$SOURCE" "Started" "$*" >/dev/null 2>&1 || true
+"$@"
+status=$?
+
+if [ "$status" -eq 0 ]; then
+  "$event_bin" "$SOURCE" "Completed" "$SESSION" >/dev/null 2>&1 || true
+else
+  "$event_bin" "$SOURCE" "Failed" "exit $status in $SESSION" >/dev/null 2>&1 || true
+fi
+
+exit "$status"

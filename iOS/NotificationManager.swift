@@ -39,6 +39,40 @@ final class NotificationManager {
         }
     }
 
+    func evaluate(events: [AgentEvent]) {
+        for event in events {
+            let key = "event-\(event.id)"
+            guard !firedKeys.contains(key) else { continue }
+            firedKeys.insert(key)
+            notify(id: key,
+                   title: eventNotificationTitle(event),
+                   body: eventNotificationBody(event))
+        }
+    }
+
+    private func eventNotificationTitle(_ event: AgentEvent) -> String {
+        let level = event.level?.lowercased()
+        let prefix = (level == "error" || level == "warning") ? "\(level!.capitalized): " : ""
+        let source = event.source.map(displaySource) ?? "Agent"
+        return "\(prefix)\(source): \(event.title)"
+    }
+
+    private func eventNotificationBody(_ event: AgentEvent) -> String {
+        let whereText = [event.host, event.session].compactMap { $0 }.joined(separator: " · ")
+        let body = event.body ?? whereText
+        guard !whereText.isEmpty, event.body != nil else { return body.isEmpty ? "agent event" : body }
+        return "\(body)\n\(whereText)"
+    }
+
+    private func displaySource(_ source: String) -> String {
+        switch source.lowercased() {
+        case "claude": return "Claude"
+        case "codex": return "Codex"
+        case "pi", "raspberry-pi": return "Pi"
+        default: return source
+        }
+    }
+
     private func resetSuffix(_ l: UsageLimit) -> String {
         guard let iso = l.resetsAtISO, let d = ISO8601DateFormatter().date(from: iso) else { return "" }
         let h = Int(max(0, d.timeIntervalSinceNow) / 3600)

@@ -41,11 +41,15 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
         WCSession.default.activate()
     }
 
+    private func decodeCommand(_ payload: [String: Any]) -> WatchCommand? {
+        guard let data = payload["command"] as? Data else { return nil }
+        return try? JSONDecoder().decode(WatchCommand.self, from: data)
+    }
+
     func session(_ session: WCSession,
                  didReceiveMessage message: [String: Any],
                  replyHandler: @escaping ([String: Any]) -> Void) {
-        guard let data = message["command"] as? Data,
-              let command = try? JSONDecoder().decode(WatchCommand.self, from: data) else {
+        guard let command = decodeCommand(message) else {
             replyHandler(["ok": false])
             return
         }
@@ -53,5 +57,10 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
             await commandHandler?(command)
             replyHandler(["ok": true])
         }
+    }
+
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
+        guard let command = decodeCommand(userInfo) else { return }
+        Task { await commandHandler?(command) }
     }
 }

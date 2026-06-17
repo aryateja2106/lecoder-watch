@@ -188,6 +188,7 @@
     <script>
       const params = new URLSearchParams(location.search);
       const session = params.get("session") || "spine-test";
+      const pane = params.get("pane") || "";
       const statusEl = document.getElementById("status");
       const terminalEl = document.getElementById("terminal");
       const textDecoder = new TextDecoder();
@@ -208,7 +209,11 @@
       term.loadAddon(fitAddon);
       term.open(terminalEl);
 
-      const ws = new WebSocket(`ws://${location.host}/attach?session=${encodeURIComponent(session)}`);
+      const attachParams = new URLSearchParams({ session });
+      if (pane) {
+        attachParams.set("pane", pane);
+      }
+      const ws = new WebSocket(`ws://${location.host}/attach?${attachParams.toString()}`);
       ws.binaryType = "arraybuffer";
 
       const modifiers = {

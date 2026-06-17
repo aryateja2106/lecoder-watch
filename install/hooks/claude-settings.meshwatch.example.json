@@ -1,0 +1,37 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.mesh/bin/mesh-hook --source claude --title \"Claude needs attention\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.mesh/bin/mesh-hook --source claude --title \"Claude stopped\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.mesh/bin/mesh-hook --source claude --title \"Claude subagent stopped\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,5 +1,22 @@
 # MeshWatch — Mission Control Handoff
 
+## Latest handoff update — 2026-06-05 16:30
+
+Arya's final feedback after testing the current phone/watch UI: the data path works, but the terminal is **not human-usable yet**. Do not continue backend expansion until the core mobile session UI is readable and controllable.
+
+Read these context docs before making further changes:
+
+```text
+docs/NEXT-AGENT-HANDOFF.md
+docs/PRODUCT-CONTEXT-2026-06-05.md
+docs/XCODE-WATCH-DEVICE-RUNBOOK.md
+docs/IMPECCABLE-SETUP.md
+```
+
+Immediate next step should be design-quality/context work, likely with Impeccable, not more services or LaunchAgents.
+
+---
+
 Status snapshot + prioritized fix-list from Arya's on-device testing (2026-06-05).
 The watch↔phone↔meshd loop **works** (send + receive confirmed). This doc tracks
 making it genuinely usable for orchestrating terminals + coding agents.

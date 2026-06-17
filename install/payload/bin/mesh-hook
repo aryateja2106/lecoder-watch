@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+
+def load_stdin():
+    if sys.stdin.isatty():
+        return {}
+    raw = sys.stdin.read().strip()
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {"body": raw}
+
+
+def pick(doc, *keys):
+    for key in keys:
+        val = doc.get(key)
+        if val:
+            return str(val)
+    return None
+
+
+def event_title(source, doc, override=None):
+    if override:
+        return override
+    source = source.lower()
+    hook = pick(doc, "hook_event_name", "event", "type")
+    tool = pick(doc, "tool_name", "tool")
+    if source == "claude":
+        if hook == "Notification":
+            return "Claude needs attention"
+        if hook == "Stop":
+            return "Claude stopped"
+        if hook == "SubagentStop":
+            return "Claude subagent stopped"
+        if hook == "PreToolUse" and tool:
+            return f"Claude tool: {tool}"
+        return pick(doc, "title") or "Claude event"
+    if source == "codex":
+        return pick(doc, "title") or (f"Codex: {hook}" if hook else "Codex event")
+    if source == "pi":
+        return pick(doc, "title") or (f"Pi: {hook}" if hook else "Pi event")
+    return pick(doc, "title", "event", "hook_event_name", "tool_name") or "Agent event"
+
+
+def event_level(source, doc):
+    hook = pick(doc, "hook_event_name", "event", "type")
+    haystack = " ".join(
+        str(v).lower()
+        for v in [
+            source,
+            hook,
+            pick(doc, "title"),
+            pick(doc, "body", "message", "prompt", "command"),
+        ]
+        if v
+    )
+    if any(word in haystack for word in ["error", "failed", "failure", "panic", "crash"]):
+        return "error"
+    if source.lower() == "claude" and hook == "Notification":
+        return "warning"
+    if any(word in haystack for word in ["needs input", "waiting", "approval", "attention", "thermal", "hot"]):
+        return "warning"
+    return "info"
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Post an agent hook event to meshd.")
+    parser.add_argument("--source", default=os.getenv("MESH_HOOK_SOURCE", "agent"))
+    parser.add_argument("--title")
+    parser.add_argument("--body")
+    parser.add_argument("--session", default=os.getenv("MESHD_SESSION"))
+    parser.add_argument("--level", default=os.getenv("MESHD_LEVEL"))
+    parser.add_argument("--dry-run", action="store_true", help="Print the event JSON without posting.")
+    args = parser.parse_args()
+
+    doc = load_stdin()
+    title = event_title(args.source, doc, args.title)
+    body = args.body or pick(doc, "body", "message", "prompt", "command", "transcript_path")
+    session = args.session or pick(doc, "session", "cwd", "workspace")
+    payload_doc = {
+        "source": args.source,
+        "title": title,
+        "body": body,
+        "session": session,
+        "level": args.level or event_level(args.source, doc),
+    }
+    if args.dry_run:
+        print(json.dumps(payload_doc, indent=2, sort_keys=True))
+        return 0
+
+    token = os.getenv("MESHD_TOKEN")
+    token_file = os.path.join(os.getenv("MESH_HOME", os.path.expanduser("~/.mesh")), "token")
+    if not token and os.path.exists(token_file):
+        with open(token_file, "r", encoding="utf-8") as f:
+            token = f.readline().strip()
+    if not token:
+        print(f"mesh-hook: missing MESHD_TOKEN and unreadable {token_file}", file=sys.stderr)
+        return 2
+
+    host = os.getenv("MESHD_HOST", "127.0.0.1")
+    port = os.getenv("MESHD_PORT", "8899")
+    payload = json.dumps(payload_doc).encode()
+    req = urllib.request.Request(
+        f"http://{host}:{port}/events",
+        data=payload,
+        headers={"authorization": f"Bearer {token}", "content-type": "application/json"},
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(req, timeout=3).read()
+        return 0
+    except urllib.error.HTTPError as e:
+        print(f"mesh-hook: HTTP {e.code}", file=sys.stderr)
+    except OSError as e:
+        print(f"mesh-hook: {e}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -10,15 +10,39 @@ struct Machine: Codable, Identifiable, Hashable {
     var port: Int             // meshd port, default 8899
     var token: String         // bearer token
     var bridgeURL: String?    // rmux-bridge base (tailscale-serve https); nil = not deployed
+    var vncURL: String?       // noVNC/web VNC URL; nil = http://ip:6080/vnc.html
 
-    var baseURL: URL? { URL(string: "http://\(ip):\(port)") }
+    var addresses: [String] {
+        var seen = Set<String>()
+        var values = [ip, host]
+        #if targetEnvironment(simulator)
+        if host.lowercased().contains("mac") {
+            values.append("127.0.0.1")
+        }
+        #endif
+        return values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    var baseURLs: [URL] {
+        addresses.compactMap { URL(string: "http://\($0):\(port)") }
+    }
+
+    var baseURL: URL? { baseURLs.first }
 
     /// Stored bridge URL, or a known default for the Mac (tailscale-serve host),
     /// so the Terminal tab works even for machines persisted before this field existed.
     var resolvedBridge: String? {
         if let b = bridgeURL, !b.isEmpty { return b }
         // rmux-bridge runs on every mesh machine at tailnet IP:7820 (http+ws).
-        return "http://\(ip):7820"
+        return addresses.last.map { "http://\($0):7820" }
+    }
+
+    var resolvedVNC: String {
+        if let v = vncURL, !v.isEmpty { return v }
+        let address = addresses.last ?? ip
+        return "http://\(address):6080/vnc.html?autoconnect=1&resize=scale"
     }
 
     /// Live terminal URL for an rmux session on this machine's bridge.
@@ -34,8 +58,7 @@ struct Machine: Codable, Identifiable, Hashable {
         return URL(string: s)
     }
 
-    // NOTE: "testtoken" is a dev placeholder for local simulator verification.
-    // Replace per-machine in the Settings tab with the real MESHD_TOKEN.
+    // Dogfood default: current local services use this token; custom machines can use generated tokens.
     static let defaults: [Machine] = [
         Machine(host: "arya-macbook-pro", ip: "100.94.221.115", port: 8899, token: "testtoken"),
         Machine(host: "arya-pi", ip: "100.94.168.17", port: 8899, token: "testtoken"),
@@ -78,6 +101,33 @@ struct Stats: Codable, Hashable {
     var agentsCount: Int
 }
 
+struct HealthInfo: Codable, Hashable {
+    var ok: Bool
+    var host: String?
+    var platform: String?
+    var arch: String?
+    var uptimeSec: Int?
+    var meshdVersion: String?
+    var capabilities: [String]?
+}
+
+// MARK: - Tailnet
+
+struct TailnetPeer: Codable, Hashable, Identifiable {
+    var id: String { dnsName ?? host }
+    var host: String
+    var dnsName: String?
+    var ips: [String]
+    var online: Bool
+    var os: String?
+}
+
+struct TailnetSnapshot: Codable, Hashable {
+    var ok: Bool
+    var peers: [TailnetPeer]
+    var error: String?
+}
+
 // MARK: - Agents
 
 struct Agent: Codable, Hashable, Identifiable {
@@ -87,6 +137,15 @@ struct Agent: Codable, Hashable, Identifiable {
     var createdISO: String?
     var attached: Bool
     var agentType: String?
+    var memMB: Double?   // resident memory of this session's process tree
+    var cpuPct: Double?  // summed %CPU of this session's process tree
+    var panes: [Pane]?    // present when meshd supports pane listing
+
+    /// "512 MB" / "1.2 GB" — compact memory label, or nil if unknown.
+    var memLabel: String? {
+        guard let mb = memMB else { return nil }
+        return mb >= 1024 ? String(format: "%.1f GB", mb / 1024) : "\(Int(mb)) MB"
+    }
 }
 
 struct AgentOutput: Codable, Hashable {
@@ -103,6 +162,7 @@ struct Pane: Codable, Hashable, Identifiable {
     var command: String
     var active: Bool
     var windowName: String
+    var currentPath: String?
 
     /// e.g. "0.1 claude" — short label for a chip.
     var label: String {
@@ -148,6 +208,19 @@ struct UsageSnapshot: Codable, Hashable {
     var providers: [UsageProvider]
 }
 
+// MARK: - Agent hooks
+
+struct AgentEvent: Codable, Hashable, Identifiable {
+    var id: String
+    var host: String?
+    var source: String?
+    var session: String?
+    var level: String?
+    var title: String
+    var body: String?
+    var createdISO: String
+}
+
 // MARK: - Relay envelope (iPhone -> Watch over WatchConnectivity)
 
 /// One bundle the phone pushes to the watch so the watch never talks to the mesh directly.
@@ -155,9 +228,12 @@ struct MeshSnapshot: Codable, Hashable {
     var updatedISO: String
     var machines: [MachineSnapshot]
     var usage: UsageSnapshot?
+    var quickCommands: [String]?
+    var events: [AgentEvent]? = nil
     // Live output the phone relays for the agent the watch is currently watching.
     var watchedHost: String?
     var watchedAgent: String?
+    var watchedPane: String?
     var watchedOutput: [String]?
 }
 
@@ -167,6 +243,16 @@ struct MachineSnapshot: Codable, Hashable, Identifiable {
     var reachable: Bool
     var stats: Stats?
     var agents: [Agent]
+    var error: String? = nil
+    var authError: String? = nil
+    var bridgeReachable: Bool? = nil
+    var bridgeError: String? = nil
+    var vncReachable: Bool? = nil
+    var vncError: String? = nil
+    var meshdVersion: String? = nil
+    var capabilities: [String]? = nil
+    var tailnetPeers: [TailnetPeer]? = nil
+    var tailnetError: String? = nil
 }
 
 // MARK: - Watch -> Phone command
@@ -176,6 +262,9 @@ enum WatchCommandKind: String, Codable {
     case agentSend
     case agentOutput
     case newAgent
+    case newPane
+    case killAgent
+    case killPane
 }
 
 struct WatchCommand: Codable {
@@ -184,4 +273,149 @@ struct WatchCommand: Codable {
     var agent: String?
     var text: String?
     var key: String?
+    var pane: String? = nil
+    var cmd: String? = nil
+    var initialText: String? = nil
+}
+
+// MARK: - Tiny local phrase mapper
+
+func shellCommand(from phrase: String) -> String {
+    let raw = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+    let lower = raw.lowercased()
+    guard !raw.isEmpty else { return "" }
+
+    if ["list", "list files", "show files", "ls"].contains(lower) { return "ls" }
+    if ["where am i", "current directory", "pwd"].contains(lower) { return "pwd" }
+    if lower == "git status" || lower == "status" { return "git status" }
+    if lower == "git pull" || lower == "pull latest" { return "git pull" }
+    if lower == "git push" || lower == "push changes" { return "git push" }
+    if ["run tests", "test", "run test"].contains(lower) { return "make test" }
+    if ["npm install", "install packages"].contains(lower) { return "npm install" }
+    if ["npm test", "run npm tests"].contains(lower) { return "npm test" }
+    if ["npm build", "build npm"].contains(lower) { return "npm run build" }
+    if ["bun install"].contains(lower) { return "bun install" }
+    if ["bun test", "run bun tests"].contains(lower) { return "bun test" }
+    if lower == "clear" || lower == "clear screen" { return "clear" }
+    if lower == "continue" { return "continue" }
+    if ["go back", "up one", "parent directory", "cd dot dot"].contains(lower) { return "cd .." }
+    if ["home", "go home", "cd home"].contains(lower) { return "cd ~" }
+    if ["projects", "go projects", "go to projects"].contains(lower) { return "cd ~/Projects" }
+    if ["desktop", "go desktop", "go to desktop"].contains(lower) { return "cd ~/Desktop" }
+    if ["downloads", "go downloads", "go to downloads"].contains(lower) { return "cd ~/Downloads" }
+    if ["list all", "show hidden files", "list hidden files"].contains(lower) { return "ls -la" }
+    if lower == "start claude" || lower == "run claude" { return "claude" }
+    if lower == "start codex" || lower == "run codex" { return "codex" }
+    if ["check mesh", "mesh check", "run self check", "run self-check", "self check", "self-check"].contains(lower) {
+        return "~/.mesh/bin/mesh-self-check"
+    }
+    if ["tailscale status", "tail scale status", "check tailscale", "check tail scale"].contains(lower) {
+        return "tailscale status"
+    }
+    if ["check bridge", "terminal bridge", "check terminal bridge"].contains(lower) {
+        return "curl -fsS http://127.0.0.1:7820/ >/dev/null && echo bridge OK"
+    }
+
+    for prefix in ["go to ", "open folder ", "change directory to ", "cd "] {
+        if lower.hasPrefix(prefix) {
+            let path = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return path.isEmpty ? "" : "cd \(shellQuotedArgument(path))"
+        }
+    }
+    for prefix in ["make directory ", "create folder ", "mkdir "] {
+        if lower.hasPrefix(prefix) {
+            let path = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return path.isEmpty ? "" : "mkdir -p \(shellQuotedArgument(path))"
+        }
+    }
+    for prefix in ["touch file ", "create file ", "touch "] {
+        if lower.hasPrefix(prefix) {
+            let path = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return path.isEmpty ? "" : "touch \(shellQuotedArgument(path))"
+        }
+    }
+    for prefix in ["search for ", "grep for ", "find text "] {
+        if lower.hasPrefix(prefix) {
+            let term = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return term.isEmpty ? "" : "grep -R \(shellQuotedArgument(term)) ."
+        }
+    }
+    for prefix in ["ask claude to ", "tell claude to ", "claude "] {
+        if lower.hasPrefix(prefix) {
+            let task = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return task.isEmpty ? "claude" : "claude \(shellQuotedArgument(task))"
+        }
+    }
+    for prefix in ["ask codex to ", "tell codex to ", "codex "] {
+        if lower.hasPrefix(prefix) {
+            let task = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return task.isEmpty ? "codex" : "codex \(shellQuotedArgument(task))"
+        }
+    }
+
+    return raw
+}
+
+func shellQuotedArgument(_ value: String) -> String {
+    let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "/._-:@"))
+    if !value.isEmpty, value.rangeOfCharacter(from: safe.inverted) == nil {
+        return value
+    }
+    return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+}
+
+// MARK: - Session state inference
+
+/// Coarse, output-derived state so the UI can show "waiting / running / idle / error"
+/// instead of a meaningless attached flag — the difference between "my agent needs me"
+/// and "it's still thinking" at a glance.
+/// ponytail: pure heuristic over the captured tail, no agent-specific protocol. Tighten
+/// the marker lists (or fold in /events hook signals) if it misclassifies in practice.
+enum SessionState: String {
+    case waiting   // shell/agent is asking the user something — needs attention
+    case running   // producing output, no prompt yet — busy
+    case idle      // sitting at a shell prompt, ready for input
+    case error     // recent output looks like a failure
+    case unknown
+
+    var label: String {
+        switch self {
+        case .waiting: return "waiting"
+        case .running: return "running"
+        case .idle:    return "idle"
+        case .error:   return "error"
+        case .unknown: return "—"
+        }
+    }
+}
+
+func sessionState(lines: [String], attached: Bool) -> SessionState {
+    let nonEmpty = lines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    guard let last = nonEmpty.last else { return attached ? .running : .unknown }
+    let tail = nonEmpty.suffix(6).joined(separator: "\n").lowercased()
+
+    // 1. A decision prompt always wins — this is the "needs the human" signal.
+    let waitMarkers = ["(y/n)", "[y/n]", "y/n)", "(yes/no)", "[yes]", "do you want",
+                       "proceed?", "continue?", "press enter", "❯ 1.", "1. yes",
+                       "allow?", "approve", "overwrite?", "would you like"]
+    if waitMarkers.contains(where: { tail.contains($0) }) { return .waiting }
+
+    // 2. Back at a shell prompt → ready (any error is already in the past).
+    if isShellPrompt(last) { return .idle }
+
+    // 3. Current output looks like a failure.
+    let errMarkers = ["error:", "fatal:", "panic:", "traceback (most recent",
+                      "command not found", "no such file", "permission denied", "exception"]
+    if errMarkers.contains(where: { tail.contains($0) }) { return .error }
+
+    // 4. Output present, no prompt, not waiting → something is running.
+    return attached ? .running : .idle
+}
+
+/// Last line looks like an interactive shell prompt waiting for input.
+private func isShellPrompt(_ line: String) -> Bool {
+    guard let last = line.last else { return false }
+    if "$%#>".contains(last) { return true }                       // bash / zsh / root / generic
+    if line.hasSuffix("❯") || line.hasSuffix("→") { return true }  // starship / pure / zsh themes
+    return false
 }

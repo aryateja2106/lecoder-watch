@@ -1,15 +1,19 @@
 // meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale.
-// bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind 0.0.0.0:<MESHD_PORT> (tailnet-private).
+// bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind <MESHD_HOST>:<MESHD_PORT>.
 import os from "node:os";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
+const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "tailscale"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
+const EVENTS_PATH = process.env.MESHD_EVENTS_PATH ?? join(homedir(), ".mesh", "agent-events.jsonl");
 
 async function sh(cmd: string): Promise<string> {
   const p = Bun.spawn(["/bin/sh", "-c", cmd], { stdout: "pipe", stderr: "ignore" });
@@ -89,24 +93,65 @@ async function getStats() {
 }
 
 // ---------- agents (rmux) ----------
+// One snapshot of every process: pid -> { ppid, rssKB, pcpu }. Works on mac + linux.
+async function procTable(): Promise<Map<number, { ppid: number; rssKB: number; pcpu: number }>> {
+  const out = await sh(`ps -A -o pid=,ppid=,rss=,pcpu= 2>/dev/null`);
+  const t = new Map<number, { ppid: number; rssKB: number; pcpu: number }>();
+  for (const line of out.split("\n")) {
+    const f = line.trim().split(/\s+/);
+    if (f.length < 4) continue;
+    const pid = num(f[0]);
+    if (pid > 0) t.set(pid, { ppid: num(f[1]), rssKB: num(f[2]), pcpu: num(f[3]) });
+  }
+  return t;
+}
+// Sum RSS + %CPU of each root pid AND all its descendants (the agent runs as a
+// child of the pane's shell, so we must walk the tree, not just the pane pid).
+function sumSubtrees(roots: number[], table: Map<number, { ppid: number; rssKB: number; pcpu: number }>) {
+  const children = new Map<number, number[]>();
+  for (const [pid, p] of table) {
+    const arr = children.get(p.ppid) ?? [];
+    arr.push(pid);
+    children.set(p.ppid, arr);
+  }
+  let rssKB = 0, pcpu = 0;
+  const seen = new Set<number>();
+  const stack = [...roots];
+  while (stack.length) {
+    const pid = stack.pop()!;
+    if (seen.has(pid)) continue;
+    seen.add(pid);
+    const p = table.get(pid);
+    if (p) { rssKB += p.rssKB; pcpu += p.pcpu; }
+    for (const c of children.get(pid) ?? []) stack.push(c);
+  }
+  return { memMB: rssKB / 1024, cpuPct: pcpu };
+}
+
 async function rmuxSessions(): Promise<any[]> {
   const out = await sh(`${MUX} list-sessions -F '#{session_name}|#{session_windows}|#{session_created}|#{session_attached}' 2>/dev/null`);
   if (!out.trim()) return [];
   const rows = out.trim().split("\n").map((l) => l.split("|"));
   const sessions = [] as any[];
   const HIDDEN = new Set(["meshd", "rmux-bridge"]); // infra, not user agents
+  const table = await procTable();
   for (const r of rows) {
     const name = r[0];
     if (HIDDEN.has(name)) continue;
-    let agentType: string | undefined;
-    const cmd = (await sh(`${MUX} list-panes -t ${shq(name)} -F '#{pane_current_command}' 2>/dev/null | head -1`)).trim();
-    if (cmd) agentType = mapAgent(cmd);
+    // One pass over this session's panes: agent type (first pane) + all pane pids.
+    const panesOut = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{pane_pid}|#{pane_current_command}' 2>/dev/null`);
+    const paneRows = panesOut.trim().split("\n").filter(Boolean).map((l) => l.split("|"));
+    const panePids = paneRows.map((p) => num(p[0])).filter((n) => n > 0);
+    const agentType = paneRows[0]?.[1] ? mapAgent(paneRows[0][1]) : undefined;
+    const { memMB, cpuPct } = sumSubtrees(panePids, table);
     sessions.push({
       name,
       windows: num(r[1]),
       createdISO: r[2] ? new Date(num(r[2]) * 1000).toISOString() : null,
       attached: r[3] === "1",
       agentType,
+      memMB: Math.round(memMB),
+      cpuPct: Math.round(cpuPct * 10) / 10,
     });
   }
   return sessions;
@@ -125,7 +170,7 @@ function sanitize(s: string) { return s.replace(/[^a-zA-Z0-9._-]+/g, "-"); }
 async function agentPanes(name: string) {
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
-  const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{window_index}.#{pane_index}|#{pane_id}|#{pane_current_command}|#{pane_active}|#{window_name}' 2>/dev/null`);
+  const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{window_index}.#{pane_index}|#{pane_id}|#{pane_current_command}|#{pane_active}|#{window_name}|#{pane_current_path}' 2>/dev/null`);
   const panes = out.trim().split("\n").filter(Boolean).map((line) => {
     const f = line.split("|");
     const [windowIndex, paneIndex] = (f[0] ?? "").split(".");
@@ -136,6 +181,7 @@ async function agentPanes(name: string) {
       command: f[2] ?? "",
       active: f[3] === "1",
       windowName: f[4] ?? "",
+      currentPath: f[5] || undefined,
     };
   });
   return { name, panes };
@@ -147,6 +193,28 @@ async function agentOutput(name: string, lines: number, pane?: string) {
   const out = await sh(`${MUX} capture-pane -p -t ${target} 2>/dev/null`);
   const arr = out.replace(/\n+$/, "").split("\n");
   return { name, lines: arr.slice(-lines) };
+}
+const INFRA = new Set(["meshd", "rmux-bridge"]); // never killable over the wire
+async function agentKill(name: string): Promise<{ ok: boolean; error?: string }> {
+  if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
+  if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
+    return { ok: false, error: "no such session" };
+  }
+  await sh(`${MUX} kill-session -t ${shq(name)}`);
+  return { ok: true };
+}
+async function agentKillPane(name: string, paneId: string): Promise<{ ok: boolean; error?: string }> {
+  if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
+  await sh(`${MUX} kill-pane -t ${shq(paneId)}`);
+  return { ok: true };
+}
+async function agentNewPane(name: string, dir?: string): Promise<{ ok: boolean; error?: string }> {
+  if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
+    return { ok: false, error: "no such session" };
+  }
+  const flag = dir === "h" ? "-h" : dir === "v" ? "-v" : "";
+  await sh(`${MUX} split-window ${flag} -t ${shq(name)}`);
+  return { ok: true };
 }
 async function agentSend(name: string, text?: string, key?: string, pane?: string) {
   const target = pane ? shq(pane) : shq(name);
@@ -187,6 +255,68 @@ async function getUsage() {
   return { fetchedAt: raw.snapshots?.codex?.fetchedAt, providers };
 }
 
+// ---------- agent hook events ----------
+type AgentEvent = {
+  id: string;
+  host?: string;
+  source?: string;
+  session?: string;
+  level?: string;
+  title: string;
+  body?: string;
+  createdISO: string;
+};
+
+async function readEvents(since?: string | null): Promise<AgentEvent[]> {
+  const raw = await readFile(EVENTS_PATH, "utf8").catch(() => "");
+  const events = raw.split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      try { return JSON.parse(line) as AgentEvent; } catch { return null; }
+    })
+    .filter((event): event is AgentEvent => Boolean(event));
+  const filtered = since ? events.filter((event) => event.createdISO > since) : events;
+  return filtered.slice(-100);
+}
+
+async function addEvent(input: any): Promise<AgentEvent> {
+  const now = new Date().toISOString();
+  const event: AgentEvent = {
+    id: sanitize(input.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+    host: os.hostname(),
+    source: input.source ? String(input.source) : undefined,
+    session: input.session ? String(input.session) : undefined,
+    level: input.level ? String(input.level) : undefined,
+    title: String(input.title ?? "Agent event").slice(0, 120),
+    body: input.body ? String(input.body).slice(0, 500) : undefined,
+    createdISO: input.createdISO ? String(input.createdISO) : now,
+  };
+  await mkdir(join(homedir(), ".mesh"), { recursive: true });
+  await appendFile(EVENTS_PATH, `${JSON.stringify(event)}\n`);
+  return event;
+}
+
+// ---------- tailnet discovery ----------
+async function getTailnet() {
+  const out = await sh(`tailscale status --json 2>&1`);
+  if (!out.trim()) return { ok: false, peers: [], error: "tailscale unavailable" };
+  let raw: any;
+  try {
+    raw = JSON.parse(out);
+  } catch {
+    return { ok: false, peers: [], error: out.trim().slice(0, 240) };
+  }
+  const self = raw.Self ? [raw.Self] : [];
+  const peers = [...self, ...Object.values(raw.Peer ?? {})].map((p: any) => ({
+    host: String(p.HostName ?? p.DNSName ?? "").replace(/\.$/, ""),
+    dnsName: p.DNSName ? String(p.DNSName).replace(/\.$/, "") : undefined,
+    ips: Array.isArray(p.TailscaleIPs) ? p.TailscaleIPs : [],
+    online: Boolean(p.Online),
+    os: p.OS ? String(p.OS) : undefined,
+  })).filter((p) => p.host || p.ips.length);
+  return { ok: true, peers };
+}
+
 // ---------- server ----------
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -200,22 +330,30 @@ function authed(req: Request): boolean {
 
 Bun.serve({
   port: PORT,
-  hostname: "0.0.0.0",
+  hostname: HOST,
   async fetch(req) {
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/health") {
-      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION });
+      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES });
     }
     if (!authed(req)) return json({ error: "unauthorized" }, 401);
     try {
       if (path === "/stats") return json(await getStats());
+      if (path === "/tailnet") return json(await getTailnet());
       if (path === "/agents") return json(await rmuxSessions());
       if (path === "/usage") return json(await getUsage());
+      if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));
+      if (path === "/events" && req.method === "POST") return json(await addEvent(await req.json().catch(() => ({}))), 201);
       const panesM = path.match(/^\/agents\/([^/]+)\/panes$/);
       if (panesM && req.method === "GET") {
         const res = await agentPanes(decodeURIComponent(panesM[1]));
         return res ? json(res) : json({ error: "no such session" }, 404);
+      }
+      if (panesM && req.method === "POST") {
+        const body = await req.json().catch(() => ({}));
+        const res = await agentNewPane(decodeURIComponent(panesM[1]), body.dir);
+        return json(res, res.ok ? 201 : 404);
       }
       const outM = path.match(/^\/agents\/([^/]+)\/output$/);
       if (outM && req.method === "GET") {
@@ -227,12 +365,26 @@ Bun.serve({
         const body = await req.json().catch(() => ({}));
         return json(await agentSend(decodeURIComponent(sendM[1]), body.text, body.key, body.pane));
       }
+      const killPaneM = path.match(/^\/agents\/([^/]+)\/panes\/([^/]+)$/);
+      if (killPaneM && req.method === "DELETE") {
+        const res = await agentKillPane(decodeURIComponent(killPaneM[1]), decodeURIComponent(killPaneM[2]));
+        return json(res, res.ok ? 200 : 400);
+      }
+      const killM = path.match(/^\/agents\/([^/]+)$/);
+      if (killM && req.method === "DELETE") {
+        const res = await agentKill(decodeURIComponent(killM[1]));
+        return json(res, res.ok ? 200 : (res.error === "no such session" ? 404 : 400));
+      }
       if (path === "/agents/new" && req.method === "POST") {
         const b = await req.json().catch(() => ({}));
         const name = sanitize(b.name ?? "");
         if (!name) return json({ error: "name required" }, 400);
         if ((await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) return json({ error: "exists" }, 409);
         await sh(`${MUX} new-session -d -s ${shq(name)} ${b.cwd ? `-c ${shq(b.cwd)}` : ""} ${b.cmd ? shq(b.cmd) : ""}`);
+        if (b.initialText) {
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          await agentSend(name, String(b.initialText));
+        }
         return json({ ok: true, name });
       }
     } catch (e: any) {
@@ -241,4 +393,4 @@ Bun.serve({
     return json({ error: "not found" }, 404);
   },
 });
-console.log(`meshd ${VERSION} on http://0.0.0.0:${PORT}  (host=${os.hostname()} platform=${process.platform})`);
+console.log(`meshd ${VERSION} on http://${HOST}:${PORT}  (host=${os.hostname()} platform=${process.platform})`);

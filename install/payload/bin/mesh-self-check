@@ -1,0 +1,93 @@
+#!/bin/sh
+
+set -u
+
+HOST="${MESHD_HOST:-127.0.0.1}"
+PORT="${MESHD_PORT:-8899}"
+BRIDGE_HOST="${BRIDGE_HOST:-127.0.0.1}"
+BRIDGE_PORT="${PORT:-7820}"
+VNC_URL="${MESH_VNC_URL:-http://127.0.0.1:6080/vnc.html}"
+TOKEN="${MESHD_TOKEN:-}"
+TOKEN_FILE="${MESH_HOME:-$HOME/.mesh}/token"
+
+if [ -z "$TOKEN" ] && [ -r "$TOKEN_FILE" ]; then
+  TOKEN=$(sed -n '1p' "$TOKEN_FILE")
+fi
+
+auth=""
+if [ -n "$TOKEN" ]; then
+  auth="-H Authorization: Bearer $TOKEN"
+fi
+
+http_code() {
+  # shellcheck disable=SC2086
+  curl -s -o /dev/null -w '%{http_code}' $auth "$1"
+}
+
+printf 'meshd: '
+# shellcheck disable=SC2086
+if curl -fsS $auth "http://$HOST:$PORT/health" 2>/tmp/mesh-health.err; then
+  printf '\n'
+else
+  cat /tmp/mesh-health.err
+  exit 1
+fi
+
+printf 'agents: '
+code=$(http_code "http://$HOST:$PORT/agents")
+if [ "$code" = "200" ]; then
+  printf 'active\n'
+else
+  printf 'HTTP %s\n' "$code"
+  exit 1
+fi
+
+printf 'events: '
+code=$(http_code "http://$HOST:$PORT/events")
+if [ "$code" = "200" ]; then
+  printf 'active\n'
+else
+  printf 'HTTP %s\n' "$code"
+  exit 1
+fi
+
+printf 'tailnet: '
+tailnet_body=$(mktemp "${TMPDIR:-/tmp}/mesh-tailnet.XXXXXX")
+# shellcheck disable=SC2086
+code=$(curl -s -o "$tailnet_body" -w '%{http_code}' $auth "http://$HOST:$PORT/tailnet")
+if [ "$code" = "200" ] && grep '"ok":true' "$tailnet_body" >/dev/null 2>&1; then
+  printf 'active\n'
+else
+  printf 'HTTP %s ' "$code"
+  head -c 180 "$tailnet_body"
+  printf '\n'
+  rm -f "$tailnet_body"
+  exit 1
+fi
+rm -f "$tailnet_body"
+
+printf 'bridge: '
+code=$(curl -s -o /dev/null -w '%{http_code}' "http://$BRIDGE_HOST:$BRIDGE_PORT/")
+case "$code" in
+  2*|3*) printf 'active\n' ;;
+  *)
+    printf 'HTTP %s\n' "$code"
+    exit 1
+    ;;
+esac
+
+printf 'VNC: '
+code=$(curl -s -o /dev/null -w '%{http_code}' "$VNC_URL")
+case "$code" in
+  2*|3*) printf 'active\n' ;;
+  000) printf 'not configured (%s)\n' "$VNC_URL" ;;
+  *) printf 'HTTP %s (%s)\n' "$code" "$VNC_URL" ;;
+esac
+
+printf 'hooks: '
+if "${MESH_HOME:-$HOME/.mesh}/bin/mesh-event" self-check "Mesh self-check" "events OK" >/dev/null 2>&1; then
+  printf 'active\n'
+else
+  printf 'failed\n'
+  exit 1
+fi

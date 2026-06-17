@@ -10,11 +10,11 @@ struct TerminalTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var creatingOn: Machine?
 
-    private var bridged: [MachineSnapshot] {
-        let snaps = store.snapshot?.machines ?? []
-        return snaps.filter { snap in
-            store.machines.first(where: { $0.host == snap.host })?.resolvedBridge != nil
-        }
+    private var machineRows: [MachineSnapshot] {
+        let snaps = store.snapshot?.machines.isEmpty == false
+            ? store.snapshot?.machines ?? []
+            : store.machines.map { MachineSnapshot(host: $0.host, reachable: false, stats: nil, agents: [], error: "not checked yet") }
+        return terminalActiveFirst(snaps)
     }
 
     private func machine(for host: String) -> Machine? {
@@ -24,25 +24,46 @@ struct TerminalTab: View {
     var body: some View {
         NavigationStack {
             List {
-                if bridged.isEmpty {
+                if machineRows.isEmpty {
                     ContentUnavailableView(
-                        "No terminal bridge",
+                        "No machines",
                         systemImage: "terminal",
-                        description: Text("Run rmux-bridge on a machine to open live terminals here.")
+                        description: Text("Add a machine in Settings.")
                     )
                 }
-                ForEach(bridged) { snap in
+                ForEach(machineRows) { snap in
                     if let m = machine(for: snap.host) {
                         Section {
+                            if !snap.reachable {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(snap.error ?? "meshd unreachable")
+                                        .foregroundStyle(.secondary)
+                                    Text("meshd \(m.baseURLs.map(\.absoluteString).joined(separator: " or "))")
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.secondary)
+                                    Text("bridge \(m.resolvedBridge ?? "none")")
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else if let auth = snap.authError {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(auth)
+                                        .foregroundStyle(.orange)
+                                    Text("Update this machine's token in Settings, then refresh.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    copyableCommand("sh install.sh --token \(m.token)")
+                                }
+                            }
                             ForEach(snap.agents) { agent in
                                 NavigationLink {
-                                    BridgeTerminalScreen(machine: m, session: agent.name)
+                                    SessionPeekScreen(machine: m, session: agent)
                                 } label: {
                                     HStack {
                                         Image(systemName: "terminal.fill")
                                         VStack(alignment: .leading) {
                                             Text(agent.name)
-                                            Text(agent.agentType ?? "shell")
+                                            Text([agent.agentType ?? "shell", agent.memLabel].compactMap { $0 }.joined(separator: " · "))
                                                 .font(.caption).foregroundStyle(.secondary)
                                         }
                                         Spacer()
@@ -52,17 +73,36 @@ struct TerminalTab: View {
                                         }
                                     }
                                 }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        Task { await store.kill(on: m, name: agent.name) }
+                                    } label: {
+                                        Label("Kill", systemImage: "trash")
+                                    }
+                                }
                             }
                             if snap.agents.isEmpty {
-                                Text("no sessions").foregroundStyle(.secondary)
+                                Text(snap.authError != nil ? "token needed to list sessions" : (snap.reachable ? "no sessions" : "start meshd to list sessions"))
+                                    .foregroundStyle(.secondary)
+                            }
+                            if snap.bridgeReachable == true {
+                                NavigationLink {
+                                    ManualBridgeScreen(machine: m)
+                                } label: {
+                                    Label("Open known session", systemImage: "rectangle.connected.to.line.below")
+                                }
                             }
                             Button {
                                 creatingOn = m
                             } label: {
                                 Label("New session", systemImage: "plus.circle")
                             }
+                            .disabled(!terminalReady(snap))
                         } header: {
-                            Text(snap.host)
+                            HStack {
+                                Circle().fill(snap.authError != nil ? .orange : (snap.reachable ? .green : .secondary)).frame(width: 7, height: 7)
+                                Text(snap.host)
+                            }
                         }
                     }
                 }
@@ -80,6 +120,53 @@ struct TerminalTab: View {
     }
 }
 
+private func terminalActiveFirst(_ snaps: [MachineSnapshot]) -> [MachineSnapshot] {
+    snaps.sorted {
+        if $0.reachable != $1.reachable { return $0.reachable && !$1.reachable }
+        if $0.agents.count != $1.agents.count { return $0.agents.count > $1.agents.count }
+        return $0.host < $1.host
+    }
+}
+
+private func terminalReady(_ snap: MachineSnapshot) -> Bool {
+    snap.reachable && snap.authError == nil
+}
+
+private struct ManualBridgeScreen: View {
+    let machine: Machine
+    @State private var session = ""
+
+    var body: some View {
+        Form {
+            Section("Session") {
+                TextField("pi-shell", text: $session)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                FlowButtons(items: suggestions) { session = $0 }
+                NavigationLink {
+                    BridgeTerminalScreen(machine: machine, session: sessionName, initialPane: nil)
+                } label: {
+                    Label("Open terminal", systemImage: "terminal")
+                }
+                .disabled(sessionName.isEmpty)
+            }
+        }
+        .navigationTitle(machine.host)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var sessionName: String {
+        session.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var suggestions: [String] {
+        let host = machine.host.lowercased()
+        if host.contains("pi") { return ["pi-shell", "watch-shell", "mesh-smoke"] }
+        if host.contains("mac") { return ["mesh-smoke", "codex", "claude"] }
+        return ["shell", "codex", "claude"]
+    }
+}
+
 // MARK: - New session sheet
 
 private struct NewSessionSheet: View {
@@ -89,10 +176,30 @@ private struct NewSessionSheet: View {
 
     @State private var name = ""
     @State private var command = ""
+    @State private var taskAgent = "claude"
+    @State private var taskText = ""
     @State private var busy = false
 
     // Common launchers; "shell" means just a plain rmux session.
     private let presets = ["shell", "claude", "codex", "agy", "bun", "python3"]
+    private let taskAgents = ["claude", "codex"]
+
+    private var launchCommand: String {
+        if !taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return taskAgent }
+        return command
+    }
+
+    private var initialText: String? {
+        let task = taskText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return task.isEmpty ? nil : task + "\n"
+    }
+
+    private var sessionName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        let prefix = launchCommand.split(separator: " ").first.map(String.init) ?? "shell"
+        return "phone-\(prefix)-\(Int(Date().timeIntervalSince1970) % 100000)"
+    }
 
     var body: some View {
         NavigationStack {
@@ -112,6 +219,19 @@ private struct NewSessionSheet: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 }
+                Section("Task") {
+                    Picker("Agent", selection: $taskAgent) {
+                        ForEach(taskAgents, id: \.self) { Text($0).tag($0) }
+                    }
+                    TextField("Describe the task", text: $taskText, axis: .vertical)
+                        .lineLimit(2...5)
+                        .autocorrectionDisabled()
+                    if !taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("\(launchCommand) + type task")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .navigationTitle("New on \(machine.host)")
             .navigationBarTitleDisplayMode(.inline)
@@ -123,12 +243,350 @@ private struct NewSessionSheet: View {
                     Button("Create") {
                         busy = true
                         Task {
-                            await store.newSession(on: machine, name: name, cmd: command)
+                            await store.newSession(on: machine, name: sessionName, cmd: launchCommand, initialText: initialText)
                             busy = false
                             dismiss()
                         }
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || busy)
+                    .disabled(busy)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Session peek (read-first, type only on intent)
+
+/// Clean mobile control surface for one rmux session. The default state is read-only:
+/// show the latest output and high-signal controls, then open the full terminal only
+/// when Arya explicitly taps "Open terminal".
+private struct SessionPeekScreen: View {
+    @EnvironmentObject var store: MeshStore
+    @Environment(\.dismiss) private var dismiss
+    let machine: Machine
+    let session: Agent
+
+    @State private var output: [String] = []
+    @State private var panes: [Pane] = []
+    @State private var selectedPane: String?
+    @State private var composeText = ""
+    @State private var phraseText = ""
+    @State private var showingCompose = false
+    @State private var showingPhrase = false
+    @State private var loading = false
+    @State private var lastUpdated: Date?
+
+    private var visibleLines: [String] {
+        let trimmed = output.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return Array(trimmed.suffix(32))
+    }
+
+    private var activePane: Pane? {
+        guard let selectedPane else { return panes.first(where: { $0.active }) }
+        return panes.first { $0.paneId == selectedPane }
+    }
+
+    private var state: SessionState { sessionState(lines: output, attached: session.attached) }
+
+    private func stateColor(_ s: SessionState) -> Color {
+        switch s {
+        case .waiting: return .orange
+        case .running: return .blue
+        case .error:   return .red
+        case .idle, .unknown: return .secondary
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                headerCard
+                paneCard
+                outputCard
+                controlsCard
+                presetsCard
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle(session.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            Button { Task { await refresh() } } label: {
+                Image(systemName: loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+            }
+        }
+        .task(id: session.name) {
+            while !Task.isCancelled {
+                await refresh()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
+        .sheet(isPresented: $showingCompose) { composeSheet }
+        .sheet(isPresented: $showingPhrase) { phraseSheet }
+    }
+
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                Image(systemName: session.attached ? "dot.radiowaves.left.and.right" : "terminal.fill")
+                    .foregroundStyle(session.attached ? .green : .accentColor)
+                    .font(.title2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(session.name)
+                        .font(.title2.bold())
+                        .lineLimit(1)
+                    Text("\(terminalShortName(machine.host)) · \(session.agentType ?? "shell") · \(session.windows) pane\(session.windows == 1 ? "" : "s")")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            HStack {
+                StatPill(label: "CPU", value: session.cpuPct.map { String(format: "%.0f%%", $0) } ?? "—")
+                StatPill(label: "Mem", value: session.memLabel ?? "—")
+                StatPill(label: "State", value: state.label, tone: stateColor(state))
+            }
+            if let lastUpdated {
+                Text("updated \(lastUpdated.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var paneCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Pane", systemImage: "rectangle.split.2x1")
+                    .font(.headline)
+                Spacer()
+                Text(activePane?.label ?? "session")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if panes.isEmpty {
+                Text("No pane list yet.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                if let path = activePane?.currentPath, !path.isEmpty {
+                    Label(path, systemImage: "folder")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                }
+                FlowButtons(items: panes.map(\.label)) { label in
+                    guard let pane = panes.first(where: { $0.label == label }) else { return }
+                    selectedPane = pane.paneId
+                    Task { await refresh() }
+                }
+            }
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var outputCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Latest output", systemImage: "text.alignleft")
+                    .font(.headline)
+                Spacer()
+                if loading { ProgressView().controlSize(.small) }
+            }
+            Group {
+                if visibleLines.isEmpty {
+                    Text("No output yet. Tap refresh or open the terminal.")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Text(visibleLines.joined(separator: "\n"))
+                        .font(.system(.caption, design: .monospaced))
+                        .lineSpacing(2)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(12)
+            .background(Color.black, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .foregroundStyle(.white)
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var controlsCard: some View {
+        VStack(spacing: 10) {
+            NavigationLink {
+                BridgeTerminalScreen(machine: machine, session: session.name, initialPane: selectedPane)
+            } label: {
+                Label("Open terminal", systemImage: "terminal")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            HStack {
+                Button { showingCompose = true } label: { Label("Reply", systemImage: "square.and.pencil") }
+                Button { showingPhrase = true } label: { Label("Command", systemImage: "waveform") }
+                Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
+                if activePane != nil {
+                    Button(role: .destructive) { Task { await killPane() } } label: { Label("Kill pane", systemImage: "rectangle.split.1x2") }
+                }
+                Button { Task { await send(key: "enter") } } label: { Label("Enter", systemImage: "return") }
+                Button(role: .destructive) { Task { await send(key: "ctrl-c") } } label: { Label("Stop", systemImage: "xmark.octagon") }
+            }
+            .buttonStyle(.bordered)
+            .labelStyle(.iconOnly)
+            Button(role: .destructive) {
+                Task {
+                    await store.kill(on: machine, name: session.name)
+                    dismiss()
+                }
+            } label: {
+                Label("Kill session", systemImage: "trash")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var presetsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Quick send")
+                .font(.headline)
+            FlowButtons(items: store.quickCommands) { cmd in
+                Task { await send(text: cmd + "\n") }
+            }
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var composeSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Send to \(session.name)") {
+                    TextField("Type, paste, or dictate a command", text: $composeText, axis: .vertical)
+                        .lineLimit(3...8)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+            }
+            .navigationTitle("Reply")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingCompose = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Send") {
+                        Task {
+                            await send(text: composeText + "\n")
+                            composeText = ""
+                            showingCompose = false
+                        }
+                    }
+                    .disabled(composeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private var phraseSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Say what you want") {
+                    TextField("list files, go to Projects, start codex", text: $phraseText, axis: .vertical)
+                        .lineLimit(2...5)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                    Text(shellCommand(from: phraseText).isEmpty ? " " : shellCommand(from: phraseText))
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+                Section("Examples") {
+                    Button("list files") { phraseText = "list files" }
+                    Button("where am i") { phraseText = "where am i" }
+                    Button("git status") { phraseText = "git status" }
+                    Button("start codex") { phraseText = "start codex" }
+                    Button("check mesh") { phraseText = "check mesh" }
+                }
+            }
+            .navigationTitle("Command")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingPhrase = false } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Send") {
+                        let command = shellCommand(from: phraseText)
+                        Task {
+                            await send(text: command + "\n")
+                            phraseText = ""
+                            showingPhrase = false
+                        }
+                    }
+                    .disabled(shellCommand(from: phraseText).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func refresh() async {
+        loading = true
+        defer { loading = false }
+        async let out = try? MeshClient(machine: machine).output(agent: session.name, lines: 80, pane: selectedPane)
+        async let paneList = try? MeshClient(machine: machine).panes(agent: session.name)
+        if let fetched = await out { output = fetched.lines }
+        if let fetchedPanes = await paneList {
+            panes = fetchedPanes
+            if selectedPane == nil {
+                selectedPane = fetchedPanes.first(where: { $0.active })?.paneId ?? fetchedPanes.first?.paneId
+            }
+        }
+        lastUpdated = Date()
+    }
+
+    private func send(text: String? = nil, key: String? = nil) async {
+        try? await MeshClient(machine: machine).send(agent: session.name, text: text, key: key, pane: selectedPane)
+        try? await Task.sleep(for: .milliseconds(350))
+        await refresh()
+    }
+
+    private func newPane() async {
+        try? await MeshClient(machine: machine).newPane(agent: session.name)
+        try? await Task.sleep(for: .milliseconds(350))
+        selectedPane = nil
+        await refresh()
+    }
+
+    private func killPane() async {
+        guard let pane = activePane else { return }
+        try? await MeshClient(machine: machine).killPane(agent: session.name, paneId: pane.paneId)
+        try? await Task.sleep(for: .milliseconds(350))
+        selectedPane = nil
+        await refresh()
+    }
+}
+
+private func terminalShortName(_ host: String) -> String {
+    host.replacingOccurrences(of: "arya-", with: "").replacingOccurrences(of: "agents", with: "")
+}
+
+private struct FlowButtons: View {
+    let items: [String]
+    let action: (String) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(items, id: \.self) { item in
+                    Button(item) { action(item) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                 }
             }
         }
@@ -140,6 +598,7 @@ private struct NewSessionSheet: View {
 private struct BridgeTerminalScreen: View {
     let machine: Machine
     let session: String
+    let initialPane: String?
 
     @State private var panes: [Pane] = []
     @State private var selectedPane: String?   // nil = whole session (default)
@@ -189,7 +648,7 @@ private struct BridgeTerminalScreen: View {
             let fetched = try await MeshClient(machine: machine).panes(agent: session)
             panes = fetched
             // Default to the active pane so the chip selection matches the bridge's view.
-            if selectedPane == nil { selectedPane = fetched.first(where: { $0.active })?.paneId }
+            if selectedPane == nil { selectedPane = initialPane ?? fetched.first(where: { $0.active })?.paneId }
         } catch {
             panes = []
         }
@@ -199,11 +658,6 @@ private struct BridgeTerminalScreen: View {
 /// WKWebView wrapper. The bridge page (xterm + keybar + splits) handles all
 /// touch input, scroll/select/copy, and the WebSocket stream itself.
 ///
-/// BRIDGE CHANGE NEEDED (rmux-bridge, owned by another agent): the bridge today
-/// reads only `?session=`. To honor pane focus, after reading the session it must
-/// also read `pane` and pass it to its rmux target, e.g. add one line:
-///   const pane = new URL(req.url, "http://x").searchParams.get("pane");
-/// then target `pane ?? session` when attaching/capturing (rmux `-t <pane>`).
 private struct BridgeWebView: UIViewRepresentable {
     let url: URL
 
@@ -221,5 +675,26 @@ private struct BridgeWebView: UIViewRepresentable {
 
     func updateUIView(_ web: WKWebView, context: Context) {
         if web.url != url { web.load(URLRequest(url: url)) }
+    }
+}
+
+private struct StatPill: View {
+    let label: String
+    let value: String
+    var tone: Color = .primary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.bold())
+                .foregroundStyle(tone)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
