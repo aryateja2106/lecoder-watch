@@ -62,13 +62,10 @@ struct MachinesListView: View {
                 ProgressView("Connecting…")
             }
         }
-        .toolbar {
-            Button {
-                Task { await store.refresh() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-        }
+        // ponytail: pull-to-refresh instead of a toolbar button — on watchOS a bare
+        // .toolbar Button renders as a full-width top button that covered the first
+        // machine and showed no managed spinner. .refreshable self-dismisses.
+        .refreshable { await store.refresh() }
     }
 }
 
