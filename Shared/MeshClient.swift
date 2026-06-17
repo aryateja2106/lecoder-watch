@@ -1,6 +1,6 @@
 import Foundation
 
-/// Talks to a single machine's `meshd` over Tailscale. iPhone-only (the watch never calls this).
+/// Talks to a single machine's `meshd` over Tailscale.
 struct MeshClient {
     let machine: Machine
 
@@ -68,6 +68,10 @@ struct MeshClient {
         let query = since.map { "?since=\($0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0)" } ?? ""
         let data = try await request("/events\(query)")
         return try JSONDecoder().decode([AgentEvent].self, from: data)
+    }
+
+    func screen() async throws -> Data {
+        try await request("/screen.jpg")
     }
 
     func panes(agent: String) async throws -> [Pane] {

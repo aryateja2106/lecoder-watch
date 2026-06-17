@@ -10,8 +10,9 @@ const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
 const VERSION = "0.2.0";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "tailscale", "kb"];
+const BASE_CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "tailscale", "kb"];
 const IS_MAC = process.platform === "darwin";
+const IS_LINUX = process.platform === "linux";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
 const EVENTS_PATH = process.env.MESHD_EVENTS_PATH ?? join(homedir(), ".mesh", "agent-events.jsonl");
@@ -22,10 +23,35 @@ async function sh(cmd: string): Promise<string> {
   await p.exited;
   return out;
 }
+async function shBytes(cmd: string): Promise<Uint8Array> {
+  const p = Bun.spawn(["/bin/sh", "-c", cmd], { stdout: "pipe", stderr: "ignore" });
+  const bytes = new Uint8Array(await new Response(p.stdout).arrayBuffer());
+  const code = await p.exited;
+  if (code !== 0 || bytes.length === 0) throw new Error("command failed");
+  return bytes;
+}
 
 function num(x: string | undefined, d = 0): number {
   const n = Number((x ?? "").trim());
   return Number.isFinite(n) ? n : d;
+}
+
+// ---------- capabilities ----------
+let capsCache: string[] | null = null;
+async function hasCommand(cmd: string): Promise<boolean> {
+  return (await sh(`command -v ${cmd} >/dev/null 2>&1; echo $?`)).trim().endsWith("0");
+}
+async function screenAvailable(): Promise<boolean> {
+  if (IS_MAC) return (await hasCommand("screencapture")) && (await hasCommand("sips"));
+  if (IS_LINUX) return ((await hasCommand("grim")) || (await hasCommand("scrot"))) && ((await hasCommand("magick")) || (await hasCommand("convert")));
+  return false;
+}
+async function capabilities(): Promise<string[]> {
+  if (capsCache) return capsCache;
+  const caps = [...BASE_CAPABILITIES];
+  if (await screenAvailable()) caps.push("screen");
+  capsCache = caps;
+  return caps;
 }
 
 // ---------- stats ----------
@@ -83,14 +109,15 @@ async function topProcs(): Promise<any[]> {
   }).filter((p) => p.pid > 0);
 }
 async function getStats() {
-  const [cpuPct, mem, dsk, procs, agentsCount] = await Promise.all([
+  const [cpuPct, mem, dsk, procs, agentsCount, caps] = await Promise.all([
     IS_MAC ? macCpuPct() : linuxCpuPct(),
     IS_MAC ? macMem() : linuxMem(),
     disk(),
     topProcs(),
     rmuxSessions().then((s) => s.length).catch(() => 0),
+    capabilities(),
   ]);
-  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount };
+  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount, capabilities: caps };
 }
 
 // ---------- agents (rmux) ----------
@@ -191,9 +218,10 @@ async function agentOutput(name: string, lines: number, pane?: string) {
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
   const target = pane ? shq(pane) : shq(name);
-  const out = await sh(`${MUX} capture-pane -p -t ${target} 2>/dev/null`);
+  const count = Math.max(1, Math.min(1000, Math.floor(lines || 80)));
+  const out = await sh(`${MUX} capture-pane -p -S -${count} -t ${target} 2>/dev/null`);
   const arr = out.replace(/\n+$/, "").split("\n");
-  return { name, lines: arr.slice(-lines) };
+  return { name, lines: arr.slice(-count) };
 }
 const INFRA = new Set(["meshd", "rmux-bridge"]); // never killable over the wire
 async function agentKill(name: string): Promise<{ ok: boolean; error?: string }> {
@@ -217,6 +245,23 @@ async function agentNewPane(name: string, dir?: string): Promise<{ ok: boolean; 
   await sh(`${MUX} split-window ${flag} -t ${shq(name)}`);
   return { ok: true };
 }
+function sendOps(text: string) {
+  const parts = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const ops: Array<{ text?: string; key?: "enter" }> = [];
+  parts.forEach((part, i) => {
+    if (part) ops.push({ text: part });
+    if (i < parts.length - 1) ops.push({ key: "enter" });
+  });
+  return ops;
+}
+function hexText(text: string) {
+  return Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")).join(" ");
+}
+if (process.argv.includes("--self-test")) {
+  console.assert(JSON.stringify(sendOps("ls\n")) === JSON.stringify([{ text: "ls" }, { key: "enter" }]));
+  console.assert(JSON.stringify(sendOps("a\r\nb")) === JSON.stringify([{ text: "a" }, { key: "enter" }, { text: "b" }]));
+  process.exit(0);
+}
 async function agentSend(name: string, text?: string, key?: string, pane?: string) {
   const target = pane ? shq(pane) : shq(name);
   if (key === "enter") await sh(`${MUX} send-keys -t ${target} Enter`);
@@ -224,8 +269,10 @@ async function agentSend(name: string, text?: string, key?: string, pane?: strin
   else if (key === "up") await sh(`${MUX} send-keys -t ${target} Up`);
   else if (key === "down") await sh(`${MUX} send-keys -t ${target} Down`);
   else if (text) {
-    const hex = Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")).join(" ");
-    await sh(`${MUX} send-keys -t ${target} -H -- ${hex}`);
+    for (const op of sendOps(text)) {
+      if (op.key === "enter") await sh(`${MUX} send-keys -t ${target} Enter`);
+      else if (op.text) await sh(`${MUX} send-keys -t ${target} -H -- ${hexText(op.text)}`);
+    }
   }
   return { ok: true };
 }
@@ -318,6 +365,17 @@ async function getTailnet() {
   return { ok: true, peers };
 }
 
+// ---------- screen ----------
+async function screenJpeg(): Promise<Uint8Array> {
+  if (IS_MAC) {
+    return shBytes(`tmp=$(mktemp -t meshd-screen); out=$(mktemp -t meshd-screen); trap 'rm -f "$tmp" "$out"' EXIT; screencapture -x -t jpg - > "$tmp" 2>/dev/null && sips -Z 480 -s format jpeg "$tmp" --out "$out" >/dev/null 2>&1 && cat "$out"`);
+  }
+  if (IS_LINUX) {
+    return shBytes(`tmp=$(mktemp); out=$(mktemp); trap 'rm -f "$tmp" "$out"' EXIT; if command -v grim >/dev/null 2>&1; then grim -t jpeg "$tmp"; elif command -v scrot >/dev/null 2>&1; then scrot -q 70 "$tmp"; else exit 127; fi; if command -v magick >/dev/null 2>&1; then magick "$tmp" -resize 480x "$out"; elif command -v convert >/dev/null 2>&1; then convert "$tmp" -resize 480x "$out"; else exit 127; fi; cat "$out"`);
+  }
+  throw new Error("screen unsupported");
+}
+
 // ---------- server ----------
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -327,6 +385,9 @@ function authed(req: Request): boolean {
   const h = req.headers.get("authorization") ?? "";
   const q = new URL(req.url).searchParams.get("token") ?? "";
   return h === `Bearer ${TOKEN}` || q === TOKEN;
+}
+function screenAuthed(req: Request): boolean {
+  return TOKEN !== "" && authed(req);
 }
 
 function localIPs(): Set<string> {
@@ -363,7 +424,7 @@ async function kbFederateSearch(local: any[], sp: URLSearchParams): Promise<any[
   const seen = new Set<string>();
   const out: any[] = [];
   for (const e of merged) {
-    const k = `${e.host} ${e.scope} ${e.key}`;
+    const k = `${e.host} ${e.scope} ${e.key}`;
     if (!seen.has(k)) { seen.add(k); out.push(e); }
   }
   return out;
@@ -376,7 +437,7 @@ Bun.serve({
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/health") {
-      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES });
+      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: await capabilities() });
     }
     if (!authed(req)) return json({ error: "unauthorized" }, 401);
     try {
@@ -386,6 +447,16 @@ Bun.serve({
       if (path === "/usage") return json(await getUsage());
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));
       if (path === "/events" && req.method === "POST") return json(await addEvent(await req.json().catch(() => ({}))), 201);
+      if (path === "/screen.jpg" && req.method === "GET") {
+        if (!screenAuthed(req)) return json({ error: "unauthorized" }, 401);
+        try {
+          return new Response(await screenJpeg(), {
+            headers: { "content-type": "image/jpeg", "cache-control": "no-store" },
+          });
+        } catch {
+          return json({ error: "screen unavailable" }, 503);
+        }
+      }
       if (path === "/kb" && (req.method === "PUT" || req.method === "POST")) {
         try { return json(kbPut(await req.json().catch(() => ({})), os.hostname()), 201); }
         catch (e: any) { return json({ error: String(e?.message ?? e) }, 400); }

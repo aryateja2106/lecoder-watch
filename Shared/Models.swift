@@ -99,6 +99,7 @@ struct Stats: Codable, Hashable {
     var disk: DiskInfo
     var topProcs: [ProcInfo]
     var agentsCount: Int
+    var capabilities: [String]?
 }
 
 struct HealthInfo: Codable, Hashable {

@@ -23,6 +23,7 @@ bun + TypeScript. `GET /stats` (htop-style), `GET /agents` + `/agents/:name/{out
 
 ```bash
 MESHD_TOKEN=yourtoken ./meshd/deploy.sh   # starts on Mac + pi + dataflow (tmux)
+MESHD_TOKEN=yourtoken ./meshd/mesh-self-check --require-screen
 ```
 
 ## App (Xcode)

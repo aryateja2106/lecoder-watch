@@ -21,7 +21,7 @@ for h in "${LINUX_HOSTS[@]}"; do
   echo "== $h =="
   ssh -o ConnectTimeout=8 "$h" 'command -v ~/.bun/bin/bun >/dev/null || (curl -fsSL https://bun.sh/install -o /tmp/bun.sh && bash /tmp/bun.sh)' 2>/dev/null || true
   ssh -o ConnectTimeout=8 "$h" 'mkdir -p ~/meshd'
-  scp -q "$HERE/server.ts" "$HERE/package.json" "$h":~/meshd/
+  scp -q "$HERE/server.ts" "$HERE/package.json" "$HERE/mesh-self-check" "$h":~/meshd/
   ssh -o ConnectTimeout=8 "$h" "tmux kill-session -t meshd 2>/dev/null || true; \
     tmux new-session -d -s meshd 'cd ~/meshd && MESHD_TOKEN=$TOKEN MESHD_PORT=$PORT ~/.bun/bin/bun run server.ts 2>&1 | tee ~/meshd/meshd.log'"
   sleep 2

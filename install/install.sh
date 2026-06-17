@@ -302,6 +302,13 @@ done
 compute_components
 
 # ---------- detect environment ----------
+[ -f "$PAYLOAD_DIR/meshd/server.ts" ] || die "missing payload file: $PAYLOAD_DIR/meshd/server.ts"
+[ -f "$PAYLOAD_DIR/meshd/package.json" ] || die "missing payload file: $PAYLOAD_DIR/meshd/package.json"
+[ -f "$PAYLOAD_DIR/meshd/mesh-self-check" ] || die "missing payload file: $PAYLOAD_DIR/meshd/mesh-self-check"
+[ -f "$PAYLOAD_DIR/rmux-bridge/src/server.ts" ] || die "missing payload file: $PAYLOAD_DIR/rmux-bridge/src/server.ts"
+[ -f "$PAYLOAD_DIR/rmux-bridge/package.json" ] || die "missing payload file: $PAYLOAD_DIR/rmux-bridge/package.json"
+[ -f "$PAYLOAD_DIR/rmux-bridge/public/index.html" ] || die "missing payload file: $PAYLOAD_DIR/rmux-bridge/public/index.html"
+[ -f "$PAYLOAD_DIR/rmux-bridge/public/vendor/xterm.js" ] || die "missing payload file: $PAYLOAD_DIR/rmux-bridge/public/vendor/xterm.js"
 
 OS_NAME=$(uname -s 2>/dev/null || printf '')
 ARCH_NAME=$(uname -m 2>/dev/null || printf '')
