@@ -83,13 +83,6 @@ private func statusColor(_ snap: MachineSnapshot) -> Color {
     return snap.reachable ? .green : .secondary
 }
 
-private func knownSessions(for host: String) -> [String] {
-    let lower = host.lowercased()
-    if lower.contains("pi") { return ["pi-shell", "watch-shell-67982", "mesh-smoke"] }
-    if lower.contains("mac") { return ["mesh-smoke", "codex", "claude"] }
-    return ["shell", "codex", "claude"]
-}
-
 struct EventsView: View {
     @EnvironmentObject var store: WatchMeshStore
 
@@ -184,15 +177,6 @@ struct SessionsView: View {
                     Text("Then refresh the watch.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                }
-            }
-            Section("Known") {
-                ForEach(knownSessions(for: host), id: \.self) { session in
-                    NavigationLink {
-                        AgentLiveView(host: host, agent: session).environmentObject(store)
-                    } label: {
-                        Label(session, systemImage: "terminal")
-                    }
                 }
             }
             Section("New") {
