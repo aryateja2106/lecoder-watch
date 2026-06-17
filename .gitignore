@@ -4,3 +4,7 @@ build/
 DerivedData/
 .tmp/
 .omx/
+
+# inspiration / internal (not for distribution)
+.agents/
+Reference-images/
