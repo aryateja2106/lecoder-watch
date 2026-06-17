@@ -374,6 +374,11 @@ struct AgentLiveView: View {
         store.output.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
+    /// Glance state inferred from the live tail — "waiting / running / idle / error".
+    private var derivedState: SessionState {
+        sessionState(lines: meaningfulLines, attached: currentAgent?.attached ?? false)
+    }
+
     private var previewLines: [String] {
         Array(meaningfulLines.suffix(8))
     }
@@ -395,6 +400,11 @@ struct AgentLiveView: View {
                     Text(agent)
                         .font(.headline)
                         .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Circle().fill(derivedState.tint).frame(width: 6, height: 6)
+                        Text(derivedState.cardLabel).foregroundStyle(derivedState.tint)
+                    }
+                    .font(.caption2)
                     Text(statusText)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -412,19 +422,18 @@ struct AgentLiveView: View {
                 .padding(.vertical, 2)
             }
 
-            Section("control") {
-                HStack(spacing: 6) {
-                    Button { store.send(key: "enter") } label: {
-                        VStack { Image(systemName: "return"); Text("Enter").font(.caption2) }
-                    }
-                    Button(role: .destructive) { store.send(key: "ctrl-c") } label: {
-                        VStack { Image(systemName: "xmark.octagon"); Text("Stop").font(.caption2) }
-                    }
-                    Button { store.send(key: "up") } label: {
-                        VStack { Image(systemName: "arrow.up"); Text("Prev").font(.caption2) }
-                    }
+            // Command Deck — trust-tiered. SEND keystrokes/text (blue); DANGER is a separate
+            // red section below so a stop/kill is never a mis-tap away from a routine send.
+            Section("send") {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
+                    DeckButton(label: "Continue", icon: "arrow.forward.circle") { store.send(text: "continue\n") }
+                    DeckButton(label: "Enter", icon: "return") { store.send(key: "enter") }
+                    DeckButton(label: "Prev", icon: "arrow.up") { store.send(key: "up") }
+                    DeckButton(label: "Git status", icon: "arrow.triangle.branch") { store.send(text: "git status\n") }
+                    DeckButton(label: "Check mesh", icon: "checkmark.shield") { store.send(text: "~/.mesh/bin/mesh-self-check\n") }
+                    DeckButton(label: "New pane", icon: "rectangle.split.2x1") { store.newPane(host: host, agent: agent) }
                 }
-                .buttonStyle(.bordered)
+                .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
                 Button { showReply = true } label: {
                     Label("Reply / dictate", systemImage: "square.and.pencil")
                 }
@@ -433,10 +442,12 @@ struct AgentLiveView: View {
                     Label("Voice command", systemImage: "waveform")
                 }
                 .buttonStyle(.bordered)
-                Button { store.newPane(host: host, agent: agent) } label: {
-                    Label("New pane", systemImage: "rectangle.split.2x1")
+            }
+
+            Section("danger") {
+                Button(role: .destructive) { store.send(key: "ctrl-c") } label: {
+                    Label("Stop (Ctrl-C)", systemImage: "xmark.octagon")
                 }
-                .buttonStyle(.bordered)
                 if let pane = currentPane {
                     Button(role: .destructive) {
                         store.killPane(host: host, agent: agent, pane: pane.paneId)
@@ -444,12 +455,10 @@ struct AgentLiveView: View {
                     } label: {
                         Label("Kill pane", systemImage: "rectangle.split.1x2")
                     }
-                    .buttonStyle(.bordered)
                 }
                 Button(role: .destructive) { store.killSession(host: host, agent: agent) } label: {
                     Label("Kill session", systemImage: "trash")
                 }
-                .buttonStyle(.bordered)
             }
 
             Section("quick send") {
@@ -626,6 +635,26 @@ struct UsageView: View {
 }
 
 // MARK: - Bits
+
+/// One Command-Deck preset: stacked icon + label, ≥44pt, tinted by trust tier.
+struct DeckButton: View {
+    let label: String
+    let icon: String
+    var tint: Color = .blue
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: icon).font(.title3)
+                Text(label).font(.caption2).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity, minHeight: 50)
+        }
+        .buttonStyle(.bordered)
+        .tint(tint)
+        .accessibilityLabel(label)
+    }
+}
 
 struct GaugeRow: View {
     let label: String
