@@ -66,6 +66,22 @@ private struct MonitorTab: View {
 
 private struct MachinesTab: View {
     @EnvironmentObject var store: MeshStore
+    @State private var addHostPrefill: AddHostPrefill?
+
+    /// Hosts/IPs already configured, so discovery can de-dup peers.
+    private var configuredKeys: Set<String> {
+        var keys = Set<String>()
+        for m in store.machines {
+            keys.insert(m.host.lowercased())
+            keys.insert(m.ip.lowercased())
+        }
+        return keys
+    }
+
+    private func isConfigured(_ peer: TailnetPeer) -> Bool {
+        if configuredKeys.contains(peerShortHost(peer).lowercased()) { return true }
+        return peer.ips.contains { configuredKeys.contains($0.lowercased()) }
+    }
 
     private var rows: [MachineSnapshot] {
         let machines = store.snapshot?.machines.isEmpty == false
@@ -128,9 +144,29 @@ private struct MachinesTab: View {
                                 StatRow(label: "meshd endpoints", value: machine.baseURLs.map(\.absoluteString).joined(separator: " or "))
                             }
                             if let peers = m.tailnetPeers, !peers.isEmpty {
-                                SectionLabel("Tailnet peers")
+                                SectionLabel("Tailnet peers — tap to add")
                                 ForEach(peers.prefix(10)) { peer in
-                                    StatRow(label: peer.host, value: peerDetail(peer))
+                                    let configured = isConfigured(peer)
+                                    Button {
+                                        addHostPrefill = AddHostPrefill(name: peerShortHost(peer), ip: peer.ips.first ?? "")
+                                    } label: {
+                                        HStack(spacing: 10) {
+                                            Circle().fill(peer.online ? Color.green : .secondary).frame(width: 8, height: 8)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(peer.host).font(.subheadline)
+                                                Text(peerDetail(peer)).font(.caption2).foregroundStyle(.secondary)
+                                            }
+                                            Spacer()
+                                            if configured {
+                                                Text("configured").font(.caption2).foregroundStyle(.secondary)
+                                            } else {
+                                                Image(systemName: "plus.circle.fill").foregroundStyle(MW.accent)
+                                            }
+                                        }
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(configured)
                                 }
                             } else if let tailnetError = m.tailnetError, !tailnetError.isEmpty {
                                 StatRow(label: "Tailnet", value: tailnetError)
@@ -227,16 +263,39 @@ private struct MachinesTab: View {
             .navigationTitle("Mesh")
             .overlay {
                 if rows.isEmpty {
-                    ContentUnavailableView("No machines", systemImage: "server.rack", description: Text("Add one in Settings."))
+                    ContentUnavailableView {
+                        Label("No machines", systemImage: "server.rack")
+                    } description: {
+                        Text("Add your first machine to start steering it.")
+                    } actions: {
+                        Button("Add Machine") { addHostPrefill = AddHostPrefill() }
+                            .buttonStyle(.borderedProminent)
+                    }
                 }
             }
             .toolbar {
-                Button { Task { await store.refresh() } } label: {
-                    Image(systemName: store.polling ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { Task { await store.refresh() } } label: {
+                        Image(systemName: store.polling ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                    }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { addHostPrefill = AddHostPrefill() } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Add machine")
+                }
+            }
+            .sheet(item: $addHostPrefill) { p in
+                AddHostSheet(prefillName: p.name, prefillIP: p.ip).environmentObject(store)
             }
         }
     }
+}
+
+/// Peer hostname without the tailnet suffix (e.g. "arya-pi.tailXXXX.ts.net" → "arya-pi").
+private func peerShortHost(_ peer: TailnetPeer) -> String {
+    peer.host.split(separator: ".").first.map(String.init) ?? peer.host
 }
 
 @ViewBuilder
@@ -349,6 +408,7 @@ private struct UsageRows: View {
 private struct SettingsTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var newCommand = ""
+    @State private var addHostPrefill: AddHostPrefill?
 
     private func typeBinding(_ kind: NotifKind) -> Binding<Bool> {
         Binding(get: { store.notifPrefs.typeEnabled(kind) },
@@ -424,7 +484,7 @@ private struct SettingsTab: View {
                         }
                     }
                     .onDelete { store.machines.remove(atOffsets: $0); store.save() }
-                    Button { store.addMachine() } label: {
+                    Button { addHostPrefill = AddHostPrefill() } label: {
                         Label("Add machine", systemImage: "plus.circle")
                     }
                 }
@@ -455,6 +515,9 @@ private struct SettingsTab: View {
             }
             .navigationTitle("Settings")
             .toolbar { Button("Save") { store.save(); Task { await store.refresh() } } }
+            .sheet(item: $addHostPrefill) { p in
+                AddHostSheet(prefillName: p.name, prefillIP: p.ip).environmentObject(store)
+            }
         }
     }
 }

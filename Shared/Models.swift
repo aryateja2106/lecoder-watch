@@ -4,7 +4,7 @@ import Foundation
 
 /// A machine on the Tailscale mesh that runs `meshd`.
 struct Machine: Codable, Identifiable, Hashable {
-    var id: String { host }
+    var id = UUID()           // stable identity — survives renames; two unnamed adds never collide
     var host: String          // display name, e.g. "my-mac"
     var ip: String            // tailscale IP, e.g. "100.x.y.z"
     var port: Int             // meshd port, default 8899
@@ -63,6 +63,21 @@ struct Machine: Codable, Identifiable, Hashable {
     static let defaults: [Machine] = [
         Machine(host: "my-mac", ip: "100.100.100.100", port: 8899, token: "")
     ]
+}
+
+extension Machine {
+    // Tolerant decode: machines persisted before `id` existed have no id key — give them a
+    // fresh stable UUID instead of throwing (which would wipe the saved list on upgrade).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        host = try c.decode(String.self, forKey: .host)
+        ip = try c.decode(String.self, forKey: .ip)
+        port = try c.decode(Int.self, forKey: .port)
+        token = try c.decode(String.self, forKey: .token)
+        bridgeURL = try c.decodeIfPresent(String.self, forKey: .bridgeURL)
+        vncURL = try c.decodeIfPresent(String.self, forKey: .vncURL)
+    }
 }
 
 // MARK: - Stats (htop-style)

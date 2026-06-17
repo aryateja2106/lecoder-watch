@@ -133,9 +133,38 @@ final class MeshStore: ObservableObject {
         save()
     }
 
-    func addMachine() {
-        machines.append(Machine(host: "new-machine", ip: "", port: 8899, token: installToken()))
+    enum AddHostError: LocalizedError {
+        case emptyAddress, duplicate(String)
+        var errorDescription: String? {
+            switch self {
+            case .emptyAddress: return "Enter the machine's Tailscale IP or hostname."
+            case .duplicate(let h): return "“\(h)” is already added."
+            }
+        }
+    }
+
+    /// Add a real machine from the Add-Host sheet: validate non-empty + unique, persist,
+    /// then refresh so its reachable/auth status resolves inline. Returns the new machine's id.
+    @discardableResult
+    func addHost(name: String, ip: String, port: Int = 8899, token: String,
+                 bridgeURL: String? = nil, vncURL: String? = nil) throws -> UUID {
+        let ip = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ip.isEmpty else { throw AddHostError.emptyAddress }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = trimmedName.isEmpty ? ip : trimmedName
+        guard !machines.contains(where: { $0.host.caseInsensitiveCompare(host) == .orderedSame }) else {
+            throw AddHostError.duplicate(host)
+        }
+        let machine = Machine(
+            host: host, ip: ip, port: port,
+            token: token.trimmingCharacters(in: .whitespacesAndNewlines),
+            bridgeURL: bridgeURL?.isEmpty == true ? nil : bridgeURL,
+            vncURL: vncURL?.isEmpty == true ? nil : vncURL
+        )
+        machines.append(machine)
         save()
+        Task { await refresh() }
+        return machine.id
     }
 
     // MARK: Polling
