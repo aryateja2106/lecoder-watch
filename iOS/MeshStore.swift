@@ -23,12 +23,18 @@ final class MeshStore: ObservableObject {
     /// Notification-tap deep link: which tab to show and which session to push.
     @Published var selectedTab: Int = 0
     @Published var pendingSession: SessionRoute?
+    /// The pinned "primary" session: leads the Live Activity and is the only
+    /// session whose *completion* pings (needs-input/error still ping for all).
+    @Published var primarySessionId: String? = UserDefaults.standard.string(forKey: MeshStore.primaryKey) {
+        didSet { UserDefaults.standard.set(primarySessionId, forKey: Self.primaryKey) }
+    }
 
     private var timer: Timer?
     private let defaultsKey = "mesh.machines.v1"
     private let installTokenKey = "mesh.installToken.v1"
     private let quickCommandsKey = "mesh.quickCommands.v1"
     private static let notifPrefsKey = "mesh.notifPrefs.v1"
+    private static let primaryKey = "mesh.primarySession.v1"
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
@@ -53,6 +59,11 @@ final class MeshStore: ObservableObject {
         selectedTab = 1   // Terminal tab (see ContentView tab order)
         if let session { pendingSession = SessionRoute(host: host, session: session) }
     }
+
+    // MARK: Primary (pinned) session
+
+    func isPrimary(_ session: String) -> Bool { primarySessionId == session }
+    func setPrimary(_ session: String?) { primarySessionId = session }
 
     // MARK: Notification prefs persistence
 
@@ -278,7 +289,7 @@ final class MeshStore: ObservableObject {
         }
         guard !fetched.isEmpty else { return }
         events = Array((events + fetched).suffix(100))
-        NotificationManager.shared.evaluate(events: notifyEvents, prefs: notifPrefs)
+        NotificationManager.shared.evaluate(events: notifyEvents, prefs: notifPrefs, primary: primarySessionId)
     }
 
     // MARK: Sessions

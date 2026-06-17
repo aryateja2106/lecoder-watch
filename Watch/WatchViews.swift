@@ -124,6 +124,12 @@ struct SessionsView: View {
 
     private var snap: MachineSnapshot? { store.snaps.first { $0.host == host } }
 
+    /// Cheap status from the relayed event feed, else attached→working/idle.
+    private func watchState(for agent: Agent) -> SessionState {
+        let latest = store.events.last { $0.session == agent.name && ($0.host == host || $0.host == nil) }
+        return cardState(forLevel: latest?.level, attached: agent.attached)
+    }
+
     var body: some View {
         List {
             Section("Sessions (\(snap?.agents.count ?? 0))") {
@@ -134,8 +140,17 @@ struct SessionsView: View {
                         HStack(spacing: 6) {
                             Image(systemName: a.attached ? "dot.radiowaves.left.and.right" : "terminal")
                                 .foregroundStyle(a.attached ? .green : .secondary)
-                            VStack(alignment: .leading, spacing: 0) {
-                                Text(a.name)
+                            VStack(alignment: .leading, spacing: 1) {
+                                HStack(spacing: 4) {
+                                    AgentBadge(type: a.agentType)
+                                    Text(a.name).lineLimit(1)
+                                }
+                                let st = watchState(for: a)
+                                HStack(spacing: 4) {
+                                    Circle().fill(st.tint).frame(width: 5, height: 5)
+                                    Text(st.cardLabel).foregroundStyle(st.tint)
+                                }
+                                .font(.caption2)
                                 Text("\(a.windows) pane\(a.windows == 1 ? "" : "s")\(a.attached ? " · live" : "") · \(store.routeLabel(for: host))")
                                     .font(.caption2).foregroundStyle(.secondary)
                             }

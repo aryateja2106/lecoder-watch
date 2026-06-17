@@ -48,11 +48,14 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// Turn fresh agent events into notifications, honoring the user's per-source /
     /// per-type toggles. Routine output (unclassified level) is dropped — only
     /// needs-input / finished / error ping.
-    func evaluate(events: [AgentEvent], prefs: NotifPrefs) {
+    /// `primary` is the pinned session id. Codync rule: only the primary session's
+    /// *completion* pings; needs-input and error ping for every session (safety net).
+    func evaluate(events: [AgentEvent], prefs: NotifPrefs, primary: String?) {
         for event in events {
             let key = "event-\(event.id)"
             guard !firedKeys.contains(key) else { continue }
             guard let kind = notifKind(for: event.level), prefs.allows(event) else { continue }
+            if kind == .finished, let primary, event.session != primary { continue }
             firedKeys.insert(key)
             notify(id: key,
                    title: eventNotificationTitle(event),
@@ -64,25 +67,26 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func eventNotificationTitle(_ event: AgentEvent) -> String {
-        let level = event.level?.lowercased()
-        let prefix = (level == "error" || level == "warning") ? "\(level!.capitalized): " : ""
-        let source = event.source.map(displaySource) ?? "Agent"
-        return "\(prefix)\(source): \(event.title)"
+        let source = displaySourceLabel(event.source)
+        switch notifKind(for: event.level) {
+        case .needsInput: return "\(source) needs input"
+        case .finished:   return "Session complete"
+        case .error:      return "Error in \(event.session ?? source)"
+        case nil:         return "\(source): \(event.title)"
+        }
     }
 
     private func eventNotificationBody(_ event: AgentEvent) -> String {
-        let whereText = [event.host, event.session].compactMap { $0 }.joined(separator: " · ")
-        let body = event.body ?? whereText
-        guard !whereText.isEmpty, event.body != nil else { return body.isEmpty ? "agent event" : body }
-        return "\(body)\n\(whereText)"
-    }
-
-    private func displaySource(_ source: String) -> String {
-        switch source.lowercased() {
-        case "claude": return "Claude"
-        case "codex": return "Codex"
-        case "pi", "raspberry-pi": return "Pi"
-        default: return source
+        let sessionHost = [event.session, event.host].compactMap { $0 }.joined(separator: " · ")
+        switch notifKind(for: event.level) {
+        case .finished:
+            return "\(displaySourceLabel(event.source)) · \(event.session ?? "session") finished"
+        case .error:
+            let detail = (event.body?.isEmpty == false) ? event.body! : event.title
+            return [detail, event.host].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        case .needsInput, nil:
+            if let body = event.body, !body.isEmpty { return body }
+            return sessionHost.isEmpty ? event.title : sessionHost
         }
     }
 

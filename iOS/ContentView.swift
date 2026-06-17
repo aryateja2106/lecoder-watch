@@ -74,6 +74,14 @@ private struct MachinesTab: View {
         return activeFirst(machines)
     }
 
+    /// Cheap card status: the latest event for this session (if any) drives it,
+    /// else fall back to attached→working/idle. Full output classification only
+    /// happens on the opened SessionPeekScreen.
+    private func agentState(for agent: Agent, host: String) -> SessionState {
+        let latest = store.events.last { $0.host == host && $0.session == agent.name }
+        return cardState(forLevel: latest?.level, attached: agent.attached)
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -157,18 +165,26 @@ private struct MachinesTab: View {
                             }
                         }
                         ForEach(m.agents) { a in
-                            HStack {
-                                Image(systemName: "terminal")
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(a.name)
-                                    Text("\(a.windows) pane\(a.windows == 1 ? "" : "s")")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 7) {
+                                    AgentBadge(type: a.agentType)
+                                    Text(a.name).font(.headline).lineLimit(1)
+                                    if store.isPrimary(a.name) { PrimaryPill() }
+                                    Spacer()
                                 }
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text(a.agentType ?? "shell").font(.caption)
-                                    Text(sessionCost(a)).font(.caption2).foregroundStyle(.secondary)
+                                HStack {
+                                    SessionStatusLabel(state: agentState(for: a, host: m.host))
+                                    Spacer()
+                                    Text(resourceLine(a)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                            .contextMenu {
+                                Button {
+                                    store.setPrimary(store.isPrimary(a.name) ? nil : a.name)
+                                } label: {
+                                    Label(store.isPrimary(a.name) ? "Unpin primary" : "Pin to Dynamic Island",
+                                          systemImage: store.isPrimary(a.name) ? "pin.slash" : "pin")
                                 }
                             }
                         }
@@ -240,9 +256,11 @@ func copyableCommand(_ command: String) -> some View {
     }
 }
 
-private func sessionCost(_ agent: Agent) -> String {
+private func resourceLine(_ agent: Agent) -> String {
     let cpu = agent.cpuPct.map { String(format: "%.0f%%", $0) }
-    return [cpu, agent.memLabel].compactMap { $0 }.joined(separator: " · ")
+    let paneCount = agent.panes?.count ?? agent.windows
+    let panes = paneCount > 0 ? "\(paneCount) pane\(paneCount == 1 ? "" : "s")" : nil
+    return [cpu, agent.memLabel, panes].compactMap { $0 }.joined(separator: " · ")
 }
 
 private func peerDetail(_ peer: TailnetPeer) -> String {
