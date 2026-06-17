@@ -1,16 +1,56 @@
 # Mesh Installer
 
-Serve `install.sh` next to the vendored `payload/` directory, then run:
+One command to install or uninstall the mesh stack (meshd, rmux-bridge, agent
+hook tools) on any macOS or Linux machine. Detects OS, architecture, and
+multiplexer; nothing is hardcoded.
+
+## Install (single curl command)
+
+Once `install.sh` + `mesh-install.tgz` are hosted together (see Hosting):
 
 ```sh
-curl -fsSL <host>/install.sh -o /tmp/mesh-install.sh && sh /tmp/mesh-install.sh --token MYTOKEN
+curl -fsSL <host>/install.sh | sh
+curl -fsSL <host>/install.sh | sh -s -- --only meshd --token MYTOKEN
 ```
 
-Package the installer from this repo:
+Or point at the payload explicitly — no hosting setup needed:
 
 ```sh
-sh scripts/package-mesh-install.sh /tmp/mesh-install.tgz
+curl -fsSL <host>/install.sh | sh -s -- --src <host>/mesh-install.tgz
+sh install.sh --src /path/to/mesh-install.tgz   # from a local tarball
+sh install.sh                                   # from a repo checkout (uses ./payload)
 ```
+
+## Options
+
+| Flag | Purpose |
+| --- | --- |
+| `--token V` | meshd auth token (default: `$MESHD_TOKEN` or generated) |
+| `--src SRC` | payload base URL, direct `.tgz` URL, or local tarball path |
+| `--only LIST` | install only these components (`meshd,bridge,tools`) |
+| `--without LIST` | install all except these |
+| `--prefix DIR` | install location (default `~/.mesh`) |
+| `--no-start` | install without launching services |
+| `--list` | show what is installed under the prefix |
+| `--uninstall` (`--purge`) | stop + remove components; `--purge` also drops the token + prefix |
+
+Components: **meshd** (`:8899`), **bridge** (`:7820`), **tools** (hook helpers).
+
+## Hosting (build the single-curl bundle)
+
+```sh
+sh scripts/package-mesh-install.sh /out/mesh-install.tgz https://<host>/dl
+```
+
+This writes `mesh-install.tgz` and a standalone `install.sh` with the source URL
+baked in. Host both at `https://<host>/dl/` and share:
+
+```sh
+curl -fsSL https://<host>/dl/install.sh | sh
+```
+
+Privacy-first option: serve `/dl` from a machine already on your Tailscale mesh,
+so new nodes install over the tailnet with no public host.
 
 What gets installed:
 
@@ -75,5 +115,7 @@ Environment variables:
 Uninstall:
 
 ```sh
-sh install.sh --uninstall
+sh install.sh --uninstall            # stop services + remove components, keep token
+sh install.sh --uninstall --purge    # also remove the token and the whole prefix
+sh install.sh --only tools --uninstall   # remove just one component
 ```
