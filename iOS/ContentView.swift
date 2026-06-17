@@ -6,12 +6,12 @@ struct ContentView: View {
     @EnvironmentObject var store: MeshStore
 
     var body: some View {
-        TabView {
-            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }
-            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }
-            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }
-            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }
-            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }
+        TabView(selection: $store.selectedTab) {
+            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }.tag(0)
+            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }.tag(1)
+            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }.tag(2)
+            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }.tag(3)
+            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }.tag(4)
         }
     }
 }
@@ -332,9 +332,35 @@ private struct SettingsTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var newCommand = ""
 
+    private func typeBinding(_ kind: NotifKind) -> Binding<Bool> {
+        Binding(get: { store.notifPrefs.typeEnabled(kind) },
+                set: { store.notifPrefs.types[kind.rawValue] = $0 })
+    }
+
+    private func sourceBinding(_ source: String) -> Binding<Bool> {
+        Binding(get: { store.notifPrefs.sourceEnabled(source) },
+                set: { store.notifPrefs.sources[source.lowercased()] = $0 })
+    }
+
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    ForEach(NotifKind.allCases, id: \.self) { kind in
+                        Toggle(kind.label, isOn: typeBinding(kind))
+                    }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    Text("Needs-input and errors ping loudly; finished is quiet. Routine output never notifies.")
+                }
+
+                Section("Notify from") {
+                    ForEach(NotifPrefs.knownSources, id: \.self) { source in
+                        Toggle(source.capitalized, isOn: sourceBinding(source))
+                    }
+                }
+
                 Section("Machines") {
                     ForEach($store.machines) { $m in
                         VStack(alignment: .leading, spacing: 10) {

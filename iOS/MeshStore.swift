@@ -1,6 +1,13 @@
 import Foundation
 import Combine
 
+/// Where a tapped notification should navigate: a session on a machine.
+struct SessionRoute: Identifiable, Hashable {
+    let host: String
+    let session: String
+    var id: String { "\(host)/\(session)" }
+}
+
 /// iPhone-side brain: persists the machine list, polls every machine's meshd
 /// concurrently, builds the snapshot for the UI, and relays it to the watch.
 @MainActor
@@ -11,11 +18,17 @@ final class MeshStore: ObservableObject {
     @Published var events: [AgentEvent] = []
     @Published var lastError: String?
     @Published var polling = false
+    /// Per-source / per-type notification toggles (Settings → Notifications).
+    @Published var notifPrefs: NotifPrefs = MeshStore.loadNotifPrefs() { didSet { saveNotifPrefs() } }
+    /// Notification-tap deep link: which tab to show and which session to push.
+    @Published var selectedTab: Int = 0
+    @Published var pendingSession: SessionRoute?
 
     private var timer: Timer?
     private let defaultsKey = "mesh.machines.v1"
     private let installTokenKey = "mesh.installToken.v1"
     private let quickCommandsKey = "mesh.quickCommands.v1"
+    private static let notifPrefsKey = "mesh.notifPrefs.v1"
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
@@ -28,6 +41,30 @@ final class MeshStore: ObservableObject {
         load()
         PhoneConnectivity.shared.commandHandler = { [weak self] cmd in
             await self?.handle(cmd)
+        }
+        // A notification tap opens its machine→session: switch to Terminal, push it.
+        NotificationManager.shared.onOpen = { [weak self] host, session in
+            Task { @MainActor in self?.openSession(host: host, session: session) }
+        }
+    }
+
+    /// Deep-link from a tapped notification to the originating session.
+    func openSession(host: String, session: String?) {
+        selectedTab = 1   // Terminal tab (see ContentView tab order)
+        if let session { pendingSession = SessionRoute(host: host, session: session) }
+    }
+
+    // MARK: Notification prefs persistence
+
+    private static func loadNotifPrefs() -> NotifPrefs {
+        guard let data = UserDefaults.standard.data(forKey: notifPrefsKey),
+              let decoded = try? JSONDecoder().decode(NotifPrefs.self, from: data) else { return .default }
+        return decoded
+    }
+
+    private func saveNotifPrefs() {
+        if let data = try? JSONEncoder().encode(notifPrefs) {
+            UserDefaults.standard.set(data, forKey: Self.notifPrefsKey)
         }
     }
 
@@ -221,8 +258,11 @@ final class MeshStore: ObservableObject {
                 continue
             }
             let tagged = machineEvents.map { event in
+                // Tag with the app's display host (e.g. "arya-macbook-pro") rather than
+                // meshd's os.hostname() ("Aryas-MacBook-Pro.local") so notification taps
+                // resolve back to a Machine and the Monitor feed reads consistently.
                 AgentEvent(id: event.id,
-                           host: event.host ?? machine.host,
+                           host: machine.host,
                            source: event.source,
                            session: event.session,
                            level: event.level,
@@ -238,7 +278,7 @@ final class MeshStore: ObservableObject {
         }
         guard !fetched.isEmpty else { return }
         events = Array((events + fetched).suffix(100))
-        NotificationManager.shared.evaluate(events: notifyEvents)
+        NotificationManager.shared.evaluate(events: notifyEvents, prefs: notifPrefs)
     }
 
     // MARK: Sessions

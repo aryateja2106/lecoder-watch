@@ -3,15 +3,21 @@ import UserNotifications
 
 /// Local notifications for the monitoring layer: usage limits crossing a threshold,
 /// a machine dropping offline, and agent count changes. Delivered to the phone (and
-/// mirrored to the watch by watchOS automatically).
-final class NotificationManager {
+/// mirrored to the watch by watchOS automatically). Also turns agent /events into
+/// actionable pings (needs-input / finished / error), and routes a tap back to the
+/// machine→session it came from.
+final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
     private var firedKeys: Set<String> = []          // de-dupe within a session
     private var lastReachable: [String: Bool] = [:]
     private let usageThreshold = 85.0                  // notify when a limit is >85% used
 
+    /// Tap routing — set by MeshStore. Receives (appHost, session?).
+    var onOpen: ((String, String?) -> Void)?
+
     func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        UNUserNotificationCenter.current().delegate = self
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
     /// Inspect a fresh snapshot and fire notifications for noteworthy changes.
@@ -39,14 +45,21 @@ final class NotificationManager {
         }
     }
 
-    func evaluate(events: [AgentEvent]) {
+    /// Turn fresh agent events into notifications, honoring the user's per-source /
+    /// per-type toggles. Routine output (unclassified level) is dropped — only
+    /// needs-input / finished / error ping.
+    func evaluate(events: [AgentEvent], prefs: NotifPrefs) {
         for event in events {
             let key = "event-\(event.id)"
             guard !firedKeys.contains(key) else { continue }
+            guard let kind = notifKind(for: event.level), prefs.allows(event) else { continue }
             firedKeys.insert(key)
             notify(id: key,
                    title: eventNotificationTitle(event),
-                   body: eventNotificationBody(event))
+                   body: eventNotificationBody(event),
+                   kind: kind,
+                   host: event.host,
+                   session: event.session)
         }
     }
 
@@ -87,5 +100,48 @@ final class NotificationManager {
         let req = UNNotificationRequest(identifier: id, content: content,
                                         trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))
         UNUserNotificationCenter.current().add(req)
+    }
+
+    /// Agent-event notification: louder + break-through for needs-input/error, quiet
+    /// for finished, and carrying host/session so a tap can open the right session.
+    private func notify(id: String, title: String, body: String, kind: NotifKind, host: String?, session: String?) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        // ponytail: .timeSensitive only breaks through Focus/DND with the matching
+        // entitlement; without it iOS quietly downgrades to .active — no crash. Add
+        // the entitlement when shipping if DND break-through matters.
+        content.interruptionLevel = kind.isLoud ? .timeSensitive : .active
+        if let host { content.threadIdentifier = host }
+        var info: [String: String] = [:]
+        if let host { info["host"] = host }
+        if let session, !session.isEmpty { info["session"] = session }
+        content.userInfo = info
+        let req = UNNotificationRequest(identifier: id, content: content,
+                                        trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))
+        UNUserNotificationCenter.current().add(req)
+    }
+
+    // MARK: UNUserNotificationCenterDelegate
+
+    /// Show the banner even when the app is foregrounded (so a permission ping is
+    /// visible while you're already in the app, and verifiable in the simulator).
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .list])
+    }
+
+    /// Tap → hand the host/session back to MeshStore to open that session.
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let info = response.notification.request.content.userInfo
+        if let host = info["host"] as? String {
+            let session = (info["session"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            onOpen?(host, session)
+        }
+        completionHandler()
     }
 }

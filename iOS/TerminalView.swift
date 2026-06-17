@@ -108,6 +108,18 @@ struct TerminalTab: View {
                 }
             }
             .navigationTitle("Terminal")
+            // Notification tap (MeshStore.pendingSession) lands here: open the rich
+            // session peek if we already know the agent, else the bridge by name.
+            .navigationDestination(item: $store.pendingSession) { route in
+                if let m = machine(for: route.host) {
+                    if let agent = store.snapshot?.machines.first(where: { $0.host == route.host })?
+                        .agents.first(where: { $0.name == route.session }) {
+                        SessionPeekScreen(machine: m, session: agent)
+                    } else {
+                        BridgeTerminalScreen(machine: m, session: route.session, initialPane: nil)
+                    }
+                }
+            }
             .toolbar {
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
