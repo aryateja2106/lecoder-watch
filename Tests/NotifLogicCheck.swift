@@ -12,7 +12,7 @@ enum NotifLogicCheck {
             if !cond { failures += 1; print("FAIL: \(msg)") }
         }
         func ev(_ level: String?, source: String? = "claude") -> AgentEvent {
-            AgentEvent(id: "1", host: "arya-macbook-pro", source: source, session: "watch-shell",
+            AgentEvent(id: "1", host: "my-mac", source: source, session: "watch-shell",
                        level: level, title: "t", body: "b", createdISO: "2026-01-01T00:00:00Z")
         }
 

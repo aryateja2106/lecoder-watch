@@ -4,7 +4,9 @@ import XCTest
 /// the live Mac daemon, let the app poll /events and raise the banner, tap the banner,
 /// and assert we land on that session. Headless — no human finger needed.
 final class NotificationTapUITests: XCTestCase {
-    private let daemon = "http://100.94.221.115:8899/events?token=testtoken"
+    // Set MESHD_URL (e.g. http://100.x.y.z:8899/events?token=YOUR_TOKEN) in the test scheme's
+    // environment to run this end-to-end against a live daemon; defaults to localhost.
+    private let daemon = ProcessInfo.processInfo.environment["MESHD_URL"] ?? "http://127.0.0.1:8899/events"
     private let testSession = "uitest-open"
 
     func testNotificationTapOpensSession() throws {

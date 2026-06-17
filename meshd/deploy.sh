@@ -3,14 +3,15 @@
 # Usage: MESHD_TOKEN=yourtoken ./deploy.sh
 set -euo pipefail
 
-TOKEN="${MESHD_TOKEN:-testtoken}"
+TOKEN="${MESHD_TOKEN:?set MESHD_TOKEN to a strong shared secret}"
 PORT="${MESHD_PORT:-8899}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-# Tailscale hosts (ssh alias -> tailscale ip). Mac runs locally.
+# Your Tailscale hosts (ssh alias -> tailscale ip). Mac runs locally.
+# Edit these for your own tailnet, or export them before running.
 LINUX_HOSTS=(pi-ts dataflow)
-declare -A IPS=( [pi-ts]=100.94.168.17 [dataflow]=100.80.10.95 )
-MAC_IP=100.94.221.115
+declare -A IPS=( [pi-ts]=100.x.y.z [dataflow]=100.x.y.z )
+MAC_IP=100.x.y.z
 
 echo "== Mac (local) =="
 pkill -f "meshd/server.ts" 2>/dev/null || true

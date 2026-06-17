@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+
+PORT="${MESHD_PORT:-8899}"
+BASE="${MESHD_URL:-http://127.0.0.1:$PORT}"
+TOKEN="${MESHD_TOKEN:-}"
+REQUIRE="${1:-}"
+
+health=$(curl -fsS "$BASE/health")
+cap_ok=0
+printf 'health: %s\n' "$BASE"
+if printf '%s' "$health" | grep -q '"screen"'; then
+  echo "capability: screen"
+  cap_ok=1
+else
+  echo "capability: screen missing"
+fi
+
+unauth=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/screen.jpg" || true)
+echo "screen.jpg unauth: $unauth"
+
+auth_ok=0
+if [ -n "$TOKEN" ]; then
+  tmp=$(mktemp "${TMPDIR:-/tmp}/mesh-screen.XXXXXX")
+  trap 'rm -f "$tmp"' EXIT
+  status=$(curl -sS -H "Authorization: Bearer $TOKEN" -o "$tmp" -w '%{http_code} %{content_type} %{size_download}' "$BASE/screen.jpg" || true)
+  echo "screen.jpg auth: $status"
+  case "$status" in
+    200\ image/jpeg*) auth_ok=1 ;;
+  esac
+else
+  echo "screen.jpg auth: skipped (set MESHD_TOKEN)"
+fi
+
+if [ "$REQUIRE" = "--require-screen" ] && { [ "$cap_ok" != "1" ] || [ "$auth_ok" != "1" ]; }; then
+  exit 1
+fi

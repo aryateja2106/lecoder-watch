@@ -5,8 +5,8 @@ import Foundation
 /// A machine on the Tailscale mesh that runs `meshd`.
 struct Machine: Codable, Identifiable, Hashable {
     var id: String { host }
-    var host: String          // display name, e.g. "arya-macbook-pro"
-    var ip: String            // tailscale IP, e.g. "100.94.221.115"
+    var host: String          // display name, e.g. "my-mac"
+    var ip: String            // tailscale IP, e.g. "100.x.y.z"
     var port: Int             // meshd port, default 8899
     var token: String         // bearer token
     var bridgeURL: String?    // rmux-bridge base (tailscale-serve https); nil = not deployed
@@ -58,11 +58,10 @@ struct Machine: Codable, Identifiable, Hashable {
         return URL(string: s)
     }
 
-    // Dogfood default: current local services use this token; custom machines can use generated tokens.
+    // One placeholder machine to edit on first launch (Settings tab). Set the Tailscale
+    // IP and the token printed by `install.sh` on each machine. Add more in Settings.
     static let defaults: [Machine] = [
-        Machine(host: "arya-macbook-pro", ip: "100.94.221.115", port: 8899, token: "testtoken"),
-        Machine(host: "arya-pi", ip: "100.94.168.17", port: 8899, token: "testtoken"),
-        Machine(host: "dataflowagents", ip: "100.80.10.95", port: 8899, token: "testtoken")
+        Machine(host: "my-mac", ip: "100.100.100.100", port: 8899, token: "")
     ]
 }
 

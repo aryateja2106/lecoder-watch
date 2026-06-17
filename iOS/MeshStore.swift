@@ -94,15 +94,6 @@ final class MeshStore: ObservableObject {
         } else {
             machines = Machine.defaults
         }
-        let generated = UserDefaults.standard.string(forKey: installTokenKey)
-        var changed = false
-        for idx in machines.indices {
-            if generated == machines[idx].token, Machine.defaults.contains(where: { $0.host == machines[idx].host }) {
-                machines[idx].token = "testtoken"
-                changed = true
-            }
-        }
-        if changed { save() }
         if let decoded = UserDefaults.standard.stringArray(forKey: quickCommandsKey), !decoded.isEmpty {
             quickCommands = Self.mergedQuickCommands(decoded)
             UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
@@ -275,8 +266,8 @@ final class MeshStore: ObservableObject {
                 continue
             }
             let tagged = machineEvents.map { event in
-                // Tag with the app's display host (e.g. "arya-macbook-pro") rather than
-                // meshd's os.hostname() ("Aryas-MacBook-Pro.local") so notification taps
+                // Tag with the app's display host (e.g. "my-mac") rather than
+                // meshd's os.hostname() so notification taps
                 // resolve back to a Machine and the Monitor feed reads consistently.
                 AgentEvent(id: event.id,
                            host: machine.host,

@@ -25,7 +25,7 @@ struct SessionActivityAttributes: ActivityAttributes {
         }
     }
 
-    var host: String       // app display host, e.g. "arya-macbook-pro"
+    var host: String       // app display host, e.g. "my-mac"
     var session: String    // rmux/tmux session == Agent.name
 }
 #endif
