@@ -94,6 +94,7 @@ final class MeshStore: ObservableObject {
         } else {
             machines = Machine.defaults
         }
+        hydrateTokens()
         if let decoded = UserDefaults.standard.stringArray(forKey: quickCommandsKey), !decoded.isEmpty {
             quickCommands = Self.mergedQuickCommands(decoded)
             UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
@@ -117,8 +118,35 @@ final class MeshStore: ObservableObject {
         return commands
     }
 
+    /// Pull each machine's bearer token from the Keychain after decoding the (token-free)
+    /// UserDefaults blob. Legacy blobs still carry a plaintext token: keep it, push it into the
+    /// Keychain, and re-save so the next persisted blob is redacted.
+    private func hydrateTokens() {
+        var migratedLegacy = false
+        for i in machines.indices {
+            let stored = KeychainVault.token(for: machines[i].id)
+            if machines[i].token.isEmpty {
+                if let stored { machines[i].token = stored }
+            } else if stored == nil {
+                // Legacy plaintext token from the old UserDefaults blob → move into Keychain.
+                KeychainVault.setToken(machines[i].token, for: machines[i].id)
+                migratedLegacy = true
+            }
+        }
+        if migratedLegacy { save() }   // overwrite the plaintext blob with a redacted one
+    }
+
     func save() {
-        if let data = try? JSONEncoder().encode(machines) {
+        // Secrets live in the Keychain, never in the UserDefaults plaintext blob.
+        for machine in machines {
+            if machine.token.isEmpty {
+                KeychainVault.deleteToken(for: machine.id)
+            } else {
+                KeychainVault.setToken(machine.token, for: machine.id)
+            }
+        }
+        let redacted = machines.map { m -> Machine in var c = m; c.token = ""; return c }
+        if let data = try? JSONEncoder().encode(redacted) {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
         UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)

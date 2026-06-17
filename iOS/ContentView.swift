@@ -298,6 +298,15 @@ private func peerShortHost(_ peer: TailnetPeer) -> String {
     peer.host.split(separator: ".").first.map(String.init) ?? peer.host
 }
 
+/// Copy a secret to the pasteboard with a 60s auto-clear, so a token doesn't linger for any
+/// other app to read. (Brief #4: never put a secret on the pasteboard without an expiry.)
+func copySecret(_ secret: String) {
+    UIPasteboard.general.setItems(
+        [["public.utf8-plain-text": secret]],
+        options: [.expirationDate: Date().addingTimeInterval(60)]
+    )
+}
+
 @ViewBuilder
 func copyableCommand(_ command: String) -> some View {
     HStack(alignment: .firstTextBaseline) {
@@ -469,7 +478,7 @@ private struct SettingsTab: View {
                             SecureField("token", text: $m.token)
                             HStack {
                                 Button {
-                                    UIPasteboard.general.string = m.token
+                                    copySecret(m.token)
                                 } label: {
                                     Label("Copy token", systemImage: "key")
                                 }
