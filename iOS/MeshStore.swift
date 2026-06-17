@@ -63,7 +63,12 @@ final class MeshStore: ObservableObject {
     // MARK: Primary (pinned) session
 
     func isPrimary(_ session: String) -> Bool { primarySessionId == session }
-    func setPrimary(_ session: String?) { primarySessionId = session }
+    func setPrimary(_ session: String?) {
+        primarySessionId = session
+        LiveActivityController.shared.setPinned(session)
+        // Start the activity right away while we're in the foreground (tap context).
+        if session != nil, let snap = snapshot { LiveActivityController.shared.sync(snapshot: snap) }
+    }
 
     // MARK: Notification prefs persistence
 
@@ -252,6 +257,7 @@ final class MeshStore: ObservableObject {
         snapshot = snap
         PhoneConnectivity.shared.push(snap)
         NotificationManager.shared.evaluate(snap)
+        LiveActivityController.shared.sync(snapshot: snap)
     }
 
     private func refreshEvents(from targets: [Machine]) async {

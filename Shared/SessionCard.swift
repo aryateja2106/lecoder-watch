@@ -27,6 +27,17 @@ extension SessionState {
         case .unknown: return .gray
         }
     }
+
+    /// Glyph for the Dynamic Island compact/minimal regions (where text won't fit).
+    var symbol: String {
+        switch self {
+        case .waiting: return "questionmark.circle.fill"
+        case .running: return "gearshape.2.fill"
+        case .idle:    return "checkmark.circle.fill"
+        case .error:   return "exclamationmark.triangle.fill"
+        case .unknown: return "circle.dashed"
+        }
+    }
 }
 
 /// Map an event level to the status a card should show when there's no live
