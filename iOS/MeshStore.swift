@@ -13,6 +13,9 @@ struct SessionRoute: Identifiable, Hashable {
 @MainActor
 final class MeshStore: ObservableObject {
     @Published var machines: [Machine] = []
+    /// Named SSH/VNC identities. Non-secret metadata only — the password/key lives in Keychain
+    /// (KeychainVault, keyed by credential id). Persisted separately from machines.
+    @Published var credentials: [Credential] = []
     @Published var quickCommands: [String] = MeshStore.defaultQuickCommands
     @Published var snapshot: MeshSnapshot?
     @Published var events: [AgentEvent] = []
@@ -31,6 +34,7 @@ final class MeshStore: ObservableObject {
 
     private var timer: Timer?
     private let defaultsKey = "mesh.machines.v1"
+    private let credentialsKey = "mesh.credentials.v1"
     private let installTokenKey = "mesh.installToken.v1"
     private let quickCommandsKey = "mesh.quickCommands.v1"
     private static let notifPrefsKey = "mesh.notifPrefs.v1"
@@ -95,6 +99,10 @@ final class MeshStore: ObservableObject {
             machines = Machine.defaults
         }
         hydrateTokens()
+        if let data = UserDefaults.standard.data(forKey: credentialsKey),
+           let decoded = try? JSONDecoder().decode([Credential].self, from: data) {
+            credentials = decoded
+        }
         if let decoded = UserDefaults.standard.stringArray(forKey: quickCommandsKey), !decoded.isEmpty {
             quickCommands = Self.mergedQuickCommands(decoded)
             UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
@@ -150,6 +158,39 @@ final class MeshStore: ObservableObject {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
         UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
+    }
+
+    // MARK: Credentials (Vault)
+
+    private func saveCredentials() {
+        if let data = try? JSONEncoder().encode(credentials) {
+            UserDefaults.standard.set(data, forKey: credentialsKey)
+        }
+    }
+
+    /// Create a named identity: metadata persisted, secret stored in Keychain.
+    func addCredential(name: String, kind: Credential.Kind, username: String, secret: String) {
+        let cred = Credential(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                              kind: kind,
+                              username: username.trimmingCharacters(in: .whitespacesAndNewlines))
+        KeychainVault.setSecret(secret, forCredential: cred.id)
+        credentials.append(cred)
+        saveCredentials()
+    }
+
+    /// Replace a credential's metadata (and secret if a non-nil value is supplied).
+    func updateCredential(_ cred: Credential, secret: String?) {
+        if let idx = credentials.firstIndex(where: { $0.id == cred.id }) {
+            credentials[idx] = cred
+        }
+        if let secret { KeychainVault.setSecret(secret, forCredential: cred.id) }
+        saveCredentials()
+    }
+
+    func deleteCredentials(at offsets: IndexSet) {
+        for i in offsets { KeychainVault.deleteSecret(forCredential: credentials[i].id) }
+        credentials.remove(atOffsets: offsets)
+        saveCredentials()
     }
 
     func update(_ machine: Machine) {

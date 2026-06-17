@@ -59,4 +59,11 @@ enum KeychainVault {
     static func token(for machineID: UUID) -> String? { secret(account: tokenAccount(machineID)) }
     static func setToken(_ token: String, for machineID: UUID) { set(token, account: tokenAccount(machineID)) }
     static func deleteToken(for machineID: UUID) { delete(account: tokenAccount(machineID)) }
+
+    // MARK: named SSH/VNC credential convenience
+
+    static func credentialAccount(_ id: UUID) -> String { "cred/\(id.uuidString)" }
+    static func secret(forCredential id: UUID) -> String? { secret(account: credentialAccount(id)) }
+    static func setSecret(_ value: String, forCredential id: UUID) { set(value, account: credentialAccount(id)) }
+    static func deleteSecret(forCredential id: UUID) { delete(account: credentialAccount(id)) }
 }

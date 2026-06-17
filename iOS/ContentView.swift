@@ -433,6 +433,16 @@ private struct SettingsTab: View {
         NavigationStack {
             List {
                 Section {
+                    NavigationLink {
+                        VaultView().environmentObject(store)
+                    } label: {
+                        Label("Credential Vault", systemImage: "key.horizontal.fill")
+                    }
+                } footer: {
+                    Text("SSH & VNC identities, stored in Apple Keychain — add once, reuse everywhere.")
+                }
+
+                Section {
                     ForEach(NotifKind.allCases, id: \.self) { kind in
                         Toggle(kind.label, isOn: typeBinding(kind))
                     }
