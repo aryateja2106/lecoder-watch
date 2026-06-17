@@ -284,7 +284,6 @@ private struct SessionPeekScreen: View {
     @State private var selectedPane: String?
     @State private var composeText = ""
     @State private var phraseText = ""
-    @State private var showingCompose = false
     @State private var showingPhrase = false
     @State private var loading = false
     @State private var lastUpdated: Date?
@@ -323,6 +322,14 @@ private struct SessionPeekScreen: View {
             .padding(.vertical, 14)
         }
         .background(Color(.systemGroupedBackground))
+        // Voice-first InputBar pinned above the keyboard — the one place to talk to the session.
+        .safeAreaInset(edge: .bottom) {
+            InputBar(text: $composeText, placeholder: "Message \(session.name)…") {
+                let toSend = composeText
+                composeText = ""
+                Task { await send(text: toSend + "\n") }
+            }
+        }
         .navigationTitle(session.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -336,7 +343,6 @@ private struct SessionPeekScreen: View {
                 try? await Task.sleep(for: .seconds(2))
             }
         }
-        .sheet(isPresented: $showingCompose) { composeSheet }
         .sheet(isPresented: $showingPhrase) { phraseSheet }
     }
 
@@ -412,22 +418,7 @@ private struct SessionPeekScreen: View {
                 Spacer()
                 if loading { ProgressView().controlSize(.small) }
             }
-            Group {
-                if visibleLines.isEmpty {
-                    Text("No output yet. Tap refresh or open the terminal.")
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    Text(visibleLines.joined(separator: "\n"))
-                        .font(.system(.caption, design: .monospaced))
-                        .lineSpacing(2)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(12)
-            .background(Color.black, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .foregroundStyle(.white)
+            TerminalSurface(lines: visibleLines, isLive: session.attached || state == .running)
         }
         .padding(16)
         .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -443,7 +434,6 @@ private struct SessionPeekScreen: View {
             }
             .buttonStyle(.borderedProminent)
             HStack {
-                Button { showingCompose = true } label: { Label("Reply", systemImage: "square.and.pencil") }
                 Button { showingPhrase = true } label: { Label("Command", systemImage: "waveform") }
                 Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
                 if activePane != nil {
@@ -479,34 +469,6 @@ private struct SessionPeekScreen: View {
         }
         .padding(16)
         .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-
-    private var composeSheet: some View {
-        NavigationStack {
-            Form {
-                Section("Send to \(session.name)") {
-                    TextField("Type, paste, or dictate a command", text: $composeText, axis: .vertical)
-                        .lineLimit(3...8)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                }
-            }
-            .navigationTitle("Reply")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showingCompose = false } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Send") {
-                        Task {
-                            await send(text: composeText + "\n")
-                            composeText = ""
-                            showingCompose = false
-                        }
-                    }
-                    .disabled(composeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
     }
 
     private var phraseSheet: some View {
