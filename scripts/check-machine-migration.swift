@@ -13,11 +13,13 @@ struct Machine: Codable, Identifiable, Hashable {
     var token: String
     var bridgeURL: String?
     var vncURL: String?
+    var vncCredentialId: UUID?
 
     init(id: UUID = UUID(), host: String, ip: String, port: Int, token: String,
-         bridgeURL: String? = nil, vncURL: String? = nil) {
+         bridgeURL: String? = nil, vncURL: String? = nil, vncCredentialId: UUID? = nil) {
         self.id = id; self.host = host; self.ip = ip; self.port = port
         self.token = token; self.bridgeURL = bridgeURL; self.vncURL = vncURL
+        self.vncCredentialId = vncCredentialId
     }
 
     init(from decoder: Decoder) throws {
@@ -29,6 +31,7 @@ struct Machine: Codable, Identifiable, Hashable {
         token = try c.decode(String.self, forKey: .token)
         bridgeURL = try c.decodeIfPresent(String.self, forKey: .bridgeURL)
         vncURL = try c.decodeIfPresent(String.self, forKey: .vncURL)
+        vncCredentialId = try c.decodeIfPresent(UUID.self, forKey: .vncCredentialId)
     }
 }
 

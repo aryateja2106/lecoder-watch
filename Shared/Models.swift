@@ -11,6 +11,7 @@ struct Machine: Codable, Identifiable, Hashable {
     var token: String         // bearer token
     var bridgeURL: String?    // rmux-bridge base (tailscale-serve https); nil = not deployed
     var vncURL: String?       // noVNC/web VNC URL; nil = http://ip:6080/vnc.html
+    var vncCredentialId: UUID? // bound Vault VNC identity (secret stays in Keychain); nil = none
 
     var addresses: [String] {
         var seen = Set<String>()
@@ -77,6 +78,7 @@ extension Machine {
         token = try c.decode(String.self, forKey: .token)
         bridgeURL = try c.decodeIfPresent(String.self, forKey: .bridgeURL)
         vncURL = try c.decodeIfPresent(String.self, forKey: .vncURL)
+        vncCredentialId = try c.decodeIfPresent(UUID.self, forKey: .vncCredentialId)
     }
 }
 

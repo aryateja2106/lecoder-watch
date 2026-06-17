@@ -562,9 +562,9 @@ private struct RemoteControlTab: View {
                 ForEach(machines) { machine in
                     Section(machine.host) {
                         NavigationLink {
-                            RemoteWebScreen(title: machine.host, urlString: machine.resolvedVNC)
+                            VNCConnectScreen(machine: machine).environmentObject(store)
                         } label: {
-                            Label("Open VNC", systemImage: "display")
+                            Label("Connect VNC", systemImage: "display")
                         }
                         if let snap = snap(for: machine) {
                             ServiceStatusRow(label: "machine", ok: snap.reachable, detail: snap.reachable ? "active" : snap.error)
@@ -586,7 +586,7 @@ private struct RemoteControlTab: View {
     }
 }
 
-private struct RemoteWebScreen: View {
+struct RemoteWebScreen: View {
     let title: String
     let urlString: String
     @State private var reloadToken = UUID()
