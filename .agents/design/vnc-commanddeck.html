@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeshWatch — VNC RemoteCanvas + CommandDeck</title>
+<style>
+  :root{
+    --base:#0A0B0D; --raised:#15171A; --control:#1E2125;
+    --t1:#F5F6F7; --t2:#9BA0A6; --t3:#5C6066;
+    --hair:#2A2D31; --accent:#4DA3FF;
+    --ok:#34C759; --warn:#FF9F0A; --err:#FF453A;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sys:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0;}
+  body{
+    background:#171819; font-family:var(--sys); color:var(--t1);
+    min-height:100vh; display:flex; flex-direction:column; align-items:center;
+    padding:40px 16px 80px; gap:14px;
+  }
+  .pagehead{text-align:center;color:var(--t2);max-width:760px;}
+  .pagehead h1{font-size:17px;color:var(--t1);font-weight:600;letter-spacing:-.2px;}
+  .pagehead p{font-size:12.5px;margin-top:6px;line-height:1.5;}
+  .stage{display:flex;gap:48px;flex-wrap:wrap;justify-content:center;align-items:flex-start;}
+  .col{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .lbl{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--t3);font-weight:700;}
+  .lbl.after{color:var(--accent);}
+
+  /* phone bezel */
+  .phone{
+    width:390px; height:844px; background:#000; border-radius:54px;
+    padding:11px; box-shadow:0 0 0 2px #232427,0 30px 70px rgba(0,0,0,.6);
+    position:relative;
+  }
+  .screen{
+    width:100%;height:100%;background:var(--base);border-radius:44px;overflow:hidden;
+    position:relative; display:flex; flex-direction:column;
+  }
+  .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:122px;height:32px;background:#000;border-radius:0 0 18px 18px;z-index:60;}
+
+  /* ===== RemoteCanvas (full-bleed framebuffer) ===== */
+  .canvas{
+    position:absolute; inset:0; overflow:hidden;
+    background:
+      radial-gradient(120% 80% at 70% 12%, #20242b 0%, #15181d 46%, #0c0e11 100%);
+  }
+  /* subtle desktop wallpaper texture (monochrome) */
+  .canvas::before{
+    content:""; position:absolute; inset:0;
+    background:
+      repeating-linear-gradient(115deg, rgba(255,255,255,.012) 0 2px, transparent 2px 9px),
+      radial-gradient(60% 50% at 30% 75%, rgba(255,255,255,.03), transparent 70%);
+    opacity:.8;
+  }
+  .menubar{
+    position:absolute;top:54px;left:0;right:0;height:24px;z-index:5;
+    background:rgba(10,11,13,.55);backdrop-filter:blur(8px);
+    border-bottom:1px solid rgba(255,255,255,.05);
+    display:flex;align-items:center;gap:14px;padding:0 14px;
+    font-size:10.5px;color:var(--t2);
+  }
+  .menubar .apple{font-size:11px;color:var(--t1);}
+  .menubar .sp{flex:1;}
+  .menubar .clock{font-variant-numeric:tabular-nums;color:var(--t1);font-weight:600;}
+
+  /* desktop windows */
+  .win{position:absolute;border-radius:10px;overflow:hidden;
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 18px 40px rgba(0,0,0,.55);}
+  .titlebar{height:22px;background:#202327;display:flex;align-items:center;padding:0 9px;gap:6px;border-bottom:1px solid rgba(0,0,0,.4);}
+  .dot{width:9px;height:9px;border-radius:50%;}
+  .dot.r{background:#5b5d61;} .dot.y{background:#5b5d61;} .dot.g{background:#5b5d61;}
+  .titlebar .ttl{font-size:9px;color:var(--t3);margin-left:6px;}
+
+  /* terminal window — LIVELY ANSI */
+  .termwin{top:96px;left:14px;width:206px;height:300px;}
+  .term{height:calc(100% - 22px);background:#070809;padding:8px 9px;font-family:var(--mono);font-size:8.5px;line-height:1.5;overflow:hidden;}
+  .term .g{color:#3ddc84;} .term .a{color:#ffb84d;} .term .r{color:#ff6b5e;}
+  .term .b{color:#5fb0ff;} .term .d{color:#6a7079;} .term .w{color:#d7dadf;}
+  .cursor{display:inline-block;width:5px;height:11px;background:#3ddc84;transform:translateY(2px);animation:blink 1.05s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+
+  /* second terminal (htop-ish) */
+  .termwin2{top:300px;left:30px;width:188px;height:150px;z-index:4;}
+  .term2{height:calc(100% - 22px);background:#060708;padding:6px 7px;font-family:var(--mono);font-size:7.5px;line-height:1.45;}
+  .bar{display:inline-block;color:#3ddc84;}
+
+  /* browser window */
+  .browwin{top:118px;right:14px;width:168px;height:248px;background:#fafafa;}
+  .browbar{height:24px;background:#e9eaec;display:flex;align-items:center;gap:5px;padding:0 8px;border-bottom:1px solid #d4d6d9;}
+  .urlpill{flex:1;height:13px;background:#fff;border-radius:7px;border:1px solid #d4d6d9;font-size:7px;color:#7a7d82;display:flex;align-items:center;padding:0 6px;}
+  .browbody{padding:24px 14px;display:flex;flex-direction:column;align-items:center;gap:10px;color:#1d1d1f;}
+  .glogo{font-size:11px;font-weight:600;display:flex;align-items:center;gap:5px;}
+  .glogo .g{width:13px;height:13px;border-radius:50%;background:conic-gradient(#5a5c60 0 100%);}
+  .codebox{width:100%;background:#f1f2f4;border-radius:6px;border:1px solid #e2e3e6;padding:7px;font-family:var(--mono);font-size:6.5px;color:#3a3c40;text-align:center;line-height:1.5;}
+  .copybtn{background:#1d1d1f;color:#fff;font-size:8px;border-radius:14px;padding:6px 18px;font-weight:600;}
+
+  /* soft VNC cursor */
+  .vcursor{position:absolute;left:206px;top:330px;z-index:8;width:18px;height:18px;
+    filter:drop-shadow(0 1px 2px rgba(0,0,0,.7));}
+
+  /* ===== Floating CommandDeck ===== */
+  .deck{
+    position:absolute; left:10px; right:10px; bottom:18px; z-index:30;
+    background:rgba(21,23,26,.82);
+    backdrop-filter:blur(20px) saturate(1.2);
+    border:1px solid var(--hair); border-radius:20px;
+    box-shadow:0 10px 34px rgba(0,0,0,.55);
+    transition:all .28s cubic-bezier(.32,.72,0,1);
+  }
+  .deckrow{display:flex;align-items:center;gap:9px;padding:9px 10px;}
+  /* left: modifier key strip (scrollable) */
+  .keystrip{
+    display:flex;gap:6px;overflow-x:auto;flex:0 1 auto;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 8px,#000 calc(100% - 14px),transparent 100%);
+  }
+  .keystrip::-webkit-scrollbar{display:none;}
+  .keycap{
+    flex:0 0 auto;min-width:44px;height:44px;padding:0 12px;
+    background:var(--control);border:1px solid var(--hair);border-radius:11px;
+    color:var(--t1);font-size:12.5px;font-weight:600;letter-spacing:.2px;
+    display:flex;align-items:center;justify-content:center;gap:5px;
+    transition:.14s;user-select:none;
+  }
+  .keycap.sym{font-size:15px;}
+  .keycap:active{background:#262a2f;}
+  .keycap.latched{
+    border-color:var(--accent);color:var(--accent);
+    background:rgba(77,163,255,.14);
+    box-shadow:0 0 0 1px var(--accent) inset, 0 0 10px rgba(77,163,255,.25);
+  }
+  .keycap.latched::after{content:"";position:absolute;}
+  .latchpin{position:relative;}
+  .latchpin .pin{position:absolute;top:5px;right:6px;width:5px;height:5px;border-radius:50%;background:var(--accent);box-shadow:0 0 5px var(--accent);}
+  /* overflow / more key */
+  .keycap.more{min-width:44px;color:var(--t2);font-size:18px;}
+
+  /* center: text injection pill */
+  .injfield{
+    flex:1 1 auto;min-width:80px;height:44px;
+    background:var(--base);border:1px solid var(--hair);border-radius:14px;
+    display:flex;align-items:center;gap:8px;padding:0 14px;color:var(--t3);font-size:13.5px;
+    font-family:var(--mono);
+  }
+  .injfield .icur{display:inline-block;width:2px;height:15px;background:var(--accent);animation:blink 1.05s steps(1) infinite;}
+  /* right cluster */
+  .rcluster{display:flex;gap:7px;flex:0 0 auto;}
+  .iconbtn{
+    width:44px;height:44px;border-radius:12px;background:var(--control);
+    border:1px solid var(--hair);display:flex;align-items:center;justify-content:center;
+    color:var(--t2);transition:.14s;
+  }
+  .iconbtn:active{background:#262a2f;}
+  .iconbtn.on{color:var(--accent);border-color:var(--accent);background:rgba(77,163,255,.12);}
+  .iconbtn svg{width:21px;height:21px;}
+
+  /* connection chip + jump-to-latest */
+  .topchips{position:absolute;top:86px;left:0;right:0;display:flex;justify-content:space-between;padding:0 14px;z-index:9;pointer-events:none;}
+  .chip{
+    pointer-events:auto;display:flex;align-items:center;gap:6px;height:28px;padding:0 11px;
+    background:rgba(21,23,26,.85);backdrop-filter:blur(14px);border:1px solid var(--hair);
+    border-radius:14px;font-size:11px;color:var(--t2);font-weight:600;
+  }
+  .chip .led{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok);}
+  .chip.jump{color:var(--accent);border-color:rgba(77,163,255,.4);}
+  .chip.jump svg{width:13px;height:13px;}
+
+  /* collapsed deck = handle */
+  .deck.collapsed{left:auto;right:14px;width:auto;border-radius:24px;}
+  .deck.collapsed .deckrow{padding:0;}
+  .handle{display:none;align-items:center;gap:9px;height:46px;padding:0 16px 0 14px;cursor:pointer;}
+  .deck.collapsed .deckrow{display:none;}
+  .deck.collapsed .handle{display:flex;}
+  .handle .ttl{font-size:12.5px;font-weight:600;color:var(--t1);}
+  .handle .sub{font-size:11px;color:var(--accent);font-weight:600;}
+  .handle .kbd{width:20px;height:20px;color:var(--t2);}
+
+  .caps{max-width:390px;display:flex;flex-direction:column;gap:9px;}
+  .cap{display:flex;gap:9px;font-size:12px;color:var(--t2);line-height:1.45;}
+  .cap b{color:var(--t1);font-weight:600;}
+  .cap .n{flex:0 0 18px;height:18px;border-radius:50%;background:var(--control);border:1px solid var(--hair);color:var(--accent);font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px;}
+
+  /* watch col */
+  .watch{width:198px;height:240px;background:#000;border-radius:48px;padding:10px;box-shadow:0 0 0 3px #2a2b2e,0 20px 40px rgba(0,0,0,.5);}
+  .wscreen{width:100%;height:100%;background:var(--base);border-radius:40px;overflow:hidden;position:relative;}
+</style>
+</head>
+<body>
+
+<div class="pagehead">
+  <h1>RemoteCanvas + CommandDeck — RealVNC, made monochrome</h1>
+  <p>Full-bleed desktop framebuffer with a soft cursor. A floating, collapsible deck floats over the canvas — never a navbar. Tap a modifier to latch it (accent border + pin). Use the toggle below the phone to see the deck collapse to a handle.</p>
+</div>
+
+<div class="stage">
+
+  <!-- ============ AFTER (redesign) ============ -->
+  <div class="col">
+    <span class="lbl after">After · MeshWatch</span>
+    <div class="phone">
+      <div class="screen">
+        <div class="notch"></div>
+
+        <!-- RemoteCanvas -->
+        <div class="canvas" id="canvas">
+          <div class="menubar">
+            <span class="apple">&#63743;</span><span style="color:var(--t1);font-weight:600;">studio-mini</span>
+            <span>File</span><span>Edit</span><span>View</span>
+            <span class="sp"></span>
+            <span>&#9683;</span><span>&#128246;</span><span class="clock">2:41</span>
+          </div>
+
+          <!-- top chips: connection + jump-to-latest -->
+          <div class="topchips">
+            <div class="chip"><span class="led"></span>Tailscale&nbsp;·&nbsp;VNC&nbsp;<span style="color:var(--t3)">42ms</span></div>
+            <div class="chip jump">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              Live
+            </div>
+          </div>
+
+          <!-- terminal window 1 (lively ANSI) -->
+          <div class="win termwin">
+            <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">claude — ssh</span></div>
+            <div class="term">
+              <div><span class="d">~/lecoder-watch</span> <span class="b">git:(</span><span class="a">redesign</span><span class="b">)</span></div>
+              <div><span class="g">&gt;</span> <span class="w">Paste it back here in this chat and</span></div>
+              <div><span class="w">I'll feed it the waiting OTP.</span></div>
+              <div style="height:5px"></div>
+              <div><span class="a">⏺</span> <span class="w">A few notes:</span></div>
+              <div><span class="d">  • </span><span class="w">login prompt parked in a tmux</span></div>
+              <div><span class="d">    session; safe to step away.</span></div>
+              <div><span class="d">  • </span><span class="g">build GREEN</span> <span class="w">on studio-mini.</span></div>
+              <div style="height:5px"></div>
+              <div><span class="b">[16h24:31]</span> <span class="d">~/lc</span> <span class="a">⎇</span></div>
+              <div><span class="g">$</span> <span class="w">npm run watch</span><span class="cursor"></span></div>
+            </div>
+          </div>
+
+          <!-- terminal window 2 (htop) -->
+          <div class="win termwin2">
+            <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="ttl">btop</span></div>
+            <div class="term2">
+              <div><span class="b">cpu</span> <span class="g">▏▎▍▌▋▊▉█</span><span class="d">▁▁▂</span> <span class="w">31%</span></div>
+              <div><span class="b">mem</span> <span class="g">███████</span><span class="d">░░░░</span> <span class="w">7.7G</span></div>
+              <div style="height:3px"></div>
+              <div><span class="d">PID  </span><span class="w">node</span>   <span class="w">2.4%</span> <span class="w">412M</span></div>
+              <div><span class="d">PID  </span><span class="w">ssh</span>    <span class="w">0.1%</span> <span class="w"> 18M</span></div>
+              <div><span class="d">PID  </span><span class="w">vncd</span>   <span class="w">1.9%</span> <span class="w"> 54M</span></div>
+              <div><span class="d">net  </span><span class="w">▼ 0.4M</span> <span class="w">▲ 9.1K</span></div>
+            </div>
+          </div>
+
+          <!-- browser window -->
+          <div class="win browwin">
+            <div class="browbar"><span style="font-size:8px;color:#9a9da2">&#8249; &#8250;</span><span class="urlpill">&#128274; antigravity.google</span></div>
+            <div class="browbody">
+              <div class="glogo"><span class="g"></span>Google Antigravity</div>
+              <div style="font-size:6.5px;color:#86888d;text-align:center;">Paste this code into your application<br>to complete authorization</div>
+              <div class="codebox">4/0AVMBsJu2itf2u6a8w<br>P9oV1y2BfK4nVbeQ8sX</div>
+              <div class="copybtn">Copy to Clipboard</div>
+            </div>
+          </div>
+
+          <!-- soft cursor -->
+          <svg class="vcursor" viewBox="0 0 24 24">
+            <path d="M4 2l16 9-7 1.5L9.5 20 4 2z" fill="#f5f6f7" stroke="#0a0b0d" stroke-width="1.4" stroke-linejoin="round"/>
+          </svg>
+
+          <!-- ===== Floating CommandDeck ===== -->
+          <div class="deck" id="deck">
+            <!-- expanded row -->
+            <div class="deckrow">
+              <div class="keystrip">
+                <div class="keycap sym" title="shift">&#8679;</div>
+                <div class="keycap latched latchpin" title="ctrl latched"><span>ctrl</span><span class="pin"></span></div>
+                <div class="keycap" title="alt">alt</div>
+                <div class="keycap latched latchpin" title="cmd latched"><span style="font-size:15px">&#8984;</span><span class="pin"></span></div>
+                <div class="keycap" title="esc">esc</div>
+                <div class="keycap" title="del">del</div>
+                <div class="keycap more" title="more keys (win · opt · tab · fn)">&#8943;</div>
+              </div>
+
+              <div class="injfield"><span>type to inject</span><span class="icur"></span></div>
+
+              <div class="rcluster">
+                <div class="iconbtn on" id="eyeBtn" title="preview / hi-res toggle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                </div>
+                <div class="iconbtn" id="collapseBtn" title="collapse deck" onclick="setCollapsed(true)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14l5-5 5 5"/></svg>
+                </div>
+              </div>
+            </div>
+            <!-- collapsed handle -->
+            <div class="handle" onclick="setCollapsed(false)">
+              <svg class="kbd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h12" stroke-linecap="round"/></svg>
+              <span class="ttl">Deck</span><span class="sub">2 latched</span>
+              <svg class="kbd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 10l-5 5-5-5"/></svg>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <button onclick="setCollapsed(!document.getElementById('deck').classList.contains('collapsed'))"
+      style="background:var(--control);color:var(--accent);border:1px solid var(--hair);border-radius:12px;height:38px;padding:0 18px;font-size:12.5px;font-weight:600;font-family:var(--sys);cursor:pointer;">
+      Toggle deck ⇄ handle
+    </button>
+  </div>
+
+  <!-- ============ BEFORE (RealVNC current) ============ -->
+  <div class="col">
+    <span class="lbl">Before · RealVNC</span>
+    <div class="phone">
+      <div class="screen">
+        <div class="notch"></div>
+        <div class="canvas" style="background:radial-gradient(120% 80% at 70% 12%,#1c1f24,#0c0e11);">
+          <!-- generic desktop blocks, washed -->
+          <div class="win" style="top:96px;left:14px;width:200px;height:150px;opacity:.85;">
+            <div class="titlebar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+            <div style="background:#181a1d;height:100%;"></div>
+          </div>
+          <div class="win" style="top:120px;right:14px;width:160px;height:210px;background:#f3f3f3;opacity:.9;">
+            <div class="browbar"></div>
+            <div style="height:100%"></div>
+          </div>
+
+          <!-- BEFORE deck: cramped grey strip, win/opt cluttering, last key clipped -->
+          <div style="position:absolute;top:300px;left:8px;right:8px;background:#d8d9db;border-radius:8px;padding:7px 8px;display:flex;align-items:center;gap:6px;">
+            <div style="display:flex;gap:5px;overflow:hidden;flex:1;">
+              <div style="background:#fff;border:1px solid #b9bbbe;border-radius:6px;height:34px;min-width:34px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#222;">&#8679;</div>
+              <div style="background:#fff;border:1px solid #b9bbbe;border-radius:6px;height:34px;min-width:34px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#222;">ctrl</div>
+              <div style="background:#fff;border:1px solid #b9bbbe;border-radius:6px;height:34px;min-width:30px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#222;">alt</div>
+              <div style="background:#fff;border:1px solid #b9bbbe;border-radius:6px;height:34px;min-width:30px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#222;">&#8862;</div>
+              <div style="background:#fff;border:1px solid #b9bbbe;border-radius:6px;height:34px;min-width:30px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#222;">&#9180;</div>
+              <div style="background:#fff;border:1px solid #b9bbbe;border-radius:6px;height:34px;min-width:30px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#222;">&#8984;</div>
+              <div style="background:#fff;border:1px solid #b9bbbe;border-radius:6px;height:34px;min-width:30px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#222;">del</div>
+              <div style="background:#fff;border:1px solid #b9bbbe;border-radius:6px;height:34px;min-width:18px;overflow:hidden;display:flex;align-items:center;justify-content:flex-start;font-size:10px;color:#222;padding-left:5px;">es</div>
+            </div>
+            <div style="width:34px;height:34px;border-radius:50%;background:#4da3ff;flex:0 0 auto;display:flex;align-items:center;justify-content:center;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+          </div>
+
+          <!-- system keyboard eating half the screen -->
+          <div style="position:absolute;left:0;right:0;bottom:0;height:330px;background:#c9cbce;border-top:1px solid #aeb0b3;display:flex;flex-direction:column;justify-content:center;gap:8px;padding:14px 8px;">
+            <div style="display:flex;gap:6px;justify-content:center;">
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;display:flex;align-items:center;justify-content:center;font-size:13px;color:#222;">q</span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;display:flex;align-items:center;justify-content:center;font-size:13px;color:#222;">w</span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;display:flex;align-items:center;justify-content:center;font-size:13px;color:#222;">e</span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;display:flex;align-items:center;justify-content:center;font-size:13px;color:#222;">r</span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;display:flex;align-items:center;justify-content:center;font-size:13px;color:#222;">t</span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;display:flex;align-items:center;justify-content:center;font-size:13px;color:#222;">y</span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;display:flex;align-items:center;justify-content:center;font-size:13px;color:#222;">u</span>
+            </div>
+            <div style="display:flex;gap:6px;justify-content:center;padding:0 12px;">
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+            </div>
+            <div style="display:flex;gap:6px;justify-content:center;padding:0 30px;">
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+              <span style="background:#fff;border-radius:6px;height:38px;flex:1;box-shadow:0 1px 0 #9a9c9f;"></span>
+            </div>
+            <div style="display:flex;gap:6px;justify-content:center;">
+              <span style="background:#a9abae;border-radius:6px;height:40px;width:56px;font-size:11px;color:#222;display:flex;align-items:center;justify-content:center;">123</span>
+              <span style="background:#fff;border-radius:6px;height:40px;flex:1;"></span>
+              <span style="background:#a9abae;border-radius:6px;height:40px;width:56px;"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <span style="font-size:11px;color:var(--t3);max-width:360px;text-align:center;line-height:1.5;">Plastic light-grey keycaps, <b style="color:var(--t2)">win/opt clutter</b> the strip, the last key (<b style="color:var(--t2)">esc</b>) is clipped, no latch feedback, and the OS keyboard swallows the canvas.</span>
+  </div>
+
+  <!-- ============ WATCH peek ============ -->
+  <div class="col">
+    <span class="lbl after">Watch · Deck peek</span>
+    <div class="watch">
+      <div class="wscreen">
+        <div style="position:absolute;inset:0;background:radial-gradient(120% 80% at 70% 14%,#1c2026,#0a0b0d);"></div>
+        <!-- mini canvas -->
+        <div style="position:absolute;top:30px;left:12px;width:96px;height:70px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:#070809;overflow:hidden;font-family:var(--mono);font-size:6px;padding:5px;line-height:1.5;">
+          <div style="color:#3ddc84">$ npm run watch</div>
+          <div style="color:#d7dadf">building…</div>
+          <div style="color:#ffb84d">⏺ needs OTP</div>
+          <div style="color:#3ddc84">build GREEN<span style="display:inline-block;width:3px;height:7px;background:#3ddc84;transform:translateY(1px)"></span></div>
+        </div>
+        <div style="position:absolute;top:30px;right:10px;width:62px;height:70px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:#fafafa;"></div>
+        <!-- compact deck: 3 key caps + inject -->
+        <div style="position:absolute;left:8px;right:8px;bottom:12px;background:rgba(21,23,26,.9);border:1px solid var(--hair);border-radius:14px;padding:6px;display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;gap:5px;justify-content:center;">
+            <div style="height:30px;flex:1;border-radius:8px;background:rgba(77,163,255,.16);border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;">⌃</div>
+            <div style="height:30px;flex:1;border-radius:8px;background:var(--control);border:1px solid var(--hair);color:var(--t1);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;">⌥</div>
+            <div style="height:30px;flex:1;border-radius:8px;background:rgba(77,163,255,.16);border:1px solid var(--accent);color:var(--accent);font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;">⌘</div>
+          </div>
+          <div style="height:28px;border-radius:9px;background:var(--base);border:1px solid var(--hair);display:flex;align-items:center;padding:0 9px;font-size:9px;color:var(--accent);font-weight:600;gap:5px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v6m0 0a5 5 0 005 5h0a5 5 0 01-10 0h0a5 5 0 015-5z"/></svg>
+            Dictate
+          </div>
+        </div>
+      </div>
+    </div>
+    <span style="font-size:11px;color:var(--t3);max-width:198px;text-align:center;line-height:1.5;">Same deck, three latchable keys + Dictate inject on the wrist.</span>
+  </div>
+
+</div>
+
+<!-- annotations -->
+<div class="caps">
+  <div class="cap"><span class="n">1</span><span><b>Sticky latch is the headline.</b> ctrl &amp; ⌘ held active with an accent border, fill, and a small pin — so a queued ⌃⌘-chord is legible before you inject. Single-fire keys (shift, esc, del) stay monochrome.</span></div>
+  <div class="cap"><span class="n">2</span><span><b>The strip never lies about its contents.</b> esc / del survive to the end; win + opt are demoted into the <b>⋯</b> overflow rather than clipped, fixing the cut-off last key in the original.</span></div>
+  <div class="cap"><span class="n">3</span><span><b>Deck floats, never a navbar.</b> Translucent over the full-bleed canvas, it collapses to a labeled handle (“Deck · 2 latched”) via the chevron — reclaiming the framebuffer the OS keyboard used to eat.</span></div>
+  <div class="cap"><span class="n">4</span><span><b>Status colors earn their place.</b> Green link LED + 42 ms latency and the “Live” jump-to-latest chip are the only color besides the one blue accent; the terminal keeps real ANSI green/amber inside its frame.</span></div>
+  <div class="cap"><span class="n">5</span><span><b>Eye = preview/hi-res toggle</b> (latched blue here), and the injection pill carries a blinking accent caret to read as a live text target, not a button.</span></div>
+</div>
+
+<script>
+  function setCollapsed(v){
+    document.getElementById('deck').classList.toggle('collapsed', v);
+  }
+  // eye toggle demo
+  document.getElementById('eyeBtn').addEventListener('click',function(e){
+    e.stopPropagation();
+    this.classList.toggle('on');
+  });
+</script>
+</body>
+</html>

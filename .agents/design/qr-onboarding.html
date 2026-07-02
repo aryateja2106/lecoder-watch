@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeshWatch — QR Onboarding</title>
+<style>
+  :root{
+    --base:#0A0B0D; --raised:#15171A; --control:#1E2125;
+    --t1:#F5F6F7; --t2:#9BA0A6; --t3:#5C6066;
+    --hair:#2A2D31;
+    --accent:#4DA3FF;
+    --green:#34C759; --orange:#FF9F0A; --red:#FF453A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{
+    background:#0d0f12;
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+    color:var(--t1);
+    display:flex;flex-direction:column;align-items:center;
+    padding:48px 16px 80px;gap:14px;
+  }
+  .pagehead{text-align:center;max-width:920px;margin-bottom:8px;}
+  .pagehead h1{font-size:19px;font-weight:600;letter-spacing:-.02em;}
+  .pagehead p{font-size:13px;color:var(--t2);margin-top:6px;}
+  .row{
+    display:flex;flex-wrap:wrap;gap:34px;justify-content:center;align-items:flex-start;
+    max-width:1400px;
+  }
+  /* phone bezel */
+  .bezel{
+    width:390px;border-radius:54px;background:#000;
+    padding:11px;box-shadow:0 0 0 2px #2a2d31,0 30px 60px rgba(0,0,0,.6);
+    position:relative;
+  }
+  .screen{
+    width:368px;height:760px;border-radius:44px;overflow:hidden;
+    background:var(--base);position:relative;display:flex;flex-direction:column;
+  }
+  .notch{
+    position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:118px;height:30px;background:#000;border-radius:0 0 18px 18px;z-index:40;
+  }
+  .statusbar{
+    height:50px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 7px;font-size:13px;font-weight:600;color:var(--t1);z-index:30;
+  }
+  .statusbar .r{display:flex;gap:6px;align-items:center;font-size:12px;}
+  /* step dots */
+  .stepper{display:flex;gap:7px;justify-content:center;align-items:center;padding:4px 0 14px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--control);}
+  .dot.on{background:var(--accent);width:22px;border-radius:4px;}
+  .dot.done{background:var(--t3);}
+  .navrow{
+    display:flex;align-items:center;justify-content:space-between;padding:6px 20px 2px;height:38px;
+  }
+  .navrow .back{font-size:15px;color:var(--accent);display:flex;align-items:center;gap:3px;}
+  .navrow .step{font-size:12px;color:var(--t3);font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+  .navrow .done-pill{
+    width:30px;height:30px;border-radius:50%;background:var(--accent);
+    display:flex;align-items:center;justify-content:center;color:#001a33;font-weight:800;
+  }
+  .label{text-align:center;font-size:12.5px;color:var(--t2);font-weight:600;margin:2px 0 12px;}
+
+  /* ===== STEP 1 — camera viewfinder ===== */
+  .vf{
+    flex:1;margin:0 16px 12px;border-radius:28px;overflow:hidden;position:relative;
+    background:
+      radial-gradient(120% 80% at 50% 0%,#1b2734 0%,#0e141b 55%,#080a0d 100%);
+    display:flex;align-items:center;justify-content:center;
+  }
+  /* faint mac on a desk hint */
+  .vf .desk{
+    position:absolute;inset:0;
+    background:
+      linear-gradient(180deg,transparent 60%,rgba(0,0,0,.5) 100%),
+      repeating-linear-gradient(115deg,rgba(255,255,255,.015) 0 2px,transparent 2px 9px);
+  }
+  .vf .macbar{
+    position:absolute;top:34%;left:50%;transform:translateX(-50%);
+    width:172px;height:108px;border-radius:10px;
+    background:linear-gradient(180deg,#10151b,#0a0d11);
+    border:1px solid rgba(255,255,255,.06);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .qrmock{
+    width:78px;height:78px;border-radius:8px;padding:7px;background:#f5f6f7;
+    display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);gap:1px;
+  }
+  .qrmock i{background:transparent;border-radius:1px;}
+  .qrmock i.b{background:#0A0B0D;}
+  /* scanning frame */
+  .scanframe{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:196px;height:196px;
+  }
+  .corner{position:absolute;width:34px;height:34px;border:3px solid var(--accent);border-radius:4px;}
+  .corner.tl{top:0;left:0;border-right:none;border-bottom:none;}
+  .corner.tr{top:0;right:0;border-left:none;border-bottom:none;}
+  .corner.bl{bottom:0;left:0;border-right:none;border-top:none;}
+  .corner.br{bottom:0;right:0;border-left:none;border-top:none;}
+  .scanline{
+    position:absolute;left:8px;right:8px;height:2px;border-radius:2px;
+    background:linear-gradient(90deg,transparent,var(--accent),transparent);
+    animation:scan 2.4s ease-in-out infinite;
+  }
+  @keyframes scan{0%{top:10px;}50%{top:180px;}100%{top:10px;}}
+  .vf .pill-hint{
+    position:absolute;bottom:18px;left:50%;transform:translateX(-50%);
+    background:rgba(10,11,13,.86);
+    padding:9px 15px;border-radius:20px;font-size:13px;color:var(--t1);
+    display:flex;align-items:center;gap:8px;border:1px solid var(--hair);
+  }
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 0 0 rgba(77,163,255,.5);animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(77,163,255,.5);}70%{box-shadow:0 0 0 7px rgba(77,163,255,0);}100%{box-shadow:0 0 0 0 rgba(77,163,255,0);}}
+  .titleblk{padding:0 24px 4px;}
+  .titleblk h2{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.18;}
+  .titleblk p{font-size:14px;color:var(--t2);margin-top:7px;line-height:1.4;}
+
+  /* ===== STEP 2 — detected machine + sheet ===== */
+  .s2top{padding:0 22px;}
+  .sheet{
+    margin-top:auto;background:var(--raised);border-radius:28px 28px 0 0;
+    padding:10px 16px 22px;border-top:1px solid var(--hair);
+  }
+  .grabber{width:38px;height:5px;border-radius:3px;background:#3a3e44;margin:0 auto 14px;}
+  .sheet h3{text-align:center;font-size:17px;font-weight:600;}
+  .machcard{
+    background:var(--control);border-radius:16px;padding:14px;margin:16px 0 18px;
+    display:flex;align-items:center;gap:13px;border:1px solid var(--hair);
+  }
+  .machicon{
+    width:46px;height:46px;border-radius:12px;background:#0e1116;
+    display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;
+    border:1px solid var(--hair);
+  }
+  .machcard .meta{flex:1;min-width:0;}
+  .machcard .name{font-size:16px;font-weight:600;display:flex;align-items:center;gap:7px;}
+  .machcard .ip{font-size:12.5px;color:var(--t2);margin-top:3px;font-family:ui-monospace,"SF Mono",Menlo,monospace;}
+  .tag-online{font-size:11px;color:var(--green);display:flex;align-items:center;gap:5px;font-weight:600;}
+  .tag-online .d{width:7px;height:7px;border-radius:50%;background:var(--green);}
+
+  .group{background:var(--control);border-radius:14px;overflow:hidden;border:1px solid var(--hair);}
+  .glabel{font-size:12px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:0 4px 7px;margin-top:16px;}
+  .grow{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:13px 14px;min-height:52px;
+  }
+  .grow + .grow{border-top:1px solid var(--hair);}
+  .grow .lead{display:flex;align-items:center;gap:11px;}
+  .grow .gi{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .gi.blue{background:rgba(77,163,255,.16);}
+  .gi.grey{background:#0e1116;border:1px solid var(--hair);}
+  .grow .gt{font-size:15px;font-weight:500;}
+  .grow .gs{font-size:12px;color:var(--t2);margin-top:2px;}
+  .toggle{width:50px;height:30px;border-radius:16px;background:var(--green);position:relative;flex-shrink:0;}
+  .toggle.off{background:#3a3e44;}
+  .toggle .knob{position:absolute;top:2px;left:22px;width:26px;height:26px;border-radius:50%;background:#fff;transition:.2s;}
+  .toggle.off .knob{left:2px;}
+  .keychip{
+    font-size:12px;color:var(--t2);background:#0e1116;border:1px solid var(--hair);
+    padding:5px 9px;border-radius:8px;display:flex;align-items:center;gap:5px;font-weight:600;
+  }
+  .keychip .lock{font-size:11px;}
+  .privacy{
+    display:flex;gap:9px;align-items:flex-start;margin-top:14px;padding:0 4px;
+    font-size:12px;color:var(--t3);line-height:1.45;
+  }
+  .privacy .li{color:var(--green);font-size:13px;margin-top:1px;}
+  .cta{
+    margin-top:18px;height:52px;border-radius:15px;background:var(--accent);
+    color:#001a33;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+
+  /* ===== STEP 3 — success ===== */
+  .s3{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 30px;text-align:center;}
+  .checkwrap{
+    width:108px;height:108px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;margin-bottom:26px;position:relative;
+  }
+  .checkdisc{
+    width:78px;height:78px;border-radius:50%;background:var(--green);
+    display:flex;align-items:center;justify-content:center;
+    animation:pop .45s cubic-bezier(.2,1.3,.4,1) both;
+  }
+  @keyframes pop{0%{transform:scale(.4);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .checkdisc svg{width:40px;height:40px;}
+  .s3 h2{font-size:25px;font-weight:700;letter-spacing:-.02em;}
+  .s3 .sub{font-size:14px;color:var(--t2);margin-top:9px;line-height:1.45;}
+  .receipt{
+    width:100%;background:var(--raised);border:1px solid var(--hair);border-radius:16px;
+    margin-top:26px;overflow:hidden;text-align:left;
+  }
+  .rrow{display:flex;align-items:center;gap:11px;padding:13px 15px;font-size:14px;}
+  .rrow + .rrow{border-top:1px solid var(--hair);}
+  .rrow .ri{width:24px;text-align:center;font-size:15px;}
+  .rrow .rt{flex:1;font-weight:500;}
+  .rrow .rv{font-size:12.5px;color:var(--green);font-weight:600;font-family:ui-monospace,"SF Mono",Menlo,monospace;}
+  .rrow .rv.grey{color:var(--t2);}
+  .s3cta{width:100%;margin-top:auto;margin-bottom:8px;padding:0 4px;}
+  .btnfill{height:52px;border-radius:15px;background:var(--accent);color:#001a33;font-size:17px;font-weight:600;display:flex;align-items:center;justify-content:center;}
+  .btnghost{height:48px;margin-top:10px;border-radius:15px;background:transparent;color:var(--t2);font-size:15px;font-weight:500;display:flex;align-items:center;justify-content:center;}
+
+  .homebar{height:5px;width:130px;border-radius:3px;background:#42464c;margin:6px auto 9px;}
+
+  /* watch */
+  .wbezel{width:236px;border-radius:54px;background:#000;padding:19px;box-shadow:0 0 0 2px #2a2d31,0 24px 50px rgba(0,0,0,.55);}
+  .wscreen{width:198px;height:240px;border-radius:40px;background:var(--base);overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px;text-align:center;}
+  .wscreen .wcheck{width:54px;height:54px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;margin-bottom:12px;}
+  .wscreen .wcheck svg{width:26px;height:26px;}
+  .wscreen h4{font-size:15px;font-weight:700;}
+  .wscreen p{font-size:11px;color:var(--t2);margin-top:5px;line-height:1.35;}
+  .wscreen .wtag{margin-top:11px;font-size:10.5px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:5px;background:rgba(52,199,89,.12);padding:4px 9px;border-radius:10px;}
+
+  .caps{max-width:1180px;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:18px;}
+  .cap{background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:13px 15px;}
+  .cap b{display:block;font-size:12.5px;color:var(--t1);margin-bottom:5px;}
+  .cap b::before{content:attr(data-n);display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;background:rgba(77,163,255,.16);color:var(--accent);font-size:11px;font-weight:700;margin-right:7px;}
+  .cap span{font-size:12px;color:var(--t2);line-height:1.45;}
+  .frametitle{font-size:12px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:center;margin-bottom:2px;}
+</style>
+</head>
+<body>
+
+  <div class="pagehead">
+    <h1>MeshWatch · Add a Machine</h1>
+    <p>Scan, confirm, done — no typing secrets. Three steps for non-technical users to add a Mac over Tailscale SSH.</p>
+  </div>
+
+  <div class="row">
+
+    <!-- ============ STEP 1 ============ -->
+    <div>
+      <div class="frametitle">Step 1 · Scan</div>
+      <div class="bezel">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><div>9:41</div><div class="r">5G ▮▮▮ 84%</div></div>
+          <div class="navrow">
+            <div class="back">‹ Cancel</div>
+            <div class="step">Step 1 of 3</div>
+            <div style="width:46px"></div>
+          </div>
+          <div class="stepper"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>
+
+          <div class="titleblk">
+            <h2>Point at the QR<br>on your Mac</h2>
+            <p>Open MeshWatch on your Mac and hold your phone up to the code.</p>
+          </div>
+
+          <div class="vf">
+            <div class="desk"></div>
+            <div class="macbar">
+              <div class="qrmock" id="qr"></div>
+            </div>
+            <div class="scanframe">
+              <span class="corner tl"></span><span class="corner tr"></span>
+              <span class="corner bl"></span><span class="corner br"></span>
+              <span class="scanline"></span>
+            </div>
+            <div class="pill-hint"><span class="live-dot"></span> Looking for a code…</div>
+          </div>
+          <div class="homebar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ STEP 2 ============ -->
+    <div>
+      <div class="frametitle">Step 2 · Confirm</div>
+      <div class="bezel">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><div>9:41</div><div class="r">5G ▮▮▮ 84%</div></div>
+          <!-- dim viewfinder behind the sheet -->
+          <div style="position:absolute;inset:50px 0 0;background:radial-gradient(120% 80% at 50% 0,#16202b,#0a0d11);opacity:.5;"></div>
+
+          <div class="navrow" style="position:relative;z-index:5;">
+            <div class="back">‹ Back</div>
+            <div class="step">Step 2 of 3</div>
+            <div style="width:46px"></div>
+          </div>
+          <div class="stepper" style="position:relative;z-index:5;"><span class="dot done"></span><span class="dot on"></span><span class="dot"></span></div>
+
+          <div class="sheet" style="position:relative;z-index:5;">
+            <div class="grabber"></div>
+            <h3>Machine found</h3>
+
+            <div class="machcard">
+              <div class="machicon">🖥️</div>
+              <div class="meta">
+                <div class="name">arya-mac <span style="font-size:11px;color:var(--t3);font-weight:500;">· macOS</span></div>
+                <div class="ip">100.92.14.7</div>
+              </div>
+              <div class="tag-online"><span class="d"></span>Online</div>
+            </div>
+
+            <div class="glabel">Access</div>
+            <div class="group">
+              <div class="grow">
+                <div class="lead">
+                  <div class="gi blue">🔑</div>
+                  <div>
+                    <div class="gt">Generate SSH key</div>
+                    <div class="gs">For terminal &amp; agent control</div>
+                  </div>
+                </div>
+                <div class="toggle"><span class="knob"></span></div>
+              </div>
+              <div class="grow">
+                <div class="lead">
+                  <div class="gi blue">🖥️</div>
+                  <div>
+                    <div class="gt">Set a VNC password</div>
+                    <div class="gs">For screen mirroring</div>
+                  </div>
+                </div>
+                <div class="keychip"><span class="lock">🔒</span>Auto · Keychain</div>
+              </div>
+            </div>
+
+            <div class="privacy">
+              <span class="li">●</span>
+              <span>Passwords and keys are created on-device and saved to <b style="color:var(--t2);font-weight:600;">Apple Keychain</b>. They’re never shown or typed.</span>
+            </div>
+
+            <div class="cta">Add arya-mac</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ STEP 3 ============ -->
+    <div>
+      <div class="frametitle">Step 3 · Done</div>
+      <div class="bezel">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar"><div>9:41</div><div class="r">5G ▮▮▮ 84%</div></div>
+          <div class="navrow">
+            <div style="width:46px"></div>
+            <div class="step">Step 3 of 3</div>
+            <div class="done-pill">✓</div>
+          </div>
+          <div class="stepper"><span class="dot done"></span><span class="dot done"></span><span class="dot on"></span></div>
+
+          <div class="s3">
+            <div class="checkwrap">
+              <div class="checkdisc">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#04210d" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+              </div>
+            </div>
+            <h2>arya-mac added</h2>
+            <div class="sub">You can now mirror its screen and steer agents from your phone or watch.</div>
+
+            <div class="receipt">
+              <div class="rrow"><span class="ri">🖥️</span><span class="rt">Screen mirroring</span><span class="rv">VNC ready</span></div>
+              <div class="rrow"><span class="ri">🔑</span><span class="rt">SSH key</span><span class="rv">In Keychain</span></div>
+              <div class="rrow"><span class="ri">🌐</span><span class="rt">Tailscale</span><span class="rv grey">100.92.14.7</span></div>
+            </div>
+
+            <div class="s3cta">
+              <div class="btnfill">Open arya-mac</div>
+              <div class="btnghost">Add another machine</div>
+            </div>
+          </div>
+          <div class="homebar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ WATCH MIRROR ============ -->
+    <div>
+      <div class="frametitle">watchOS · Confirmation</div>
+      <div class="wbezel">
+        <div class="wscreen">
+          <div class="wcheck">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#04210d" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          </div>
+          <h4>arya-mac added</h4>
+          <p>VNC ready · key in Keychain</p>
+          <div class="wtag"><span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;"></span>Online</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- annotations -->
+  <div class="caps">
+    <div class="cap"><b data-n="1">Lively scan, calm shell</b><span>Only the viewfinder moves — animated scan line + blue “searching” pulse. The surrounding chrome stays monochrome, so motion signals state, not decoration. Green is held back for confirmed status only.</span></div>
+    <div class="cap"><b data-n="2">Secrets never surface</b><span>VNC password and SSH key are generated on-device. The keychain chip and green privacy line replace any password field — nothing to read or type.</span></div>
+    <div class="cap"><b data-n="3">One accent, semantic status</b><span>Blue drives every action (scan frame, CTA, active dot). Green is reserved strictly for status — Online, VNC ready, key saved.</span></div>
+    <div class="cap"><b data-n="4">Native sheet vocabulary</b><span>Step 2 is a real iOS sheet: grabber, centered title, grouped-inset rows with hairline dividers, 52pt tap targets in the thumb zone.</span></div>
+    <div class="cap"><b data-n="5">Receipt, not a wall of text</b><span>Success reads as a scannable receipt — each line is a fact the user cares about, ending in a green confirmation token.</span></div>
+  </div>
+
+<script>
+  // build a deterministic QR-ish 9x9 pattern with finder squares
+  (function(){
+    var q=document.getElementById('qr');if(!q)return;
+    var pat=[
+      1,1,1,0,1,0,1,1,1,
+      1,0,1,0,0,1,1,0,1,
+      1,1,1,0,1,0,1,1,1,
+      0,0,0,1,0,1,0,0,0,
+      1,0,1,0,1,1,0,1,0,
+      0,1,0,1,0,0,1,0,1,
+      1,1,1,0,1,0,0,0,1,
+      1,0,1,1,0,1,1,1,0,
+      1,1,1,0,0,0,1,0,1
+    ];
+    for(var k=0;k<81;k++){var i=document.createElement('i');if(pat[k])i.className='b';q.appendChild(i);}
+  })();
+</script>
+</body>
+</html>

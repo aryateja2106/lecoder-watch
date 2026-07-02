@@ -1,0 +1,223 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1782945846947,
+  "projectRoot": "/Users/aryateja/Projects/lecoder-watch",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "Generated": {
+      "path": "Generated",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1782945846923,
+      "keyFiles": [
+        "Watch-Info.plist",
+        "iOS-Info.plist"
+      ]
+    },
+    "MeshWatch.xcodeproj": {
+      "path": "MeshWatch.xcodeproj",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1782945846924,
+      "keyFiles": [
+        "project.pbxproj"
+      ]
+    },
+    "Reference-images": {
+      "path": "Reference-images",
+      "purpose": null,
+      "fileCount": 16,
+      "lastAccessed": 1782945846924,
+      "keyFiles": [
+        "IMG_8638.png",
+        "IMG_8639.png",
+        "IMG_8640.png",
+        "IMG_8641.png",
+        "IMG_8642.png"
+      ]
+    },
+    "Shared": {
+      "path": "Shared",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1782945846924,
+      "keyFiles": [
+        "MeshClient.swift",
+        "Models.swift"
+      ]
+    },
+    "Watch": {
+      "path": "Watch",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1782945846925,
+      "keyFiles": [
+        "MeshWatchApp.swift",
+        "WatchLink.swift",
+        "WatchMeshStore.swift",
+        "WatchViews.swift"
+      ]
+    },
+    "build": {
+      "path": "build",
+      "purpose": "Build output",
+      "fileCount": 1,
+      "lastAccessed": 1782945846925,
+      "keyFiles": [
+        "info.plist"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 4,
+      "lastAccessed": 1782945846926,
+      "keyFiles": [
+        "IMPECCABLE-SETUP.md",
+        "NEXT-AGENT-HANDOFF.md",
+        "PRODUCT-CONTEXT-2026-06-05.md",
+        "XCODE-WATCH-DEVICE-RUNBOOK.md"
+      ]
+    },
+    "iOS": {
+      "path": "iOS",
+      "purpose": null,
+      "fileCount": 6,
+      "lastAccessed": 1782945846926,
+      "keyFiles": [
+        "ContentView.swift",
+        "MeshRelayApp.swift",
+        "MeshStore.swift",
+        "NotificationManager.swift",
+        "PhoneConnectivity.swift"
+      ]
+    },
+    "install": {
+      "path": "install",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1782945846926,
+      "keyFiles": [
+        "README.md",
+        "install.sh"
+      ]
+    },
+    "meshd": {
+      "path": "meshd",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1782945846926,
+      "keyFiles": [
+        "deploy.sh",
+        "kb.ts",
+        "package.json",
+        "server.ts"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 7,
+      "lastAccessed": 1782945846926,
+      "keyFiles": [
+        "check-mesh-hook.py",
+        "check-mesh-self-check.sh",
+        "check-package-mesh-install.sh",
+        "check-session-state.swift",
+        "check-shell-quoting.swift"
+      ]
+    },
+    "build/Build": {
+      "path": "build/Build",
+      "purpose": "Build output",
+      "fileCount": 0,
+      "lastAccessed": 1782945846928,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "install/install.sh",
+      "accessCount": 18,
+      "lastAccessed": 1781939037438,
+      "type": "file"
+    },
+    {
+      "path": "install/README.md",
+      "accessCount": 2,
+      "lastAccessed": 1781934938203,
+      "type": "file"
+    },
+    {
+      "path": "scripts/package-mesh-install.sh",
+      "accessCount": 2,
+      "lastAccessed": 1781935152800,
+      "type": "file"
+    },
+    {
+      "path": "HANDOFF.md",
+      "accessCount": 1,
+      "lastAccessed": 1781932709521,
+      "type": "file"
+    },
+    {
+      "path": "iOS/MeshStore.swift",
+      "accessCount": 1,
+      "lastAccessed": 1781932880786,
+      "type": "file"
+    },
+    {
+      "path": "Shared/Models.swift",
+      "accessCount": 1,
+      "lastAccessed": 1781932885029,
+      "type": "file"
+    },
+    {
+      "path": "Shared/MeshClient.swift",
+      "accessCount": 1,
+      "lastAccessed": 1781932886025,
+      "type": "file"
+    },
+    {
+      "path": "iOS/ContentView.swift",
+      "accessCount": 1,
+      "lastAccessed": 1781932886296,
+      "type": "file"
+    },
+    {
+      "path": ".agents/RELAUNCH.md",
+      "accessCount": 1,
+      "lastAccessed": 1782780285954,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

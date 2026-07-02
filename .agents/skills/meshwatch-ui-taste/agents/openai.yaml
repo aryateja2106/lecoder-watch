@@ -1,0 +1,4 @@
+interface:
+  display_name: "MeshWatch UI Taste"
+  short_description: "Polish native MeshWatch SwiftUI screens"
+  default_prompt: "Use $meshwatch-ui-taste to critique and polish this MeshWatch SwiftUI screen."

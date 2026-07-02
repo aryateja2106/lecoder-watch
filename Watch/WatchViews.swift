@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - Root
 
@@ -82,13 +85,6 @@ private func statusColor(_ snap: MachineSnapshot) -> Color {
     return snap.reachable ? .green : .secondary
 }
 
-private func knownSessions(for host: String) -> [String] {
-    let lower = host.lowercased()
-    if lower.contains("pi") { return ["pi-shell", "watch-shell-67982", "mesh-smoke"] }
-    if lower.contains("mac") { return ["mesh-smoke", "codex", "claude"] }
-    return ["shell", "codex", "claude"]
-}
-
 struct EventsView: View {
     @EnvironmentObject var store: WatchMeshStore
 
@@ -111,6 +107,12 @@ struct EventsView: View {
 
 // MARK: - Sessions on a machine
 
+private struct SessionRoute: Identifiable, Hashable {
+    var host: String
+    var agent: String
+    var id: String { "\(host):\(agent)" }
+}
+
 struct SessionsView: View {
     @EnvironmentObject var store: WatchMeshStore
     let host: String
@@ -118,6 +120,7 @@ struct SessionsView: View {
     @State private var taskAgent = "claude"
     @State private var taskText = ""
     @State private var showTask = false
+    @State private var openAgent: SessionRoute?
 
     private var snap: MachineSnapshot? { store.snaps.first { $0.host == host } }
 
@@ -140,7 +143,12 @@ struct SessionsView: View {
                     }
                 }
                 if (snap?.agents ?? []).isEmpty {
-                    Text(snap?.authError != nil ? "token needed" : "no sessions").foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(snap?.authError != nil ? "Token needed" : "No sessions")
+                        Text(emptySessionHint)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             if snap?.authError != nil {
@@ -153,23 +161,22 @@ struct SessionsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Section("Known") {
-                ForEach(knownSessions(for: host), id: \.self) { session in
-                    NavigationLink {
-                        AgentLiveView(host: host, agent: session).environmentObject(store)
-                    } label: {
-                        Label(session, systemImage: "terminal")
-                    }
+            Section("Monitor") {
+                NavigationLink {
+                    ScreenPeekView(host: host).environmentObject(store)
+                } label: {
+                    Label("Screen peek", systemImage: "display")
                 }
+                .disabled(snap?.reachable != true || snap?.authError != nil)
             }
             Section("New") {
-                Button { store.newSession(host: host, cmd: nil) } label: {
+                Button { openNewSession(cmd: nil) } label: {
                     Label("Shell", systemImage: "terminal")
                 }
-                Button { store.newSession(host: host, cmd: "claude") } label: {
+                Button { openNewSession(cmd: "claude") } label: {
                     Label("Claude", systemImage: "sparkles")
                 }
-                Button { store.newSession(host: host, cmd: "codex") } label: {
+                Button { openNewSession(cmd: "codex") } label: {
                     Label("Codex", systemImage: "curlybraces")
                 }
                 Button { taskAgent = "claude"; showTask = true } label: {
@@ -199,7 +206,21 @@ struct SessionsView: View {
                 Image(systemName: "arrow.clockwise")
             }
         }
+        .navigationDestination(item: $openAgent) { route in
+            AgentLiveView(host: route.host, agent: route.agent).environmentObject(store)
+        }
         .sheet(isPresented: $showTask) { taskSheet }
+    }
+
+    private var emptySessionHint: String {
+        if snap?.authError != nil { return "Open Mesh on iPhone, fix the token, then refresh." }
+        if snap?.reachable == true { return "Start Shell, Claude, or Codex below." }
+        return "Open Mesh on iPhone or refresh when the Mac is nearby."
+    }
+
+    private func openNewSession(cmd: String?, initialText: String? = nil) {
+        let name = store.newSession(host: host, cmd: cmd, initialText: initialText)
+        openAgent = SessionRoute(host: host, agent: name)
     }
 
     private var taskSheet: some View {
@@ -210,7 +231,9 @@ struct SessionsView: View {
                 TextField("Build/fix/check…", text: $taskText)
                     .autocorrectionDisabled()
                 Button("Start") {
-                    store.newTask(host: host, agent: taskAgent, task: taskText)
+                    if let name = store.newTask(host: host, agent: taskAgent, task: taskText) {
+                        openAgent = SessionRoute(host: host, agent: name)
+                    }
                     taskText = ""
                     showTask = false
                 }
@@ -263,16 +286,16 @@ struct AgentLiveView: View {
     private var statusText: String {
         if store.sending { return "sending…" }
         if meaningfulLines.isEmpty { return "waiting for output" }
-        return "live · \(meaningfulLines.count) lines"
+        return "\(sessionState(lines: meaningfulLines, attached: currentAgent?.attached ?? false).label) · \(meaningfulLines.count) lines"
     }
 
     var body: some View {
         List {
-            Section {
+            Section("Monitor") {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Circle().fill(store.sending ? .orange : .green).frame(width: 8, height: 8)
-                        Text(shortName(host)).font(.caption).foregroundStyle(.secondary)
+                        Text("\(shortName(host)) · \(store.routeLabel(for: host))").font(.caption).foregroundStyle(.secondary)
                     }
                     Text(agent)
                         .font(.headline)
@@ -294,17 +317,28 @@ struct AgentLiveView: View {
                 .padding(.vertical, 2)
             }
 
-            Section("control") {
+            Section("Send") {
                 HStack(spacing: 6) {
+                    Button { store.send(text: "continue\n") } label: {
+                        VStack { Image(systemName: "play.fill"); Text("Go").font(.caption2) }
+                    }
                     Button { store.send(key: "enter") } label: {
                         VStack { Image(systemName: "return"); Text("Enter").font(.caption2) }
                     }
-                    Button(role: .destructive) { store.send(key: "ctrl-c") } label: {
-                        VStack { Image(systemName: "xmark.octagon"); Text("Stop").font(.caption2) }
-                    }
                     Button { store.send(key: "up") } label: {
-                        VStack { Image(systemName: "arrow.up"); Text("Prev").font(.caption2) }
+                        VStack { Image(systemName: "arrow.up"); Text("Up").font(.caption2) }
                     }
+                    Button { store.send(key: "down") } label: {
+                        VStack { Image(systemName: "arrow.down"); Text("Down").font(.caption2) }
+                    }
+                }
+                .buttonStyle(.bordered)
+                Button { store.send(text: "git status\n") } label: {
+                    Label("Git status", systemImage: "arrow.triangle.branch")
+                }
+                .buttonStyle(.bordered)
+                Button { store.send(text: "~/.mesh/bin/mesh-self-check\n") } label: {
+                    Label("Check mesh", systemImage: "checkmark.shield")
                 }
                 .buttonStyle(.bordered)
                 Button { showReply = true } label: {
@@ -317,19 +351,6 @@ struct AgentLiveView: View {
                 .buttonStyle(.bordered)
                 Button { store.newPane(host: host, agent: agent) } label: {
                     Label("New pane", systemImage: "rectangle.split.2x1")
-                }
-                .buttonStyle(.bordered)
-                if let pane = currentPane {
-                    Button(role: .destructive) {
-                        store.killPane(host: host, agent: agent, pane: pane.paneId)
-                        selectedPane = nil
-                    } label: {
-                        Label("Kill pane", systemImage: "rectangle.split.1x2")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                Button(role: .destructive) { store.killSession(host: host, agent: agent) } label: {
-                    Label("Kill session", systemImage: "trash")
                 }
                 .buttonStyle(.bordered)
             }
@@ -361,7 +382,7 @@ struct AgentLiveView: View {
                 }
             }
 
-            Section("peek") {
+            Section("Output") {
                 if previewLines.isEmpty {
                     Text("No output yet. Use Reply only when you want the keyboard.")
                         .font(.caption)
@@ -375,6 +396,26 @@ struct AgentLiveView: View {
                 Button { showMore = true } label: {
                     Label("Show more", systemImage: "doc.text.magnifyingglass")
                 }
+            }
+
+            Section("Danger") {
+                Button(role: .destructive) { store.send(key: "ctrl-c") } label: {
+                    Label("Stop", systemImage: "xmark.octagon")
+                }
+                .buttonStyle(.bordered)
+                if let pane = currentPane {
+                    Button(role: .destructive) {
+                        store.killPane(host: host, agent: agent, pane: pane.paneId)
+                        selectedPane = nil
+                    } label: {
+                        Label("Kill pane", systemImage: "rectangle.split.1x2")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                Button(role: .destructive) { store.killSession(host: host, agent: agent) } label: {
+                    Label("Kill session", systemImage: "trash")
+                }
+                .buttonStyle(.bordered)
             }
         }
         .navigationTitle("Session")
@@ -479,6 +520,57 @@ struct AgentLiveView: View {
     }
 }
 
+// MARK: - Screen peek
+
+struct ScreenPeekView: View {
+    @EnvironmentObject var store: WatchMeshStore
+    let host: String
+
+    private var imageData: Data? {
+        store.screenHost == host ? store.screenJPEGData : nil
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("\(shortName(host)) · \(store.routeLabel(for: host))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let imageData, let image = meshImage(from: imageData) {
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                } else if let error = store.screenError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else {
+                    ProgressView("Fetching screen…")
+                }
+                if let updated = resetText(store.screenUpdatedISO) {
+                    Text(updated.replacingOccurrences(of: "resets ", with: "updated "))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Button {
+                    store.requestScreen(host: host)
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+                Text("Read only. Use iPhone for full terminal/VNC.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 6)
+        }
+        .navigationTitle("Screen")
+        .onAppear { store.requestScreen(host: host) }
+        .onDisappear { store.stopScreen() }
+    }
+}
+
 // MARK: - Usage
 
 struct UsageView: View {
@@ -487,6 +579,12 @@ struct UsageView: View {
     var body: some View {
         List(store.effectiveUsage?.providers ?? []) { p in
             Section("\(p.displayName) \(p.plan ?? "")") {
+                if let today = p.today {
+                    Text("Today \(today)").font(.caption)
+                }
+                if let last30 = p.last30 {
+                    Text("30d \(last30)").font(.caption2).foregroundStyle(.secondary)
+                }
                 ForEach(p.limits) { l in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack {
@@ -499,6 +597,9 @@ struct UsageView: View {
                             Text(reset).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
+                }
+                if p.limits.isEmpty {
+                    Text("No limit rows yet").font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }
@@ -530,3 +631,12 @@ private func resetText(_ iso: String?) -> String? {
     guard let iso, let date = ISO8601DateFormatter().date(from: iso) else { return nil }
     return "resets \(date.formatted(date: .abbreviated, time: .shortened))"
 }
+
+#if canImport(UIKit)
+private func meshImage(from data: Data) -> Image? {
+    guard let image = UIImage(data: data) else { return nil }
+    return Image(uiImage: image)
+}
+#else
+private func meshImage(from data: Data) -> Image? { nil }
+#endif

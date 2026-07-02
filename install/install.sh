@@ -39,6 +39,9 @@ Usage:
 
 Options:
   --token VALUE    Auth token for meshd (default: \$MESHD_TOKEN or generated).
+  --user NAME      (Linux) Provision an isolated agent: create Unix user NAME and
+                   run its own meshd on a free port (8901+). Add --uninstall to tear
+                   it down (--purge also deletes the user). Sandboxes risky work.
   --src SRC        Payload source: a base URL (fetches SRC/mesh-install.tgz),
                    a direct .tgz/.tar.gz URL, or a local tarball path.
                    Default: baked-in source, else a local ./payload checkout.
@@ -117,7 +120,9 @@ ensure_bun() {
   bun_installer=$(mktemp "${TMPDIR:-/tmp}/bun-install.XXXXXX")
   log "Installing bun into $HOME/.bun"
   curl -fsSL https://bun.sh/install -o "$bun_installer"
-  sh "$bun_installer"
+  # bun's installer is a bash script (uses pipefail/arrays) — sh/dash can't run it.
+  if command -v bash >/dev/null 2>&1; then bash "$bun_installer"
+  else die "installing bun requires bash; install bash or bun first"; fi
   rm -f "$bun_installer"
   PATH="$HOME/.bun/bin:$PATH"; export PATH
   command -v bun >/dev/null 2>&1 || die "bun install completed but bun is still unavailable"
@@ -129,6 +134,232 @@ ensure_tmux() {
     die "tmux is required. Install it with: brew install tmux"
   fi
   die "tmux is required. Install it with: $(linux_tmux_hint)"
+}
+
+# ---------- reboot-persistent services (launchd / systemd-user / tmux fallback) ----------
+#
+# meshd + rmux-bridge are long-lived; tmux sessions die on reboot, which is what
+# made the mesh "go dark". We register a real supervisor so services come back
+# automatically: launchd on macOS, systemd --user (with linger) on Linux/WSL,
+# falling back to a detached tmux session only where neither exists.
+
+# Label/unit base name; override MESH_LABEL_PREFIX to test without touching prod.
+LABEL_PREFIX="${MESH_LABEL_PREFIX:-ai.lesearch}"
+
+# Choose the supervisor. Override with MESH_SERVICE=launchd|systemd|tmux.
+detect_service_mgr() {
+  if [ -n "${MESH_SERVICE:-}" ]; then printf '%s' "$MESH_SERVICE"; return; fi
+  if [ "$OS_NAME" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then printf 'launchd'; return; fi
+  if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then printf 'systemd'; return; fi
+  printf 'tmux'
+}
+
+mux_session()   { printf '%s-%s' "$LABEL_PREFIX" "$1"; }   # tmux session name, label-isolated
+launchd_label() { printf '%s.%s' "$LABEL_PREFIX" "$1"; }
+launchd_plist() { printf '%s/Library/LaunchAgents/%s.%s.plist' "$HOME" "$LABEL_PREFIX" "$1"; }
+systemd_unit()  { printf '%s/.config/systemd/user/%s-%s.service' "$HOME" "$LABEL_PREFIX" "$1"; }
+systemd_name()  { printf '%s-%s.service' "$LABEL_PREFIX" "$1"; }
+
+# Minimal XML escaping for plist string values (token/path are normally clean).
+xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+
+# emit_launchd_plist LABEL WORKDIR BUN ENTRY LOGPATH  (env "KEY=VALUE" lines on stdin)
+emit_launchd_plist() {
+  el_label="$1"; el_workdir="$2"; el_bun="$3"; el_entry="$4"; el_log="$5"
+  el_env=$(while IFS= read -r kv; do
+    [ -n "$kv" ] || continue
+    printf '        <key>%s</key>\n        <string>%s</string>\n' \
+      "$(xml_escape "${kv%%=*}")" "$(xml_escape "${kv#*=}")"
+  done)
+  cat <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>$el_label</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$el_bun</string>
+        <string>run</string>
+        <string>$el_entry</string>
+    </array>
+    <key>WorkingDirectory</key><string>$el_workdir</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+$el_env
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>ProcessType</key><string>Background</string>
+    <key>StandardOutPath</key><string>$el_log</string>
+    <key>StandardErrorPath</key><string>$el_log</string>
+</dict>
+</plist>
+EOF
+}
+
+# emit_systemd_unit DESC WORKDIR BUN ENTRY  (env "KEY=VALUE" lines on stdin)
+emit_systemd_unit() {
+  su_desc="$1"; su_workdir="$2"; su_bun="$3"; su_entry="$4"
+  su_env=$(while IFS= read -r kv; do [ -n "$kv" ] || continue; printf 'Environment="%s"\n' "$kv"; done)
+  cat <<EOF
+[Unit]
+Description=$su_desc
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$su_workdir
+$su_env
+ExecStart=$su_bun run $su_entry
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+EOF
+}
+
+# systemctl --user needs a runtime dir; set it for headless/ssh sessions.
+systemd_user_env() { [ -n "${XDG_RUNTIME_DIR:-}" ] || { XDG_RUNTIME_DIR="/run/user/$(id -u)"; export XDG_RUNTIME_DIR; }; }
+
+# service_start NAME WORKDIR ENTRY HEALTH_URL  (env "KEY=VALUE" lines on stdin)
+# Installs + (re)starts under the detected supervisor. Echoes nothing; sets no globals.
+service_start() {
+  ss_name="$1"; ss_workdir="$2"; ss_entry="$3"; ss_env=$(cat)
+  # Drop our own prior (prefixed) tmux session so test installs never touch prod.
+  kill_session "$(mux_session "$ss_name")" >/dev/null 2>&1 || true
+  # ponytail: only a real default-prefix install migrates a legacy deploy.sh "meshd"
+  # tmux session (plain name). A custom MESH_LABEL_PREFIX stays fully isolated.
+  [ "$LABEL_PREFIX" = "ai.lesearch" ] && kill_session "$ss_name" >/dev/null 2>&1 || true
+  case "$SERVICE_MGR" in
+    launchd)
+      ss_plist=$(launchd_plist "$ss_name"); ss_label=$(launchd_label "$ss_name")
+      mkdir -p "$(dirname "$ss_plist")"
+      printf '%s\n' "$ss_env" | emit_launchd_plist "$ss_label" "$ss_workdir" "$BUN_BIN" "$ss_entry" "${TMPDIR:-/tmp}/${ss_name}.log" > "$ss_plist"
+      launchctl bootout "gui/$(id -u)/$ss_label" 2>/dev/null || true
+      launchctl bootstrap "gui/$(id -u)" "$ss_plist" 2>/dev/null || launchctl load "$ss_plist" 2>/dev/null || \
+        warn "launchctl could not load $ss_label; check $ss_plist"
+      ;;
+    systemd)
+      systemd_user_env
+      ss_unit=$(systemd_unit "$ss_name")
+      mkdir -p "$(dirname "$ss_unit")"
+      printf '%s\n' "$ss_env" | emit_systemd_unit "mesh $ss_name" "$ss_workdir" "$BUN_BIN" "$ss_entry" > "$ss_unit"
+      loginctl enable-linger "$(id -un)" 2>/dev/null || sudo loginctl enable-linger "$(id -un)" 2>/dev/null || \
+        warn "could not enable linger; services may stop when you log out (run: sudo loginctl enable-linger $(id -un))"
+      systemctl --user daemon-reload 2>/dev/null || true
+      systemctl --user enable --now "$(systemd_name "$ss_name")" 2>/dev/null || \
+        warn "systemctl --user could not start $(systemd_name "$ss_name"); check: systemctl --user status $(systemd_name "$ss_name")"
+      ;;
+    *)  # tmux fallback (does NOT survive reboot)
+      ss_flat=$(printf '%s' "$ss_env" | tr '\n' ' ')   # env values are space-free
+      start_session "$(mux_session "$ss_name")" "$ss_workdir" "env $ss_flat $BUN_BIN run $ss_entry"
+      ;;
+  esac
+}
+
+# service_stop NAME — stop + remove the supervisor entry, whatever manages it.
+service_stop() {
+  st_name="$1"; st_removed=1
+  if [ "$OS_NAME" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
+    st_plist=$(launchd_plist "$st_name"); st_label=$(launchd_label "$st_name")
+    if [ -f "$st_plist" ] || launchctl print "gui/$(id -u)/$st_label" >/dev/null 2>&1; then
+      launchctl bootout "gui/$(id -u)/$st_label" 2>/dev/null || launchctl unload "$st_plist" 2>/dev/null || true
+      rm -f "$st_plist"; st_removed=0
+    fi
+  fi
+  if command -v systemctl >/dev/null 2>&1; then
+    st_unit=$(systemd_unit "$st_name")
+    if [ -f "$st_unit" ]; then
+      systemd_user_env
+      systemctl --user disable --now "$(systemd_name "$st_name")" 2>/dev/null || true
+      rm -f "$st_unit"; systemctl --user daemon-reload 2>/dev/null || true; st_removed=0
+    fi
+  fi
+  kill_session "$(mux_session "$st_name")" >/dev/null 2>&1 && st_removed=0 || true
+  return $st_removed
+}
+
+# ---------- isolated agent users (--user) ----------
+#
+# Sandbox an agent on a Linux box: create a separate Unix user that runs its OWN
+# meshd on its own port. Standard Unix permissions then keep that agent out of
+# your real user's files. Linux-only (the sandbox target is a server/VPS).
+
+port_in_use() {
+  if command -v ss >/dev/null 2>&1; then ss -ltn 2>/dev/null | grep -q "[:.]$1 " && return 0; fi
+  if command -v lsof >/dev/null 2>&1; then lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1 && return 0; fi
+  return 1
+}
+
+find_free_port() {  # first free port in [$1,$2]
+  ffp=$1
+  while [ "$ffp" -le "$2" ]; do port_in_use "$ffp" || { printf '%s' "$ffp"; return 0; }; ffp=$((ffp + 1)); done
+  return 1
+}
+
+# Resolve the installer source the per-user install should re-fetch from.
+provision_source() {
+  ps_src="${SRC_FLAG:-${MESH_SRC:-}}"
+  { [ -z "$ps_src" ] && [ "$MESH_SRC_DEFAULT" != "__MESH_SRC__" ]; } && ps_src="$MESH_SRC_DEFAULT"
+  [ -n "$ps_src" ] || die "--user needs a release installer (baked source) or --src URL"
+  case "$ps_src" in *install.sh) printf '%s' "$ps_src";; *) printf '%s/install.sh' "${ps_src%/}";; esac
+}
+
+provision_privilege() {  # echoes "" if root, "sudo" if usable, else dies
+  if [ "$(id -u)" = 0 ]; then return 0; fi
+  command -v sudo >/dev/null 2>&1 || die "--user needs root or sudo"
+  printf 'sudo'
+}
+
+provision_user() {
+  pu_name="$1"
+  [ "$OS_NAME" = "Linux" ] || die "--user is Linux-only (sandbox an agent on a Linux/WSL box); create the user manually on macOS"
+  case "$pu_name" in ''|*[!a-z0-9_-]*) die "--user name must be lowercase letters, digits, '_' or '-'";; esac
+  SUDO=$(provision_privilege)
+  pu_url=$(provision_source)
+  if ! id "$pu_name" >/dev/null 2>&1; then
+    log "Creating isolated user '$pu_name'"
+    $SUDO useradd -m -s /bin/bash "$pu_name" || die "useradd failed for $pu_name"
+  fi
+  $SUDO loginctl enable-linger "$pu_name" 2>/dev/null || warn "could not enable linger for $pu_name (services may stop on logout)"
+  pu_port="${MESHD_PORT:-$(find_free_port 8901 8999)}"
+  [ -n "$pu_port" ] || die "no free port in 8901-8999 for the sandbox"
+  pu_token="${TOKEN_FLAG:-${MESHD_TOKEN:-}}"; [ -n "$pu_token" ] || pu_token=$(gen_token)
+  log "Installing isolated meshd as '$pu_name' on port $pu_port"
+  $SUDO -u "$pu_name" --login env MESHD_PORT="$pu_port" MESH_SRC="${SRC_FLAG:-${MESH_SRC:-$MESH_SRC_DEFAULT}}" \
+    sh -c "curl -fsSL '$pu_url' | MESHD_PORT='$pu_port' sh -s -- --only meshd --token '$pu_token'" \
+    || die "per-user install failed for $pu_name"
+  pu_ip=""; command -v tailscale >/dev/null 2>&1 && pu_ip=$(tailscale ip -4 2>/dev/null | head -1)
+  printf '\nIsolated agent box ready:\n'
+  printf '  user:  %s\n  port:  %s\n  token: %s\n' "$pu_name" "$pu_port" "$pu_token"
+  [ -n "$pu_ip" ] && printf '  add in app: host=<name> ip=%s port=%s token=<above>\n' "$pu_ip" "$pu_port"
+  printf '  remove: sh install.sh --user %s --uninstall --purge\n' "$pu_name"
+}
+
+deprovision_user() {
+  du_name="$1"
+  [ "$OS_NAME" = "Linux" ] || die "--user is Linux-only"
+  case "$du_name" in ''|*[!a-z0-9_-]*) die "invalid --user name";; esac
+  SUDO=$(provision_privilege)
+  if id "$du_name" >/dev/null 2>&1; then
+    du_url=$(provision_source)
+    $SUDO -u "$du_name" --login sh -c "curl -fsSL '$du_url' | sh -s -- --only meshd --uninstall --purge" 2>/dev/null || true
+    if [ "$DO_PURGE" = "1" ]; then
+      # Stop the user's systemd manager + any stragglers, or userdel refuses.
+      $SUDO loginctl disable-linger "$du_name" 2>/dev/null || true
+      $SUDO loginctl terminate-user "$du_name" 2>/dev/null || true
+      $SUDO pkill -KILL -u "$du_name" 2>/dev/null || true
+      sleep 1
+      $SUDO userdel -rf "$du_name" 2>/dev/null && log "Removed user $du_name" || warn "userdel failed for $du_name (try: sudo userdel -rf $du_name)"
+    else
+      log "Stopped $du_name's mesh (user kept; add --purge to delete the user)"
+    fi
+  else
+    log "No such user: $du_name"
+  fi
 }
 
 resolve_script_dir() {
@@ -245,26 +476,33 @@ install_deps() { ( cd "$1" && bun install ); }
 
 # ---------- actions ----------
 
+service_state() {  # prints launchd|systemd|tmux supervisor state for a service name
+  if [ "$OS_NAME" = "Darwin" ] && [ -f "$(launchd_plist "$1")" ]; then printf 'launchd'; return; fi
+  [ -f "$(systemd_unit "$1")" ] && { printf 'systemd'; return; }
+  command -v tmux >/dev/null 2>&1 && tmux has-session -t "$(mux_session "$1")" 2>/dev/null && { printf 'tmux'; return; }
+  printf 'none'
+}
+
 do_list() {
   log "Prefix: $MESH_HOME"
   [ -d "$MESH_HOME" ] || { log "  (nothing installed)"; return; }
   for item in meshd rmux-bridge bin hooks token; do
     [ -e "$MESH_HOME/$item" ] && log "  present: $item"
   done
-  if command -v tmux >/dev/null 2>&1; then
-    tmux has-session -t meshd 2>/dev/null && log "  running: meshd session" || true
-    tmux has-session -t rmux-bridge 2>/dev/null && log "  running: rmux-bridge session" || true
-  fi
+  for svc in meshd rmux-bridge; do
+    st=$(service_state "$svc")
+    [ "$st" = "none" ] || log "  service: $svc ($st)"
+  done
 }
 
 do_uninstall() {
   removed=""
   if want_component meshd; then
-    kill_session meshd && removed="$removed meshd(service)" || true
+    service_stop meshd && removed="$removed meshd(service)" || true
     [ -e "$MESH_HOME/meshd" ] && { rm -rf "$MESH_HOME/meshd"; removed="$removed meshd"; }
   fi
   if want_component bridge; then
-    kill_session rmux-bridge && removed="$removed bridge(service)" || true
+    service_stop rmux-bridge && removed="$removed bridge(service)" || true
     [ -e "$MESH_HOME/rmux-bridge" ] && { rm -rf "$MESH_HOME/rmux-bridge"; removed="$removed bridge"; }
   fi
   if want_component tools; then
@@ -279,12 +517,13 @@ do_uninstall() {
 
 # ---------- arg parsing ----------
 
-TOKEN_FLAG=""; SRC_FLAG=""; ONLY_LIST=""; WITHOUT_LIST=""
+TOKEN_FLAG=""; SRC_FLAG=""; ONLY_LIST=""; WITHOUT_LIST=""; USER_FLAG=""
 DO_UNINSTALL="0"; DO_PURGE="0"; DO_LIST="0"; NO_START="0"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --token) shift; [ "$#" -gt 0 ] || die "--token requires a value"; TOKEN_FLAG="$1";;
+    --user) shift; [ "$#" -gt 0 ] || die "--user requires a name"; USER_FLAG="$1";;
     --src) shift; [ "$#" -gt 0 ] || die "--src requires a value"; SRC_FLAG="$1";;
     --only) shift; [ "$#" -gt 0 ] || die "--only requires a value"; ONLY_LIST="$1";;
     --without) shift; [ "$#" -gt 0 ] || die "--without requires a value"; WITHOUT_LIST="$1";;
@@ -308,6 +547,15 @@ ARCH_NAME=$(uname -m 2>/dev/null || printf '')
 case "$OS_NAME" in Darwin|Linux) ;; *) die "unsupported OS: ${OS_NAME:-unknown} (expected Darwin or Linux)";; esac
 case "$ARCH_NAME" in arm64|aarch64|x86_64) ;; *) die "unsupported arch: ${ARCH_NAME:-unknown}";; esac
 
+SERVICE_MGR=$(detect_service_mgr)
+
+# --user: provision (or with --uninstall, tear down) an isolated agent user that
+# runs its own meshd on its own port. Meta-operation — handle before anything else.
+if [ -n "$USER_FLAG" ]; then
+  if [ "$DO_UNINSTALL" = "1" ]; then deprovision_user "$USER_FLAG"; else provision_user "$USER_FLAG"; fi
+  exit $?
+fi
+
 # list / uninstall are pure local operations — handle before any fetch
 if [ "$DO_LIST" = "1" ]; then do_list; exit 0; fi
 if [ "$DO_UNINSTALL" = "1" ]; then do_uninstall; exit 0; fi
@@ -315,7 +563,7 @@ if [ "$DO_UNINSTALL" = "1" ]; then do_uninstall; exit 0; fi
 # default multiplexer ("which terminal filesystem to drive")
 MUX_DEFAULT="tmux"
 if [ "$OS_NAME" = "Darwin" ] && command -v rmux >/dev/null 2>&1; then MUX_DEFAULT="rmux"; fi
-log "Detected: $OS_NAME/$ARCH_NAME · mux=$MUX_DEFAULT · components=[$SELECTED_COMPONENTS] · prefix=$MESH_HOME"
+log "Detected: $OS_NAME/$ARCH_NAME · mux=$MUX_DEFAULT · service=$SERVICE_MGR · components=[$SELECTED_COMPONENTS] · prefix=$MESH_HOME"
 
 # ---------- install ----------
 
@@ -328,6 +576,7 @@ validate_payload
 
 if want_component meshd || want_component bridge; then
   ensure_bun
+  BUN_BIN=$(command -v bun)
   [ "$NO_START" = "1" ] || ensure_tmux
 fi
 
@@ -354,19 +603,22 @@ if [ "$NO_START" = "1" ]; then
   log "Installed (services not started: --no-start)."
 else
   if want_component meshd; then
-    meshd_cmd="env PATH=$(shell_quote "$PATH") MESHD_TOKEN=$(shell_quote "$TOKEN_VALUE") MESHD_PORT=$(shell_quote "$MESHD_PORT_VALUE")"
-    meshd_cmd=$(append_env "$meshd_cmd" "MESHD_HOST" "${MESHD_HOST:-}")
-    meshd_cmd=$(append_env "$meshd_cmd" "MESH_MUX" "$EFFECTIVE_MESHD_MUX")
-    meshd_cmd="$meshd_cmd bun run server.ts"
-    start_session "meshd" "$MESH_HOME/meshd" "$meshd_cmd"
+    {
+      printf 'PATH=%s\n' "$PATH"
+      printf 'MESHD_TOKEN=%s\n' "$TOKEN_VALUE"
+      printf 'MESHD_PORT=%s\n' "$MESHD_PORT_VALUE"
+      [ -n "${MESHD_HOST:-}" ] && printf 'MESHD_HOST=%s\n' "$MESHD_HOST"
+      [ -n "$EFFECTIVE_MESHD_MUX" ] && printf 'MESH_MUX=%s\n' "$EFFECTIVE_MESHD_MUX"
+    } | service_start meshd "$MESH_HOME/meshd" server.ts
     MESHD_STATUS="down"; wait_http "http://127.0.0.1:${MESHD_PORT_VALUE}/health" && MESHD_STATUS="up"
   fi
   if want_component bridge; then
-    bridge_cmd="env PATH=$(shell_quote "$PATH") PORT=$(shell_quote "$BRIDGE_PORT_VALUE")"
-    bridge_cmd=$(append_env "$bridge_cmd" "BRIDGE_HOST" "${BRIDGE_HOST:-}")
-    bridge_cmd=$(append_env "$bridge_cmd" "MUX" "$EFFECTIVE_BRIDGE_MUX")
-    bridge_cmd="$bridge_cmd bun run src/server.ts"
-    start_session "rmux-bridge" "$MESH_HOME/rmux-bridge" "$bridge_cmd"
+    {
+      printf 'PATH=%s\n' "$PATH"
+      printf 'PORT=%s\n' "$BRIDGE_PORT_VALUE"
+      [ -n "${BRIDGE_HOST:-}" ] && printf 'BRIDGE_HOST=%s\n' "$BRIDGE_HOST"
+      [ -n "$EFFECTIVE_BRIDGE_MUX" ] && printf 'MUX=%s\n' "$EFFECTIVE_BRIDGE_MUX"
+    } | service_start rmux-bridge "$MESH_HOME/rmux-bridge" src/server.ts
     BRIDGE_STATUS="down"; wait_http "http://127.0.0.1:${BRIDGE_PORT_VALUE}/" && BRIDGE_STATUS="up"
   fi
 fi

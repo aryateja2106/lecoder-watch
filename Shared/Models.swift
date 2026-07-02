@@ -230,6 +230,10 @@ struct MeshSnapshot: Codable, Hashable {
     var usage: UsageSnapshot?
     var quickCommands: [String]?
     var events: [AgentEvent]? = nil
+    var screenHost: String? = nil
+    var screenFetchedISO: String? = nil
+    var screenJPEGData: Data? = nil
+    var screenError: String? = nil
     // Live output the phone relays for the agent the watch is currently watching.
     var watchedHost: String?
     var watchedAgent: String?
@@ -261,6 +265,7 @@ enum WatchCommandKind: String, Codable {
     case refresh
     case agentSend
     case agentOutput
+    case screenPeek
     case newAgent
     case newPane
     case killAgent

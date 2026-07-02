@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeshWatch — Watch Command Deck</title>
+<style>
+  :root{
+    --base:#0A0B0D; --raised:#15171A; --ctrl:#1E2125;
+    --txt:#F5F6F7; --txt2:#9BA0A6; --txt3:#5C6066;
+    --hair:#2A2D31;
+    --blue:#4DA3FF;
+    --green:#34C759; --orange:#FF9F0A; --red:#FF453A;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --sys:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{
+    background:#070809; color:var(--txt); font-family:var(--sys);
+    min-height:100vh; padding:40px 16px 80px;
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+  }
+  .pagehead{text-align:center; margin-bottom:14px;}
+  .pagehead h1{font-size:17px; font-weight:600; letter-spacing:-.2px;}
+  .pagehead p{font-size:12px; color:var(--txt3); margin-top:4px;}
+
+  .deck{display:flex; flex-wrap:wrap; gap:48px 56px; justify-content:center; align-items:flex-start;}
+  .col{display:flex; flex-direction:column; align-items:center; gap:14px;}
+  .col-label{font-size:11px; color:var(--txt2); text-transform:uppercase; letter-spacing:1.2px; font-weight:600;}
+
+  /* ---- watch bezel ---- */
+  .watch{
+    width:198px; height:240px; border-radius:54px;
+    background:#000; padding:13px;
+    box-shadow:0 0 0 3px #1b1d20, 0 0 0 6px #0d0e10, 0 22px 50px rgba(0,0,0,.65);
+    position:relative;
+  }
+  .watch::after{ /* digital crown */
+    content:""; position:absolute; right:-6px; top:88px;
+    width:7px; height:34px; border-radius:4px; background:#26282c;
+    box-shadow:0 1px 2px #000;
+  }
+  .screen{
+    width:100%; height:100%; border-radius:42px; background:var(--base);
+    overflow:hidden; position:relative;
+  }
+  .scroll{
+    position:absolute; inset:0; overflow-y:auto; padding:8px 12px 16px;
+    scrollbar-width:none;
+  }
+  .scroll::-webkit-scrollbar{display:none;}
+
+  /* ---- glance layer ---- */
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:2px 2px 6px;}
+  .time{font-size:13px; font-weight:600; color:var(--txt); font-variant-numeric:tabular-nums;}
+  .sess{display:flex; align-items:center; gap:4px; font-size:11px; color:var(--txt2); max-width:108px;}
+  .sess .dot{width:7px; height:7px; border-radius:50%; flex:none;}
+  .sess .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  .pill{
+    display:inline-flex; align-items:center; gap:5px; align-self:flex-start;
+    padding:3px 9px; border-radius:11px; font-size:10px; font-weight:600;
+    letter-spacing:.2px; margin-bottom:8px;
+  }
+  .pill .pdot{width:6px; height:6px; border-radius:50%;}
+  .pill.run{background:rgba(255,159,10,.16); color:var(--orange);}
+  .pill.wait{background:rgba(255,159,10,.16); color:var(--orange);}
+  .pill.idle{background:rgba(92,96,102,.18); color:var(--txt2);}
+
+  /* ---- latest output (lively terminal glance) ---- */
+  .glance{
+    background:#08090A; border:1px solid var(--hair); border-radius:14px;
+    padding:8px 10px 9px; margin-bottom:6px;
+  }
+  .glance .lbl{font-size:9px; color:var(--txt3); letter-spacing:.6px; text-transform:uppercase; display:flex; justify-content:space-between; margin-bottom:5px;}
+  .glance .pane{color:var(--txt3);}
+  .out{font-family:var(--mono); font-size:10.5px; line-height:1.45;}
+  .out .g{color:var(--green);} .out .a{color:var(--orange);} .out .r{color:var(--red);} .out .d{color:var(--txt3);}
+  .cursor{display:inline-block; width:6px; height:12px; background:var(--txt2); vertical-align:-1px; margin-left:1px; animation:blink 1s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+
+  .jump{
+    display:inline-flex; align-items:center; gap:4px; margin:2px 0 10px;
+    background:var(--ctrl); color:var(--blue); border:1px solid var(--hair);
+    border-radius:11px; padding:3px 9px; font-size:9.5px; font-weight:600;
+  }
+
+  /* ---- deck grid ---- */
+  .tier{font-size:9px; color:var(--txt3); letter-spacing:1px; text-transform:uppercase; margin:4px 2px 6px; display:flex; align-items:center; gap:6px;}
+  .tier::after{content:""; flex:1; height:1px; background:var(--hair);}
+  .tier.mon::before{content:"👁"; font-size:9px; filter:grayscale(1);}
+
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:7px;}
+  .key{
+    min-height:46px; border-radius:13px; background:var(--raised);
+    border:1px solid var(--hair); color:var(--txt);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    font-size:11px; font-weight:600; cursor:pointer; user-select:none;
+    transition:transform .08s, background .12s;
+  }
+  .key:active{transform:scale(.95);}
+  .key .ic{font-size:15px; line-height:1;}
+  .key .sub{font-size:8px; color:var(--txt3); font-weight:500;}
+  /* send tier = blue accent keys */
+  .key.send{background:var(--blue); border-color:var(--blue); color:#04101f;}
+  .key.send .sub{color:rgba(4,16,31,.6);}
+  .key.send .ic{color:#04101f;}
+  /* monitor = neutral */
+  .key.mon{background:var(--ctrl);}
+
+  /* ad-hoc entry row */
+  .adhoc{display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:7px;}
+  .entry{
+    min-height:42px; border-radius:13px; background:var(--ctrl); border:1px solid var(--hair);
+    color:var(--txt2); display:flex; align-items:center; justify-content:center; gap:5px;
+    font-size:10.5px; font-weight:600; cursor:pointer;
+  }
+  .entry .ic{font-size:14px;}
+
+  /* ---- danger zone, visually separated ---- */
+  .danger-sep{height:1px; background:rgba(255,69,58,.45); margin:14px 4px 8px;}
+  .tier.dgr{color:var(--red);}
+  .tier.dgr::after{background:rgba(255,69,58,.35);}
+  .danger{display:grid; grid-template-columns:1fr 1fr; gap:7px;}
+  .key.danger-key{
+    background:rgba(255,69,58,.12); border:1px solid rgba(255,69,58,.5); color:var(--red);
+  }
+  .key.danger-key .ic{color:var(--red);}
+  .key.danger-key .sub{color:rgba(255,69,58,.6);}
+
+  /* captions */
+  .caps{max-width:760px; margin-top:30px;}
+  .caps h3{font-size:12px; color:var(--txt2); text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; text-align:center;}
+  .capgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px;}
+  .cap{background:var(--raised); border:1px solid var(--hair); border-radius:12px; padding:12px 14px;}
+  .cap b{color:var(--txt); font-size:12px; display:flex; align-items:center; gap:7px; margin-bottom:5px;}
+  .cap span{color:var(--txt2); font-size:11.5px; line-height:1.5;}
+  .swatch{width:9px; height:9px; border-radius:3px; flex:none;}
+</style>
+</head>
+<body>
+
+  <div class="pagehead">
+    <h1>MeshWatch — Watch Command Deck</h1>
+    <p>watchOS · glance · decide · send — never a terminal</p>
+  </div>
+
+  <div class="deck">
+
+    <!-- ============ BEFORE ============ -->
+    <div class="col">
+      <div class="col-label">Before</div>
+      <div class="watch">
+        <div class="screen">
+          <div class="scroll">
+            <div class="topbar">
+              <span class="time" style="color:var(--txt2)">10:24</span>
+              <span class="sess" style="color:var(--txt3)">session</span>
+            </div>
+            <!-- weak: tiny scrolled log, no state, undifferentiated buttons -->
+            <div style="font-family:var(--mono); font-size:8.5px; color:var(--txt3); line-height:1.5; background:#0e0f11; border-radius:8px; padding:7px; height:96px; overflow:hidden;">
+              $ npm run build<br>compiling modules...<br>warn: deprecated api<br>resolving deps 412/980<br>writing chunks<br>build ok in 8.2s<br>$ git status<br>on branch main<br>nothing to commit<br>$ <span style="opacity:.5">_</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:5px; margin-top:8px;">
+              <div style="min-height:30px; background:#1a1c1f; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--txt2);">Continue</div>
+              <div style="min-height:30px; background:#1a1c1f; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--txt2);">Enter</div>
+              <div style="min-height:30px; background:#1a1c1f; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--txt2);">Stop</div>
+              <div style="min-height:30px; background:#1a1c1f; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--txt2);">Git status</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:10.5px; color:var(--txt3); max-width:198px; text-align:center; line-height:1.45;">
+        Cramped scrollback you can't read, no session state, Stop looks identical to Continue.
+      </div>
+    </div>
+
+    <!-- ============ AFTER ============ -->
+    <div class="col">
+      <div class="col-label" style="color:var(--blue)">After</div>
+      <div class="watch">
+        <div class="screen">
+          <div class="scroll">
+
+            <!-- glance layer -->
+            <div class="topbar">
+              <span class="time">10:24</span>
+              <span class="sess">
+                <span class="dot" style="background:var(--orange)"></span>
+                <span class="nm">mac-studio · pane 2</span>
+              </span>
+            </div>
+
+            <span class="pill run">
+              <span class="pdot" style="background:var(--orange)"></span>
+              RUNNING · waiting on auth
+            </span>
+
+            <div class="glance">
+              <div class="lbl"><span>Latest · claude</span><span class="pane">2/3</span></div>
+              <div class="out">
+                <span class="a">●</span> <span class="d">need approval to</span><br>
+                <span class="d">run</span> <span class="g">git push</span> <span class="d">— y/n?</span><span class="cursor"></span>
+              </div>
+            </div>
+            <span class="jump">↓ jump to latest</span>
+
+            <!-- MONITOR tier -->
+            <div class="tier mon">Monitor</div>
+            <div class="grid">
+              <div class="key mon"><span class="ic">📋</span>Git status</div>
+              <div class="key mon"><span class="ic">📡</span>Check mesh</div>
+            </div>
+
+            <!-- SEND tier (blue) -->
+            <div class="tier">Send · keystroke</div>
+            <div class="grid">
+              <div class="key send"><span class="ic">▶</span>Continue<span class="sub">⏎ resume</span></div>
+              <div class="key send"><span class="ic">⏎</span>Enter<span class="sub">confirm</span></div>
+              <div class="key send"><span class="ic">↩</span>Reply</div>
+              <div class="key send"><span class="ic">⊞</span>New pane</div>
+            </div>
+
+            <!-- ad-hoc entry -->
+            <div class="adhoc">
+              <div class="entry"><span class="ic">🎙</span>Voice</div>
+              <div class="entry"><span class="ic">✎</span>Scribble</div>
+            </div>
+
+            <!-- DANGER zone -->
+            <div class="danger-sep"></div>
+            <div class="tier dgr">Danger</div>
+            <div class="danger">
+              <div class="key danger-key"><span class="ic">■</span>Stop<span class="sub">⌃C</span></div>
+              <div class="key danger-key"><span class="ic">✕</span>Kill<span class="sub">pane</span></div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+      <div style="font-size:10.5px; color:var(--txt3); max-width:198px; text-align:center; line-height:1.45;">
+        One readable output line + state pill, then trust-tiered presets. Danger is red and walled off.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ ANNOTATIONS ============ -->
+  <div class="caps">
+    <h3>Key design choices</h3>
+    <div class="capgrid">
+      <div class="cap">
+        <b><span class="swatch" style="background:var(--orange)"></span>Glance before grid</b>
+        <span>Top third is read-only: latest line, a single state pill (running / waiting / idle), and pane awareness (2/3). You decide before you touch a key.</span>
+      </div>
+      <div class="cap">
+        <b><span class="swatch" style="background:var(--blue)"></span>Trust-tiered keys</b>
+        <span>Monitor (neutral, read-only) → Send (blue, keystrokes) → Danger. Color encodes consequence, so a fat-finger never escalates by accident.</span>
+      </div>
+      <div class="cap">
+        <b><span class="swatch" style="background:var(--red)"></span>Danger is walled off</b>
+        <span>Stop / Kill sit below a red divider at the very bottom of the scroll — destructive actions are red and physically separated, never adjacent to Continue.</span>
+      </div>
+      <div class="cap">
+        <b><span class="swatch" style="background:var(--blue)"></span>Lively terminal glance</b>
+        <span>The one output card mirrors real ANSI terminal output (green/orange/red are the program's own status, not chrome). The shell around it stays strictly monochrome with a neutral cursor.</span>
+      </div>
+      <div class="cap">
+        <b><span class="swatch" style="background:#9BA0A6"></span>No keyboard, just intent</b>
+        <span>Ad-hoc input is Voice + Scribble only — native watch entry. No cramped custom keyboard; the watch sends intent, the Mac does the typing.</span>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

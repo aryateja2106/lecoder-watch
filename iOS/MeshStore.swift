@@ -21,6 +21,7 @@ final class MeshStore: ObservableObject {
     private var watchedHost: String?
     private var watchedAgent: String?
     private var watchedPane: String?
+    private var watchedScreenHost: String?
     private var lastEventISOByHost: [String: String] = [:]
     private var initializedEventHosts = Set<String>()
 
@@ -190,13 +191,28 @@ final class MeshStore: ObservableObject {
            let m = targets.first(where: { $0.host == host }) {
             watchedOutput = (try? await MeshClient(machine: m).output(agent: agent, lines: 60, pane: watchedPane))?.lines
         }
+        var screenJPEGData: Data?
+        var screenError: String?
+        if let host = watchedScreenHost,
+           let m = targets.first(where: { $0.host == host }) {
+            do {
+                screenJPEGData = try await MeshClient(machine: m).screenImage()
+            } catch {
+                screenError = Self.describe(error)
+            }
+        }
         await refreshEvents(from: targets)
 
-        let snap = MeshSnapshot(updatedISO: ISO8601DateFormatter().string(from: Date()),
+        let now = ISO8601DateFormatter().string(from: Date())
+        let snap = MeshSnapshot(updatedISO: now,
                                 machines: ordered,
                                 usage: usage,
                                 quickCommands: quickCommands,
                                 events: events,
+                                screenHost: watchedScreenHost,
+                                screenFetchedISO: screenJPEGData == nil ? nil : now,
+                                screenJPEGData: screenJPEGData,
+                                screenError: screenError,
                                 watchedHost: watchedHost,
                                 watchedAgent: watchedAgent,
                                 watchedPane: watchedPane,
@@ -291,6 +307,9 @@ final class MeshStore: ObservableObject {
             watchedHost = command.host
             watchedAgent = command.agent
             watchedPane = command.pane
+            await refresh()
+        case .screenPeek:
+            watchedScreenHost = command.host
             await refresh()
         case .newAgent:
             guard let host = command.host, let name = command.text,

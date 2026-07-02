@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeshWatch — Redesign Walkthrough</title>
+<style>
+  :root {
+    --base: #0A0B0D;
+    --panel: #121317;
+    --panel-2: #16181D;
+    --line: #23262D;
+    --line-2: #2C3038;
+    --ink: #E8EAED;
+    --ink-dim: #9AA0A8;
+    --ink-faint: #6A7079;
+    --accent: #4DA3FF;
+    --accent-dim: rgba(77, 163, 255, 0.14);
+    --ok: #4DE0A0;
+    --warn: #E0B84D;
+    --bad: #E0584D;
+    --radius: 14px;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--base);
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+  }
+  a { color: var(--accent); text-decoration: none; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  header.hero { border-bottom: 1px solid var(--line); padding-bottom: 32px; margin-bottom: 40px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 34px;
+    line-height: 1.15;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    margin: 0 0 18px;
+  }
+  .framing { color: var(--ink-dim); font-size: 16px; max-width: 720px; margin: 0; }
+  .framing b { color: var(--ink); font-weight: 600; }
+  .meta { margin-top: 20px; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+  .meta .dot { color: var(--line-2); margin: 0 8px; }
+
+  h2.section {
+    font-size: 13px;
+    font-family: var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 56px 0 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* Card grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  }
+  .card:hover { border-color: var(--line-2); background: var(--panel-2); transform: translateY(-2px); }
+  .card .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.1em;
+  }
+  .card h3 { font-size: 17px; font-weight: 600; margin: 8px 0 10px; letter-spacing: -0.01em; }
+  .card p.choices { color: var(--ink-dim); font-size: 13.5px; margin: 0 0 18px; flex: 1; }
+  .card .actions { display: flex; gap: 10px; margin-top: auto; }
+  .btn {
+    font-size: 12.5px;
+    font-family: var(--mono);
+    letter-spacing: 0.02em;
+    padding: 7px 13px;
+    border-radius: 9px;
+    border: 1px solid var(--line-2);
+    cursor: pointer;
+    background: transparent;
+    color: var(--ink-dim);
+    transition: all 0.13s ease;
+  }
+  .btn.primary { background: var(--accent-dim); border-color: rgba(77,163,255,0.3); color: var(--accent); }
+  .btn:hover { color: var(--ink); border-color: var(--accent); }
+  .btn.primary:hover { background: rgba(77,163,255,0.22); }
+
+  /* Before/After */
+  .ba-list { display: grid; gap: 12px; }
+  .ba {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+  .ba .idx {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border-radius: 7px;
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+  }
+  .ba .fix-title { font-weight: 600; font-size: 14.5px; margin: 0 0 4px; }
+  .ba .ba-row { font-size: 13px; color: var(--ink-dim); display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+  .ba .tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid var(--line-2);
+    color: var(--ink-faint);
+  }
+  .ba .tag.before { color: var(--bad); border-color: rgba(224,88,77,0.35); }
+  .ba .tag.after { color: var(--ok); border-color: rgba(77,224,160,0.35); }
+  .ba .arrow { color: var(--ink-faint); }
+
+  /* Legend */
+  .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  .swatch {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    padding: 14px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .swatch .chip { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line-2); flex: none; }
+  .swatch .label { font-size: 13px; font-weight: 600; }
+  .swatch .hex { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-top: 2px; }
+
+  footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--ink-faint); font-family: var(--mono); font-size: 11.5px; }
+
+  /* Overlay */
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(5,6,8,0.86);
+    backdrop-filter: blur(8px);
+    display: none;
+    z-index: 100;
+    padding: 28px;
+  }
+  #overlay.open { display: flex; flex-direction: column; }
+  #overlay .ov-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; margin-bottom: 14px;
+  }
+  #overlay .ov-title { font-family: var(--mono); font-size: 13px; color: var(--ink-dim); }
+  #overlay .ov-actions { display: flex; gap: 10px; }
+  #overlay iframe {
+    flex: 1;
+    width: 100%;
+    border: 1px solid var(--line-2);
+    border-radius: 14px;
+    background: var(--base);
+  }
+  @media (max-width: 640px) {
+    h1 { font-size: 26px; }
+    .wrap { padding: 40px 18px 72px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">MeshWatch · Design</div>
+    <h1>MeshWatch — Redesign Walkthrough</h1>
+    <p class="framing">
+      A redesign for <b>agent-first mesh control over Tailscale</b>: rich-monochrome surfaces,
+      <b>voice-first</b> interaction, and <b>one-finger</b> reach from phone and watch. Every screen treats
+      your machines and their running agents as the primary objects — discovered on the tailnet, secured in
+      the Secure Enclave, and driven from a wrist or a thumb without a keyboard.
+    </p>
+    <div class="meta">
+      11 screens<span class="dot">·</span>monochrome system<span class="dot">·</span>2026-06-17
+    </div>
+  </header>
+
+  <h2 class="section">Screens</h2>
+  <div class="grid" id="grid"></div>
+
+  <h2 class="section">Before → After · 8 functional fixes</h2>
+  <div class="ba-list" id="ba"></div>
+
+  <h2 class="section">Color tokens</h2>
+  <div class="legend" id="legend"></div>
+
+  <footer>
+    MeshWatch redesign walkthrough · generated 2026-06-17 · #0A0B0D base / #4DA3FF accent
+  </footer>
+</div>
+
+<div id="overlay">
+  <div class="ov-bar">
+    <div class="ov-title" id="ovTitle"></div>
+    <div class="ov-actions">
+      <a class="btn" id="ovNewTab" target="_blank" rel="noopener">Open in new tab ↗</a>
+      <button class="btn primary" onclick="closeOverlay()">Close ✕</button>
+    </div>
+  </div>
+  <iframe id="ovFrame" title="mockup preview"></iframe>
+</div>
+
+<script>
+  const screens = [
+    { file: "machines-list.html", title: "Machines List",
+      choices: "The home surface: every tailnet machine as a card with live agent count, reachability dot, and one-tap into its command deck. Agents are first-class, not buried." },
+    { file: "add-host-sheet.html", title: "Add Machine Sheet",
+      choices: "A guided onboarding sheet that pulls host, user, and port inline — minimal fields, monochrome inputs, and a single confident primary action." },
+    { file: "tailnet-discovery.html", title: "Tailnet Discovery",
+      choices: "Auto-scans the Tailscale tailnet and lists reachable peers so you tap-to-add instead of typing IPs. Online state and last-seen shown at a glance." },
+    { file: "credential-vault.html", title: "Credential Vault",
+      choices: "Identities stored in the iOS Keychain / Secure Enclave. SSH keys and tokens never leave the device unencrypted; add-identity flow is one screen." },
+    { file: "vnc-commanddeck.html", title: "VNC RemoteCanvas + CommandDeck",
+      choices: "RealVNC remade monochrome: a live remote canvas with an overlaid command deck so you can act on the screen without losing the frame." },
+    { file: "connection-info-card.html", title: "Connection Info Card",
+      choices: "A compact glance card — IP, latency, tunnel state, agent health — that answers 'is this reachable and busy?' before you commit to a session." },
+    { file: "voice-terminal.html", title: "Voice-first Terminal",
+      choices: "Speak commands; the terminal transcribes, confirms, and runs them. Designed for no-keyboard, one-finger confirm — the core voice-first interaction." },
+    { file: "action-menu.html", title: "Action Menu Popover",
+      choices: "A radial/list popover of contextual actions per machine or agent. Big tap targets, monochrome, reachable from a single thumb." },
+    { file: "watch-command-deck.html", title: "Watch Command Deck",
+      choices: "The whole mesh on a wrist: scrollable agent list, glanceable status, and tap-to-run common actions sized for watchOS crowns and taps." },
+    { file: "qr-onboarding.html", title: "QR Onboarding",
+      choices: "Scan a QR from the daemon to pair a machine in seconds — confirmation state ('arya-mac added') closes the loop with zero manual entry." },
+    { file: "design-system.html", title: "Design System Reference",
+      choices: "The token, type, spacing, and component reference that keeps all surfaces consistent — the source of truth for the monochrome system." },
+  ];
+
+  const fixes = [
+    { t: "Reachability is invisible", before: "no live state", after: "per-machine status dot + latency",
+      v: "Each machine card now carries an online/degraded/offline dot and ping, so you never tap into a dead host." },
+    { t: "Agents buried under machines", before: "machine-only list", after: "agent-first cards",
+      v: "Running agents surface as the primary count on every card and lead the watch deck." },
+    { t: "Manual IP entry", before: "type host + IP", after: "tailnet discovery + QR pair",
+      v: "Discovery and QR onboarding replace typed IPs with tap-to-add and scan-to-pair." },
+    { t: "Credentials handled loosely", before: "plaintext-ish", after: "Secure Enclave vault",
+      v: "A dedicated vault screen shows keys/tokens as Keychain-backed identities, never raw secrets." },
+    { t: "VNC felt like a separate app", before: "full-color RealVNC", after: "monochrome RemoteCanvas",
+      v: "The remote canvas is reskinned into the system palette with an inline command deck overlay." },
+    { t: "Keyboard required to act", before: "type commands", after: "voice-first terminal",
+      v: "Voice capture + transcribe + one-tap confirm makes the terminal usable hands-light." },
+    { t: "Actions hard to reach one-handed", before: "scattered controls", after: "thumb-reach action popover",
+      v: "A single action popover with large targets centralizes per-object commands." },
+    { t: "No wrist presence", before: "phone-only", after: "watch command deck",
+      v: "A watchOS deck mirrors mesh status and common actions for glance-and-go control." },
+  ];
+
+  const tokens = [
+    { name: "Base", hex: "#0A0B0D", val: "#0A0B0D" },
+    { name: "Panel", hex: "#121317", val: "#121317" },
+    { name: "Line", hex: "#23262D", val: "#23262D" },
+    { name: "Ink", hex: "#E8EAED", val: "#E8EAED" },
+    { name: "Ink dim", hex: "#9AA0A8", val: "#9AA0A8" },
+    { name: "Accent", hex: "#4DA3FF", val: "#4DA3FF" },
+    { name: "OK", hex: "#4DE0A0", val: "#4DE0A0" },
+    { name: "Warn", hex: "#E0B84D", val: "#E0B84D" },
+    { name: "Bad", hex: "#E0584D", val: "#E0584D" },
+  ];
+
+  // Build screen grid
+  const grid = document.getElementById("grid");
+  screens.forEach((s, i) => {
+    const c = document.createElement("div");
+    c.className = "card";
+    const n = String(i + 1).padStart(2, "0");
+    c.innerHTML = `
+      <div class="num">${n} · ${s.file}</div>
+      <h3>${s.title}</h3>
+      <p class="choices">${s.choices}</p>
+      <div class="actions">
+        <button class="btn primary" onclick="openOverlay('${s.file}','${s.title}')">Preview</button>
+        <a class="btn" href="${s.file}" target="_blank" rel="noopener">New tab ↗</a>
+      </div>`;
+    grid.appendChild(c);
+  });
+
+  // Before/After
+  const ba = document.getElementById("ba");
+  fixes.forEach((f, i) => {
+    const row = document.createElement("div");
+    row.className = "ba";
+    row.innerHTML = `
+      <div class="idx">${i + 1}</div>
+      <div>
+        <p class="fix-title">${f.t}</p>
+        <div class="ba-row">
+          <span class="tag before">Before · ${f.before}</span>
+          <span class="arrow">→</span>
+          <span class="tag after">After · ${f.after}</span>
+        </div>
+        <div class="ba-row" style="margin-top:6px;">${f.v}</div>
+      </div>`;
+    ba.appendChild(row);
+  });
+
+  // Legend
+  const legend = document.getElementById("legend");
+  tokens.forEach(t => {
+    const sw = document.createElement("div");
+    sw.className = "swatch";
+    sw.innerHTML = `
+      <div class="chip" style="background:${t.val}"></div>
+      <div><div class="label">${t.name}</div><div class="hex">${t.hex}</div></div>`;
+    legend.appendChild(sw);
+  });
+
+  // Overlay
+  const overlay = document.getElementById("overlay");
+  const ovFrame = document.getElementById("ovFrame");
+  const ovTitle = document.getElementById("ovTitle");
+  const ovNewTab = document.getElementById("ovNewTab");
+  function openOverlay(file, title) {
+    ovFrame.src = file;
+    ovTitle.textContent = title + "  ·  " + file;
+    ovNewTab.href = file;
+    overlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+  function closeOverlay() {
+    overlay.classList.remove("open");
+    ovFrame.src = "";
+    document.body.style.overflow = "";
+  }
+  overlay.addEventListener("click", e => { if (e.target === overlay) closeOverlay(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeOverlay(); });
+</script>
+</body>
+</html>

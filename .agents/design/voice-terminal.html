@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeshWatch — Voice-first Terminal</title>
+<style>
+  :root{
+    --base:#0A0B0D; --raised:#15171A; --ctrl:#1E2125;
+    --t1:#F5F6F7; --t2:#9BA0A6; --t3:#5C6066;
+    --hair:#2A2D31;
+    --blue:#4DA3FF;
+    --green:#34C759; --orange:#FF9F0A; --red:#FF453A; --grey:#5C6066;
+    --term-bg:#06140C;
+    --ansi-green:#3ddc6b; --ansi-amber:#FFb454; --ansi-red:#ff6b5e; --ansi-dim:#7fae8e;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+    --mono:"SF Mono",ui-monospace,Menlo,"Roboto Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{
+    background:#202225;
+    font-family:var(--font);
+    color:var(--t1);
+    min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;
+    padding:40px 16px 80px;
+    gap:14px;
+  }
+  .page-title{color:#c9ccd1;font-size:15px;font-weight:600;letter-spacing:.2px;}
+  .page-sub{color:#7d8187;font-size:12px;margin-top:-6px;margin-bottom:6px;}
+  .row{display:flex;gap:36px;flex-wrap:wrap;justify-content:center;align-items:flex-start;}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .frame-label{
+    font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;
+    color:#80858c;
+  }
+  .frame-label.after{color:var(--blue);}
+
+  /* phone bezel */
+  .phone{
+    width:390px;background:#000;border-radius:46px;padding:11px;
+    box-shadow:0 0 0 2px #2c2f33, 0 22px 60px rgba(0,0,0,.6);
+  }
+  .screen{
+    background:var(--base);border-radius:36px;overflow:hidden;
+    height:780px;display:flex;flex-direction:column;position:relative;
+  }
+  .notch{
+    position:absolute;top:0;left:50%;transform:translateX(-50%);
+    width:124px;height:30px;background:#000;border-radius:0 0 18px 18px;z-index:30;
+  }
+  /* status bar */
+  .statusbar{
+    height:46px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 24px 5px;font-size:13px;font-weight:600;color:var(--t1);flex-shrink:0;
+  }
+  .statusbar .right{display:flex;gap:6px;align-items:center;}
+
+  /* ===== header ===== */
+  .hdr{
+    display:flex;align-items:center;gap:10px;padding:6px 14px 12px;flex-shrink:0;
+    border-bottom:1px solid var(--hair);
+  }
+  .hdr .back{
+    width:44px;height:44px;margin-left:-9px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    color:var(--blue);font-size:22px;flex-shrink:0;
+  }
+  .hdr .id{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;}
+  .hdr .host{display:flex;align-items:center;gap:7px;}
+  .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .dot.ok{background:var(--green);}
+  .dot.idle{background:var(--grey);}
+  .hdr .hu{font-size:15px;font-weight:600;color:var(--t1);font-family:var(--mono);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hdr .sub{font-size:11px;color:var(--t2);}
+  .badge{
+    font-size:10px;font-weight:700;letter-spacing:.4px;padding:3px 7px;border-radius:6px;
+    background:var(--ctrl);color:var(--t2);border:1px solid var(--hair);text-transform:uppercase;
+  }
+  /* tmux is a session-type label, not a health status — keep it neutral so green stays meaningful */
+
+  /* ===== terminal surface ===== */
+  .term-wrap{flex:1;padding:12px;display:flex;flex-direction:column;min-height:0;position:relative;}
+  .term-card{
+    flex:1;background:var(--term-bg);border-radius:16px;border:1px solid #173322;
+    display:flex;flex-direction:column;min-height:0;overflow:hidden;position:relative;
+  }
+  .term-bar{
+    display:flex;align-items:center;gap:7px;padding:8px 12px;border-bottom:1px solid #143020;flex-shrink:0;
+    background:rgba(8,24,14,.6);
+  }
+  .term-bar .tl{display:flex;gap:6px;}
+  .term-bar .tl span{width:10px;height:10px;border-radius:50%;}
+  .tl .r{background:#ff5f57;} .tl .y{background:#febc2e;} .tl .g{background:#28c840;}
+  .term-bar .title{font-family:var(--mono);font-size:11px;color:var(--ansi-dim);margin-left:4px;}
+  .term-bar .live{
+    margin-left:auto;display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;
+    color:var(--ansi-green);letter-spacing:.5px;
+  }
+  .term-bar .live i{width:6px;height:6px;border-radius:50%;background:var(--ansi-green);
+    animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .scroll{
+    flex:1;overflow-y:auto;padding:12px 14px 16px;font-family:var(--mono);
+    font-size:12px;line-height:1.55;color:var(--ansi-green);
+  }
+  .scroll::-webkit-scrollbar{width:0;}
+  .scroll .l{white-space:pre-wrap;word-break:break-word;}
+  .g{color:var(--ansi-green);} .a{color:var(--ansi-amber);} .r{color:var(--ansi-red);}
+  .dim{color:var(--ansi-dim);} .w{color:#cfeede;}
+  .prompt .u{color:var(--ansi-green);font-weight:600;}
+  .prompt .p{color:#5fd3ff;}
+  .cursor{
+    display:inline-block;width:8px;height:15px;background:var(--ansi-green);
+    vertical-align:-2px;margin-left:2px;animation:blink 1.05s steps(1) infinite;
+  }
+  @keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
+
+  /* jump to latest chip */
+  .jump{
+    position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
+    background:var(--ctrl);border:1px solid var(--hair);color:var(--t1);
+    font-size:12px;font-weight:600;padding:7px 14px;border-radius:18px;
+    display:flex;align-items:center;gap:6px;box-shadow:0 4px 14px rgba(0,0,0,.5);
+    z-index:5;
+  }
+  .jump .av{color:var(--blue);font-size:13px;}
+
+  /* ===== BEFORE: dead input ===== */
+  .dead-input{
+    margin:0 12px 14px;padding:14px 16px;border-radius:14px;
+    background:var(--raised);border:1px solid var(--hair);
+    display:flex;align-items:center;gap:10px;flex-shrink:0;
+  }
+  .dead-input .ph{color:var(--t3);font-size:15px;}
+  .dead-input .kbd{margin-left:auto;color:var(--t3);font-size:17px;}
+
+  /* mock keyboard (before) */
+  .kbd-mock{flex-shrink:0;background:#1c1d20;padding:8px 4px 18px;}
+  .kbd-acc{display:flex;gap:6px;padding:0 6px 8px;overflow:hidden;}
+  .kbd-acc .pill{background:#2c2e33;color:#cfd2d6;font-size:11px;font-family:var(--mono);
+    padding:5px 9px;border-radius:6px;white-space:nowrap;}
+  .kbd-acc .pill.blue{color:var(--blue);}
+  .kbd-row{display:flex;justify-content:center;gap:5px;padding:3px 5px;}
+  .key{background:#43464d;border-radius:5px;height:30px;flex:1;display:flex;align-items:center;
+    justify-content:center;color:#fff;font-size:13px;box-shadow:0 1px 0 rgba(0,0,0,.4);}
+  .key.fn{background:#2c2e33;font-size:11px;flex:.7;}
+
+  /* ===== AFTER: dual-mode InputBar ===== */
+  .inputbar{
+    flex-shrink:0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--hair);background:var(--base);
+    display:flex;align-items:center;gap:10px;
+  }
+  .mic{
+    width:46px;height:46px;border-radius:50%;flex-shrink:0;
+    background:var(--ctrl);border:1px solid var(--hair);
+    display:flex;align-items:center;justify-content:center;color:var(--t2);
+    position:relative;
+  }
+  .mic svg{width:20px;height:20px;}
+  .mic.active{
+    background:rgba(255,69,58,.14);border-color:rgba(255,69,58,.5);color:var(--red);
+  }
+  .mic.active::before{
+    content:"";position:absolute;inset:-6px;border-radius:50%;
+    border:2px solid rgba(255,69,58,.4);animation:ring 1.4s ease-out infinite;
+  }
+  @keyframes ring{0%{transform:scale(.85);opacity:.9}100%{transform:scale(1.25);opacity:0}}
+
+  .center-tap{
+    flex:1;min-width:0;height:46px;border-radius:23px;
+    background:var(--raised);border:1px solid var(--hair);
+    display:flex;align-items:center;padding:0 16px;gap:10px;cursor:pointer;
+  }
+  .center-tap .label{font-size:15px;color:var(--t2);}
+  .center-tap .kbd-ic{margin-left:auto;color:var(--t3);font-size:16px;}
+
+  /* dictating center field */
+  .center-tap.dictating{border-color:rgba(255,69,58,.4);background:#191215;}
+  .center-tap.dictating .label{color:var(--t1);}
+  .wave{display:flex;align-items:center;gap:3px;height:18px;margin-left:auto;}
+  .wave i{width:3px;border-radius:2px;background:var(--red);}
+  .wave i:nth-child(1){height:6px;animation:wv 0.9s ease-in-out infinite;}
+  .wave i:nth-child(2){height:14px;animation:wv 0.9s ease-in-out .1s infinite;}
+  .wave i:nth-child(3){height:18px;animation:wv 0.9s ease-in-out .2s infinite;}
+  .wave i:nth-child(4){height:10px;animation:wv 0.9s ease-in-out .3s infinite;}
+  .wave i:nth-child(5){height:16px;animation:wv 0.9s ease-in-out .15s infinite;}
+  .wave i:nth-child(6){height:7px;animation:wv 0.9s ease-in-out .25s infinite;}
+  @keyframes wv{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+
+  .send{
+    width:46px;height:46px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .send.off{background:var(--ctrl);border:1px solid var(--hair);color:var(--t3);}
+  .send.on{background:var(--blue);color:#fff;}
+  .send svg{width:20px;height:20px;}
+
+  /* command deck (raised w/ keyboard) */
+  .deck{
+    flex-shrink:0;background:var(--base);border-top:1px solid var(--hair);
+    padding:9px 12px 7px;display:flex;gap:7px;overflow:hidden;
+  }
+  .deck .chip{
+    background:var(--ctrl);border:1px solid var(--hair);color:var(--t1);
+    font-family:var(--mono);font-size:12px;padding:7px 11px;border-radius:9px;white-space:nowrap;
+    display:flex;align-items:center;gap:5px;
+  }
+  .deck .chip.latched{background:rgba(77,163,255,.14);border-color:rgba(77,163,255,.5);color:var(--blue);}
+  .deck .chip .lbl{color:var(--t3);font-size:10px;font-family:var(--font);}
+
+  /* captions */
+  .caps{max-width:840px;display:flex;flex-direction:column;gap:9px;margin-top:8px;padding:0 8px;}
+  .cap{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:#aeb2b8;line-height:1.45;}
+  .cap b{color:#e7e9eb;font-weight:600;}
+  .cap .n{
+    flex-shrink:0;width:18px;height:18px;border-radius:5px;background:var(--ctrl);
+    border:1px solid var(--hair);color:var(--blue);font-size:11px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;margin-top:1px;
+  }
+
+  .toggle{
+    display:flex;gap:0;background:var(--ctrl);border:1px solid var(--hair);
+    border-radius:11px;padding:3px;margin-bottom:4px;
+  }
+  .toggle button{
+    background:none;border:none;color:var(--t2);font-size:12px;font-weight:600;
+    padding:7px 16px;border-radius:8px;cursor:pointer;font-family:var(--font);
+  }
+  .toggle button.sel{background:var(--blue);color:#fff;}
+</style>
+</head>
+<body>
+
+  <div class="page-title">MeshWatch — Voice-first InputBar &amp; TerminalSurface</div>
+  <div class="page-sub">arya@dataflowagents · live tmux session over Tailscale SSH</div>
+
+  <div class="row">
+
+    <!-- ===================== BEFORE ===================== -->
+    <div class="col">
+      <div class="frame-label">Before — LeCoder</div>
+      <div class="phone">
+        <div class="screen">
+          <div class="notch"></div>
+          <div class="statusbar">
+            <div>5:40</div>
+            <div class="right">●●●&nbsp; <span>📶</span> <span>80</span></div>
+          </div>
+
+          <!-- raw scrollback, no real header -->
+          <div class="scroll" style="flex:1;background:var(--term-bg);">
+            <div class="l dim">…is not enabled.</div>
+            <div class="l">&nbsp;</div>
+            <div class="l">119 updates can be applied immediately.</div>
+            <div class="l">36 of these updates are standard security updates.</div>
+            <div class="l">To see these additional updates run: apt list</div>
+            <div class="l">&nbsp;&nbsp;--upgradable</div>
+            <div class="l">&nbsp;</div>
+            <div class="l">21 additional security updates can be applied with</div>
+            <div class="l">ESM Apps. Learn more about enabling ESM Apps service</div>
+            <div class="l">at https://ubuntu.com/esm</div>
+            <div class="l">&nbsp;</div>
+            <div class="l">15 updates could not be installed automatically.</div>
+            <div class="l">For more details, see /var/log/unattended-upgrades/</div>
+            <div class="l">unattended-upgrades.log</div>
+            <div class="l">&nbsp;</div>
+            <div class="l dim">Last login: Wed Jun 17 06:43:51 2026 from 100.94.221.115</div>
+            <div class="l prompt"><span class="u">arya@dataflowagents</span><span class="w">:~$</span> clear</div>
+          </div>
+
+          <!-- dead input bar -->
+          <div class="dead-input">
+            <span class="ph">Tap to type…</span>
+            <span class="kbd">⌨︎</span>
+          </div>
+
+          <!-- iOS keyboard -->
+          <div class="kbd-mock">
+            <div class="kbd-acc">
+              <span class="pill">flow</span>
+              <span class="pill blue">⟢ tailscale-d… ⊗</span>
+              <span class="pill">☺</span>
+              <span class="pill">▦</span>
+            </div>
+            <div class="kbd-row">
+              <span class="key fn">esc</span><span class="key fn">tab</span><span class="key fn">ctrl</span>
+              <span class="key fn">~</span><span class="key fn">|</span><span class="key fn">/</span>
+              <span class="key fn">◀</span><span class="key fn">▼</span><span class="key fn">▲</span>
+            </div>
+            <div class="kbd-row">
+              <span class="key">q</span><span class="key">w</span><span class="key">e</span><span class="key">r</span><span class="key">t</span><span class="key">y</span><span class="key">u</span><span class="key">i</span><span class="key">o</span><span class="key">p</span>
+            </div>
+            <div class="kbd-row" style="padding-left:18px;padding-right:18px;">
+              <span class="key">a</span><span class="key">s</span><span class="key">d</span><span class="key">f</span><span class="key">g</span><span class="key">h</span><span class="key">j</span><span class="key">k</span><span class="key">l</span>
+            </div>
+            <div class="kbd-row">
+              <span class="key fn">⇧</span><span class="key">z</span><span class="key">x</span><span class="key">c</span><span class="key">v</span><span class="key">b</span><span class="key">n</span><span class="key">m</span><span class="key fn">⌫</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:#7d8187;max-width:340px;text-align:center;line-height:1.5;">
+        Raw SSH dump. No status header, no session identity. The input is a
+        dead <b style="color:#aeb2b8;">“Tap to type”</b> slab that just summons the system keyboard — no voice, no commands.
+      </div>
+    </div>
+
+    <!-- ===================== AFTER ===================== -->
+    <div class="col">
+      <div class="frame-label after">After — MeshWatch · idle</div>
+      <div class="phone">
+        <div class="screen">
+          <div class="notch"></div>
+          <div class="statusbar">
+            <div>5:40</div>
+            <div class="right">●●●&nbsp; <span>📶</span> <span>80</span></div>
+          </div>
+
+          <!-- status header -->
+          <div class="hdr">
+            <div class="back">‹</div>
+            <div class="id">
+              <div class="host">
+                <span class="dot ok"></span>
+                <span class="hu">arya@dataflowagents</span>
+              </div>
+              <div class="sub">working · 24ms · 100.94.221.115</div>
+            </div>
+            <span class="badge tmux">tmux</span>
+          </div>
+
+          <!-- terminal surface -->
+          <div class="term-wrap">
+            <div class="term-card">
+              <div class="term-bar">
+                <div class="tl"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+                <span class="title">main · ~/dataflow</span>
+                <span class="live"><i></i>LIVE</span>
+              </div>
+              <div class="scroll">
+                <div class="l"><span class="dim">$ </span>git status</div>
+                <div class="l g">On branch <span class="w">main</span></div>
+                <div class="l a">Changes not staged for commit:</div>
+                <div class="l r">&nbsp;&nbsp;modified:&nbsp;&nbsp;pipeline/ingest.py</div>
+                <div class="l r">&nbsp;&nbsp;modified:&nbsp;&nbsp;runner/worker.go</div>
+                <div class="l">&nbsp;</div>
+                <div class="l"><span class="dim">$ </span>pytest -q tests/ingest</div>
+                <div class="l g">.......... <span class="dim">[100%]</span></div>
+                <div class="l g">14 passed <span class="dim">in 2.31s</span></div>
+                <div class="l a">⚠ 2 deprecation warnings</div>
+                <div class="l">&nbsp;</div>
+                <div class="l prompt"><span class="u">arya@dataflowagents</span><span class="p">:~$</span> <span class="cursor"></span></div>
+              </div>
+              <div class="jump"><span class="av">↓</span> Jump to latest</div>
+            </div>
+          </div>
+
+          <!-- dual-mode input bar: IDLE -->
+          <div class="inputbar">
+            <div class="mic" title="tap to speak">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="9" y="3" width="6" height="11" rx="3"/>
+                <path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>
+              </svg>
+            </div>
+            <div class="center-tap">
+              <span class="label">Tap to speak · or type</span>
+              <span class="kbd-ic">⌨︎</span>
+            </div>
+            <div class="send off">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:#7d8187;max-width:340px;text-align:center;line-height:1.5;">
+        Idle state — mic invites voice (<b style="color:#aeb2b8;">tap to speak</b>), center tap raises the
+        keyboard + command deck, send is dim until there's text.
+      </div>
+    </div>
+
+    <!-- ===================== AFTER — dictating ===================== -->
+    <div class="col">
+      <div class="frame-label after">After — dictating + deck</div>
+      <div class="phone">
+        <div class="screen">
+          <div class="notch"></div>
+          <div class="statusbar">
+            <div>5:40</div>
+            <div class="right">●●●&nbsp; <span>📶</span> <span>80</span></div>
+          </div>
+
+          <div class="hdr">
+            <div class="back">‹</div>
+            <div class="id">
+              <div class="host">
+                <span class="dot ok"></span>
+                <span class="hu">arya@dataflowagents</span>
+              </div>
+              <div class="sub">listening · dictating to shell</div>
+            </div>
+            <span class="badge tmux">tmux</span>
+          </div>
+
+          <div class="term-wrap" style="flex:0 1 auto;">
+            <div class="term-card">
+              <div class="term-bar">
+                <div class="tl"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+                <span class="title">main · ~/dataflow</span>
+                <span class="live"><i></i>LIVE</span>
+              </div>
+              <div class="scroll" style="font-size:11.5px;">
+                <div class="l g">14 passed <span class="dim">in 2.31s</span></div>
+                <div class="l a">⚠ 2 deprecation warnings</div>
+                <div class="l">&nbsp;</div>
+                <div class="l prompt"><span class="u">arya@dataflowagents</span><span class="p">:~$</span>
+                  <span class="w">git checkout -b fix/ingest-</span><span class="cursor"></span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- command deck (latched modifier + quick commands) -->
+          <div class="deck">
+            <span class="chip latched">ctrl <span class="lbl">held</span></span>
+            <span class="chip">esc</span>
+            <span class="chip">^C</span>
+            <span class="chip">↑ hist</span>
+            <span class="chip">tab</span>
+          </div>
+
+          <!-- dual-mode input bar: DICTATING -->
+          <div class="inputbar">
+            <div class="mic active" title="dictating">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="9" y="3" width="6" height="11" rx="3"/>
+                <path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>
+              </svg>
+            </div>
+            <div class="center-tap dictating">
+              <span class="label">checkout new branch…</span>
+              <span class="wave"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            </div>
+            <div class="send on">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:#7d8187;max-width:340px;text-align:center;line-height:1.5;">
+        Dictating — mic pulses red (recording status), live transcript fills the field, waveform
+        animates, and <b style="color:#aeb2b8;">send brightens blue</b> now that there's text.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- annotated design choices -->
+  <div class="caps">
+    <div class="cap"><span class="n">1</span><div><b>Identity restored.</b> A StatusHeader replaces the raw dump: back chevron, a green status dot for <i>working</i>, the mono <b>arya@dataflowagents</b> host-user, and a <b>tmux</b> badge — so you always know which machine and session you're steering.</div></div>
+    <div class="cap"><span class="n">2</span><div><b>The terminal is the only lively surface.</b> Framed card on near-black with real ANSI green/amber/red mono scrollback and a blinking cursor. Everything around it stays monochrome; a <b>“Jump to latest”</b> chip appears when scrolled up.</div></div>
+    <div class="cap"><span class="n">3</span><div><b>Dual-mode InputBar kills “Tap to type.”</b> Mic (left) for voice, a center tap to raise the keyboard + command deck, send (right) on the far thumb. Three intents, three fixed 44pt targets.</div></div>
+    <div class="cap"><span class="n">4</span><div><b>One accent does the work.</b> Blue is the only non-status color — it marks the active send and the latched <b>ctrl</b> key in the deck. Red on the mic is <i>status</i> (recording), never decoration.</div></div>
+    <div class="cap"><span class="n">5</span><div><b>Send state is legible.</b> Off it's a flat grey glyph; the instant there's transcript or typed text it fills solid blue — a flat color change, no glow.</div></div>
+  </div>
+
+</body>
+</html>

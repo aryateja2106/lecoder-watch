@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeshWatch — Machines</title>
+<style>
+  :root{
+    --base:#0A0B0D; --raised:#15171A; --control:#1E2125;
+    --t1:#F5F6F7; --t2:#9BA0A6; --t3:#5C6066;
+    --hair:#2A2D31;
+    --accent:#4DA3FF;
+    --green:#34C759; --orange:#FF9F0A; --red:#FF453A; --grey:#5C6066;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{
+    background:#0E0F11;font-family:var(--font);color:var(--t1);
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:40px 16px 64px;gap:14px;
+  }
+  .page-title{color:var(--t2);font-size:13px;letter-spacing:.04em;text-transform:uppercase;font-weight:600;margin-bottom:6px;}
+  .compare{display:flex;gap:48px;flex-wrap:wrap;justify-content:center;align-items:flex-start;}
+  .stack{display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .lbl{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);}
+  .lbl.after{color:var(--accent);}
+
+  /* phone bezel */
+  .bezel{
+    width:390px;background:#000;border-radius:54px;padding:12px;
+    box-shadow:0 0 0 2px #2c2e31, 0 24px 60px rgba(0,0,0,.6);
+  }
+  .screen{
+    background:var(--base);border-radius:42px;overflow:hidden;
+    height:760px;display:flex;flex-direction:column;position:relative;
+  }
+  /* status bar */
+  .statusbar{height:50px;display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 30px 8px;font-size:14px;font-weight:600;color:var(--t1);}
+  .statusbar .right{display:flex;gap:6px;align-items:center;}
+  .notch{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:120px;height:30px;background:#000;border-radius:0 0 18px 18px;z-index:5;}
+
+  /* nav */
+  .nav{padding:4px 20px 10px;display:flex;align-items:flex-end;justify-content:space-between;}
+  .nav h1{font-size:30px;font-weight:700;letter-spacing:-.02em;}
+  .nav .navbtn{width:44px;height:44px;border-radius:50%;background:var(--control);
+    display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:17px;}
+  .subhdr{padding:0 20px 12px;color:var(--t2);font-size:13px;display:flex;align-items:center;gap:7px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green);}
+
+  .scroll{flex:1;overflow-y:auto;padding:0 16px 24px;}
+  .group-label{color:var(--t3);font-size:12px;font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase;padding:6px 6px 8px;}
+
+  /* session list card group */
+  .group{background:var(--raised);border-radius:16px;overflow:hidden;margin-bottom:18px;}
+  .row{display:flex;align-items:center;gap:13px;padding:13px 14px;min-height:62px;position:relative;cursor:pointer;}
+  .row + .row::before{content:"";position:absolute;top:0;left:60px;right:0;height:1px;background:var(--hair);}
+  .row:active{background:#1b1e22;}
+
+  .ico{width:34px;height:34px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;
+    justify-content:center;font-size:17px;background:#22262b;}
+  .ico.mac{background:rgba(77,163,255,.16);color:var(--accent);}
+  .ico.pi{background:rgba(77,163,255,.16);color:var(--accent);}
+  .ico.linux{background:rgba(255,159,10,.15);color:var(--orange);}
+
+  .meta{flex:1;min-width:0;}
+  .host{font-size:16px;font-weight:600;color:var(--t1);letter-spacing:-.01em;}
+  .sub{font-size:12.5px;color:var(--t2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sub .mid{color:var(--t3);}
+
+  /* status pill */
+  .pill{display:flex;align-items:center;gap:5px;flex-shrink:0;padding:5px 9px;border-radius:20px;
+    font-size:12px;font-weight:600;line-height:1;}
+  .pill.ok{background:rgba(52,199,89,.14);color:var(--green);}
+  .pill.tok{background:rgba(255,159,10,.16);color:var(--orange);}
+  .pill.off{background:rgba(92,96,102,.18);color:var(--t3);}
+  .pill .pdot{width:7px;height:7px;border-radius:50%;background:currentColor;}
+  .chev{color:var(--t3);font-size:15px;margin-left:2px;}
+
+  .sessbadge{font-size:11px;color:var(--t2);background:#23272c;border-radius:7px;padding:2px 7px;font-weight:600;margin-right:2px;}
+
+  /* discover row */
+  .discover{display:flex;align-items:center;gap:13px;padding:14px;min-height:60px;cursor:pointer;}
+  .discover .ico{background:rgba(77,163,255,.12);color:var(--accent);border-radius:9px;}
+  .discover .meta .host{color:var(--accent);font-weight:600;font-size:15px;}
+  .discover .meta .sub{color:var(--t3);}
+
+  /* tab bar */
+  .tabbar{height:78px;background:rgba(16,17,19,.92);border-top:1px solid var(--hair);
+    display:flex;align-items:flex-start;padding-top:9px;}
+  .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:var(--t3);}
+  .tab .ti{font-size:21px;line-height:1;}
+  .tab.on{color:var(--accent);}
+
+  /* BEFORE (weak state) */
+  .before-list{background:#000;flex:1;overflow-y:auto;}
+  .b-hdr{padding:18px 18px 8px;font-size:30px;font-weight:700;}
+  .b-grp{color:var(--t3);font-size:13px;padding:14px 18px 6px;text-transform:uppercase;letter-spacing:.04em;}
+  .b-row{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;
+    border-bottom:1px solid #1a1a1a;}
+  .b-row .l{font-size:16px;color:#ddd;}
+  .b-row .l small{display:block;color:#666;font-size:12px;margin-top:3px;}
+  .b-row .r{font-size:12px;color:#666;text-align:right;}
+  .b-row .r.bad{color:#777;}
+
+  .caps{max-width:840px;display:flex;flex-direction:column;gap:9px;margin-top:18px;}
+  .cap{display:flex;gap:10px;font-size:13px;color:var(--t2);line-height:1.45;}
+  .cap b{color:var(--t1);font-weight:600;}
+  .cap .n{flex-shrink:0;width:20px;height:20px;border-radius:50%;background:var(--control);
+    color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  ::-webkit-scrollbar{width:0;}
+</style>
+</head>
+<body>
+
+  <div class="page-title">MeshWatch · Machines List (mesh overview)</div>
+
+  <div class="compare">
+
+    <!-- BEFORE -->
+    <div class="stack">
+      <div class="lbl">Before</div>
+      <div class="bezel">
+        <div class="screen">
+          <div class="notch"></div>
+          <div class="statusbar"><span>9:41</span><span class="right">● ▮ ▸</span></div>
+          <div class="before-list">
+            <div class="b-hdr">Machines</div>
+            <div class="b-grp">Mesh</div>
+            <div class="b-row"><div class="l">arya-mac<small>100.x.x.1</small></div><div class="r">meshd ok · 2 sessions</div></div>
+            <div class="b-row"><div class="l">arya-pi<small>100.x.x.2</small></div><div class="r">meshd ok · 1 session</div></div>
+            <div class="b-row"><div class="l">dataflowagents<small>100.x.x.3</small></div><div class="r">needs token</div></div>
+            <div class="b-row"><div class="l">seed<small>100.100.100.100</small></div><div class="r bad">unreachable</div></div>
+          </div>
+          <div class="tabbar">
+            <div class="tab on"><div class="ti">▤</div>Machines</div>
+            <div class="tab"><div class="ti">▦</div>Sessions</div>
+            <div class="tab"><div class="ti">◰</div>Screen</div>
+            <div class="tab"><div class="ti">⚙</div>Settings</div>
+          </div>
+        </div>
+      </div>
+      <div style="max-width:330px;font-size:12px;color:var(--t3);text-align:center;line-height:1.4;">
+        Flat grey StatRow list. Status crammed into trailing caption. A dead 100.100.100.100 seed sits among real hosts.
+      </div>
+    </div>
+
+    <!-- AFTER -->
+    <div class="stack">
+      <div class="lbl after">After</div>
+      <div class="bezel">
+        <div class="screen">
+          <div class="notch"></div>
+          <div class="statusbar"><span>9:41</span><span class="right">● ▮ ▸</span></div>
+
+          <div class="nav">
+            <h1>Machines</h1>
+            <div class="navbtn" role="button" aria-label="Refresh mesh">↻</div>
+          </div>
+          <div class="subhdr"><span class="dot"></span>Tailnet connected · 3 reachable</div>
+
+          <div class="scroll">
+            <div class="group-label">Active</div>
+            <div class="group">
+
+              <!-- arya-mac -->
+              <div class="row">
+                <div class="ico mac"></div>
+                <div class="meta">
+                  <div class="host">arya-mac</div>
+                  <div class="sub">meshd active <span class="mid">·</span> bridge <span class="mid">·</span> hooks</div>
+                </div>
+                <span class="sessbadge">2 sess</span>
+                <div class="pill ok"><span class="pdot"></span>live</div>
+                <span class="chev">›</span>
+              </div>
+
+              <!-- arya-pi -->
+              <div class="row">
+                <div class="ico pi">🍓</div>
+                <div class="meta">
+                  <div class="host">arya-pi</div>
+                  <div class="sub">meshd active <span class="mid">·</span> bridge <span class="mid">·</span> hooks</div>
+                </div>
+                <span class="sessbadge">1 sess</span>
+                <div class="pill ok"><span class="pdot"></span>live</div>
+                <span class="chev">›</span>
+              </div>
+
+            </div>
+
+            <div class="group-label">Needs attention</div>
+            <div class="group">
+
+              <!-- dataflowagents -->
+              <div class="row">
+                <div class="ico linux">🐧</div>
+                <div class="meta">
+                  <div class="host">dataflowagents</div>
+                  <div class="sub">meshd up <span class="mid">·</span> bridge <span class="mid">·</span> hooks off</div>
+                </div>
+                <div class="pill tok"><span class="pdot"></span>token</div>
+                <span class="chev">›</span>
+              </div>
+
+            </div>
+
+            <div class="group">
+              <div class="discover">
+                <div class="ico">⊕</div>
+                <div class="meta">
+                  <div class="host">Discover Tailnet</div>
+                  <div class="sub">Scan for new meshd nodes</div>
+                </div>
+                <span class="chev">›</span>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="tabbar">
+            <div class="tab on"><div class="ti">▤</div>Machines</div>
+            <div class="tab"><div class="ti">▦</div>Sessions</div>
+            <div class="tab"><div class="ti">◰</div>Screen</div>
+            <div class="tab"><div class="ti">⚙</div>Settings</div>
+          </div>
+        </div>
+      </div>
+      <div style="max-width:330px;font-size:12px;color:var(--t3);text-align:center;line-height:1.4;">
+        SessionListCard rows: accent host icon, daemon subtitle, trailing StatusPill. Active hosts first; discover entry at the foot.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- annotations -->
+  <div class="caps">
+    <div class="cap"><span class="n">1</span><div><b>One accent, status reserved for status.</b> Blue marks the host icons and Discover action; green "live" / orange "token" pills carry reachability — never decoration.</div></div>
+    <div class="cap"><span class="n">2</span><div><b>Subtitle = the daemon truth.</b> "meshd active · bridge · hooks" replaces a buried IP, so the row says what each machine can actually do at a glance.</div></div>
+    <div class="cap"><span class="n">3</span><div><b>Sorted by liveness.</b> Active machines group up top; "Needs attention" (dataflowagents, orange token) is split out so a stalled auth can't hide.</div></div>
+    <div class="cap"><span class="n">4</span><div><b>Dead seed removed.</b> The unreachable 100.100.100.100 placeholder is gone; a tappable "Discover Tailnet" row is the only path to add nodes.</div></div>
+    <div class="cap"><span class="n">5</span><div><b>Grouped-inset iOS rows.</b> 62pt tap targets, hairline dividers inset past the icon, session-count badge before the pill — native vocabulary, no nested cards.</div></div>
+  </div>
+
+</body>
+</html>

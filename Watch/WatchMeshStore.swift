@@ -19,6 +19,10 @@ final class WatchMeshStore: ObservableObject {
     @Published var sending = false
     @Published var phoneReachable = false
     @Published var lastError: String?
+    @Published var screenHost: String?
+    @Published var screenJPEGData: Data?
+    @Published var screenUpdatedISO: String?
+    @Published var screenError: String?
 
     struct WatchTarget: Equatable { let host: String; let agent: String; let pane: String? }
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
@@ -80,6 +84,12 @@ final class WatchMeshStore: ObservableObject {
         // Wire the relay.
         WatchLink.shared.onSnapshot = { [weak self] snap in
             Task { @MainActor in self?.relayed = snap }
+            Task { @MainActor in
+                guard let self, snap.screenHost == self.screenHost else { return }
+                self.screenJPEGData = snap.screenJPEGData
+                self.screenUpdatedISO = snap.screenFetchedISO
+                self.screenError = snap.screenError
+            }
         }
         WatchLink.shared.onReachable = { [weak self] r in
             Task { @MainActor in self?.phoneReachable = r }
@@ -188,13 +198,15 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
-    func newSession(host: String, cmd: String?, initialText: String? = nil) {
+    @discardableResult
+    func newSession(host: String, cmd: String?, initialText: String? = nil) -> String {
         let name = watchSessionName(cmd)
         if directReachable(host), let m = machines.first(where: { $0.host == host }) {
             lastError = nil
             Task {
                 do {
                     try await MeshClient(machine: m).newSession(name: name, cmd: cmd, initialText: initialText)
+                    watch(host: host, agent: name)
                 } catch {
                     lastError = "new session failed"
                 }
@@ -202,13 +214,45 @@ final class WatchMeshStore: ObservableObject {
             }
         } else {
             WatchLink.shared.send(WatchCommand(kind: .newAgent, host: host, agent: nil, text: name, key: nil, cmd: cmd, initialText: initialText))
+            watch(host: host, agent: name)
+        }
+        return name
+    }
+
+    @discardableResult
+    func newTask(host: String, agent: String, task: String) -> String? {
+        let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return newSession(host: host, cmd: agent, initialText: trimmed + "\n")
+    }
+
+    func requestScreen(host: String) {
+        screenHost = host
+        screenError = nil
+        if directReachable(host), let m = machines.first(where: { $0.host == host }) {
+            Task {
+                do {
+                    screenJPEGData = try await MeshClient(machine: m).screenImage()
+                    screenUpdatedISO = ISO8601DateFormatter().string(from: Date())
+                } catch {
+                    screenError = "screen unavailable"
+                    WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil))
+                }
+            }
+        } else {
+            screenJPEGData = nil
+            WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil))
         }
     }
 
-    func newTask(host: String, agent: String, task: String) {
-        let trimmed = task.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        newSession(host: host, cmd: agent, initialText: trimmed + "\n")
+    func stopScreen() {
+        if screenHost != nil {
+            WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: nil, agent: nil, text: nil, key: nil))
+        }
+        screenHost = nil
+        screenJPEGData = nil
+        screenUpdatedISO = nil
+        screenError = nil
     }
 
     func newPane(host: String, agent: String) {

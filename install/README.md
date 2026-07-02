@@ -62,11 +62,15 @@ What gets installed:
 - `~/.mesh/bin/mesh-self-check` to verify `meshd`, sessions, events, Tailnet, terminal bridge, and hook posting
 - `~/.mesh/hooks/` examples for Claude hooks, Codex notify, and agent wrappers
 - `~/.mesh/token` saved for local hook helpers
-- Two detached `tmux` sessions: `meshd` and `rmux-bridge`
+- A **reboot-persistent service** per OS that supervises `meshd` and `rmux-bridge`:
+  launchd agent on macOS (`~/Library/LaunchAgents/ai.lesearch.{meshd,rmux-bridge}.plist`),
+  systemd `--user` unit on Linux/WSL (`~/.config/systemd/user/ai.lesearch-*.service`,
+  with `loginctl enable-linger` so it runs headless), or a detached `tmux` session
+  where neither exists. Services restart on crash and come back after reboot.
 - HTTP services on `8899` (`meshd`) and `7820` (`rmux-bridge`) by default
 
 Update an existing machine by running the installer again with the same token.
-This restarts both `tmux` service sessions with the current payload.
+This reinstalls the service with the current payload and restarts it.
 
 Hook smoke test after install:
 
@@ -111,6 +115,8 @@ Environment variables:
 | `MESH_MUX` | Override the mux binary used inside `meshd` |
 | `MUX` | Override the mux binary used inside `rmux-bridge` |
 | `MESH_HOME` | Install location (default `~/.mesh`) |
+| `MESH_SERVICE` | Force supervisor: `launchd`, `systemd`, or `tmux` (default: auto-detect) |
+| `MESH_LABEL_PREFIX` | Service label/unit base name (default `ai.lesearch`) |
 
 Uninstall:
 

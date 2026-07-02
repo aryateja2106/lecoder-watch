@@ -27,7 +27,9 @@ PY
 
 if [ -n "$SRC_URL" ]; then
   STAMPED=$(dirname "$OUT")/install.sh
-  sed "s#__MESH_SRC__#${SRC_URL}#" "$ROOT/install/install.sh" > "$STAMPED"
+  # Only stamp the assignment line — NOT the `!= "__MESH_SRC__"` guard, which must
+  # keep the literal placeholder so the baked default actually gets used.
+  sed "s#^MESH_SRC_DEFAULT=\"__MESH_SRC__\"#MESH_SRC_DEFAULT=\"${SRC_URL}\"#" "$ROOT/install/install.sh" > "$STAMPED"
   chmod +x "$STAMPED"
   printf '%s\n' "$STAMPED"
   printf 'Host both files at %s and users run:\n' "$SRC_URL"

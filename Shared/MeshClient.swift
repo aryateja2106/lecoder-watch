@@ -59,6 +59,10 @@ struct MeshClient {
         return try JSONDecoder().decode(UsageSnapshot.self, from: data)
     }
 
+    func screenImage() async throws -> Data {
+        try await request("/screen.jpg")
+    }
+
     func tailnet() async throws -> TailnetSnapshot {
         let data = try await request("/tailnet")
         return try JSONDecoder().decode(TailnetSnapshot.self, from: data)

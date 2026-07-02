@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Design to MeshWatch SwiftUI"
+  short_description: "Convert prototypes into MeshWatch SwiftUI"
+  default_prompt: "Use $claude-design-to-meshwatch-swiftui to convert this prototype into a MeshWatch SwiftUI view."

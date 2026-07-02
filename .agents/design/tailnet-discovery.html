@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeshWatch — Tailnet Discovery</title>
+<style>
+  :root{
+    --base:#0A0B0D; --raised:#15171A; --control:#1E2125; --hair:#2A2D31;
+    --t1:#F5F6F7; --t2:#9BA0A6; --t3:#5C6066;
+    --accent:#4DA3FF;
+    --green:#34C759; --orange:#FF9F0A; --red:#FF453A; --grey:#5C6066;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:#161719;font-family:var(--font);-webkit-font-smoothing:antialiased;}
+  body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 16px 64px;gap:14px;}
+
+  .pageTitle{color:#6A6E73;font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;margin-bottom:6px;}
+
+  .stage{display:flex;gap:48px;flex-wrap:wrap;justify-content:center;align-items:flex-start;}
+  .col{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .colLabel{display:flex;align-items:center;gap:8px;color:#7E8288;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+  .colLabel .dot{width:7px;height:7px;border-radius:50%;}
+  .colLabel.before .dot{background:#5C6066;}
+  .colLabel.after .dot{background:var(--accent);}
+
+  /* phone bezel */
+  .phone{width:390px;background:#000;border-radius:52px;padding:11px;box-shadow:0 0 0 2px #2C2E31,0 24px 60px rgba(0,0,0,.6);position:relative;}
+  .screen{background:var(--base);border-radius:42px;overflow:hidden;position:relative;height:768px;display:flex;flex-direction:column;}
+  .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:128px;height:30px;background:#000;border-radius:0 0 18px 18px;z-index:30;}
+
+  /* status bar */
+  .statusbar{height:46px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 26px 7px;color:var(--t1);font-size:13px;font-weight:600;flex-shrink:0;}
+  .statusbar .right{display:flex;gap:6px;align-items:center;}
+
+  /* nav */
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:4px 16px 10px;flex-shrink:0;}
+  .nav .back{color:var(--accent);font-size:16px;display:flex;align-items:center;gap:3px;}
+  .nav .navtitle{color:var(--t1);font-size:17px;font-weight:600;}
+  .nav .add{color:var(--accent);font-size:22px;font-weight:300;width:30px;text-align:right;}
+
+  .body{flex:1;overflow:hidden;padding:0 16px;}
+
+  /* section header */
+  .secHead{display:flex;align-items:center;justify-content:space-between;padding:18px 6px 8px;}
+  .secHead .lbl{color:var(--t2);font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+  .secHead .scan{display:flex;align-items:center;gap:6px;color:var(--accent);font-size:13px;font-weight:500;}
+  .secHead .scan .spin{width:11px;height:11px;border:1.5px solid rgba(77,163,255,.3);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ===== BEFORE: dead StatRows ===== */
+  .group{background:var(--raised);border-radius:14px;overflow:hidden;}
+  .statrow{display:flex;align-items:center;justify-content:space-between;padding:13px 15px;min-height:46px;}
+  .statrow + .statrow{border-top:.5px solid var(--hair);}
+  .statrow .k{color:var(--t2);font-size:15px;}
+  .statrow .v{color:var(--t1);font-size:15px;font-family:var(--mono);}
+  .deadnote{color:var(--t3);font-size:12px;padding:10px 8px 0;line-height:1.45;}
+
+  /* ===== AFTER: peer button cards ===== */
+  .peerlist{display:flex;flex-direction:column;gap:10px;}
+  .peer{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--raised);border:none;border-radius:15px;padding:13px 14px;min-height:64px;cursor:pointer;position:relative;transition:background .12s,transform .08s;font-family:var(--font);}
+  .peer:active{background:#1B1E22;transform:scale(.985);}
+  .peer.tappable{box-shadow:inset 0 0 0 1px rgba(77,163,255,.16);}
+  .pIcon{width:38px;height:38px;border-radius:10px;background:var(--control);display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;}
+  .pIcon svg{width:20px;height:20px;}
+  .pStatus{position:absolute;right:-2px;bottom:-2px;width:12px;height:12px;border-radius:50%;border:2.5px solid var(--raised);}
+  .pStatus.online{background:var(--green);}
+  .pStatus.offline{background:var(--grey);}
+  .pMain{flex:1;min-width:0;}
+  .pName{color:var(--t1);font-size:15.5px;font-weight:600;display:flex;align-items:center;gap:7px;}
+  .pMeta{color:var(--t2);font-size:12.5px;margin-top:2px;display:flex;align-items:center;gap:7px;}
+  .pMeta .ip{font-family:var(--mono);color:var(--t2);}
+  .pMeta .sep{color:var(--t3);}
+  .pAction{flex-shrink:0;display:flex;align-items:center;gap:5px;color:var(--accent);font-size:13px;font-weight:500;}
+  .pAction .plus{width:24px;height:24px;border-radius:50%;background:rgba(77,163,255,.14);display:flex;align-items:center;justify-content:center;}
+  .pAction .plus svg{width:13px;height:13px;}
+
+  /* configured (greyed/deduped) peer */
+  .peer.configured{box-shadow:none;cursor:default;opacity:.62;}
+  .peer.configured:active{background:var(--raised);transform:none;}
+  .peer.configured .pName{color:var(--t2);}
+  .tag{font-size:10.5px;font-weight:600;letter-spacing:.03em;padding:2px 7px;border-radius:6px;background:var(--control);color:var(--t3);text-transform:uppercase;}
+
+  .helper{color:var(--t3);font-size:12px;padding:11px 8px 0;line-height:1.45;}
+
+  /* ===== Add-Host sheet (pre-filled) ===== */
+  .sheetScrim{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:40;display:flex;align-items:flex-end;border-radius:42px;}
+  .sheet{width:100%;background:var(--base);border-radius:26px 26px 0 0;padding:8px 16px 24px;box-shadow:0 -1px 0 var(--hair);}
+  .grabber{width:36px;height:5px;border-radius:3px;background:#3A3D42;margin:8px auto 4px;}
+  .sheetNav{display:flex;align-items:center;justify-content:space-between;padding:6px 2px 14px;}
+  .sheetNav .cancel{color:var(--accent);font-size:16px;min-height:44px;display:flex;align-items:center;}
+  .sheetNav .title{color:var(--t1);font-size:16px;font-weight:600;}
+  .donePill{position:relative;width:44px;height:44px;margin-right:-7px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+  .donePill::before{content:"";position:absolute;width:30px;height:30px;border-radius:50%;background:var(--accent);}
+  .donePill svg{width:15px;height:15px;position:relative;z-index:1;}
+  .prefillBanner{display:flex;align-items:center;gap:8px;background:rgba(77,163,255,.10);border:.5px solid rgba(77,163,255,.28);border-radius:11px;padding:9px 12px;margin-bottom:14px;color:var(--accent);font-size:12.5px;font-weight:500;}
+  .prefillBanner svg{width:14px;height:14px;flex-shrink:0;}
+  .formGroup{background:var(--raised);border-radius:13px;overflow:hidden;}
+  .field{display:flex;align-items:center;padding:12px 15px;min-height:50px;}
+  .field + .field{border-top:.5px solid var(--hair);}
+  .field .flbl{color:var(--t2);font-size:14px;width:88px;flex-shrink:0;}
+  .field .fval{color:var(--t1);font-size:15px;font-family:var(--mono);flex:1;}
+  .field .fval.placeholder{color:var(--t3);font-family:var(--font);}
+  .field .filled{display:inline-flex;align-items:center;gap:6px;}
+  .field .filled .chk{width:14px;height:14px;color:var(--green);}
+  .groupLbl{color:var(--t2);font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:18px 6px 8px;}
+
+  /* captions */
+  .caps{max-width:880px;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px 26px;margin-top:18px;padding:0 8px;}
+  .cap{display:flex;gap:9px;color:#9BA0A6;font-size:12.5px;line-height:1.5;}
+  .cap b{color:#D8DADC;font-weight:600;}
+  .capnum{flex-shrink:0;width:18px;height:18px;border-radius:50%;background:#1E2125;color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px;}
+
+  .cursor{display:inline-block;width:2px;height:15px;background:var(--accent);vertical-align:-2px;animation:blink 1.05s step-end infinite;}
+  @keyframes blink{50%{opacity:0;}}
+</style>
+</head>
+<body>
+
+<div class="pageTitle">MeshWatch · Settings › Hosts · Tailnet Discovery</div>
+
+<div class="stage">
+
+  <!-- ================= BEFORE ================= -->
+  <div class="col">
+    <div class="colLabel before"><span class="dot"></span>Before · dead text</div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="right">􀙇 􀛨 􀛩</span>
+        </div>
+        <div class="nav">
+          <span class="back">‹ Settings</span>
+          <span class="navtitle">Add Host</span>
+          <span class="add">+</span>
+        </div>
+        <div class="body">
+          <div class="secHead"><span class="lbl">Tailnet</span></div>
+          <div class="group">
+            <div class="statrow"><span class="k">pi</span><span class="v">100.x.x.41</span></div>
+            <div class="statrow"><span class="k">dataflow</span><span class="v">100.x.x.12</span></div>
+            <div class="statrow"><span class="k">jetson</span><span class="v">100.x.x.88</span></div>
+            <div class="statrow"><span class="k">mac-studio</span><span class="v">100.x.x.07</span></div>
+          </div>
+          <div class="deadnote">Discovered peers are shown as plain rows. Nothing here is tappable — you still have to retype the host and IP by hand into the form below.</div>
+
+          <div class="secHead"><span class="lbl">Manual entry</span></div>
+          <div class="group">
+            <div class="statrow"><span class="k">Host name</span><span class="v" style="color:var(--t3)">required</span></div>
+            <div class="statrow"><span class="k">Address</span><span class="v" style="color:var(--t3)">required</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= AFTER ================= -->
+  <div class="col">
+    <div class="colLabel after"><span class="dot"></span>After · tappable peers</div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="right">􀙇 􀛨 􀛩</span>
+        </div>
+        <div class="nav">
+          <span class="back">‹ Settings</span>
+          <span class="navtitle">Add Host</span>
+          <span class="add">+</span>
+        </div>
+        <div class="body">
+          <div class="secHead">
+            <span class="lbl">Discovered on tailnet</span>
+            <span class="scan"><span class="spin"></span>Scanning</span>
+          </div>
+
+          <div class="peerlist">
+
+            <!-- pi : online, tappable -->
+            <button class="peer tappable">
+              <span class="pIcon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#9BA0A6" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="8.5" cy="8.5" r="1.1" fill="#9BA0A6" stroke="none"/><circle cx="15.5" cy="8.5" r="1.1" fill="#9BA0A6" stroke="none"/><circle cx="8.5" cy="15.5" r="1.1" fill="#9BA0A6" stroke="none"/><circle cx="15.5" cy="15.5" r="1.1" fill="#9BA0A6" stroke="none"/></svg>
+                <span class="pStatus online"></span>
+              </span>
+              <span class="pMain">
+                <span class="pName">pi</span>
+                <span class="pMeta"><span>Raspberry Pi OS</span><span class="sep">·</span><span class="ip">100.x.x.41</span></span>
+              </span>
+              <span class="pAction">
+                <span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="#4DA3FF" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span>
+              </span>
+            </button>
+
+            <!-- dataflow : online, tappable -->
+            <button class="peer tappable">
+              <span class="pIcon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#9BA0A6" stroke-width="1.6"><rect x="3" y="5" width="18" height="11" rx="1.6"/><path d="M9 20h6M12 16v4"/></svg>
+                <span class="pStatus online"></span>
+              </span>
+              <span class="pMain">
+                <span class="pName">dataflow</span>
+                <span class="pMeta"><span>Ubuntu 24.04</span><span class="sep">·</span><span class="ip">100.x.x.12</span></span>
+              </span>
+              <span class="pAction">
+                <span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="#4DA3FF" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span>
+              </span>
+            </button>
+
+            <!-- jetson : online, tappable -->
+            <button class="peer tappable">
+              <span class="pIcon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#9BA0A6" stroke-width="1.6"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>
+                <span class="pStatus online"></span>
+              </span>
+              <span class="pMain">
+                <span class="pName">jetson</span>
+                <span class="pMeta"><span>JetPack 6</span><span class="sep">·</span><span class="ip">100.x.x.88</span></span>
+              </span>
+              <span class="pAction">
+                <span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="#4DA3FF" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span>
+              </span>
+            </button>
+
+            <!-- mac-studio : already configured, greyed/deduped -->
+            <button class="peer configured" disabled>
+              <span class="pIcon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#5C6066" stroke-width="1.6"><rect x="3" y="4" width="18" height="12" rx="1.6"/><path d="M8 20h8M12 16v4"/></svg>
+                <span class="pStatus online" style="background:#5C6066;"></span>
+              </span>
+              <span class="pMain">
+                <span class="pName">mac-studio</span>
+                <span class="pMeta"><span>macOS 15</span><span class="sep">·</span><span class="ip">100.x.x.07</span></span>
+              </span>
+              <span class="tag">Configured</span>
+            </button>
+
+            <!-- offline peer -->
+            <button class="peer configured" disabled>
+              <span class="pIcon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#5C6066" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                <span class="pStatus offline"></span>
+              </span>
+              <span class="pMain">
+                <span class="pName">edge-01</span>
+                <span class="pMeta"><span>Offline</span><span class="sep">·</span><span class="ip">100.x.x.54</span></span>
+              </span>
+              <span class="tag">Offline</span>
+            </button>
+
+          </div>
+          <div class="helper">Tap any online peer to pre-fill a new host. Already-added and offline peers are dimmed.</div>
+        </div>
+
+        <!-- Pre-filled Add-Host sheet -->
+        <div class="sheetScrim">
+          <div class="sheet">
+            <div class="grabber"></div>
+            <div class="sheetNav">
+              <span class="cancel">Cancel</span>
+              <span class="title">New Host · pi</span>
+              <span class="donePill"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6"><path d="M5 13l4 4L19 7"/></svg></span>
+            </div>
+            <div class="prefillBanner">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#4DA3FF" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>
+              Pre-filled from tailnet peer <strong>&nbsp;pi</strong>
+            </div>
+            <div class="formGroup">
+              <div class="field"><span class="flbl">Host name</span><span class="fval filled">pi <svg class="chk" viewBox="0 0 24 24" fill="none" stroke="#34C759" stroke-width="2.6"><path d="M5 13l4 4L19 7"/></svg></span></div>
+              <div class="field"><span class="flbl">Address</span><span class="fval filled">100.x.x.41 <svg class="chk" viewBox="0 0 24 24" fill="none" stroke="#34C759" stroke-width="2.6"><path d="M5 13l4 4L19 7"/></svg></span></div>
+              <div class="field"><span class="flbl">User</span><span class="fval placeholder">pi<span class="cursor"></span></span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="caps">
+  <div class="cap"><span class="capnum">1</span><span><b>Peer = Button, not StatRow.</b> Each online peer is a 64pt tappable card with an inset blue hairline and a filled <b>+</b> affordance — the tap target reads as an action, not a label.</span></div>
+  <div class="cap"><span class="capnum">2</span><span><b>Status dot, not decoration.</b> Green = reachable on the tailnet, grey = offline. Color is reserved strictly for state; the shell stays monochrome.</span></div>
+  <div class="cap"><span class="capnum">3</span><span><b>De-dupe &amp; dim.</b> Already-added <i>mac-studio</i> and offline <i>edge-01</i> are greyed, non-tappable, and tagged <b>Configured</b>/<b>Offline</b> so you never double-add.</span></div>
+  <div class="cap"><span class="capnum">4</span><span><b>Tap pre-fills the sheet.</b> Native iOS sheet — grabber, centered title, circular blue Done check. Host + IP arrive filled (green checks); only User waits, cursor blinking.</span></div>
+  <div class="cap"><span class="capnum">5</span><span><b>OS + first IP surfaced.</b> Mono IP and OS line give enough to identify the box before adding it — no guessing which <code>100.x</code> is which.</span></div>
+</div>
+
+</body>
+</html>

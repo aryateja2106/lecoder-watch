@@ -436,8 +436,16 @@ private struct SessionPeekScreen: View {
                 if activePane != nil {
                     Button(role: .destructive) { Task { await killPane() } } label: { Label("Kill pane", systemImage: "rectangle.split.1x2") }
                 }
+            }
+            .buttonStyle(.bordered)
+            .labelStyle(.iconOnly)
+            HStack {
                 Button { Task { await send(key: "enter") } } label: { Label("Enter", systemImage: "return") }
                 Button(role: .destructive) { Task { await send(key: "ctrl-c") } } label: { Label("Stop", systemImage: "xmark.octagon") }
+                Button { Task { await send(key: "up") } } label: { Label("Up", systemImage: "arrow.up") }
+                Button { Task { await send(key: "down") } } label: { Label("Down", systemImage: "arrow.down") }
+                Button { Task { await send(key: "tab") } } label: { Label("Tab", systemImage: "arrow.right.to.line") }
+                Button { Task { await send(key: "escape") } } label: { Label("Esc", systemImage: "escape") }
             }
             .buttonStyle(.bordered)
             .labelStyle(.iconOnly)

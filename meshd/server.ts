@@ -3,14 +3,14 @@
 import os from "node:os";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
 const VERSION = "0.2.0";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "tailscale", "kb"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "tailscale", "kb", "screenPeek"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -217,33 +217,60 @@ async function agentNewPane(name: string, dir?: string): Promise<{ ok: boolean; 
   await sh(`${MUX} split-window ${flag} -t ${shq(name)}`);
   return { ok: true };
 }
-async function agentSend(name: string, text?: string, key?: string, pane?: string) {
+const KEY_SEND_KEYS: Record<string, string> = {
+  enter: "Enter",
+  "ctrl-c": "C-c",
+  "ctrl-d": "C-d",
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+  tab: "Tab",
+  escape: "Escape",
+  backspace: "BSpace",
+  delete: "DC",
+  home: "Home",
+  end: "End",
+  "page-up": "PPage",
+  "page-down": "NPage",
+};
+
+async function agentSend(name: string, text?: string, key?: string, pane?: string): Promise<{ ok: boolean; error?: string }> {
+  const hasText = typeof text === "string" && text.length > 0;
+  const hasKey = typeof key === "string" && key.length > 0;
+  if (!hasText && !hasKey) return { ok: false, error: "text or key required" };
+
+  const sendKey = hasKey ? KEY_SEND_KEYS[key] : undefined;
+  if (hasKey && !sendKey) return { ok: false, error: `unsupported key: ${key}` };
+
   const target = pane ? shq(pane) : shq(name);
-  if (key === "enter") await sh(`${MUX} send-keys -t ${target} Enter`);
-  else if (key === "ctrl-c") await sh(`${MUX} send-keys -t ${target} C-c`);
-  else if (key === "up") await sh(`${MUX} send-keys -t ${target} Up`);
-  else if (key === "down") await sh(`${MUX} send-keys -t ${target} Down`);
-  else if (text) {
+  if (hasText) {
     const hex = Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")).join(" ");
     await sh(`${MUX} send-keys -t ${target} -H -- ${hex}`);
   }
+  if (sendKey) await sh(`${MUX} send-keys -t ${target} ${sendKey}`);
   return { ok: true };
 }
 
 // ---------- usage (OpenUsage) ----------
-const KNOWN_LABELS = new Set(["Today", "Yesterday", "Last 30 Days", "Account", "Credits", "Usage Trend"]);
-async function getUsage() {
-  if (!IS_MAC) return { providers: [] };
-  const path = join(homedir(), "Library/Application Support/com.sunstory.openusage/usage-api-cache.json");
-  const file = Bun.file(path);
-  if (!(await file.exists())) return { providers: [] };
-  const raw = await file.json();
-  const providers = Object.values(raw.snapshots ?? {}).map((s: any) => {
+const OPENUSAGE_API = "http://127.0.0.1:6736/v1/usage";
+const KNOWN_LABELS = new Set(["Today", "Yesterday", "Last 30 Days", "Account", "Credits", "Usage Trend", "Rate Limit Resets"]);
+
+function pctFromProgress(line: any): number | null {
+  const used = Number(line.used);
+  const limit = Number(line.limit);
+  if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) return null;
+  return line.format?.kind === "percent" && limit === 100 ? used : (used / limit) * 100;
+}
+
+function normalizeUsage(raw: any) {
+  const snapshots = Array.isArray(raw) ? raw : Object.values(raw.snapshots ?? {});
+  const providers = snapshots.map((s: any) => {
     const limits: any[] = [], topModels: any[] = [];
     let today, yesterday, last30;
     for (const line of s.lines ?? []) {
-      if (line.type === "progress" && line.format?.kind === "percent") {
-        limits.push({ label: line.label, usedPct: line.limit ? (line.used / line.limit) * 100 : null, resetsAtISO: line.resetsAt ?? null, periodDurationMs: line.periodDurationMs ?? null });
+      if (line.type === "progress") {
+        limits.push({ label: line.label, usedPct: pctFromProgress(line), resetsAtISO: line.resetsAt ?? null, periodDurationMs: line.periodDurationMs ?? null });
       } else if (line.type === "text") {
         if (line.label === "Today") today = line.value;
         else if (line.label === "Yesterday") yesterday = line.value;
@@ -251,9 +278,55 @@ async function getUsage() {
         else if (!KNOWN_LABELS.has(line.label) && line.label.includes("-")) topModels.push({ label: line.label, pct: line.value });
       }
     }
-    return { id: s.providerId, displayName: s.displayName, plan: s.plan ?? null, limits, today, yesterday, last30, topModels };
+    return {
+      id: String(s.providerId ?? s.id ?? s.displayName ?? "unknown"),
+      displayName: String(s.displayName ?? s.providerId ?? "Unknown"),
+      plan: s.plan ?? null,
+      limits,
+      today,
+      yesterday,
+      last30,
+      topModels,
+    };
   });
-  return { fetchedAt: raw.snapshots?.codex?.fetchedAt, providers };
+  const fetchedAt = snapshots.map((s: any) => s.fetchedAt).filter(Boolean).sort().at(-1);
+  return { fetchedAt, providers };
+}
+
+async function fetchOpenUsageApi() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 1500);
+  try {
+    const res = await fetch(OPENUSAGE_API, { signal: ctrl.signal });
+    return res.ok ? await res.json() : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function getUsage() {
+  if (!IS_MAC) return { providers: [] };
+  const live = await fetchOpenUsageApi().catch(() => null);
+  if (live) return normalizeUsage(live);
+
+  const path = join(homedir(), "Library/Application Support/com.sunstory.openusage/usage-api-cache.json");
+  const file = Bun.file(path);
+  if (!(await file.exists())) return { providers: [] };
+  return normalizeUsage(await file.json());
+}
+
+async function screenImage(): Promise<Response> {
+  if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
+  const path = join(os.tmpdir(), `meshd-screen-${process.pid}-${Date.now()}.jpg`);
+  try {
+    const shot = Bun.spawn(["screencapture", "-x", "-t", "jpg", path], { stdout: "ignore", stderr: "ignore" });
+    if (await shot.exited !== 0) return json({ error: "screenshot unavailable" }, 503);
+    const scale = Bun.spawn(["sips", "-Z", "480", path], { stdout: "ignore", stderr: "ignore" });
+    await scale.exited;
+    return new Response(await readFile(path), { headers: { "content-type": "image/jpeg", "cache-control": "no-store" } });
+  } finally {
+    unlink(path).catch(() => {});
+  }
 }
 
 // ---------- agent hook events ----------
@@ -384,6 +457,7 @@ Bun.serve({
       if (path === "/tailnet") return json(await getTailnet());
       if (path === "/agents") return json(await rmuxSessions());
       if (path === "/usage") return json(await getUsage());
+      if (path === "/screen.jpg" && req.method === "GET") return await screenImage();
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));
       if (path === "/events" && req.method === "POST") return json(await addEvent(await req.json().catch(() => ({}))), 201);
       if (path === "/kb" && (req.method === "PUT" || req.method === "POST")) {
@@ -422,7 +496,8 @@ Bun.serve({
       const sendM = path.match(/^\/agents\/([^/]+)\/send$/);
       if (sendM && req.method === "POST") {
         const body = await req.json().catch(() => ({}));
-        return json(await agentSend(decodeURIComponent(sendM[1]), body.text, body.key, body.pane));
+        const res = await agentSend(decodeURIComponent(sendM[1]), body.text, body.key, body.pane);
+        return json(res, res.ok ? 200 : 400);
       }
       const killPaneM = path.match(/^\/agents\/([^/]+)\/panes\/([^/]+)$/);
       if (killPaneM && req.method === "DELETE") {

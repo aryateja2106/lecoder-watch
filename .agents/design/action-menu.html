@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeshWatch — Action Menu Popover</title>
+<style>
+  :root{
+    --base:#0A0B0D;
+    --raised:#15171A;
+    --control:#1E2125;
+    --tile:#23262B;
+    --t1:#F5F6F7;
+    --t2:#9BA0A6;
+    --t3:#5C6066;
+    --hair:#2A2D31;
+    --accent:#4DA3FF;
+    --green:#34C759;
+    --amber:#FF9F0A;
+    --red:#FF453A;
+    --ansi-green:#3BD267;
+    --ansi-amber:#E5B567;
+    --ansi-dim:#6F7B72;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+    --mono:"SF Mono",ui-monospace,Menlo,Monaco,"Cascadia Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased;}
+  body{
+    background:#161719;
+    font-family:var(--font);
+    color:var(--t1);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:40px 16px 64px;
+    gap:28px;
+  }
+
+  .page-head{text-align:center;max-width:760px;}
+  .page-head h1{font-size:18px;font-weight:600;letter-spacing:-.2px;color:var(--t1);}
+  .page-head p{font-size:13px;color:var(--t2);margin-top:6px;line-height:1.5;}
+
+  .stage{display:flex;flex-wrap:wrap;gap:36px;justify-content:center;align-items:flex-start;}
+  .col{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .col-label{
+    font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;
+    color:var(--t3);
+    display:flex;align-items:center;gap:8px;
+  }
+  .col-label .dot{width:6px;height:6px;border-radius:50%;background:var(--t3);}
+  .col.after .col-label{color:var(--accent);}
+  .col.after .col-label .dot{background:var(--accent);}
+
+  /* ---------- Phone bezel ---------- */
+  .phone{
+    width:390px;
+    height:760px;
+    background:#000;
+    border-radius:52px;
+    padding:11px;
+    box-shadow:0 0 0 2px #303338, 0 24px 60px rgba(0,0,0,.55);
+    position:relative;
+  }
+  .screen{
+    position:relative;
+    width:100%;height:100%;
+    background:var(--base);
+    border-radius:42px;
+    overflow:hidden;
+  }
+  .notch{
+    position:absolute;top:11px;left:50%;transform:translateX(-50%);
+    width:120px;height:30px;background:#000;border-radius:18px;z-index:40;
+  }
+  .statusbar{
+    position:absolute;top:0;left:0;right:0;height:52px;z-index:30;
+    display:flex;align-items:flex-end;justify-content:space-between;
+    padding:0 26px 8px;font-size:14px;font-weight:600;color:var(--t1);
+  }
+  .statusbar .right{display:flex;gap:6px;align-items:center;}
+  .statusbar svg{display:block;}
+
+  /* ---------- Terminal backdrop ---------- */
+  .term{
+    position:absolute;inset:0;
+    padding:60px 16px 96px;
+    font-family:var(--mono);
+    font-size:11px;line-height:1.55;
+    color:var(--ansi-dim);
+    overflow:hidden;
+  }
+  .term .g{color:var(--ansi-green);}
+  .term .a{color:var(--ansi-amber);}
+  .term .d{color:var(--ansi-dim);}
+  .term .prompt{color:var(--accent);}
+  .term-row{white-space:nowrap;overflow:hidden;text-overflow:clip;}
+  .cursor{
+    display:inline-block;width:7px;height:13px;background:var(--ansi-green);
+    vertical-align:-2px;margin-left:2px;animation:blink 1.05s steps(1) infinite;
+  }
+  @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+
+  /* scrim dims terminal when sheet up */
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.5);z-index:18;}
+
+  /* ---------- Bottom toolbar (terminal chrome) ---------- */
+  .term-toolbar{
+    position:absolute;left:0;right:0;bottom:0;z-index:10;
+    background:rgba(14,15,17,.96);
+    border-top:1px solid var(--hair);
+    padding:9px 14px calc(9px + env(safe-area-inset-bottom));
+    display:flex;align-items:center;gap:8px;
+  }
+  .key{
+    height:34px;min-width:34px;padding:0 11px;border-radius:9px;
+    background:var(--control);color:var(--t2);
+    font-family:var(--mono);font-size:12px;font-weight:600;
+    display:flex;align-items:center;justify-content:center;border:1px solid var(--hair);
+  }
+  .key.latched{background:rgba(77,163,255,.18);color:var(--accent);border-color:rgba(77,163,255,.5);}
+  .key.flex{flex:1;}
+  .key.arrow{color:var(--t1);}
+
+  /* jump-to-latest chip */
+  .jump-chip{
+    position:absolute;right:14px;bottom:64px;z-index:12;
+    background:rgba(30,33,37,.92);border:1px solid var(--hair);
+    color:var(--accent);font-size:12px;font-weight:600;
+    height:30px;padding:0 12px;border-radius:16px;
+    display:flex;align-items:center;gap:6px;backdrop-filter:blur(8px);
+  }
+
+  /* ---------- The popover sheet ---------- */
+  .popover-wrap{
+    position:absolute;left:0;right:0;bottom:0;z-index:22;
+    display:flex;justify-content:center;
+    padding:0 10px 10px;
+  }
+  .sheet{
+    width:100%;
+    background:var(--raised);
+    border:1px solid var(--hair);
+    border-radius:26px;
+    box-shadow:0 -2px 0 rgba(255,255,255,.02) inset,0 20px 50px rgba(0,0,0,.6);
+    overflow:hidden;
+  }
+  .grabber{
+    width:38px;height:5px;border-radius:3px;background:#3A3E44;
+    margin:8px auto 2px;
+  }
+  .sheet-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:6px 16px 12px;position:relative;
+  }
+  .sheet-title{
+    position:absolute;left:0;right:0;text-align:center;
+    font-size:16px;font-weight:600;color:var(--t1);letter-spacing:-.2px;
+    pointer-events:none;
+  }
+  .sheet-sub{font-size:11px;color:var(--t3);}
+  .done{
+    margin-left:auto;
+    min-width:44px;height:44px;padding:0 14px;border-radius:22px;
+    background:rgba(77,163,255,.16);
+    color:var(--accent);font-size:15px;font-weight:600;letter-spacing:-.1px;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    z-index:2;
+  }
+
+  .group{
+    margin:0 12px 12px;
+    background:var(--control);
+    border-radius:16px;
+    overflow:hidden;
+  }
+  .group + .group{margin-top:0;}
+  .row{
+    display:flex;align-items:center;gap:13px;
+    padding:11px 14px;min-height:56px;
+    position:relative;cursor:pointer;
+  }
+  .row:active{background:rgba(255,255,255,.035);}
+  .row + .row::before{
+    content:"";position:absolute;top:0;left:60px;right:0;height:1px;background:var(--hair);
+  }
+  .tile{
+    width:36px;height:36px;border-radius:10px;flex:none;
+    background:rgba(77,163,255,.14);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .tile svg{display:block;}
+  .row-text{flex:1;min-width:0;}
+  .row-title{font-size:15px;font-weight:500;color:var(--t1);line-height:1.25;letter-spacing:-.1px;}
+  .row-sub{font-size:12px;color:var(--t2);margin-top:1px;line-height:1.25;}
+  .chev{flex:none;color:var(--t3);}
+  .trail-badge{
+    font-size:11px;font-weight:600;color:var(--green);
+    background:rgba(52,199,89,.14);border-radius:8px;padding:2px 7px;
+    margin-right:2px;display:flex;align-items:center;gap:4px;
+  }
+  .trail-badge .b-dot{width:5px;height:5px;border-radius:50%;background:var(--green);}
+
+  .sheet-foot{height:calc(10px + env(safe-area-inset-bottom));}
+
+  /* ---------- BEFORE (flat green original) ---------- */
+  .before-frame{position:absolute;inset:0;}
+  .before-pop-wrap{
+    position:absolute;left:0;right:0;bottom:0;z-index:22;
+    display:flex;justify-content:flex-end;padding:0 8px 8px;
+  }
+  .before-pop{
+    width:255px;
+    background:#1f7a4d;
+    border-radius:14px;
+    overflow:hidden;
+    box-shadow:0 14px 30px rgba(0,0,0,.5);
+    font-family:var(--mono);
+  }
+  .before-row{
+    display:flex;align-items:center;gap:0;color:#eafff2;
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+  .before-row:last-child{border-bottom:none;}
+  .before-ico{
+    width:46px;height:54px;flex:none;
+    background:rgba(0,0,0,.16);
+    display:flex;align-items:center;justify-content:center;
+    color:#bdf5d3;font-size:18px;
+  }
+  .before-lbl{font-size:13px;font-weight:600;padding:0 12px;line-height:1.2;}
+
+  /* captions */
+  .caps{max-width:390px;display:flex;flex-direction:column;gap:9px;}
+  .cap{
+    display:flex;gap:10px;font-size:12.5px;color:var(--t2);line-height:1.45;
+  }
+  .cap .n{
+    flex:none;width:20px;height:20px;border-radius:50%;
+    background:var(--control);border:1px solid var(--hair);
+    color:var(--accent);font-size:11px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;margin-top:1px;
+  }
+  .cap b{color:var(--t1);font-weight:600;}
+</style>
+</head>
+<body>
+
+  <div class="page-head">
+    <h1>MeshWatch · Action Menu Popover</h1>
+    <p>The LeCoder green action menu, rebuilt as a native iOS sheet over the live terminal — monochrome shell, one blue accent, status colors reserved for state.</p>
+  </div>
+
+  <div class="stage">
+
+    <!-- ===================== BEFORE ===================== -->
+    <div class="col">
+      <div class="col-label"><span class="dot"></span>Before · current</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar">
+            <span>5:40</span>
+            <span class="right">
+              <svg width="17" height="11" viewBox="0 0 17 11"><g fill="#F5F6F7"><rect x="0" y="7" width="3" height="4" rx=".6"/><rect x="4.5" y="5" width="3" height="6" rx=".6"/><rect x="9" y="2.5" width="3" height="8.5" rx=".6"/><rect x="13.5" y="0" width="3" height="11" rx=".6"/></g></svg>
+              <svg width="16" height="11" viewBox="0 0 16 11" fill="#F5F6F7"><path d="M8 2.2c2 0 3.8.8 5.1 2l1.1-1.2A9 9 0 0 0 8 .4 9 9 0 0 0 1.8 3l1.1 1.2A7 7 0 0 1 8 2.2Zm0 3c1.2 0 2.3.5 3 1.2l1.2-1.2A6 6 0 0 0 8 4.4a6 6 0 0 0-4.2 1.8L5 7.4A4 4 0 0 1 8 5.2Zm0 3c.6 0 1.1.2 1.5.6L8 10.6 6.5 8.8c.4-.4 1-.6 1.5-.6Z"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="1" width="20" height="10" rx="3" fill="none" stroke="#F5F6F7" opacity=".4"/><rect x="2" y="2.5" width="16" height="7" rx="1.5" fill="#F5F6F7"/><rect x="21.5" y="4" width="2" height="4" rx="1" fill="#F5F6F7" opacity=".5"/></svg>
+            </span>
+          </div>
+
+          <!-- terminal behind -->
+          <div class="term" style="opacity:.85;">
+            <div class="term-row"><span class="d">IPv4 address for enp132s0: 10.1.10.62</span></div>
+            <div class="term-row"><span class="d">IPv4 address for enp132s0: 2603:301d:cc0</span></div>
+            <div class="term-row">&nbsp;</div>
+            <div class="term-row"><span class="a">=&gt; There are 9 zombie processes.</span></div>
+            <div class="term-row">&nbsp;</div>
+            <div class="term-row"><span class="g">* Strictly confined Kubernetes makes edge</span></div>
+            <div class="term-row"><span class="d">  and IoT secure. Learn how MicroK8s just</span></div>
+            <div class="term-row"><span class="d">  raised the bar for easy, resilient and</span></div>
+            <div class="term-row"><span class="d">  secure K8s cluster deployment.</span></div>
+            <div class="term-row">&nbsp;</div>
+            <div class="term-row"><span class="g">  https://ubuntu.com/engage/secure-k8s</span></div>
+            <div class="term-row">&nbsp;</div>
+            <div class="term-row"><span class="d">119 updates can be applied immediately.</span></div>
+            <div class="term-row"><span class="d">36 of these updates are standard security</span></div>
+            <div class="term-row"><span class="d">To see these: apt list --upgradable</span></div>
+            <div class="term-row">&nbsp;</div>
+            <div class="term-row"><span class="d">Last login: ...94.221.115</span></div>
+            <div class="term-row"><span class="prompt">arya@dataflow</span><span class="d">:~$</span><span class="cursor"></span></div>
+          </div>
+
+          <!-- flat green popover -->
+          <div class="before-pop-wrap">
+            <div class="before-pop">
+              <div class="before-row"><div class="before-ico">⊕</div><div class="before-lbl">New Connection</div></div>
+              <div class="before-row"><div class="before-ico">▤</div><div class="before-lbl">Attach to<br>TMux session</div></div>
+              <div class="before-row"><div class="before-ico">▭</div><div class="before-lbl">File Browser</div></div>
+              <div class="before-row"><div class="before-ico">◍</div><div class="before-lbl">Network Explorer</div></div>
+              <div class="before-row"><div class="before-ico">▦</div><div class="before-lbl">Process Explorer</div></div>
+              <div class="before-row"><div class="before-ico">◴</div><div class="before-lbl">System Load</div></div>
+            </div>
+          </div>
+
+          <!-- before toolbar -->
+          <div class="term-toolbar">
+            <div class="key arrow">‹</div>
+            <div class="key flex">flow</div>
+            <div class="key arrow">›</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== AFTER ===================== -->
+    <div class="col after">
+      <div class="col-label"><span class="dot"></span>After · redesign</div>
+      <div class="phone">
+        <div class="notch"></div>
+        <div class="screen">
+          <div class="statusbar">
+            <span>5:40</span>
+            <span class="right">
+              <svg width="17" height="11" viewBox="0 0 17 11"><g fill="#F5F6F7"><rect x="0" y="7" width="3" height="4" rx=".6"/><rect x="4.5" y="5" width="3" height="6" rx=".6"/><rect x="9" y="2.5" width="3" height="8.5" rx=".6"/><rect x="13.5" y="0" width="3" height="11" rx=".6"/></g></svg>
+              <svg width="16" height="11" viewBox="0 0 16 11" fill="#F5F6F7"><path d="M8 2.2c2 0 3.8.8 5.1 2l1.1-1.2A9 9 0 0 0 8 .4 9 9 0 0 0 1.8 3l1.1 1.2A7 7 0 0 1 8 2.2Zm0 3c1.2 0 2.3.5 3 1.2l1.2-1.2A6 6 0 0 0 8 4.4a6 6 0 0 0-4.2 1.8L5 7.4A4 4 0 0 1 8 5.2Zm0 3c.6 0 1.1.2 1.5.6L8 10.6 6.5 8.8c.4-.4 1-.6 1.5-.6Z"/></svg>
+              <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="1" width="20" height="10" rx="3" fill="none" stroke="#F5F6F7" opacity=".4"/><rect x="2" y="2.5" width="16" height="7" rx="1.5" fill="#F5F6F7"/><rect x="21.5" y="4" width="2" height="4" rx="1" fill="#F5F6F7" opacity=".5"/></svg>
+            </span>
+          </div>
+
+          <!-- terminal behind -->
+          <div class="term">
+            <div class="term-row"><span class="d">IPv4 address for enp132s0: 10.1.10.62</span></div>
+            <div class="term-row"><span class="d">IPv4 address for enp132s0: 2603:301d:cc0</span></div>
+            <div class="term-row">&nbsp;</div>
+            <div class="term-row"><span class="a">=&gt; There are 9 zombie processes.</span></div>
+            <div class="term-row">&nbsp;</div>
+            <div class="term-row"><span class="g">* Strictly confined Kubernetes makes edge</span></div>
+            <div class="term-row"><span class="d">  and IoT secure. Learn how MicroK8s just</span></div>
+            <div class="term-row"><span class="d">  raised the bar for easy deployment.</span></div>
+            <div class="term-row">&nbsp;</div>
+            <div class="term-row"><span class="g">  https://ubuntu.com/engage/secure-k8s</span></div>
+            <div class="term-row">&nbsp;</div>
+            <div class="term-row"><span class="d">119 updates can be applied immediately.</span></div>
+            <div class="term-row"><span class="prompt">arya@dataflow</span><span class="d">:~$</span><span class="cursor"></span></div>
+          </div>
+
+          <div class="scrim"></div>
+
+          <!-- POPOVER SHEET -->
+          <div class="popover-wrap">
+            <div class="sheet">
+              <div class="grabber"></div>
+              <div class="sheet-head">
+                <span class="sheet-title">Actions</span>
+                <div class="done" role="button" aria-label="Done">
+                  <svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M3 8l3 3 6-7" stroke="#4DA3FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Done
+                </div>
+              </div>
+
+              <!-- group 1: connect / attach -->
+              <div class="group">
+                <div class="row">
+                  <div class="tile">
+                    <svg width="19" height="19" viewBox="0 0 19 19" fill="none"><circle cx="9.5" cy="9.5" r="8" stroke="#4DA3FF" stroke-width="1.6"/><path d="M9.5 6v7M6 9.5h7" stroke="#4DA3FF" stroke-width="1.6" stroke-linecap="round"/></svg>
+                  </div>
+                  <div class="row-text">
+                    <div class="row-title">New Connection</div>
+                    <div class="row-sub">Open an SSH session over Tailscale</div>
+                  </div>
+                  <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5L6.5 6.5L1.5 11.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="row">
+                  <div class="tile">
+                    <svg width="19" height="19" viewBox="0 0 19 19" fill="none"><rect x="2" y="3" width="15" height="13" rx="2.2" stroke="#4DA3FF" stroke-width="1.6"/><path d="M5 7l2.4 2L5 11M9.5 12h3.5" stroke="#4DA3FF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </div>
+                  <div class="row-text">
+                    <div class="row-title">Attach to Tmux Session</div>
+                    <div class="row-sub">3 sessions on dataflow</div>
+                  </div>
+                  <span class="trail-badge"><span class="b-dot"></span>live</span>
+                  <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5L6.5 6.5L1.5 11.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+              </div>
+
+              <!-- group 2: explorers -->
+              <div class="group">
+                <div class="row">
+                  <div class="tile">
+                    <svg width="19" height="19" viewBox="0 0 19 19" fill="none"><path d="M2 6.5l1.4-2.2A2 2 0 0 1 5 3.3h3l1.6 2H15a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6.5Z" stroke="#4DA3FF" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                  </div>
+                  <div class="row-text">
+                    <div class="row-title">File Browser</div>
+                    <div class="row-sub">Browse the remote filesystem</div>
+                  </div>
+                  <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5L6.5 6.5L1.5 11.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="row">
+                  <div class="tile">
+                    <svg width="19" height="19" viewBox="0 0 19 19" fill="none"><circle cx="9.5" cy="9.5" r="7.5" stroke="#4DA3FF" stroke-width="1.6"/><path d="M2 9.5h15M9.5 2c2.5 2 2.5 13 0 15M9.5 2c-2.5 2-2.5 13 0 15" stroke="#4DA3FF" stroke-width="1.3"/></svg>
+                  </div>
+                  <div class="row-text">
+                    <div class="row-title">Network Explorer</div>
+                    <div class="row-sub">Interfaces, routes, listening ports</div>
+                  </div>
+                  <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5L6.5 6.5L1.5 11.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="row">
+                  <div class="tile">
+                    <svg width="19" height="19" viewBox="0 0 19 19" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.4" stroke="#4DA3FF" stroke-width="1.6"/><path d="M7.5 1.5v2.5M11.5 1.5v2.5M7.5 15v2.5M11.5 15v2.5M1.5 7.5h2.5M1.5 11.5h2.5M15 7.5h2.5M15 11.5h2.5" stroke="#4DA3FF" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </div>
+                  <div class="row-text">
+                    <div class="row-title">Process Explorer</div>
+                    <div class="row-sub">9 zombies · top by CPU &amp; memory</div>
+                  </div>
+                  <span class="trail-badge" style="color:var(--amber);background:rgba(255,159,10,.14);"><span class="b-dot" style="background:var(--amber);"></span>9 zmb</span>
+                  <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5L6.5 6.5L1.5 11.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <div class="row">
+                  <div class="tile">
+                    <svg width="19" height="19" viewBox="0 0 19 19" fill="none"><circle cx="9.5" cy="9.5" r="7.5" stroke="#4DA3FF" stroke-width="1.6"/><path d="M9.5 5v4.5l3 2" stroke="#4DA3FF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </div>
+                  <div class="row-text">
+                    <div class="row-title">System Load</div>
+                    <div class="row-sub">CPU, memory &amp; disk at a glance</div>
+                  </div>
+                  <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5L6.5 6.5L1.5 11.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+              </div>
+
+              <div class="sheet-foot"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- captions -->
+  <div class="caps">
+    <div class="cap"><span class="n">1</span><span><b>Flat green → native sheet.</b> The original tint-everything popover becomes a grouped-inset iOS sheet: grabber, centered title, trailing labeled Done pill (44pt target).</span></div>
+    <div class="cap"><span class="n">2</span><span><b>Icon tile + title + subtitle + chevron.</b> Every row gains a rounded accent-icon tile and a one-line subtitle, so each action reads as a destination, not a flat label.</span></div>
+    <div class="cap"><span class="n">3</span><span><b>One accent, status reserved.</b> Icons and the Done pill use blue #4DA3FF only; green "live" and amber "9 zmb" badges appear strictly as live state from the session.</span></div>
+    <div class="cap"><span class="n">4</span><span><b>Monochrome shell over a lively terminal.</b> Real ANSI green/amber mono text with a blinking cursor stays behind a dimming scrim; the sheet chrome stays near-black.</span></div>
+  </div>
+
+</body>
+</html>
