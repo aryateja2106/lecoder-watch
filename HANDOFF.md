@@ -1,63 +1,49 @@
-# MeshWatch — Mission Control Handoff
+# HANDOFF — MeshWatch (updated 2026-07-07)
 
-## Latest handoff update — 2026-06-05 16:30
+Single entry point to resume. Read this → `docs/PROJECT-STATE-AND-LEARNINGS-2026-07-07.md` → `git log`, then continue.
+Older but still-useful context: `docs/PRODUCT-CONTEXT-2026-06-05.md`, `docs/XCODE-WATCH-DEVICE-RUNBOOK.md`.
 
-Arya's final feedback after testing the current phone/watch UI: the data path works, but the terminal is **not human-usable yet**. Do not continue backend expansion until the core mobile session UI is readable and controllable.
+## Resume protocol
+- **Branch `backup/2026-07-02`. NEVER push.** Tree clean; all work committed.
+- **Build gate before every commit** (both must be `** BUILD SUCCEEDED **`):
+  ```sh
+  cd ~/Projects/lecoder-watch && xcodegen generate
+  xcodebuild -project MeshWatch.xcodeproj -scheme MeshWatch -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData build
+  xcodebuild -project MeshWatch.xcodeproj -scheme 'MeshWatch Watch App' -destination 'generic/platform=watchOS Simulator' -derivedDataPath build/DerivedData build
+  ```
+  Then `scripts/check-*.swift` (swiftc + run). **No test targets** — self-checks are the pattern.
+- **Commit per green slice**; stage only that slice's files (never `git add -A` — the Cursor agent has WIP in `meshd/`+`install/`).
+- **Don't run `install.sh` against the Mac** — it clobbers the Cursor agent's deployed `~/.mesh` cmux-bridge fixes (see state doc → Ownership).
 
-Read these context docs before making further changes:
+## Live & working (verified 2026-07-07)
+- Fleet: **mac up · dataflow (arya@100.80.10.95, Ubuntu) up · pi down**. Check: `./install/payload/bin/mesh hosts`.
+- **Watch clean terminal** — confirmed live showing real remote `ls` output, crown-scroll + auto-follow + key bar (`5ef5167`).
+- **iOS app** — S1–S6 shipped, crash fixed, builds green, real remote output on phone.
+- **`mesh` CLI + one-curl installer + tailnet serving** — all verified. The prior P0s (phone terminal readability, pane nav, agent-view usability) are addressed.
 
-```text
-docs/NEXT-AGENT-HANDOFF.md
-docs/PRODUCT-CONTEXT-2026-06-05.md
-docs/XCODE-WATCH-DEVICE-RUNBOOK.md
-docs/IMPECCABLE-SETUP.md
-```
+## Open tasks (resume here)
+| # | Task | Notes |
+|---|------|-------|
+| 15 | **iOS/mobile polish** | cmux-clean workspace list, session card, easier in-app add-host. User: "work a lot on mobile." |
+| 16 | **Cross-platform desktop client** | New surface on the `mesh` CLI/API layer. Stack TBD (Tauri/Rust per prefs, or web). |
+| 14 | **HTML artifacts** (non-technical) | what/how/deps/file-paths, trust-building. artifact-design skill. |
+| 4  | **Nix reproducible workflow** | nix-darwin + home-manager + `~/dotfiles` flake; install pending user sudo. |
+| 7  | **S7 meshd payload sync** | backport deployed `~/.mesh` fixes → repo payload (coord. w/ Cursor agent), then native `/limits` (recipe: `docs/native-limits-recipe-2026-07-07.md`). |
+| 8  | **Runtime runbook** | cmux bridge :8901, noVNC :6080 (down; needed for VNC mirror), pi meshd. |
 
-Immediate next step should be design-quality/context work, likely with Impeccable, not more services or LaunchAgents.
+**Suggested order:** #15 or #16 first (ask which) → #14 (fast, high trust value) → #4/#7/#8 as capacity allows.
 
----
-
-Status snapshot + prioritized fix-list from Arya's on-device testing (2026-06-05).
-The watch↔phone↔meshd loop **works** (send + receive confirmed). This doc tracks
-making it genuinely usable for orchestrating terminals + coding agents.
-
-## Architecture (current, working)
-- **meshd** (per machine, bun): stats + sessions (`/agents`) + per-session `/output`,`/send`,`/new`. rmux on macOS, tmux on Linux. 0.0.0.0:8899, Bearer token.
-- **rmux-bridge** (per machine, bun): live xterm WS stream. 0.0.0.0:7820.
-- **iPhone app**: Machines / Terminal (WKWebView→bridge) / Usage / Settings. Polls meshd, relays to watch.
-- **Watch app**: direct meshd client + iPhone-relay fallback (carries agent output). Machines→Sessions→live view + send.
-
-## DONE this round
-- [x] Terminology: "agents" → **sessions** (card shows "N sess"; list "Sessions (N)" with pane count + live badge).
-- [x] Watch live view: bigger mono font (14pt), max output area, **useful commands** (ls, git status, pwd, clear, cd, mkdir, yes, continue), **tap-to-zoom** full-screen non-wrapping output with font +/- (read TUIs/diffs).
-- [x] Cross-machine (Mac+pi+dataflow), curl installer (`install/`), git repo.
-
-## FIX-LIST (prioritized)
-
-### P0 — broken / blocks daily use
-1. **Phone terminal is broken/unresponsive.** `rmux-bridge/public/index.html` xterm wraps badly, doesn't fit device width, not touch-smooth. Needs: proper viewport, fit-addon on load/resize/rotate, correct cols→tmux resize, readable font, smooth touch scroll. → owner: bridge agent.
-2. **Pane navigation missing.** Splitting (split h/v, +pane) creates panes but you can't switch back/among them. Need: meshd lists *panes* per session (`list-panes`), app shows pane switcher, `select-pane`. Splits also seem to shrink/collapse the view. → owner: meshd + app.
-3. **Coding-agent (claude/codex) view is unreadable on phone**; can't give instructions. Tied to #1 + needs an agent-aware output mode (last N lines, prompt detection).
-
-### P1 — usability
-4. **Phone↔watch sync** not always reliable; make relay push agent output promptly when watching (currently 6s) + show sync state.
-5. **"Only the signal-icon session works."** Verify non-attached sessions stream too; attaching on open if needed.
-6. **Readability everywhere**: font/real-estate pass on phone terminal + agent chat-style view (high-level messages, interrupt/redirect).
-7. **Watch real-estate / TUI goal**: progressively render more of the screen; investigate horizontal-scroll TUI view (zoom sheet is step 1).
-
-### P2 — mission control
-8. Better orchestration UI: quick "new session + launch agent", session persistence visible, watch-what-agent-is-doing, human-in-loop approvals surfaced as notifications.
-9. Notification sink: agent activity / waiting-for-input → push to one place.
-10. On-device: real iPhone+Watch run guide; verify relay leg on hardware.
-
-## Verify commands
-- meshd: `curl -s -H 'Authorization: Bearer testtoken' http://<ip>:8899/agents`
-- bridge page: `curl -s http://<ip>:7820/ | grep -i xterm`
-- build: `xcodebuild -scheme MeshWatch -destination 'platform=iOS Simulator,id=<id>' CODE_SIGNING_ALLOWED=NO build` (use **scheme + destination, never -sdk** — -sdk breaks the embedded watch target)
-- watch deep nav in sim needs the Digital Crown (cliclick can't scroll there) — verify deepest screens on device.
-
-## Build gotchas (cost time, don't repeat)
-- Build via **scheme + -destination**, never `-sdk iphonesimulator` (forces embedded watch → iOS SDK → WCSessionDelegate fails).
-- DerivedData fragments across `-target`/`-scheme`/hash dirs → stale embedded watch. Use one `-derivedDataPath` and clean when in doubt.
-- Watch sim runs the **companion-embedded** watch app; uninstall iOS app first to test a standalone watch build.
+## Build gotchas (from prior rounds — still true, don't repeat)
+- Build via **scheme + `-destination`**, never `-sdk iphonesimulator` (forces the embedded watch onto the iOS SDK → WCSessionDelegate fails).
+- One `-derivedDataPath`; DerivedData fragments across `-target`/`-scheme` and leaves a stale embedded watch — clean when in doubt.
+- Watch sim runs the **companion-embedded** watch app; uninstall the iOS app first to test a standalone watch build.
+- **Watch deep-nav in the sim needs the Digital Crown** (automation can't scroll there) — verify deepest screens on device or via a paired phone relay.
 - `strings | grep` can't see Swift small-string literals (≤15 bytes) — not a valid build check.
+- **build-green ≠ crash-free**: run the app past its first poll (~10s) and check `~/Library/Logs/DiagnosticReports/*.ips` (this session's `SIGABRT` came from `UserDefaults.set(aSet)` — Set isn't a plist type).
+
+## Computer-use (not blocking)
+Permissions now correct (BackgroundComputerUse.app in both Accessibility + Screen Recording). Still fails only because macOS reads TCC at process launch — **a fresh session/restart picks it up**. Only needed to drive the sims; product work doesn't depend on it. Memory: `computer-use-permissions`.
+
+## Runtime notes
+- Installer server (`:8890`) runs in the prior session's background — stops when that session ends. Re-run `sh scripts/serve-installer.sh` to add hosts.
+- Keep OpenUsage (:6736) alive on the Mac until native `/limits` (S7) ships.
