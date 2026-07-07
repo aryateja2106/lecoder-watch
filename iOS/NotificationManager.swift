@@ -19,7 +19,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     // the stored array forever, and cross-launch event dedup is already handled by the
     // per-host baseline (initializedEventHosts) in MeshStore, not by this set.
     private var firedKeys: Set<String> = [] {
-        didSet { UserDefaults.standard.set(firedKeys.filter { !$0.hasPrefix("event-") }, forKey: firedKeysDefaultsKey) }
+        didSet { UserDefaults.standard.set(Array(firedKeys.filter { !$0.hasPrefix("event-") }), forKey: firedKeysDefaultsKey) }
     }
     private var lastReachable: [String: Bool] = [:]
     private var lastBlockedByLimitKey: [String: Bool] = [:] {
