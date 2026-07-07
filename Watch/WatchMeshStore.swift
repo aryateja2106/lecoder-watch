@@ -213,6 +213,22 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Send `continue` to a limit-pinned session (resume-at-reset from the wrist).
+    func sendToPinned(_ pin: PinnedLimitSession) {
+        if directReachable(pin.host), let m = machines.first(where: { $0.host == pin.host }) {
+            lastError = nil
+            Task {
+                do {
+                    try await MeshClient(machine: m).send(agent: pin.sessionName, text: "continue\n")
+                } catch {
+                    lastError = "resume failed"
+                }
+            }
+        } else {
+            WatchLink.shared.send(WatchCommand(kind: .agentSend, host: pin.host, agent: pin.sessionName, text: "continue\n", key: nil))
+        }
+    }
+
     @discardableResult
     func newSession(host: String, cmd: String?, initialText: String? = nil) -> String {
         let name = watchSessionName(cmd)

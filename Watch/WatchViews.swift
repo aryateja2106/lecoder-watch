@@ -36,6 +36,15 @@ struct MachinesListView: View {
                                 Text(row.title).font(.caption)
                                 Text(row.detail).font(.caption2).foregroundStyle(.secondary)
                             }
+                            // Resume the pinned session straight from the glance once the
+                            // limit clears — the wrist action a mirrored notification tap can't do.
+                            if let pin = store.pinnedLimitSessions.first(where: { $0.providerId.lowercased() == row.providerId.lowercased() }) {
+                                Spacer()
+                                Button("Continue") { store.sendToPinned(pin) }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.mini)
+                                    .disabled(row.blocked)
+                            }
                         }
                     }
                 } header: {
@@ -229,6 +238,9 @@ struct SessionsView: View {
                 Button { taskAgent = "codex"; showTask = true } label: {
                     Label("Codex task", systemImage: "text.badge.checkmark")
                 }
+                Button { taskAgent = "pi"; showTask = true } label: {
+                    Label("Pi task", systemImage: "brain")
+                }
             }
             .disabled(snap?.reachable != true || snap?.authError != nil)
             if let s = snap?.stats {
@@ -294,6 +306,7 @@ struct SessionsView: View {
 
 struct AgentLiveView: View {
     @EnvironmentObject var store: WatchMeshStore
+    @Environment(\.dismiss) private var dismiss
     let host: String
     let agent: String
 
@@ -402,6 +415,10 @@ struct AgentLiveView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(continueBlocked)
+                Button { store.send(key: "enter") } label: {
+                    Label("Enter", systemImage: "return")
+                }
+                .buttonStyle(.bordered)
                 Button { showReply = true } label: {
                     Label("Reply", systemImage: "square.and.pencil")
                 }
@@ -453,9 +470,10 @@ struct AgentLiveView: View {
         .navigationBarTitleDisplayMode(.inline)
         .confirmationDialog("Interrupt agent?", isPresented: $confirmInterrupt, titleVisibility: .visible) {
             Button("Send Ctrl-C", role: .destructive) { store.send(key: "ctrl-c") }
+            Button("Kill session", role: .destructive) { store.killSession(host: host, agent: agent); dismiss() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Stops the current turn on \(currentAgent?.displayName ?? agent).")
+            Text("Ctrl-C stops the current turn; Kill ends the whole session on \(currentAgent?.displayName ?? agent).")
         }
         .onAppear { selectDefaultPaneAndWatch() }
         .onChange(of: panes) { _, _ in
