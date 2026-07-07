@@ -335,8 +335,17 @@ struct AgentLiveView: View {
         store.output.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
+    // Terminal display source: keep interior blank lines so TUI output stays aligned;
+    // trim only the empty lines at the top/bottom of the window.
+    private var terminalLines: [String] {
+        var lines = store.output
+        while let f = lines.first, f.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.removeFirst() }
+        while let l = lines.last, l.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.removeLast() }
+        return lines
+    }
+
     private var previewLines: [String] {
-        Array(meaningfulLines.suffix(8))
+        Array(terminalLines.suffix(8))
     }
 
     private var statusText: String {
@@ -462,8 +471,9 @@ struct AgentLiveView: View {
                         .focusable(false)
                 }
                 Button { showMore = true } label: {
-                    Label("Full output", systemImage: "doc.text.magnifyingglass")
+                    Label("Open terminal", systemImage: "terminal")
                 }
+                .accessibilityHint("Full-screen, scrollable output with a key bar")
             }
         }
         .navigationTitle("Session")
@@ -483,7 +493,7 @@ struct AgentLiveView: View {
         }
         .onDisappear { store.stopWatching() }
         .sheet(isPresented: $showReply) { replySheet }
-        .sheet(isPresented: $showMore) { outputSheet }
+        .sheet(isPresented: $showMore) { terminalScreen }
     }
 
     private func selectDefaultPaneAndWatch() {
@@ -516,26 +526,63 @@ struct AgentLiveView: View {
         }
     }
 
-    private var outputSheet: some View {
+    // A genuine terminal on the wrist: full-bleed monospaced output that the Digital
+    // Crown scrolls and that auto-follows the newest line, with an always-present,
+    // horizontally-scrollable key bar (matching the phone accessory bar). Every icon
+    // control carries a VoiceOver label.
+    private var terminalScreen: some View {
         NavigationStack {
-            ScrollView([.vertical, .horizontal]) {
-                Text(meaningfulLines.joined(separator: "\n"))
-                    .font(.system(size: fontSize + 2, design: .monospaced))
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(8)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(terminalLines.isEmpty ? "waiting for output…" : terminalLines.joined(separator: "\n"))
+                            .font(.system(size: fontSize, design: .monospaced))
+                            .foregroundStyle(terminalLines.isEmpty ? .secondary : .primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityLabel("Terminal output, \(terminalLines.count) lines")
+                        Color.clear.frame(height: 1).id("tail")
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.bottom, 4)
+                }
+                .background(Color.black)
+                .onAppear { proxy.scrollTo("tail", anchor: .bottom) }
+                .onChange(of: store.output) { _, _ in
+                    withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("tail", anchor: .bottom) }
+                }
             }
             .navigationTitle(currentAgent?.displayName ?? agent)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItemGroup(placement: .bottomBar) {
-                    Button { fontSize = max(9, fontSize - 1) } label: { Image(systemName: "textformat.size.smaller") }
-                    Text("\(Int(fontSize))pt").font(.caption2).monospacedDigit()
-                    Button { fontSize = min(24, fontSize + 1) } label: { Image(systemName: "textformat.size.larger") }
-                    Spacer()
-                    Button("Done") { showMore = false }
-                }
-            }
+            .safeAreaInset(edge: .bottom) { terminalKeyBar }
         }
+    }
+
+    private var terminalKeyBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                keyChip("Reply", "text.bubble") { showReply = true }
+                keyChip("Enter", "return") { store.send(key: "enter") }
+                keyChip("Interrupt", "xmark.octagon", role: .destructive) { store.send(key: "ctrl-c") }
+                keyChip("Tab", "arrow.right.to.line") { store.send(key: "tab") }
+                keyChip("Escape", "escape") { store.send(key: "escape") }
+                keyChip("Up", "arrow.up") { store.send(key: "up") }
+                keyChip("Down", "arrow.down") { store.send(key: "down") }
+                keyChip("Smaller text", "textformat.size.smaller") { fontSize = max(9, fontSize - 1) }
+                keyChip("Larger text", "textformat.size.larger") { fontSize = min(24, fontSize + 1) }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+        }
+        .background(.ultraThinMaterial)
+    }
+
+    @ViewBuilder
+    private func keyChip(_ label: String, _ icon: String, role: ButtonRole? = nil, action: @escaping () -> Void) -> some View {
+        Button(role: role, action: action) {
+            Image(systemName: icon).frame(width: 28, height: 28)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel(label)
     }
 }
 
