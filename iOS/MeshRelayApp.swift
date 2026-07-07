@@ -10,6 +10,9 @@ struct MeshRelayApp: App {
                 .environmentObject(store)
                 .onAppear {
                     NotificationManager.shared.requestAuthorization()
+                    NotificationManager.shared.onLimitResume = { providerId in
+                        Task { await store.resumePinnedLimit(providerId: providerId) }
+                    }
                     store.start()
                 }
         }

@@ -1,42 +1,35 @@
 import Foundation
 import UserNotifications
 
-/// Local notifications for the monitoring layer: usage limits crossing a threshold,
-/// a machine dropping offline, and agent count changes. Delivered to the phone (and
-/// mirrored to the watch by watchOS automatically).
-final class NotificationManager {
+/// Usage limit lifecycle notifications: warn at 85%, hit at 95%, schedule reset alert,
+/// ping when a blocked limit clears. Tap a reset/available alert to send `continue`
+/// to the pinned session for that provider.
+final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
-    private var firedKeys: Set<String> = []          // de-dupe within a session
-    private var lastReachable: [String: Bool] = [:]
-    private let usageThreshold = 85.0                  // notify when a limit is >85% used
 
-    func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    private var firedKeys: Set<String> = []
+    private var lastReachable: [String: Bool] = [:]
+    private var lastBlockedByLimitKey: [String: Bool] = [:]
+    private var scheduledResetISOByKey: [String: String] = [:]
+
+    private let usageThreshold = LimitHelpers.warningThreshold
+    private let blockedThreshold = LimitHelpers.blockedThreshold
+
+    /// Resume handler — MeshStore wires this to send `continue` to the pinned session.
+    var onLimitResume: ((String) -> Void)?
+
+    private override init() {
+        super.init()
+        UNUserNotificationCenter.current().delegate = self
     }
 
-    /// Inspect a fresh snapshot and fire notifications for noteworthy changes.
-    func evaluate(_ snapshot: MeshSnapshot) {
-        // Machine reachability transitions.
-        for m in snapshot.machines {
-            if let prev = lastReachable[m.host], prev != m.reachable {
-                notify(id: "reach-\(m.host)-\(m.reachable)",
-                       title: m.host,
-                       body: m.reachable ? "back online" : "went offline")
-            }
-            lastReachable[m.host] = m.reachable
-        }
-        // Usage thresholds (once per limit per session).
-        for p in snapshot.usage?.providers ?? [] {
-            for l in p.limits {
-                guard let pct = l.usedPct, pct >= usageThreshold else { continue }
-                let key = "usage-\(p.id)-\(l.label)"
-                if firedKeys.contains(key) { continue }
-                firedKeys.insert(key)
-                notify(id: key,
-                       title: "\(p.displayName) \(l.label)",
-                       body: String(format: "%.0f%% used%@", pct, resetSuffix(l)))
-            }
-        }
+    func requestAuthorization() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    func evaluate(_ snapshot: MeshSnapshot, pinned: [PinnedLimitSession]) {
+        evaluateReachability(snapshot.machines)
+        evaluateUsage(snapshot.usage, pinned: pinned)
     }
 
     func evaluate(events: [AgentEvent]) {
@@ -44,11 +37,190 @@ final class NotificationManager {
             let key = "event-\(event.id)"
             guard !firedKeys.contains(key) else { continue }
             firedKeys.insert(key)
-            notify(id: key,
-                   title: eventNotificationTitle(event),
-                   body: eventNotificationBody(event))
+            notifyNow(id: key,
+                      title: eventNotificationTitle(event),
+                      body: eventNotificationBody(event))
         }
     }
+
+    // MARK: - Reachability
+
+    private func evaluateReachability(_ machines: [MachineSnapshot]) {
+        for m in machines {
+            if let prev = lastReachable[m.host], prev != m.reachable {
+                notifyNow(id: "reach-\(m.host)-\(m.reachable)",
+                          title: m.host,
+                          body: m.reachable ? "back online" : "went offline")
+            }
+            lastReachable[m.host] = m.reachable
+        }
+    }
+
+    // MARK: - Usage limits
+
+    private func evaluateUsage(_ usage: UsageSnapshot?, pinned: [PinnedLimitSession]) {
+        guard let usage else { return }
+        var desiredResetIds = Set<String>()
+
+        for provider in usage.providers {
+            for limit in provider.limits {
+                let limitKey = LimitHelpers.limitKey(providerId: provider.id, label: limit.label)
+                let pct = limit.usedPct ?? 0
+                let blocked = pct >= blockedThreshold
+                let wasBlocked = lastBlockedByLimitKey[limitKey] ?? false
+                let canResume = LimitHelpers.isSessionLimit(label: limit.label)
+
+                if pct >= usageThreshold {
+                    let warnKey = "usage-warn-\(limitKey)"
+                    if !firedKeys.contains(warnKey) {
+                        firedKeys.insert(warnKey)
+                        notifyNow(id: warnKey,
+                                  title: "\(provider.displayName) \(limit.label)",
+                                  body: warningBody(provider: provider, limit: limit, pct: pct))
+                    }
+                }
+
+                if blocked && canResume {
+                    let hitKey = "usage-hit-\(limitKey)-\(limit.resetsAtISO ?? "none")"
+                    if !firedKeys.contains(hitKey) {
+                        firedKeys.insert(hitKey)
+                        notifyNow(id: hitKey,
+                                  title: "\(provider.displayName) limit reached",
+                                  body: blockedBody(provider: provider, limit: limit, pinned: pinned),
+                                  userInfo: limitUserInfo(providerId: provider.id, action: "limitHit"))
+                    }
+                    if let resetId = scheduleResetNotification(provider: provider,
+                                                               limit: limit,
+                                                               pinned: pinned) {
+                        desiredResetIds.insert(resetId)
+                    }
+                } else if canResume && wasBlocked && pct < LimitHelpers.clearedThreshold {
+                    let availKey = "usage-available-\(limitKey)-\(limit.resetsAtISO ?? "none")"
+                    if !firedKeys.contains(availKey) {
+                        firedKeys.insert(availKey)
+                        notifyNow(id: availKey,
+                                  title: "\(provider.displayName) limit reset",
+                                  body: availableBody(provider: provider, limit: limit, pinned: pinned),
+                                  userInfo: limitUserInfo(providerId: provider.id, action: "limitAvailable"),
+                                  loud: true)
+                    }
+                }
+
+                lastBlockedByLimitKey[limitKey] = blocked
+            }
+        }
+
+        cancelStaleResetNotifications(keeping: desiredResetIds)
+    }
+
+    private func scheduleResetNotification(provider: UsageProvider,
+                                           limit: UsageLimit,
+                                           pinned: [PinnedLimitSession]) -> String? {
+        guard let iso = limit.resetsAtISO,
+              let resetDate = LimitHelpers.resetDate(from: iso) else { return nil }
+        let seconds = resetDate.timeIntervalSinceNow
+        guard seconds > 1 else { return nil }
+
+        let limitKey = LimitHelpers.limitKey(providerId: provider.id, label: limit.label)
+        let id = "mesh-limit-reset-\(limitKey)"
+        if scheduledResetISOByKey[limitKey] == iso {
+            return id
+        }
+
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
+        scheduledResetISOByKey[limitKey] = iso
+
+        let pin = pinned.first { $0.providerId.lowercased() == provider.id.lowercased() }
+        let body: String
+        if let pin {
+            body = "Tap to send continue to \(pin.sessionName) on \(shortHost(pin.host))."
+        } else {
+            body = "Pin a session in iPhone Settings to auto-continue from alerts."
+        }
+
+        var info = limitUserInfo(providerId: provider.id, action: "limitReset")
+        info["limitLabel"] = limit.label
+
+        schedule(id: id,
+                 title: "\(provider.displayName) limit resets now",
+                 body: body,
+                 interval: seconds,
+                 userInfo: info,
+                 loud: true)
+
+        return id
+    }
+
+    private func cancelStaleResetNotifications(keeping desired: Set<String>) {
+        let staleKeys = scheduledResetISOByKey.keys.filter { key in
+            let id = "mesh-limit-reset-\(key)"
+            return !desired.contains(id)
+        }
+        guard !staleKeys.isEmpty else { return }
+        let ids = staleKeys.map { "mesh-limit-reset-\($0)" }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+        for key in staleKeys { scheduledResetISOByKey.removeValue(forKey: key) }
+    }
+
+    // MARK: - Copy helpers
+
+    private func warningBody(provider: UsageProvider, limit: UsageLimit, pct: Double) -> String {
+        let left = LimitHelpers.remainingPct(usedPct: pct).map { "\($0)% left" } ?? String(format: "%.0f%% used", pct)
+        let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO).map { " · \($0)" } ?? ""
+        return "\(left)\(countdown)"
+    }
+
+    private func blockedBody(provider: UsageProvider, limit: UsageLimit, pinned: [PinnedLimitSession]) -> String {
+        let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) ?? "Waiting for reset"
+        if pinned.contains(where: { $0.providerId.lowercased() == provider.id.lowercased() }) {
+            return "\(countdown). You'll get another alert when it's back."
+        }
+        return "\(countdown). Pin a session in Settings to resume from alerts."
+    }
+
+    private func availableBody(provider: UsageProvider, limit: UsageLimit, pinned: [PinnedLimitSession]) -> String {
+        if let pin = pinned.first(where: { $0.providerId.lowercased() == provider.id.lowercased() }) {
+            return "Tap to send continue to \(pin.sessionName) on \(shortHost(pin.host))."
+        }
+        return "Session quota is available again for \(provider.displayName) \(limit.label)."
+    }
+
+    private func shortHost(_ host: String) -> String {
+        host.replacingOccurrences(of: "arya-", with: "").replacingOccurrences(of: "agents", with: "")
+    }
+
+    private func limitUserInfo(providerId: String, action: String) -> [String: String] {
+        ["providerId": providerId, "action": action]
+    }
+
+    // MARK: - Delivery
+
+    private func notifyNow(id: String,
+                           title: String,
+                           body: String,
+                           userInfo: [String: String] = [:],
+                           loud: Bool = false) {
+        schedule(id: id, title: title, body: body, interval: 1, userInfo: userInfo, loud: loud)
+    }
+
+    private func schedule(id: String,
+                          title: String,
+                          body: String,
+                          interval: TimeInterval,
+                          userInfo: [String: String] = [:],
+                          loud: Bool = false) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        if loud { content.interruptionLevel = .timeSensitive }
+        content.userInfo = userInfo
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, interval), repeats: false)
+        let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(req)
+    }
+
+    // MARK: - Agent events
 
     private func eventNotificationTitle(_ event: AgentEvent) -> String {
         let level = event.level?.lowercased()
@@ -73,19 +245,24 @@ final class NotificationManager {
         }
     }
 
-    private func resetSuffix(_ l: UsageLimit) -> String {
-        guard let iso = l.resetsAtISO, let d = ISO8601DateFormatter().date(from: iso) else { return "" }
-        let h = Int(max(0, d.timeIntervalSinceNow) / 3600)
-        return h < 24 ? " · resets \(h)h" : " · resets \(h/24)d"
+    // MARK: UNUserNotificationCenterDelegate
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound, .list])
     }
 
-    private func notify(id: String, title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        let req = UNNotificationRequest(identifier: id, content: content,
-                                        trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))
-        UNUserNotificationCenter.current().add(req)
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let info = response.notification.request.content.userInfo
+        let action = info["action"] as? String
+        let providerId = info["providerId"] as? String
+        if let providerId,
+           action == "limitReset" || action == "limitAvailable" {
+            onLimitResume?(providerId)
+        }
+        completionHandler()
     }
 }

@@ -22,6 +22,7 @@ private struct MonitorTab: View {
     var body: some View {
         NavigationStack {
             List {
+                SessionLimitsBanner()
                 Section("Events") {
                     if store.events.isEmpty {
                         Text("No agent events")
@@ -160,8 +161,8 @@ private struct MachinesTab: View {
                             HStack {
                                 Image(systemName: "terminal")
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(a.name)
-                                    Text("\(a.windows) pane\(a.windows == 1 ? "" : "s")")
+                                    Text(a.displayName)
+                                    Text(a.isCmux ? "cmux" : "\(a.windows) pane\(a.windows == 1 ? "" : "s")")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -294,6 +295,59 @@ private func needsSelfCheck(_ machine: MachineSnapshot) -> Bool {
     needsUpdate(machine) || needsBridge(machine) || machine.vncReachable == false || machine.tailnetError != nil
 }
 
+private struct SessionLimitsBanner: View {
+    @EnvironmentObject var store: MeshStore
+
+    var body: some View {
+        if let rows = sessionLimitRows, !rows.isEmpty {
+            Section {
+                ForEach(rows, id: \.providerId) { row in
+                    HStack(spacing: 10) {
+                        Image(systemName: row.blocked ? "flame.fill" : "gauge.with.dots.needle.67percent")
+                            .foregroundStyle(row.blocked ? .red : .orange)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(row.title).font(.subheadline.weight(.semibold))
+                            Text(row.detail).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if row.blocked, let pin = store.pinnedLimitSessions.first(where: { $0.providerId == row.providerId }) {
+                            Text(pin.sessionName)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            } header: {
+                Text("Session limits")
+            }
+        }
+    }
+
+    private struct Row {
+        var providerId: String
+        var title: String
+        var detail: String
+        var blocked: Bool
+    }
+
+    private var sessionLimitRows: [Row]? {
+        guard let providers = store.snapshot?.usage?.providers else { return nil }
+        let rows = ["claude", "codex"].compactMap { id -> Row? in
+            guard let p = providers.first(where: { $0.id.lowercased() == id }),
+                  let limit = p.limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }) else { return nil }
+            let blocked = LimitHelpers.isBlocked(usedPct: limit.usedPct)
+            let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) ?? "—"
+            let left = LimitHelpers.remainingPct(usedPct: limit.usedPct).map { "\($0)% left" } ?? "—"
+            return Row(providerId: id,
+                       title: "\(p.displayName) session",
+                       detail: blocked ? "Limit reached · \(countdown)" : "\(left) · \(countdown)",
+                       blocked: blocked)
+        }
+        return rows.isEmpty ? nil : rows
+    }
+}
+
 private struct UsageRows: View {
     @EnvironmentObject var store: MeshStore
 
@@ -303,27 +357,65 @@ private struct UsageRows: View {
                 Text("\(p.displayName) \(p.plan ?? "")")
                     .font(.headline)
                 ForEach(p.limits) { l in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(l.label)
-                            Spacer()
-                            Text(l.usedPct.map { String(format: "%.0f%% used", $0) } ?? "—")
-                                .foregroundStyle(.secondary)
-                        }
-                        if let reset = resetText(l.resetsAtISO) {
-                            Text(reset)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let pct = l.usedPct {
-                            ProgressView(value: min(max(pct/100, 0), 1))
-                        }
-                    }
+                    LimitRow(limit: l)
                 }
                 if let last30 = p.last30 {
                     StatRow(label: "Last 30d", value: last30)
                 }
             }
+        }
+    }
+}
+
+private struct LimitRow: View {
+    let limit: UsageLimit
+
+    private var status: LimitStatus { LimitHelpers.status(usedPct: limit.usedPct) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label(limit.label, systemImage: statusIcon)
+                    .foregroundStyle(statusColor)
+                Spacer()
+                if let left = LimitHelpers.remainingPct(usedPct: limit.usedPct) {
+                    Text(status == .blocked ? "0% left" : "\(left)% left")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(statusColor)
+                }
+            }
+            if let pct = limit.usedPct {
+                ProgressView(value: min(max(pct/100, 0), 1))
+                    .tint(statusColor)
+            }
+            HStack {
+                Text(status.label)
+                    .font(.caption)
+                    .foregroundStyle(statusColor)
+                Spacer()
+                if let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) {
+                    Text(countdown)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var statusIcon: String {
+        switch status {
+        case .blocked: return "flame.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .available: return "checkmark.circle"
+        }
+    }
+
+    private var statusColor: Color {
+        switch status {
+        case .blocked: return .red
+        case .warning: return .orange
+        case .available: return .green
         }
     }
 }
@@ -408,10 +500,72 @@ private struct SettingsTab: View {
                         .buttonStyle(.borderless)
                     }
                 }
+
+                Section {
+                    Text("When a provider session limit resets, tap the alert to send continue to the pinned rmux or cmux session.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(["claude", "codex"], id: \.self) { providerId in
+                        PinnedLimitEditor(providerId: providerId)
+                    }
+                } header: {
+                    Text("Limit resume pins")
+                }
             }
             .navigationTitle("Settings")
             .toolbar { Button("Save") { store.save(); Task { await store.refresh() } } }
         }
+    }
+}
+
+private struct PinnedLimitEditor: View {
+    @EnvironmentObject var store: MeshStore
+    let providerId: String
+
+    @State private var host: String = ""
+    @State private var sessionName: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(providerId.capitalized).font(.headline)
+            Picker("Machine", selection: $host) {
+                Text("Pick machine").tag("")
+                ForEach(store.machines) { m in
+                    Text(m.host).tag(m.host)
+                }
+            }
+            TextField("rmux session or cmux:surface:N", text: $sessionName)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            HStack {
+                Button("Save pin") { save() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(host.isEmpty || sessionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if store.pinnedLimitSessions.contains(where: { $0.providerId.lowercased() == providerId.lowercased() }) {
+                    Button("Clear", role: .destructive) {
+                        store.removePinnedLimit(providerId: providerId)
+                        sessionName = ""
+                    }
+                }
+            }
+            .font(.caption)
+        }
+        .onAppear { load() }
+    }
+
+    private func load() {
+        if let pin = store.pinnedLimitSessions.first(where: { $0.providerId.lowercased() == providerId.lowercased() }) {
+            host = pin.host
+            sessionName = pin.sessionName
+        } else if host.isEmpty, let first = store.machines.first {
+            host = first.host
+        }
+    }
+
+    private func save() {
+        let trimmed = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty, !trimmed.isEmpty else { return }
+        store.updatePinnedLimit(PinnedLimitSession(providerId: providerId, host: host, sessionName: trimmed))
     }
 }
 

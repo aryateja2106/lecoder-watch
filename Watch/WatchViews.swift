@@ -26,6 +26,22 @@ struct MachinesListView: View {
 
     var body: some View {
         List {
+            if let glance = limitsGlance {
+                Section {
+                    ForEach(glance, id: \.providerId) { row in
+                        HStack {
+                            Image(systemName: row.blocked ? "flame.fill" : "checkmark.circle")
+                                .foregroundStyle(row.blocked ? .red : .green)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(row.title).font(.caption)
+                                Text(row.detail).font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Limits")
+                }
+            }
             ForEach(activeFirst(store.snaps)) { m in
                 NavigationLink {
                     SessionsView(host: m.host).environmentObject(store)
@@ -70,6 +86,29 @@ struct MachinesListView: View {
         // machine and showed no managed spinner. .refreshable self-dismisses.
         .refreshable { await store.refresh() }
     }
+
+    private struct LimitGlanceRow {
+        var providerId: String
+        var title: String
+        var detail: String
+        var blocked: Bool
+    }
+
+    private var limitsGlance: [LimitGlanceRow]? {
+        guard let providers = store.effectiveUsage?.providers else { return nil }
+        let rows = ["claude", "codex"].compactMap { id -> LimitGlanceRow? in
+            guard let p = providers.first(where: { $0.id.lowercased() == id }),
+                  let limit = p.limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }) else { return nil }
+            let blocked = LimitHelpers.isBlocked(usedPct: limit.usedPct)
+            let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) ?? "—"
+            let left = LimitHelpers.remainingPct(usedPct: limit.usedPct).map { "\($0)% left" } ?? "—"
+            return LimitGlanceRow(providerId: id,
+                                  title: "\(p.displayName) session",
+                                  detail: blocked ? "Limit reached · \(countdown)" : "\(left) · \(countdown)",
+                                  blocked: blocked)
+        }
+        return rows.isEmpty ? nil : rows
+    }
 }
 
 private func activeFirst(_ snaps: [MachineSnapshot]) -> [MachineSnapshot] {
@@ -83,6 +122,11 @@ private func activeFirst(_ snaps: [MachineSnapshot]) -> [MachineSnapshot] {
 private func statusColor(_ snap: MachineSnapshot) -> Color {
     if snap.authError != nil { return .orange }
     return snap.reachable ? .green : .secondary
+}
+
+private func watchSessionSubtitle(_ agent: Agent, route: String) -> String {
+    let kind = agent.isCmux ? "cmux" : "\(agent.windows) pane\(agent.windows == 1 ? "" : "s")"
+    return "\(kind)\(agent.attached ? " · live" : "") · \(route)"
 }
 
 struct EventsView: View {
@@ -135,8 +179,8 @@ struct SessionsView: View {
                             Image(systemName: a.attached ? "dot.radiowaves.left.and.right" : "terminal")
                                 .foregroundStyle(a.attached ? .green : .secondary)
                             VStack(alignment: .leading, spacing: 0) {
-                                Text(a.name)
-                                Text("\(a.windows) pane\(a.windows == 1 ? "" : "s")\(a.attached ? " · live" : "") · \(store.routeLabel(for: host))")
+                                Text(a.displayName)
+                                Text(watchSessionSubtitle(a, route: store.routeLabel(for: host)))
                                     .font(.caption2).foregroundStyle(.secondary)
                             }
                         }
@@ -254,10 +298,9 @@ struct AgentLiveView: View {
     let agent: String
 
     @State private var reply = ""
-    @State private var phrase = ""
     @State private var showReply = false
-    @State private var showPhrase = false
     @State private var showMore = false
+    @State private var confirmInterrupt = false
     @State private var fontSize: CGFloat = 13
     @State private var selectedPane: String?
 
@@ -285,19 +328,55 @@ struct AgentLiveView: View {
 
     private var statusText: String {
         if store.sending { return "sending…" }
+        if let providerId = LimitHelpers.providerId(for: currentAgent?.agentType),
+           store.isProviderBlocked(providerId) {
+            if let limit = sessionLimit(for: providerId),
+               let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) {
+                return "Limit reached · \(countdown)"
+            }
+            return "Limit reached · wait for reset"
+        }
         if meaningfulLines.isEmpty { return "waiting for output" }
         return "\(sessionState(lines: meaningfulLines, attached: currentAgent?.attached ?? false).label) · \(meaningfulLines.count) lines"
     }
 
+    private var continueBlocked: Bool {
+        guard let providerId = LimitHelpers.providerId(for: currentAgent?.agentType) else { return false }
+        return store.isProviderBlocked(providerId)
+    }
+
+    private func sessionLimit(for providerId: String) -> UsageLimit? {
+        store.effectiveUsage?.providers
+            .first { $0.id.lowercased() == providerId.lowercased() }?
+            .limits.first { $0.label.lowercased().contains("session") }
+    }
+
     var body: some View {
         List {
+            if continueBlocked, let providerId = LimitHelpers.providerId(for: currentAgent?.agentType),
+               let limit = sessionLimit(for: providerId) {
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Session limit reached", systemImage: "flame.fill")
+                            .foregroundStyle(.red)
+                            .font(.caption)
+                        if let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) {
+                            Text(countdown).font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Text("Continue is disabled until the limit resets.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Section("Monitor") {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         Circle().fill(store.sending ? .orange : .green).frame(width: 8, height: 8)
                         Text("\(shortName(host)) · \(store.routeLabel(for: host))").font(.caption).foregroundStyle(.secondary)
                     }
-                    Text(agent)
+                    Text(currentAgent?.displayName ?? agent)
                         .font(.headline)
                         .lineLimit(1)
                     Text(statusText)
@@ -317,48 +396,20 @@ struct AgentLiveView: View {
                 .padding(.vertical, 2)
             }
 
-            Section("Send") {
-                HStack(spacing: 6) {
-                    Button { store.send(text: "continue\n") } label: {
-                        VStack { Image(systemName: "play.fill"); Text("Go").font(.caption2) }
-                    }
-                    Button { store.send(key: "enter") } label: {
-                        VStack { Image(systemName: "return"); Text("Enter").font(.caption2) }
-                    }
-                    Button { store.send(key: "up") } label: {
-                        VStack { Image(systemName: "arrow.up"); Text("Up").font(.caption2) }
-                    }
-                    Button { store.send(key: "down") } label: {
-                        VStack { Image(systemName: "arrow.down"); Text("Down").font(.caption2) }
-                    }
-                }
-                .buttonStyle(.bordered)
-                Button { store.send(text: "git status\n") } label: {
-                    Label("Git status", systemImage: "arrow.triangle.branch")
-                }
-                .buttonStyle(.bordered)
-                Button { store.send(text: "~/.mesh/bin/mesh-self-check\n") } label: {
-                    Label("Check mesh", systemImage: "checkmark.shield")
-                }
-                .buttonStyle(.bordered)
-                Button { showReply = true } label: {
-                    Label("Reply / dictate", systemImage: "square.and.pencil")
+            Section("Actions") {
+                Button { store.send(text: "continue\n") } label: {
+                    Label("Continue", systemImage: "play.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                Button { showPhrase = true } label: {
-                    Label("Voice command", systemImage: "waveform")
+                .disabled(continueBlocked)
+                Button { showReply = true } label: {
+                    Label("Reply", systemImage: "square.and.pencil")
                 }
                 .buttonStyle(.bordered)
-                Button { store.newPane(host: host, agent: agent) } label: {
-                    Label("New pane", systemImage: "rectangle.split.2x1")
+                Button(role: .destructive) { confirmInterrupt = true } label: {
+                    Label("Interrupt", systemImage: "xmark.octagon")
                 }
                 .buttonStyle(.bordered)
-            }
-
-            Section("quick send") {
-                ForEach(store.quickCommands, id: \.self) { command in
-                    Button(command) { store.send(text: command + "\n") }
-                }
             }
 
             if !panes.isEmpty {
@@ -394,32 +445,18 @@ struct AgentLiveView: View {
                         .focusable(false)
                 }
                 Button { showMore = true } label: {
-                    Label("Show more", systemImage: "doc.text.magnifyingglass")
+                    Label("Full output", systemImage: "doc.text.magnifyingglass")
                 }
-            }
-
-            Section("Danger") {
-                Button(role: .destructive) { store.send(key: "ctrl-c") } label: {
-                    Label("Stop", systemImage: "xmark.octagon")
-                }
-                .buttonStyle(.bordered)
-                if let pane = currentPane {
-                    Button(role: .destructive) {
-                        store.killPane(host: host, agent: agent, pane: pane.paneId)
-                        selectedPane = nil
-                    } label: {
-                        Label("Kill pane", systemImage: "rectangle.split.1x2")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                Button(role: .destructive) { store.killSession(host: host, agent: agent) } label: {
-                    Label("Kill session", systemImage: "trash")
-                }
-                .buttonStyle(.bordered)
             }
         }
         .navigationTitle("Session")
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Interrupt agent?", isPresented: $confirmInterrupt, titleVisibility: .visible) {
+            Button("Send Ctrl-C", role: .destructive) { store.send(key: "ctrl-c") }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Stops the current turn on \(currentAgent?.displayName ?? agent).")
+        }
         .onAppear { selectDefaultPaneAndWatch() }
         .onChange(of: panes) { _, _ in
             if selectedPane == nil {
@@ -428,7 +465,6 @@ struct AgentLiveView: View {
         }
         .onDisappear { store.stopWatching() }
         .sheet(isPresented: $showReply) { replySheet }
-        .sheet(isPresented: $showPhrase) { phraseSheet }
         .sheet(isPresented: $showMore) { outputSheet }
     }
 
@@ -442,7 +478,7 @@ struct AgentLiveView: View {
     private var replySheet: some View {
         NavigationStack {
             VStack(spacing: 12) {
-                Text("Send to \(agent)")
+                Text("Send to \(currentAgent?.displayName ?? agent)")
                     .font(.headline)
                     .lineLimit(1)
                 TextField("Say, scribble, or type…", text: $reply)
@@ -462,41 +498,6 @@ struct AgentLiveView: View {
         }
     }
 
-    private var phraseSheet: some View {
-        NavigationStack {
-            VStack(spacing: 10) {
-                Text("Voice command")
-                    .font(.headline)
-                TextField("list files, go to Projects…", text: $phrase)
-                    .autocorrectionDisabled()
-                Text(shellCommand(from: phrase).isEmpty ? " " : shellCommand(from: phrase))
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(8)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                HStack {
-                    Button("ls") { phrase = "list files" }
-                    Button("pwd") { phrase = "where am i" }
-                    Button("git") { phrase = "git status" }
-                    Button("mesh") { phrase = "check mesh" }
-                }
-                .buttonStyle(.bordered)
-                Button("Send") {
-                    let command = shellCommand(from: phrase)
-                    if !command.isEmpty {
-                        store.send(text: command + "\n")
-                        phrase = ""
-                        showPhrase = false
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(shellCommand(from: phrase).isEmpty)
-            }
-            .padding()
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showPhrase = false } } }
-        }
-    }
-
     private var outputSheet: some View {
         NavigationStack {
             ScrollView([.vertical, .horizontal]) {
@@ -505,7 +506,7 @@ struct AgentLiveView: View {
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(8)
             }
-            .navigationTitle(agent)
+            .navigationTitle(currentAgent?.displayName ?? agent)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {
@@ -586,17 +587,7 @@ struct UsageView: View {
                     Text("30d \(last30)").font(.caption2).foregroundStyle(.secondary)
                 }
                 ForEach(p.limits) { l in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            Text(l.label).font(.caption)
-                            Spacer()
-                            Text(l.usedPct.map { "\(Int($0))%" } ?? "—").font(.caption2).foregroundStyle(.secondary)
-                        }
-                        if let pct = l.usedPct { ProgressView(value: min(max(pct/100, 0), 1)) }
-                        if let reset = resetText(l.resetsAtISO) {
-                            Text(reset).font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
+                    WatchLimitRow(limit: l)
                 }
                 if p.limits.isEmpty {
                     Text("No limit rows yet").font(.caption2).foregroundStyle(.secondary)
@@ -605,6 +596,37 @@ struct UsageView: View {
         }
         .navigationTitle("Usage")
         .overlay { if (store.effectiveUsage?.providers ?? []).isEmpty { Text("No usage data").foregroundStyle(.secondary) } }
+    }
+}
+
+private struct WatchLimitRow: View {
+    let limit: UsageLimit
+    private var status: LimitStatus { LimitHelpers.status(usedPct: limit.usedPct) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(limit.label).font(.caption)
+                Spacer()
+                Text(status.label)
+                    .font(.caption2)
+                    .foregroundStyle(status == .blocked ? .red : (status == .warning ? .orange : .secondary))
+            }
+            if let pct = limit.usedPct {
+                ProgressView(value: min(max(pct/100, 0), 1))
+                    .tint(status == .blocked ? .red : .accentColor)
+            }
+            HStack {
+                if let left = LimitHelpers.remainingPct(usedPct: limit.usedPct) {
+                    Text(status == .blocked ? "0% left" : "\(left)% left")
+                        .font(.caption2.monospacedDigit())
+                }
+                Spacer()
+                if let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) {
+                    Text(countdown).font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }
 

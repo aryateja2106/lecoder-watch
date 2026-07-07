@@ -10,7 +10,7 @@ const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
 const VERSION = "0.2.0";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "tailscale", "kb", "screenPeek"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -88,7 +88,7 @@ async function getStats() {
     IS_MAC ? macMem() : linuxMem(),
     disk(),
     topProcs(),
-    rmuxSessions().then((s) => s.length).catch(() => 0),
+    agentSessions().then((s) => s.length).catch(() => 0),
   ]);
   return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount };
 }
@@ -147,6 +147,7 @@ async function rmuxSessions(): Promise<any[]> {
     const { memMB, cpuPct } = sumSubtrees(panePids, table);
     sessions.push({
       name,
+      title: null,
       windows: num(r[1]),
       createdISO: r[2] ? new Date(num(r[2]) * 1000).toISOString() : null,
       attached: r[3] === "1",
@@ -168,7 +169,95 @@ function mapAgent(cmd: string): string {
 function shq(s: string) { return `'${s.replace(/'/g, `'\\''`)}'`; }
 function sanitize(s: string) { return s.replace(/[^a-zA-Z0-9._-]+/g, "-"); }
 
+type CmuxTopRow = { cpuPct: number; memMB: number; parent: string; label: string };
+
+function isCmuxAgent(name: string) { return name.startsWith("cmux:"); }
+function cmuxSurfaceRef(value?: string) {
+  if (!value) return null;
+  if (value.startsWith("cmux:")) return value.slice("cmux:".length);
+  if (value.startsWith("surface:")) return value;
+  return null;
+}
+
+async function cmuxTop() {
+  const out = await sh(`CMUX_QUIET=1 cmux top --all --flat --format tsv 2>/dev/null`);
+  const rows = new Map<string, CmuxTopRow>();
+  const agentByWorkspace = new Map<string, string>();
+  for (const line of out.split("\n")) {
+    const f = line.split("\t");
+    if (f.length < 6) continue;
+    const [cpu, memBytes, , kind, id, parent, label = ""] = f;
+    rows.set(id, { cpuPct: num(cpu), memMB: num(memBytes) / 1048576, parent, label });
+    if (kind === "tag") {
+      if (id.includes(":tag:claude")) agentByWorkspace.set(parent, "Claude");
+      else if (id.includes(":tag:codex")) agentByWorkspace.set(parent, "Codex");
+      else if (id.includes(":tag:opencode")) agentByWorkspace.set(parent, "OpenCode");
+    }
+  }
+  return { rows, agentByWorkspace };
+}
+
+async function cmuxSessions(): Promise<any[]> {
+  const [tree, top] = await Promise.all([
+    sh(`CMUX_QUIET=1 cmux tree --all --id-format both 2>/dev/null`),
+    cmuxTop(),
+  ]);
+  const sessions = [] as any[];
+  let workspaceRef = "";
+  let workspaceTitle = "";
+  let paneRef = "";
+
+  for (const line of tree.split("\n")) {
+    const workspace = line.match(/workspace (workspace:\d+) [A-F0-9-]+ "([^"]*)"/);
+    if (workspace) {
+      workspaceRef = workspace[1];
+      workspaceTitle = workspace[2] ?? "";
+      continue;
+    }
+    const pane = line.match(/pane (pane:\d+) /);
+    if (pane) {
+      paneRef = pane[1];
+      continue;
+    }
+    const surface = line.match(/surface (surface:\d+) [A-F0-9-]+ \[(\w+)\] "([^"]*)"/);
+    if (!surface || surface[2] !== "terminal") continue;
+
+    const surfaceRef = surface[1];
+    const title = surface[3] || workspaceTitle || surfaceRef;
+    const metric = top.rows.get(surfaceRef);
+    sessions.push({
+      name: `cmux:${surfaceRef}`,
+      title,
+      windows: 1,
+      createdISO: null,
+      attached: line.includes("◀ active") || line.includes("◀ here"),
+      agentType: top.agentByWorkspace.get(workspaceRef) ?? mapAgent(title),
+      memMB: metric ? Math.round(metric.memMB) : undefined,
+      cpuPct: metric ? Math.round(metric.cpuPct * 10) / 10 : undefined,
+      panes: [{
+        paneId: surfaceRef,
+        windowIndex: num(workspaceRef.split(":")[1]),
+        paneIndex: num(paneRef.split(":")[1]),
+        command: "cmux",
+        active: line.includes("◀ active") || line.includes("◀ here"),
+        windowName: workspaceTitle,
+        currentPath: workspaceTitle || undefined,
+      }],
+    });
+  }
+  return sessions;
+}
+
+async function agentSessions(): Promise<any[]> {
+  const [rmux, cmux] = await Promise.all([
+    rmuxSessions().catch(() => []),
+    cmuxSessions().catch(() => []),
+  ]);
+  return [...rmux, ...cmux];
+}
+
 async function agentPanes(name: string) {
+  if (isCmuxAgent(name)) return cmuxPanes(name);
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
   const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{window_index}.#{pane_index}|#{pane_id}|#{pane_current_command}|#{pane_active}|#{window_name}|#{pane_current_path}' 2>/dev/null`);
@@ -188,6 +277,7 @@ async function agentPanes(name: string) {
   return { name, panes };
 }
 async function agentOutput(name: string, lines: number, pane?: string) {
+  if (isCmuxAgent(name)) return cmuxOutput(name, lines, pane);
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
   const target = pane ? shq(pane) : shq(name);
@@ -195,9 +285,32 @@ async function agentOutput(name: string, lines: number, pane?: string) {
   const arr = out.replace(/\n+$/, "").split("\n");
   return { name, lines: arr.slice(-lines) };
 }
+async function cmuxPanes(name: string) {
+  const surface = cmuxSurfaceRef(name);
+  if (!surface) return null;
+  return {
+    name,
+    panes: [{
+      paneId: surface,
+      windowIndex: 0,
+      paneIndex: 0,
+      command: "cmux",
+      active: true,
+      windowName: "cmux",
+      currentPath: undefined,
+    }],
+  };
+}
+async function cmuxOutput(name: string, lines: number, pane?: string) {
+  const surface = cmuxSurfaceRef(pane) ?? cmuxSurfaceRef(name);
+  if (!surface) return null;
+  const out = await sh(`CMUX_QUIET=1 cmux read-screen --surface ${shq(surface)} --scrollback --lines ${Math.max(1, Math.min(lines, 200))} 2>/dev/null`);
+  return { name, lines: out.replace(/\n+$/, "").split("\n") };
+}
 const INFRA = new Set(["meshd", "rmux-bridge"]); // never killable over the wire
 async function agentKill(name: string): Promise<{ ok: boolean; error?: string }> {
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
+  if (isCmuxAgent(name)) return { ok: false, error: "cmux sessions are controlled from cmux/herdr" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
     return { ok: false, error: "no such session" };
   }
@@ -206,10 +319,12 @@ async function agentKill(name: string): Promise<{ ok: boolean; error?: string }>
 }
 async function agentKillPane(name: string, paneId: string): Promise<{ ok: boolean; error?: string }> {
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
+  if (isCmuxAgent(name)) return { ok: false, error: "cmux panes are controlled from cmux/herdr" };
   await sh(`${MUX} kill-pane -t ${shq(paneId)}`);
   return { ok: true };
 }
 async function agentNewPane(name: string, dir?: string): Promise<{ ok: boolean; error?: string }> {
+  if (isCmuxAgent(name)) return { ok: false, error: "cmux pane creation is not supported from MeshWatch yet" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
     return { ok: false, error: "no such session" };
   }
@@ -234,8 +349,26 @@ const KEY_SEND_KEYS: Record<string, string> = {
   "page-up": "PPage",
   "page-down": "NPage",
 };
+const CMUX_SEND_KEYS: Record<string, string> = {
+  enter: "enter",
+  "ctrl-c": "ctrl+c",
+  "ctrl-d": "ctrl+d",
+  up: "up",
+  down: "down",
+  left: "left",
+  right: "right",
+  tab: "tab",
+  escape: "escape",
+  backspace: "backspace",
+  delete: "delete",
+  home: "home",
+  end: "end",
+  "page-up": "page-up",
+  "page-down": "page-down",
+};
 
 async function agentSend(name: string, text?: string, key?: string, pane?: string): Promise<{ ok: boolean; error?: string }> {
+  if (isCmuxAgent(name)) return cmuxSend(name, text, key, pane);
   const hasText = typeof text === "string" && text.length > 0;
   const hasKey = typeof key === "string" && key.length > 0;
   if (!hasText && !hasKey) return { ok: false, error: "text or key required" };
@@ -249,6 +382,20 @@ async function agentSend(name: string, text?: string, key?: string, pane?: strin
     await sh(`${MUX} send-keys -t ${target} -H -- ${hex}`);
   }
   if (sendKey) await sh(`${MUX} send-keys -t ${target} ${sendKey}`);
+  return { ok: true };
+}
+async function cmuxSend(name: string, text?: string, key?: string, pane?: string): Promise<{ ok: boolean; error?: string }> {
+  const surface = cmuxSurfaceRef(pane) ?? cmuxSurfaceRef(name);
+  if (!surface) return { ok: false, error: "bad cmux target" };
+  const hasText = typeof text === "string" && text.length > 0;
+  const hasKey = typeof key === "string" && key.length > 0;
+  if (!hasText && !hasKey) return { ok: false, error: "text or key required" };
+  if (hasText) await sh(`CMUX_QUIET=1 cmux send --surface ${shq(surface)} -- ${shq(text!)}`);
+  if (hasKey) {
+    const sendKey = CMUX_SEND_KEYS[key!];
+    if (!sendKey) return { ok: false, error: `unsupported key: ${key}` };
+    await sh(`CMUX_QUIET=1 cmux send-key --surface ${shq(surface)} -- ${shq(sendKey)}`);
+  }
   return { ok: true };
 }
 
@@ -455,7 +602,7 @@ Bun.serve({
     try {
       if (path === "/stats") return json(await getStats());
       if (path === "/tailnet") return json(await getTailnet());
-      if (path === "/agents") return json(await rmuxSessions());
+      if (path === "/agents") return json(await agentSessions());
       if (path === "/usage") return json(await getUsage());
       if (path === "/screen.jpg" && req.method === "GET") return await screenImage();
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));

@@ -62,8 +62,8 @@ struct TerminalTab: View {
                                     HStack {
                                         Image(systemName: "terminal.fill")
                                         VStack(alignment: .leading) {
-                                            Text(agent.name)
-                                            Text([agent.agentType ?? "shell", agent.memLabel].compactMap { $0 }.joined(separator: " · "))
+                                            Text(agent.displayName)
+                                            Text([agent.isCmux ? "cmux" : nil, agent.agentType ?? "shell", agent.memLabel].compactMap { $0 }.joined(separator: " · "))
                                                 .font(.caption).foregroundStyle(.secondary)
                                         }
                                         Spacer()
@@ -74,10 +74,12 @@ struct TerminalTab: View {
                                     }
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        Task { await store.kill(on: m, name: agent.name) }
-                                    } label: {
-                                        Label("Kill", systemImage: "trash")
+                                    if !agent.isCmux {
+                                        Button(role: .destructive) {
+                                            Task { await store.kill(on: m, name: agent.name) }
+                                        } label: {
+                                            Label("Kill", systemImage: "trash")
+                                        }
                                     }
                                 }
                             }
@@ -288,6 +290,19 @@ private struct SessionPeekScreen: View {
 
     private var state: SessionState { sessionState(lines: output, attached: session.attached) }
 
+    private var sessionKind: String {
+        session.isCmux ? "cmux" : "\(session.windows) pane\(session.windows == 1 ? "" : "s")"
+    }
+
+    private var continueBlocked: Bool {
+        guard let providerId = LimitHelpers.providerId(for: session.agentType),
+              let provider = store.snapshot?.usage?.providers.first(where: { $0.id.lowercased() == providerId }) else { return false }
+        if let sessionLimit = provider.limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }) {
+            return LimitHelpers.isBlocked(usedPct: sessionLimit.usedPct)
+        }
+        return false
+    }
+
     private func stateColor(_ s: SessionState) -> Color {
         switch s {
         case .waiting: return .orange
@@ -310,7 +325,7 @@ private struct SessionPeekScreen: View {
             .padding(.vertical, 14)
         }
         .background(Color(.systemGroupedBackground))
-        .navigationTitle(session.name)
+        .navigationTitle(session.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             Button { Task { await refresh() } } label: {
@@ -334,10 +349,10 @@ private struct SessionPeekScreen: View {
                     .foregroundStyle(session.attached ? .green : .accentColor)
                     .font(.title2)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(session.name)
+                    Text(session.displayName)
                         .font(.title2.bold())
                         .lineLimit(1)
-                    Text("\(terminalShortName(machine.host)) · \(session.agentType ?? "shell") · \(session.windows) pane\(session.windows == 1 ? "" : "s")")
+                    Text("\(terminalShortName(machine.host)) · \(session.agentType ?? "shell") · \(sessionKind)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -353,6 +368,16 @@ private struct SessionPeekScreen: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if continueBlocked,
+               let providerId = LimitHelpers.providerId(for: session.agentType),
+               let limit = store.snapshot?.usage?.providers
+                .first(where: { $0.id.lowercased() == providerId })?
+                .limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }),
+               let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) {
+                Label("Session limit · \(countdown)", systemImage: "flame.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         }
         .padding(16)
         .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -361,7 +386,7 @@ private struct SessionPeekScreen: View {
     private var paneCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Pane", systemImage: "rectangle.split.2x1")
+                Label(session.isCmux ? "Surface" : "Pane", systemImage: "rectangle.split.2x1")
                     .font(.headline)
                 Spacer()
                 Text(activePane?.label ?? "session")
@@ -429,11 +454,14 @@ private struct SessionPeekScreen: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(session.isCmux)
             HStack {
                 Button { showingCompose = true } label: { Label("Reply", systemImage: "square.and.pencil") }
                 Button { showingPhrase = true } label: { Label("Command", systemImage: "waveform") }
-                Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
-                if activePane != nil {
+                if !session.isCmux {
+                    Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
+                }
+                if activePane != nil && !session.isCmux {
                     Button(role: .destructive) { Task { await killPane() } } label: { Label("Kill pane", systemImage: "rectangle.split.1x2") }
                 }
             }
@@ -449,16 +477,18 @@ private struct SessionPeekScreen: View {
             }
             .buttonStyle(.bordered)
             .labelStyle(.iconOnly)
-            Button(role: .destructive) {
-                Task {
-                    await store.kill(on: machine, name: session.name)
-                    dismiss()
+            if !session.isCmux {
+                Button(role: .destructive) {
+                    Task {
+                        await store.kill(on: machine, name: session.name)
+                        dismiss()
+                    }
+                } label: {
+                    Label("Kill session", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
                 }
-            } label: {
-                Label("Kill session", systemImage: "trash")
-                    .frame(maxWidth: .infinity)
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
         }
         .padding(16)
         .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -468,7 +498,7 @@ private struct SessionPeekScreen: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Quick send")
                 .font(.headline)
-            FlowButtons(items: store.quickCommands) { cmd in
+            FlowButtons(items: store.quickCommands, isDisabled: { continueBlocked && LimitHelpers.isContinueCommand($0) }) { cmd in
                 Task { await send(text: cmd + "\n") }
             }
         }
@@ -479,7 +509,7 @@ private struct SessionPeekScreen: View {
     private var composeSheet: some View {
         NavigationStack {
             Form {
-                Section("Send to \(session.name)") {
+                Section("Send to \(session.displayName)") {
                     TextField("Type, paste, or dictate a command", text: $composeText, axis: .vertical)
                         .lineLimit(3...8)
                         .autocorrectionDisabled()
@@ -586,6 +616,7 @@ private func terminalShortName(_ host: String) -> String {
 
 private struct FlowButtons: View {
     let items: [String]
+    var isDisabled: (String) -> Bool = { _ in false }
     let action: (String) -> Void
 
     var body: some View {
@@ -595,6 +626,7 @@ private struct FlowButtons: View {
                     Button(item) { action(item) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .disabled(isDisabled(item))
                 }
             }
         }

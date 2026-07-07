@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.lecoder.meshwatch
   deploymentTarget:
     iOS: "26.0"
-    watchOS: "26.0"
+    watchOS: "10.0"
   createIntermediateGroups: true
 settings:
   base:

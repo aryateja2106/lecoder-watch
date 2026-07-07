@@ -17,7 +17,7 @@ struct Machine: Codable, Identifiable, Hashable {
         var values = [ip, host]
         #if targetEnvironment(simulator)
         if host.lowercased().contains("mac") {
-            values.append("127.0.0.1")
+            values.insert("127.0.0.1", at: 0)
         }
         #endif
         return values
@@ -133,6 +133,7 @@ struct TailnetSnapshot: Codable, Hashable {
 struct Agent: Codable, Hashable, Identifiable {
     var id: String { name }
     var name: String
+    var title: String?
     var windows: Int
     var createdISO: String?
     var attached: Bool
@@ -146,6 +147,9 @@ struct Agent: Codable, Hashable, Identifiable {
         guard let mb = memMB else { return nil }
         return mb >= 1024 ? String(format: "%.1f GB", mb / 1024) : "\(Int(mb)) MB"
     }
+
+    var displayName: String { title?.isEmpty == false ? title! : name }
+    var isCmux: Bool { name.hasPrefix("cmux:") }
 }
 
 struct AgentOutput: Codable, Hashable {
@@ -208,6 +212,14 @@ struct UsageSnapshot: Codable, Hashable {
     var providers: [UsageProvider]
 }
 
+/// When a provider session limit resets, tap the notification to send `continue` here.
+struct PinnedLimitSession: Codable, Hashable, Identifiable {
+    var id: String { providerId }
+    var providerId: String
+    var host: String
+    var sessionName: String
+}
+
 // MARK: - Agent hooks
 
 struct AgentEvent: Codable, Hashable, Identifiable {
@@ -239,6 +251,7 @@ struct MeshSnapshot: Codable, Hashable {
     var watchedAgent: String?
     var watchedPane: String?
     var watchedOutput: [String]?
+    var pinnedLimitSessions: [PinnedLimitSession]? = nil
 }
 
 struct MachineSnapshot: Codable, Hashable, Identifiable {

@@ -1,0 +1,85 @@
+import Foundation
+
+enum LimitStatus: String {
+    case available
+    case warning
+    case blocked
+
+    var label: String {
+        switch self {
+        case .available: return "Available"
+        case .warning: return "Getting close"
+        case .blocked: return "Limit reached"
+        }
+    }
+}
+
+enum LimitHelpers {
+    static let blockedThreshold = 95.0
+    static let warningThreshold = 85.0
+    static let clearedThreshold = 90.0
+
+    static func status(usedPct: Double?) -> LimitStatus {
+        guard let pct = usedPct else { return .available }
+        if pct >= blockedThreshold { return .blocked }
+        if pct >= warningThreshold { return .warning }
+        return .available
+    }
+
+    static func isBlocked(usedPct: Double?) -> Bool {
+        status(usedPct: usedPct) == .blocked
+    }
+
+    static func remainingPct(usedPct: Double?) -> Int? {
+        guard let pct = usedPct else { return nil }
+        return max(0, min(100, Int((100 - pct).rounded())))
+    }
+
+    static func resetDate(from iso: String?) -> Date? {
+        guard let iso else { return nil }
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: iso) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: iso)
+    }
+
+    /// Human countdown like OpenUsage: "Resets in 46m" or "Resets 10:40 AM".
+    static func resetCountdown(from iso: String?, now: Date = Date()) -> String? {
+        guard let date = resetDate(from: iso) else { return nil }
+        let seconds = date.timeIntervalSince(now)
+        if seconds <= 0 { return "Reset now" }
+        if seconds < 3600 {
+            let minutes = max(1, Int(seconds / 60))
+            return "Resets in \(minutes)m"
+        }
+        if seconds < 86400 {
+            let hours = Int(seconds / 3600)
+            let minutes = Int((seconds.truncatingRemainder(dividingBy: 3600)) / 60)
+            return minutes > 0 ? "Resets in \(hours)h \(minutes)m" : "Resets in \(hours)h"
+        }
+        return "Resets \(date.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    static func limitKey(providerId: String, label: String) -> String {
+        "\(providerId.lowercased())-\(label.lowercased())"
+    }
+
+    static func isSessionLimit(label: String) -> Bool {
+        label.lowercased().contains("session")
+    }
+
+    static func isContinueCommand(_ command: String) -> Bool {
+        command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "continue"
+    }
+
+    static func providerId(for agentType: String?) -> String? {
+        guard let agentType else { return nil }
+        switch agentType.lowercased() {
+        case "claude": return "claude"
+        case "codex": return "codex"
+        default: return nil
+        }
+    }
+}

@@ -7,6 +7,7 @@ import Combine
 final class MeshStore: ObservableObject {
     @Published var machines: [Machine] = []
     @Published var quickCommands: [String] = MeshStore.defaultQuickCommands
+    @Published var pinnedLimitSessions: [PinnedLimitSession] = []
     @Published var snapshot: MeshSnapshot?
     @Published var events: [AgentEvent] = []
     @Published var lastError: String?
@@ -16,6 +17,7 @@ final class MeshStore: ObservableObject {
     private let defaultsKey = "mesh.machines.v1"
     private let installTokenKey = "mesh.installToken.v1"
     private let quickCommandsKey = "mesh.quickCommands.v1"
+    private let pinnedLimitsKey = "mesh.pinnedLimits.v1"
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
@@ -35,15 +37,16 @@ final class MeshStore: ObservableObject {
     // MARK: Persistence
 
     func load() {
+        var changed = false
         if let data = UserDefaults.standard.data(forKey: defaultsKey),
            let decoded = try? JSONDecoder().decode([Machine].self, from: data),
            !decoded.isEmpty {
-            machines = decoded
+            machines = Self.mergedDefaultMachines(decoded)
+            changed = machines != decoded
         } else {
             machines = Machine.defaults
         }
         let generated = UserDefaults.standard.string(forKey: installTokenKey)
-        var changed = false
         for idx in machines.indices {
             if generated == machines[idx].token, Machine.defaults.contains(where: { $0.host == machines[idx].host }) {
                 machines[idx].token = "testtoken"
@@ -55,6 +58,20 @@ final class MeshStore: ObservableObject {
             quickCommands = Self.mergedQuickCommands(decoded)
             UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
         }
+        if let data = UserDefaults.standard.data(forKey: pinnedLimitsKey),
+           let decoded = try? JSONDecoder().decode([PinnedLimitSession].self, from: data) {
+            pinnedLimitSessions = decoded
+        }
+    }
+
+    private static func mergedDefaultMachines(_ saved: [Machine]) -> [Machine] {
+        var machines = Machine.defaults.map { fallback in
+            saved.first { $0.host == fallback.host } ?? fallback
+        }
+        for machine in saved where !machines.contains(where: { $0.host == machine.host }) {
+            machines.append(machine)
+        }
+        return machines
     }
 
     func installToken() -> String {
@@ -79,6 +96,9 @@ final class MeshStore: ObservableObject {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
         UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
+        if let data = try? JSONEncoder().encode(pinnedLimitSessions) {
+            UserDefaults.standard.set(data, forKey: pinnedLimitsKey)
+        }
     }
 
     func update(_ machine: Machine) {
@@ -126,7 +146,18 @@ final class MeshStore: ObservableObject {
                     var errorText: String?
                     var authError: String?
                     do {
-                        health = try? await client.healthInfo()
+                        health = try await client.healthInfo()
+                    } catch {
+                        errorText = Self.describe(error)
+                    }
+                    guard health?.ok == true else {
+                        return MachineSnapshot(host: machine.host,
+                                               reachable: false,
+                                               stats: nil,
+                                               agents: [],
+                                               error: errorText ?? "unreachable")
+                    }
+                    do {
                         stats = try await client.stats()
                     } catch {
                         errorText = Self.describe(error)
@@ -216,10 +247,11 @@ final class MeshStore: ObservableObject {
                                 watchedHost: watchedHost,
                                 watchedAgent: watchedAgent,
                                 watchedPane: watchedPane,
-                                watchedOutput: watchedOutput)
+                                watchedOutput: watchedOutput,
+                                pinnedLimitSessions: pinnedLimitSessions)
         snapshot = snap
         PhoneConnectivity.shared.push(snap)
-        NotificationManager.shared.evaluate(snap)
+        NotificationManager.shared.evaluate(snap, pinned: pinnedLimitSessions)
     }
 
     private func refreshEvents(from targets: [Machine]) async {
@@ -255,6 +287,35 @@ final class MeshStore: ObservableObject {
         guard !fetched.isEmpty else { return }
         events = Array((events + fetched).suffix(100))
         NotificationManager.shared.evaluate(events: notifyEvents)
+    }
+
+    /// Send `continue` to the pinned rmux session for a provider (from limit-reset alerts).
+    func resumePinnedLimit(providerId: String) async {
+        guard let pin = pinnedLimitSessions.first(where: { $0.providerId.lowercased() == providerId.lowercased() }),
+              let machine = machines.first(where: { $0.host == pin.host }) else {
+            lastError = "No pinned session for \(providerId). Set one in Settings."
+            return
+        }
+        do {
+            try await MeshClient(machine: machine).send(agent: pin.sessionName, text: "continue\n")
+            await refresh()
+        } catch {
+            lastError = "continue failed: \(error)"
+        }
+    }
+
+    func updatePinnedLimit(_ pin: PinnedLimitSession) {
+        if let idx = pinnedLimitSessions.firstIndex(where: { $0.providerId.lowercased() == pin.providerId.lowercased() }) {
+            pinnedLimitSessions[idx] = pin
+        } else {
+            pinnedLimitSessions.append(pin)
+        }
+        save()
+    }
+
+    func removePinnedLimit(providerId: String) {
+        pinnedLimitSessions.removeAll { $0.providerId.lowercased() == providerId.lowercased() }
+        save()
     }
 
     // MARK: Sessions

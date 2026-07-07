@@ -15,7 +15,7 @@ struct MeshClient {
             guard let url = URL(string: path, relativeTo: base) else { continue }
             var req = URLRequest(url: url)
             req.httpMethod = method
-            req.timeoutInterval = 6
+            req.timeoutInterval = 3
             req.setValue("Bearer \(machine.token)", forHTTPHeaderField: "Authorization")
             if let body {
                 req.httpBody = body

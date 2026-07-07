@@ -190,7 +190,7 @@ $el_env
     </dict>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
-    <key>ProcessType</key><string>Background</string>
+    <key>ProcessType</key><string>Interactive</string>
     <key>StandardOutPath</key><string>$el_log</string>
     <key>StandardErrorPath</key><string>$el_log</string>
 </dict>
@@ -470,6 +470,15 @@ install_components() {
     chmod +x "$MESH_HOME"/bin/* 2>/dev/null || true
     if [ -d "$SCRIPT_DIR/hooks" ]; then rm -rf "$MESH_HOME/hooks"; cp -R "$SCRIPT_DIR/hooks" "$MESH_HOME/"; fi
   fi
+  if want_component meshd && [ "$OS_NAME" = "Darwin" ] && [ -f "$PAYLOAD_DIR/hooks/cmux-bridge.zsh" ]; then
+    mkdir -p "$MESH_HOME/hooks"
+    cp "$PAYLOAD_DIR/hooks/cmux-bridge.zsh" "$MESH_HOME/hooks/cmux-bridge.zsh"
+    _hook='[ -f "$HOME/.mesh/hooks/cmux-bridge.zsh" ] && source "$HOME/.mesh/hooks/cmux-bridge.zsh"'
+    if [ -f "$HOME/.zshrc" ] && ! grep -Fq 'cmux-bridge.zsh' "$HOME/.zshrc" 2>/dev/null; then
+      printf '\n# MeshWatch cmux bridge (auto-start in interactive shells)\n%s\n' "$_hook" >> "$HOME/.zshrc"
+      log "Added cmux-bridge hook to ~/.zshrc"
+    fi
+  fi
 }
 
 install_deps() { ( cd "$1" && bun install ); }
@@ -489,7 +498,7 @@ do_list() {
   for item in meshd rmux-bridge bin hooks token; do
     [ -e "$MESH_HOME/$item" ] && log "  present: $item"
   done
-  for svc in meshd rmux-bridge; do
+  for svc in meshd cmux-bridge rmux-bridge; do
     st=$(service_state "$svc")
     [ "$st" = "none" ] || log "  service: $svc ($st)"
   done
@@ -498,6 +507,7 @@ do_list() {
 do_uninstall() {
   removed=""
   if want_component meshd; then
+    service_stop cmux-bridge && removed="$removed cmux-bridge(service)" || true
     service_stop meshd && removed="$removed meshd(service)" || true
     [ -e "$MESH_HOME/meshd" ] && { rm -rf "$MESH_HOME/meshd"; removed="$removed meshd"; }
   fi
@@ -605,10 +615,13 @@ else
   if want_component meshd; then
     {
       printf 'PATH=%s\n' "$PATH"
+      printf 'HOME=%s\n' "$HOME"
+      printf 'USER=%s\n' "$(id -un)"
       printf 'MESHD_TOKEN=%s\n' "$TOKEN_VALUE"
       printf 'MESHD_PORT=%s\n' "$MESHD_PORT_VALUE"
       [ -n "${MESHD_HOST:-}" ] && printf 'MESHD_HOST=%s\n' "$MESHD_HOST"
       [ -n "$EFFECTIVE_MESHD_MUX" ] && printf 'MESH_MUX=%s\n' "$EFFECTIVE_MESHD_MUX"
+      [ -n "${CMUX_PORT:-}" ] && printf 'CMUX_PORT=%s\n' "$CMUX_PORT"
     } | service_start meshd "$MESH_HOME/meshd" server.ts
     MESHD_STATUS="down"; wait_http "http://127.0.0.1:${MESHD_PORT_VALUE}/health" && MESHD_STATUS="up"
   fi
@@ -640,6 +653,9 @@ printf 'MESHD token: %s\n' "$TOKEN_VALUE"
 if want_component tools; then
   printf 'Self-check: %s/bin/mesh-self-check\n' "$MESH_HOME"
   printf 'Notify test: %s/bin/mesh-event codex "Needs input" "phone/watch smoke test"\n' "$MESH_HOME"
+fi
+if [ "$OS_NAME" = "Darwin" ] && command -v cmux >/dev/null 2>&1 && want_component meshd; then
+  printf 'cmux-bridge: source ~/.mesh/hooks/cmux-bridge.zsh (auto via ~/.zshrc in new terminals)\n'
 fi
 printf 'Uninstall: sh install.sh --uninstall   (add --purge to remove the token + %s)\n' "$MESH_HOME"
 

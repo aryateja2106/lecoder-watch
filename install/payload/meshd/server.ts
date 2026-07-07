@@ -9,11 +9,14 @@ import { kbPut, kbGet, kbSearch } from "./kb";
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.2.0";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "tailscale", "kb", "screenPeek"];
+const VERSION = "0.2.1";
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
+const CMUX = process.env.CMUX_BIN ?? "cmux";
+const CMUX_SOCKET_HINT = process.env.CMUX_SOCKET_HINT ?? "/tmp/cmux-last-socket-path";
+const CMUX_BRIDGE = process.env.CMUX_BRIDGE ?? "http://127.0.0.1:8901";
 const EVENTS_PATH = process.env.MESHD_EVENTS_PATH ?? join(homedir(), ".mesh", "agent-events.jsonl");
 
 async function sh(cmd: string): Promise<string> {
@@ -23,8 +26,9 @@ async function sh(cmd: string): Promise<string> {
   return out;
 }
 
-function num(x: string | undefined, d = 0): number {
-  const n = Number((x ?? "").trim());
+function num(x: string | number | undefined, d = 0): number {
+  if (typeof x === "number") return Number.isFinite(x) ? x : d;
+  const n = Number(String(x ?? "").trim());
   return Number.isFinite(n) ? n : d;
 }
 
@@ -83,14 +87,15 @@ async function topProcs(): Promise<any[]> {
   }).filter((p) => p.pid > 0);
 }
 async function getStats() {
-  const [cpuPct, mem, dsk, procs, agentsCount] = await Promise.all([
+  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount] = await Promise.all([
     IS_MAC ? macCpuPct() : linuxCpuPct(),
     IS_MAC ? macMem() : linuxMem(),
     disk(),
     topProcs(),
     rmuxSessions().then((s) => s.length).catch(() => 0),
+    cmuxSessions().then((s) => s.length).catch(() => 0),
   ]);
-  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount };
+  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount };
 }
 
 // ---------- agents (rmux) ----------
@@ -167,8 +172,271 @@ function mapAgent(cmd: string): string {
 }
 function shq(s: string) { return `'${s.replace(/'/g, `'\\''`)}'`; }
 function sanitize(s: string) { return s.replace(/[^a-zA-Z0-9._-]+/g, "-"); }
+function isCmuxAgent(name: string) { return name.startsWith("cmux:"); }
+function cmuxSurfaceRef(name: string) { return name.slice("cmux:".length); }
+
+async function cmuxEnv(): Promise<Record<string, string | undefined>> {
+  const env = { ...process.env };
+  if (env.CMUX_SOCKET || env.CMUX_PORT) return env;
+  try {
+    const sock = (await readFile(CMUX_SOCKET_HINT, "utf8")).trim();
+    if (sock) env.CMUX_SOCKET = sock;
+  } catch { /* fall through */ }
+  if (!env.CMUX_SOCKET && !env.CMUX_PORT) {
+    // LaunchAgents often cannot talk to cmux.sock; TCP port still works.
+    env.CMUX_PORT = process.env.CMUX_PORT ?? "9160";
+  }
+  return env;
+}
+
+async function cmuxEnvPrefix(): Promise<string> {
+  const env = await cmuxEnv();
+  if (env.CMUX_PORT) return `CMUX_PORT=${shq(String(env.CMUX_PORT))} `;
+  if (env.CMUX_SOCKET) return `CMUX_SOCKET=${shq(String(env.CMUX_SOCKET))} `;
+  return "";
+}
+
+async function cmuxJson(args: string[]): Promise<any | null> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch(`${CMUX_BRIDGE}/cmux`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ args }),
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(t));
+    if (r.ok) {
+      const body = await r.json() as { data?: any; error?: string };
+      if (body.error || body.data == null) {
+        // #region agent log
+        appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
+          `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H6", location: "meshd/server.ts:cmuxJson", message: "bridge cmux error", data: { args: args.join(" "), error: body.error }, timestamp: Date.now() })}\n`,
+        ).catch(() => {});
+        // #endregion
+        return null;
+      }
+      // #region agent log
+      appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
+        `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H3", location: "meshd/server.ts:cmuxJson", message: "cmux bridge ok", data: { args: args.join(" "), via: "bridge" }, timestamp: Date.now() })}\n`,
+      ).catch(() => {});
+      // #endregion
+      return body.data ?? null;
+    }
+  } catch { /* bridge unreachable */ }
+
+  // #region agent log
+  appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
+    `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H5", location: "meshd/server.ts:cmuxJson", message: "bridge down", data: { args: args.join(" ") }, timestamp: Date.now() })}\n`,
+  ).catch(() => {});
+  // #endregion
+  return null;
+}
+
+async function pidsForTty(tty: string | null | undefined): Promise<number[]> {
+  if (!tty) return [];
+  const dev = tty.startsWith("tty") ? tty.slice(3) : tty;
+  const out = await sh(`ps -t ${shq(dev)} -o pid= 2>/dev/null`);
+  return out.trim().split("\n").map((l) => num(l)).filter((n) => n > 0);
+}
+
+async function agentTypeForTty(tty: string | null | undefined): Promise<string | undefined> {
+  if (!tty) return undefined;
+  const dev = tty.startsWith("tty") ? tty.slice(3) : tty;
+  const out = await sh(`ps -t ${shq(dev)} -o comm= 2>/dev/null`).then((s) => s.toLowerCase());
+  if (out.includes("claude")) return "Claude";
+  if (out.includes("codex")) return "Codex";
+  if (out.includes("herdr")) return "shell";
+  return undefined;
+}
+
+function cleanCmuxLine(line: string): string {
+  const m = line.match(/[│▕](.+?)[│▕]?$/);
+  return (m?.[1] ?? line).trim();
+}
+
+async function cmuxBridgeReady(): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2000);
+    const r = await fetch(`${CMUX_BRIDGE}/cmux`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ args: ["tree", "--all", "--json"] }),
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(t));
+    if (!r.ok) return false;
+    const body = await r.json() as { data?: { windows?: unknown[] } };
+    return Array.isArray(body.data?.windows);
+  } catch {
+    return false;
+  }
+}
+
+async function ensureCmuxBridge(): Promise<void> {
+  if (!IS_MAC) return;
+  const ready = await cmuxBridgeReady();
+  // #region agent log
+  appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
+    `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H5", location: "meshd/server.ts:ensureCmuxBridge", message: "bridge check", data: { ready, hint: ready ? null : "run ~/.mesh/bin/start-cmux-bridge from a terminal" }, timestamp: Date.now() })}\n`,
+  ).catch(() => {});
+  // #endregion
+}
+
+async function cmuxSessions(): Promise<any[]> {
+  if (!IS_MAC) return [];
+  await ensureCmuxBridge();
+  const tree = await cmuxJson(["tree", "--all", "--json"]);
+  const listed = await cmuxJson(["workspace", "list", "--json"]);
+  // #region agent log
+  appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
+    `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H2", location: "meshd/server.ts:cmuxSessions", message: "tree parsed", data: { hasTree: Boolean(tree), windows: tree?.windows?.length ?? 0, listedWs: listed?.workspaces?.length ?? 0 }, timestamp: Date.now() })}\n`,
+  ).catch(() => {});
+  // #endregion
+  if (!tree?.windows) return [];
+
+  const meta = new Map<string, { title?: string; cwd?: string; updated?: string }>();
+  for (const ws of listed?.workspaces ?? []) {
+    if (!ws?.ref) continue;
+    meta.set(String(ws.ref), {
+      title: ws.title ? String(ws.title) : undefined,
+      cwd: ws.current_directory ? String(ws.current_directory) : undefined,
+      updated: ws.latest_submitted_at ? String(ws.latest_submitted_at) : undefined,
+    });
+  }
+
+  const table = await procTable();
+  const sessions: any[] = [];
+  for (const win of tree.windows ?? []) {
+    for (const ws of win.workspaces ?? []) {
+      const wsMeta = meta.get(String(ws.ref)) ?? {};
+      for (const pane of ws.panes ?? []) {
+        for (const surf of pane.surfaces ?? []) {
+          if (surf.type !== "terminal" || !surf.ref) continue;
+          const agentType = await agentTypeForTty(surf.tty);
+          const title = String(surf.title || ws.title || wsMeta.title || surf.ref);
+          // Skip idle shells with no agent process on the tty.
+          if (!agentType && !title.includes("✳") && title.toLowerCase() === "herdr") {
+            // herdr workspace host — still show if herdr process present
+          } else if (!agentType && !title.includes("✳")) {
+            continue;
+          }
+          const pids = await pidsForTty(surf.tty);
+          const { memMB, cpuPct } = sumSubtrees(pids, table);
+          sessions.push({
+            name: `cmux:${surf.ref}`,
+            title,
+            windows: num(pane.surface_count, 1),
+            createdISO: wsMeta.updated ?? null,
+            attached: Boolean(surf.focused || surf.here || surf.active),
+            agentType: agentType ?? (title.includes("Codex") ? "Codex" : title.includes("Claude") ? "Claude" : undefined),
+            memMB: memMB ? Math.round(memMB) : undefined,
+            cpuPct: cpuPct ? Math.round(cpuPct * 10) / 10 : undefined,
+          });
+        }
+      }
+    }
+  }
+  return sessions;
+}
+
+async function listAgents() {
+  const [rmux, cmux] = await Promise.all([rmuxSessions(), cmuxSessions()]);
+  // #region agent log
+  appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
+    `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H4", location: "meshd/server.ts:listAgents", message: "agent merge", data: { rmux: rmux.length, cmux: cmux.length, cmuxNames: cmux.map((a) => a.name).join(",") }, timestamp: Date.now() })}\n`,
+  ).catch(() => {});
+  // #endregion
+  return [...rmux, ...cmux];
+}
+
+async function cmuxPanes(name: string) {
+  const ref = cmuxSurfaceRef(name);
+  const meta = await cmuxJson(["workspace", "list", "--json"]);
+  let cwd: string | undefined;
+  outer: for (const win of (await cmuxJson(["tree", "--all", "--json"]))?.windows ?? []) {
+    for (const ws of win.workspaces ?? []) {
+      for (const pane of ws.panes ?? []) {
+        for (const surf of pane.surfaces ?? []) {
+          if (surf.ref === ref) {
+            cwd = meta?.workspaces?.find((w: any) => w.ref === ws.ref)?.current_directory;
+            break outer;
+          }
+        }
+      }
+    }
+  }
+  return {
+    name,
+    panes: [{
+      paneId: ref,
+      windowIndex: 0,
+      paneIndex: 0,
+      command: "cmux",
+      active: true,
+      windowName: name,
+      currentPath: cwd,
+    }],
+  };
+}
+
+async function cmuxOutput(name: string, lines: number) {
+  const ref = cmuxSurfaceRef(name);
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    const r = await fetch(`${CMUX_BRIDGE}/cmux`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ args: ["read-screen", "--surface", ref, "--lines", String(Math.max(1, lines))] }),
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(t));
+    if (r.ok) {
+      const body = await r.json() as { data?: string };
+      const out = typeof body.data === "string" ? body.data : "";
+      const arr = out.split("\n").map(cleanCmuxLine).filter((l) => l.trim().length > 0);
+      return { name, lines: arr.slice(-lines) };
+    }
+  } catch { /* fall through */ }
+  const out = await sh(`${await cmuxEnvPrefix()}${CMUX} read-screen --surface ${shq(ref)} --lines ${Math.max(1, lines)} 2>/dev/null`);
+  const arr = out.split("\n").map(cleanCmuxLine).filter((l) => l.trim().length > 0);
+  return { name, lines: arr.slice(-lines) };
+}
+
+const CMUX_KEYS: Record<string, string> = {
+  enter: "enter",
+  "ctrl-c": "ctrl+c",
+  up: "up",
+  down: "down",
+  left: "left",
+  right: "right",
+  tab: "tab",
+  escape: "escape",
+};
+
+async function cmuxSend(name: string, text?: string, key?: string): Promise<{ ok: boolean; error?: string }> {
+  const ref = cmuxSurfaceRef(name);
+  const bridgeArgs = (args: string[]) => fetch(`${CMUX_BRIDGE}/cmux`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ args }),
+  }).then((r) => r.ok);
+
+  if (text) {
+    if (await bridgeArgs(["send", "--surface", ref, text]).catch(() => false)) return { ok: true };
+    await sh(`${await cmuxEnvPrefix()}${CMUX} send --surface ${shq(ref)} ${shq(text)}`);
+  }
+  if (key) {
+    const mapped = CMUX_KEYS[key];
+    if (!mapped) return { ok: false, error: `unsupported key: ${key}` };
+    if (await bridgeArgs(["send-key", "--surface", ref, mapped]).catch(() => false)) return { ok: true };
+    await sh(`${await cmuxEnvPrefix()}${CMUX} send-key --surface ${shq(ref)} ${mapped}`);
+  }
+  return { ok: true };
+}
 
 async function agentPanes(name: string) {
+  if (isCmuxAgent(name)) return cmuxPanes(name);
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
   const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{window_index}.#{pane_index}|#{pane_id}|#{pane_current_command}|#{pane_active}|#{window_name}|#{pane_current_path}' 2>/dev/null`);
@@ -188,6 +456,7 @@ async function agentPanes(name: string) {
   return { name, panes };
 }
 async function agentOutput(name: string, lines: number, pane?: string) {
+  if (isCmuxAgent(name)) return cmuxOutput(name, lines);
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
   const target = pane ? shq(pane) : shq(name);
@@ -197,6 +466,7 @@ async function agentOutput(name: string, lines: number, pane?: string) {
 }
 const INFRA = new Set(["meshd", "rmux-bridge"]); // never killable over the wire
 async function agentKill(name: string): Promise<{ ok: boolean; error?: string }> {
+  if (isCmuxAgent(name)) return { ok: false, error: "cmux sessions cannot be killed from meshd" };
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
     return { ok: false, error: "no such session" };
@@ -205,11 +475,13 @@ async function agentKill(name: string): Promise<{ ok: boolean; error?: string }>
   return { ok: true };
 }
 async function agentKillPane(name: string, paneId: string): Promise<{ ok: boolean; error?: string }> {
+  if (isCmuxAgent(name)) return { ok: false, error: "cmux panes cannot be killed from meshd" };
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
   await sh(`${MUX} kill-pane -t ${shq(paneId)}`);
   return { ok: true };
 }
 async function agentNewPane(name: string, dir?: string): Promise<{ ok: boolean; error?: string }> {
+  if (isCmuxAgent(name)) return { ok: false, error: "cmux sessions do not support new panes via meshd" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
     return { ok: false, error: "no such session" };
   }
@@ -236,6 +508,7 @@ const KEY_SEND_KEYS: Record<string, string> = {
 };
 
 async function agentSend(name: string, text?: string, key?: string, pane?: string): Promise<{ ok: boolean; error?: string }> {
+  if (isCmuxAgent(name)) return cmuxSend(name, text, key);
   const hasText = typeof text === "string" && text.length > 0;
   const hasKey = typeof key === "string" && key.length > 0;
   if (!hasText && !hasKey) return { ok: false, error: "text or key required" };
@@ -455,7 +728,7 @@ Bun.serve({
     try {
       if (path === "/stats") return json(await getStats());
       if (path === "/tailnet") return json(await getTailnet());
-      if (path === "/agents") return json(await rmuxSessions());
+      if (path === "/agents") return json(await listAgents());
       if (path === "/usage") return json(await getUsage());
       if (path === "/screen.jpg" && req.method === "GET") return await screenImage();
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));

@@ -47,6 +47,18 @@ final class WatchMeshStore: ObservableObject {
         return commands.isEmpty ? Self.defaultQuickCommands : commands
     }
 
+    var pinnedLimitSessions: [PinnedLimitSession] {
+        relayed?.pinnedLimitSessions ?? []
+    }
+
+    func isProviderBlocked(_ providerId: String) -> Bool {
+        guard let provider = effectiveUsage?.providers.first(where: { $0.id.lowercased() == providerId.lowercased() }) else { return false }
+        if let sessionLimit = provider.limits.first(where: { $0.label.lowercased().contains("session") }) {
+            return LimitHelpers.isBlocked(usedPct: sessionLimit.usedPct)
+        }
+        return provider.limits.contains { LimitHelpers.isBlocked(usedPct: $0.usedPct) }
+    }
+
     /// Watched agent output: direct if its host is directly reachable, else relayed.
     var output: [String] {
         guard let w = watching else { return [] }
@@ -113,6 +125,9 @@ final class WatchMeshStore: ObservableObject {
                 group.addTask {
                     let c = MeshClient(machine: m)
                     let health = try? await c.healthInfo()
+                    guard health?.ok == true else {
+                        return MachineSnapshot(host: m.host, reachable: false, stats: nil, agents: [], error: "unreachable")
+                    }
                     var authError: String?
                     var stats: Stats?
                     do {
