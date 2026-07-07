@@ -27,3 +27,5 @@ dist/
 .next/
 __pycache__/
 *.log
+
+.omc/
