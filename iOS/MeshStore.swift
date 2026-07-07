@@ -39,14 +39,14 @@ final class MeshStore: ObservableObject {
 
     func load() {
         var changed = false
+        let tombstoned = Set(UserDefaults.standard.stringArray(forKey: tombstonesKey) ?? [])
         if let data = UserDefaults.standard.data(forKey: defaultsKey),
            let decoded = try? JSONDecoder().decode([Machine].self, from: data),
            !decoded.isEmpty {
-            let tombstoned = Set(UserDefaults.standard.stringArray(forKey: tombstonesKey) ?? [])
             machines = Self.mergedDefaultMachines(decoded, tombstoned: tombstoned)
             changed = machines != decoded
         } else {
-            machines = Machine.defaults
+            machines = Machine.defaults.filter { !tombstoned.contains($0.host) }
         }
         let generated = UserDefaults.standard.string(forKey: installTokenKey)
         for idx in machines.indices {

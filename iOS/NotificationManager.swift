@@ -15,8 +15,11 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     private let scheduledResetsDefaultsKey = "mesh.notify.scheduledResets.v1"
 
     // Persisted so a relaunch neither re-fires warns nor misses blocked->cleared transitions.
+    // event-<id> keys are excluded from persistence: they are one-per-event and would grow
+    // the stored array forever, and cross-launch event dedup is already handled by the
+    // per-host baseline (initializedEventHosts) in MeshStore, not by this set.
     private var firedKeys: Set<String> = [] {
-        didSet { UserDefaults.standard.set(Array(firedKeys), forKey: firedKeysDefaultsKey) }
+        didSet { UserDefaults.standard.set(firedKeys.filter { !$0.hasPrefix("event-") }, forKey: firedKeysDefaultsKey) }
     }
     private var lastReachable: [String: Bool] = [:]
     private var lastBlockedByLimitKey: [String: Bool] = [:] {
@@ -91,9 +94,18 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
 
         for provider in usage.providers {
             for limit in provider.limits {
-                // nil pct means "unknown", not "cleared" — skip so blocked state doesn't flap.
-                guard let pct = limit.usedPct else { continue }
                 let limitKey = LimitHelpers.limitKey(providerId: provider.id, label: limit.label)
+                // nil pct means "unknown", not "cleared" — skip alerts so blocked state
+                // doesn't flap, but keep any reset alert already armed for this window alive:
+                // a nil poll must NOT cancel the OS-persisted reset notification.
+                guard let pct = limit.usedPct else {
+                    if let iso = limit.resetsAtISO,
+                       scheduledResetISOByKey[limitKey] == iso,
+                       let d = LimitHelpers.resetDate(from: iso), d.timeIntervalSinceNow > 1 {
+                        desiredResetIds.insert("mesh-limit-reset-\(limitKey)")
+                    }
+                    continue
+                }
                 let blocked = pct >= blockedThreshold
                 let wasBlocked = lastBlockedByLimitKey[limitKey] ?? false
 
