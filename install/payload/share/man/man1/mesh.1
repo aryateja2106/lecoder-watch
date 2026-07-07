@@ -1,0 +1,130 @@
+.TH MESH 1 "2026-07-07" "mesh 0.1.0" "MeshWatch"
+.SH NAME
+mesh \- control a MeshWatch mesh (meshd) from the command line
+.SH SYNOPSIS
+.B mesh
+.I command
+.RI [ args ]
+.RB [ \-H
+.IR host ]
+.RB [ \-\-json ]
+.SH DESCRIPTION
+.B mesh
+drives the same meshd HTTP API that the MeshWatch iPhone and Watch apps use: list
+machines and their coding\-agent sessions, start a session running any CLI agent
+(Claude Code, Codex, pi, or any command) with an optional natural\-language task,
+read a session's output, send input, and read usage limits.
+.PP
+Output is human\-readable by default and machine\-readable with
+.BR \-\-json ,
+so agents can drive the mesh by parsing this manual or
+.B mesh help
+and then calling
+.B mesh \-\-json.
+.SH HOSTS
+.TP
+.B mesh hosts
+List configured hosts with reachability.
+.TP
+.B mesh host add \fIname\fP \fIip\fP \fR[\fB\-\-port\fP \fIN\fP] [\fB\-\-token\fP \fIT\fP]\fR
+Add or update a host. Port defaults to 8899, token to
+.IR testtoken .
+The first host added becomes the default.
+.TP
+.B mesh host rm \fIname\fP
+Remove a host.
+.TP
+.B mesh host default \fIname\fP
+Set the default host used when
+.B \-H
+is omitted.
+.SH SESSIONS
+Commands act on the default host unless
+.B \-H \fIname\fP
+is given.
+.TP
+.B mesh ls
+List sessions/agents on the host (alias:
+.BR agents ).
+.TP
+.B mesh peek \fIsession\fP \fR[\fB\-n\fP \fIlines\fP] [\fB\-\-pane\fP \fIP\fP]\fR
+Print recent output from a session (aliases:
+.BR output ", " logs ).
+Default 40 lines.
+.TP
+.B mesh send \fIsession\fP \fItext...\fP
+Type text into a session and press Enter. Quote multi\-word text.
+.TP
+.B mesh key \fIsession\fP \fIkey\fP
+Send a single key:
+.IR enter ", " ctrl\-c ", " ctrl\-d ", " up ", " down ", " left ", " right ", "
+.IR tab ", " escape ", " backspace ", " delete ", " home ", " end ", "
+.IR page\-up ", " page\-down .
+.TP
+.B mesh new \fIname\fP \fR[\fB\-\-cmd\fP \fIC\fP] [\fB\-\-cwd\fP \fIDIR\fP] [\fB\-\-task\fP \fI"..."\fP]\fR
+Start a new session.
+.B \-\-cmd
+is any CLI (claude, codex, pi, a shell one\-liner); omit for a plain shell.
+.B \-\-task
+types a natural\-language prompt into the launched program after it starts.
+.TP
+.B mesh kill \fIsession\fP
+Kill a session.
+.SH STATUS
+.TP
+.B mesh usage
+Usage/limits per provider (alias:
+.BR limits ).
+.TP
+.B mesh health
+Report whether meshd is up on the host.
+.TP
+.B mesh events \fR[\fB\-\-since\fP \fIISO\fP]\fR
+Recent agent events.
+.SH GLOBAL OPTIONS
+.TP
+.B \-H, \-\-host \fIname\fP
+Target host. Defaults to the config default, else localhost (127.0.0.1:8899).
+.TP
+.B \-\-json
+Machine\-readable JSON output.
+.TP
+.B \-h, \-\-help
+Show help;
+.B mesh help \fIcommand\fP
+for a specific command.
+.TP
+.B version
+Print the version.
+.SH EXAMPLES
+.PP
+Add a machine and start Claude Code on a task:
+.PP
+.RS
+.nf
+mesh host add pi 100.94.168.17
+mesh new fix\-bug \-H pi \-\-cmd claude \-\-task "fix the failing test"
+mesh peek fix\-bug \-H pi \-n 60
+mesh key fix\-bug enter \-H pi
+.fi
+.RE
+.SH FILES
+.TP
+.I ~/.mesh/hosts.json
+Host configuration (name, ip, port, token).
+.TP
+.I ~/.mesh/token
+Local meshd token, used when targeting localhost.
+.SH ENVIRONMENT
+.TP
+.B MESH_HOME
+Override the config/prefix directory (default
+.IR ~/.mesh ).
+.TP
+.B MESHD_TOKEN ", " MESHD_PORT
+Override the token/port used for localhost.
+.SH SEE ALSO
+The MeshWatch installer:
+.B install.sh \-\-help
+.SH AUTHOR
+Arya Teja Rudraraju.

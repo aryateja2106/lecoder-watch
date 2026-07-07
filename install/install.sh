@@ -49,6 +49,8 @@ Options:
   --without LIST   Install everything except these components.
   --prefix DIR     Install location (default: \$MESH_HOME or ~/.mesh).
   --no-start       Install but do not launch services.
+  --upgrade        Fetch the latest and reinstall in place, preserving the existing
+  --update         token and config (same as re-running install; clearer intent).
   --list           Show what is installed under the prefix, then exit.
   --uninstall      Stop services and remove the selected components.
   --purge          With --uninstall, also remove the token and the prefix dir.
@@ -57,7 +59,10 @@ Options:
 Components: $ALL_COMPONENTS
   meshd  = stats/sessions/events daemon (:$MESHD_DEFAULT_PORT)
   bridge = rmux-bridge live terminal stream (:$BRIDGE_DEFAULT_PORT)
-  tools  = mesh-event/mesh-hook/mesh-agent-run/mesh-self-check + hook examples
+  tools  = mesh CLI + mesh-event/mesh-hook/mesh-agent-run/mesh-self-check + hooks
+
+After install, drive the mesh from the shell:
+  ~/.mesh/bin/mesh --help      (add ~/.mesh/bin to PATH; man: mesh man)
 EOF
 }
 
@@ -451,7 +456,7 @@ validate_payload() {
     [ -f "$PAYLOAD_DIR/rmux-bridge/public/index.html" ] || die "missing payload: rmux-bridge/public/index.html"
   fi
   if want_component tools; then
-    for f in mesh-event mesh-hook mesh-agent-run mesh-codex-notify mesh-self-check; do
+    for f in mesh mesh-event mesh-hook mesh-agent-run mesh-codex-notify mesh-self-check; do
       [ -f "$PAYLOAD_DIR/bin/$f" ] || die "missing payload: bin/$f"
     done
   fi
@@ -469,6 +474,7 @@ install_components() {
     rm -rf "$MESH_HOME/bin"; cp -R "$PAYLOAD_DIR/bin" "$MESH_HOME/"
     chmod +x "$MESH_HOME"/bin/* 2>/dev/null || true
     if [ -d "$SCRIPT_DIR/hooks" ]; then rm -rf "$MESH_HOME/hooks"; cp -R "$SCRIPT_DIR/hooks" "$MESH_HOME/"; fi
+    if [ -d "$PAYLOAD_DIR/share" ]; then rm -rf "$MESH_HOME/share"; cp -R "$PAYLOAD_DIR/share" "$MESH_HOME/"; fi
   fi
   if want_component meshd && [ "$OS_NAME" = "Darwin" ] && [ -f "$PAYLOAD_DIR/hooks/cmux-bridge.zsh" ]; then
     mkdir -p "$MESH_HOME/hooks"
@@ -495,7 +501,7 @@ service_state() {  # prints launchd|systemd|tmux supervisor state for a service 
 do_list() {
   log "Prefix: $MESH_HOME"
   [ -d "$MESH_HOME" ] || { log "  (nothing installed)"; return; }
-  for item in meshd rmux-bridge bin hooks token; do
+  for item in meshd rmux-bridge bin share hooks token; do
     [ -e "$MESH_HOME/$item" ] && log "  present: $item"
   done
   for svc in meshd cmux-bridge rmux-bridge; do
@@ -518,6 +524,7 @@ do_uninstall() {
   if want_component tools; then
     [ -e "$MESH_HOME/bin" ] && { rm -rf "$MESH_HOME/bin"; removed="$removed tools"; }
     [ -e "$MESH_HOME/hooks" ] && { rm -rf "$MESH_HOME/hooks"; removed="$removed hooks"; }
+    [ -e "$MESH_HOME/share" ] && { rm -rf "$MESH_HOME/share"; removed="$removed man"; }
   fi
   if [ "$DO_PURGE" = "1" ]; then
     rm -rf "$MESH_HOME"; removed="$removed prefix($MESH_HOME)"
@@ -528,7 +535,7 @@ do_uninstall() {
 # ---------- arg parsing ----------
 
 TOKEN_FLAG=""; SRC_FLAG=""; ONLY_LIST=""; WITHOUT_LIST=""; USER_FLAG=""
-DO_UNINSTALL="0"; DO_PURGE="0"; DO_LIST="0"; NO_START="0"
+DO_UNINSTALL="0"; DO_PURGE="0"; DO_LIST="0"; NO_START="0"; DO_UPGRADE="0"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -540,6 +547,7 @@ while [ "$#" -gt 0 ]; do
     --prefix) shift; [ "$#" -gt 0 ] || die "--prefix requires a value"; MESH_HOME="$1";;
     --no-start) NO_START="1";;
     --list) DO_LIST="1";;
+    --upgrade|--update) DO_UPGRADE="1";;
     --uninstall) DO_UNINSTALL="1";;
     --purge) DO_PURGE="1";;
     --help|-h) usage; exit 0;;
@@ -574,6 +582,10 @@ if [ "$DO_UNINSTALL" = "1" ]; then do_uninstall; exit 0; fi
 MUX_DEFAULT="tmux"
 if [ "$OS_NAME" = "Darwin" ] && command -v rmux >/dev/null 2>&1; then MUX_DEFAULT="rmux"; fi
 log "Detected: $OS_NAME/$ARCH_NAME · mux=$MUX_DEFAULT · service=$SERVICE_MGR · components=[$SELECTED_COMPONENTS] · prefix=$MESH_HOME"
+if [ "$DO_UPGRADE" = "1" ]; then
+  [ -d "$MESH_HOME/meshd" ] || warn "no existing install under $MESH_HOME — doing a fresh install"
+  log "Upgrade: fetching latest, reinstalling in place (token + config preserved)"
+fi
 
 # ---------- install ----------
 
@@ -591,6 +603,8 @@ if want_component meshd || want_component bridge; then
 fi
 
 TOKEN_VALUE="${TOKEN_FLAG:-${MESHD_TOKEN:-}}"
+# Preserve an existing token on re-install/upgrade so saved app/CLI host configs keep working.
+if [ -z "$TOKEN_VALUE" ] && [ -f "$MESH_HOME/token" ]; then TOKEN_VALUE=$(tr -d '\n' < "$MESH_HOME/token" 2>/dev/null); fi
 [ -n "$TOKEN_VALUE" ] || TOKEN_VALUE=$(gen_token)
 
 MESHD_PORT_VALUE="${MESHD_PORT:-$MESHD_DEFAULT_PORT}"
