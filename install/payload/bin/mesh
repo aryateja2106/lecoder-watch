@@ -54,12 +54,15 @@ function resolveHost(name: string | undefined, cfg: Config): { name: string; ip:
 
 // ---------- api ----------
 
+// Throws on any failure (so callers like `hosts` can catch and mark a host down);
+// single-target commands let it bubble to the top-level handler, which prints + exits.
 async function api(host: ReturnType<typeof resolveHost>, method: string, path: string, body?: unknown): Promise<any> {
   const url = `http://${host.ip}:${host.port}${path}`;
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  let res: Response;
   try {
-    const res = await fetch(url, {
+    res = await fetch(url, {
       method,
       headers: {
         ...(host.token ? { Authorization: `Bearer ${host.token}` } : {}),
@@ -68,16 +71,16 @@ async function api(host: ReturnType<typeof resolveHost>, method: string, path: s
       body: body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
-    if (!res.ok) die(`${method} ${path} → HTTP ${res.status} on ${host.name} (${host.ip}:${host.port})`);
-    const text = await res.text();
-    return text ? JSON.parse(text) : {};
   } catch (e: any) {
-    if (e?.name === "AbortError") die(`timeout after ${TIMEOUT_MS}ms → ${host.name} (${host.ip}:${host.port}) unreachable`);
-    if (e?.code === "ConnectionRefused" || /refused|ECONNREFUSED/.test(String(e))) die(`connection refused → meshd not running on ${host.name} (${host.ip}:${host.port})`);
-    die(String(e?.message || e));
-  } finally {
     clearTimeout(t);
+    if (e?.name === "AbortError") throw new Error(`timeout after ${TIMEOUT_MS}ms → ${host.name} (${host.ip}:${host.port}) unreachable`);
+    if (e?.code === "ConnectionRefused" || /refused|ECONNREFUSED/.test(String(e?.code || e))) throw new Error(`connection refused → meshd not running on ${host.name} (${host.ip}:${host.port})`);
+    throw new Error(String(e?.message || e));
   }
+  clearTimeout(t);
+  if (!res.ok) throw new Error(`${method} ${path} → HTTP ${res.status} on ${host.name} (${host.ip}:${host.port})`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : {};
 }
 
 // ---------- output ----------
@@ -351,4 +354,4 @@ async function main() {
   }
 }
 
-main();
+main().catch((e: any) => die(e?.message || String(e)));
