@@ -481,6 +481,14 @@ private struct SessionPeekScreen: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(session.isCmux)
+            // Watch a computer-use/browser agent live, then Stop/Reply on this same card.
+            NavigationLink {
+                RemoteWebScreen(title: "\(machine.host) screen", urlString: machine.resolvedVNC)
+            } label: {
+                Label("Watch screen (VNC)", systemImage: "display")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
             HStack {
                 Button { showingCompose = true } label: { Label("Reply", systemImage: "square.and.pencil") }
                 Button { showingPhrase = true } label: { Label("Command", systemImage: "waveform") }

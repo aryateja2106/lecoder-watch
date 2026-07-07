@@ -629,7 +629,7 @@ private struct RemoteControlTab: View {
     }
 }
 
-private struct RemoteWebScreen: View {
+struct RemoteWebScreen: View {
     let title: String
     let urlString: String
     @State private var reloadToken = UUID()
