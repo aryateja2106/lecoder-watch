@@ -4,13 +4,27 @@ import UserNotifications
 /// Usage limit lifecycle notifications: warn at 85%, hit at 95%, schedule reset alert,
 /// ping when a blocked limit clears. Tap a reset/available alert to send `continue`
 /// to the pinned session for that provider.
-final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
+final class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
 
-    private var firedKeys: Set<String> = []
+    /// True when the user declined alert permission — surfaced in the Monitor tab.
+    @Published var authorizationDenied = false
+
+    private let firedKeysDefaultsKey = "mesh.notify.firedKeys.v1"
+    private let lastBlockedDefaultsKey = "mesh.notify.lastBlocked.v1"
+    private let scheduledResetsDefaultsKey = "mesh.notify.scheduledResets.v1"
+
+    // Persisted so a relaunch neither re-fires warns nor misses blocked->cleared transitions.
+    private var firedKeys: Set<String> = [] {
+        didSet { UserDefaults.standard.set(Array(firedKeys), forKey: firedKeysDefaultsKey) }
+    }
     private var lastReachable: [String: Bool] = [:]
-    private var lastBlockedByLimitKey: [String: Bool] = [:]
-    private var scheduledResetISOByKey: [String: String] = [:]
+    private var lastBlockedByLimitKey: [String: Bool] = [:] {
+        didSet { UserDefaults.standard.set(lastBlockedByLimitKey, forKey: lastBlockedDefaultsKey) }
+    }
+    private var scheduledResetISOByKey: [String: String] = [:] {
+        didSet { UserDefaults.standard.set(scheduledResetISOByKey, forKey: scheduledResetsDefaultsKey) }
+    }
 
     private let usageThreshold = LimitHelpers.warningThreshold
     private let blockedThreshold = LimitHelpers.blockedThreshold
@@ -20,11 +34,24 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     private override init() {
         super.init()
+        if let saved = UserDefaults.standard.stringArray(forKey: firedKeysDefaultsKey) {
+            firedKeys = Set(saved)
+        }
+        if let saved = UserDefaults.standard.dictionary(forKey: lastBlockedDefaultsKey) as? [String: Bool] {
+            lastBlockedByLimitKey = saved
+        }
+        if let saved = UserDefaults.standard.dictionary(forKey: scheduledResetsDefaultsKey) as? [String: String] {
+            scheduledResetISOByKey = saved
+        }
         UNUserNotificationCenter.current().delegate = self
     }
 
     func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            DispatchQueue.main.async {
+                self.authorizationDenied = !granted
+            }
+        }
     }
 
     func evaluate(_ snapshot: MeshSnapshot, pinned: [PinnedLimitSession]) {
@@ -64,23 +91,30 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
         for provider in usage.providers {
             for limit in provider.limits {
+                // nil pct means "unknown", not "cleared" — skip so blocked state doesn't flap.
+                guard let pct = limit.usedPct else { continue }
                 let limitKey = LimitHelpers.limitKey(providerId: provider.id, label: limit.label)
-                let pct = limit.usedPct ?? 0
                 let blocked = pct >= blockedThreshold
                 let wasBlocked = lastBlockedByLimitKey[limitKey] ?? false
-                let canResume = LimitHelpers.isSessionLimit(label: limit.label)
 
                 if pct >= usageThreshold {
-                    let warnKey = "usage-warn-\(limitKey)"
+                    let warnKey = "usage-warn-\(limitKey)-\(limit.resetsAtISO ?? "none")"
                     if !firedKeys.contains(warnKey) {
                         firedKeys.insert(warnKey)
                         notifyNow(id: warnKey,
                                   title: "\(provider.displayName) \(limit.label)",
                                   body: warningBody(provider: provider, limit: limit, pct: pct))
                     }
+                    // Pre-arm the OS-persisted reset alert from the warning band so it
+                    // still fires if the app is backgrounded or killed before the limit hits.
+                    if let resetId = scheduleResetNotification(provider: provider,
+                                                               limit: limit,
+                                                               pinned: pinned) {
+                        desiredResetIds.insert(resetId)
+                    }
                 }
 
-                if blocked && canResume {
+                if blocked {
                     let hitKey = "usage-hit-\(limitKey)-\(limit.resetsAtISO ?? "none")"
                     if !firedKeys.contains(hitKey) {
                         firedKeys.insert(hitKey)
@@ -89,12 +123,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
                                   body: blockedBody(provider: provider, limit: limit, pinned: pinned),
                                   userInfo: limitUserInfo(providerId: provider.id, action: "limitHit"))
                     }
-                    if let resetId = scheduleResetNotification(provider: provider,
-                                                               limit: limit,
-                                                               pinned: pinned) {
-                        desiredResetIds.insert(resetId)
-                    }
-                } else if canResume && wasBlocked && pct < LimitHelpers.clearedThreshold {
+                } else if wasBlocked && pct < LimitHelpers.clearedThreshold {
                     let availKey = "usage-available-\(limitKey)-\(limit.resetsAtISO ?? "none")"
                     if !firedKeys.contains(availKey) {
                         firedKeys.insert(availKey)

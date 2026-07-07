@@ -18,10 +18,25 @@ struct ContentView: View {
 
 private struct MonitorTab: View {
     @EnvironmentObject var store: MeshStore
+    @ObservedObject private var notifications = NotificationManager.shared
 
     var body: some View {
         NavigationStack {
             List {
+                if notifications.authorizationDenied || store.lastError != nil {
+                    Section {
+                        if notifications.authorizationDenied {
+                            Text("Notifications are off — limit alerts can't be delivered. Enable them in iPhone Settings.")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                        if let lastError = store.lastError {
+                            Text(lastError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
                 SessionLimitsBanner()
                 Section("Events") {
                     if store.events.isEmpty {

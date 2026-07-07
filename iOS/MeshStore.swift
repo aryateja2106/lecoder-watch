@@ -296,6 +296,11 @@ final class MeshStore: ObservableObject {
             lastError = "No pinned session for \(providerId). Set one in Settings."
             return
         }
+        if let provider = snapshot?.usage?.providers.first(where: { $0.id.lowercased() == providerId.lowercased() }),
+           provider.limits.contains(where: { LimitHelpers.isBlocked(usedPct: $0.usedPct) }) {
+            lastError = "\(provider.displayName) is still at its limit. Try again after it resets."
+            return
+        }
         do {
             try await MeshClient(machine: machine).send(agent: pin.sessionName, text: "continue\n")
             await refresh()
