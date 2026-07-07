@@ -178,17 +178,33 @@ private struct NewSessionSheet: View {
 
     @State private var name = ""
     @State private var command = ""
+    @State private var cwd = ""
     @State private var taskAgent = "claude"
     @State private var taskText = ""
     @State private var busy = false
 
     // Common launchers; "shell" means just a plain rmux session.
-    private let presets = ["shell", "claude", "codex", "agy", "bun", "python3"]
-    private let taskAgents = ["claude", "codex"]
+    private let presets = ["shell", "claude", "codex", "pi", "agy", "bun", "python3"]
+    private let taskAgents = ["claude", "codex", "pi"]
 
+    // A chosen command always wins (so `pi` or any custom CLI keeps its task); only fall
+    // back to the task-agent default when no command was picked. The task goes out as
+    // initialText and meshd types it into whatever we launched.
     private var launchCommand: String {
+        let cmd = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cmd.isEmpty { return cmd }
         if !taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return taskAgent }
-        return command
+        return ""
+    }
+
+    /// Recent working directories seen across this machine's live panes.
+    private var cwdRecents: [String] {
+        let agents = store.snapshot?.machines.first(where: { $0.host == machine.host })?.agents ?? []
+        let paths = agents.flatMap { $0.panes ?? [] }.compactMap { $0.currentPath }
+        var seen = Set<String>()
+        var out: [String] = []
+        for p in paths where !p.isEmpty && seen.insert(p).inserted { out.append(p) }
+        return Array(out.prefix(6))
     }
 
     private var initialText: String? {
@@ -220,6 +236,12 @@ private struct NewSessionSheet: View {
                     TextField("or custom command", text: $command)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                    TextField("Working directory (optional)", text: $cwd)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                    if !cwdRecents.isEmpty {
+                        FlowButtons(items: cwdRecents) { cwd = $0 }
+                    }
                 }
                 Section("Task") {
                     Picker("Agent", selection: $taskAgent) {
@@ -245,7 +267,7 @@ private struct NewSessionSheet: View {
                     Button("Create") {
                         busy = true
                         Task {
-                            await store.newSession(on: machine, name: sessionName, cmd: launchCommand, initialText: initialText)
+                            await store.newSession(on: machine, name: sessionName, cmd: launchCommand, cwd: cwd, initialText: initialText)
                             busy = false
                             dismiss()
                         }

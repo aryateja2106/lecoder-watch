@@ -18,6 +18,7 @@ final class MeshStore: ObservableObject {
     private let installTokenKey = "mesh.installToken.v1"
     private let quickCommandsKey = "mesh.quickCommands.v1"
     private let pinnedLimitsKey = "mesh.pinnedLimits.v1"
+    private let tombstonesKey = "mesh.deletedDefaults.v1"
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
@@ -41,7 +42,8 @@ final class MeshStore: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: defaultsKey),
            let decoded = try? JSONDecoder().decode([Machine].self, from: data),
            !decoded.isEmpty {
-            machines = Self.mergedDefaultMachines(decoded)
+            let tombstoned = Set(UserDefaults.standard.stringArray(forKey: tombstonesKey) ?? [])
+            machines = Self.mergedDefaultMachines(decoded, tombstoned: tombstoned)
             changed = machines != decoded
         } else {
             machines = Machine.defaults
@@ -64,14 +66,27 @@ final class MeshStore: ObservableObject {
         }
     }
 
-    private static func mergedDefaultMachines(_ saved: [Machine]) -> [Machine] {
-        var machines = Machine.defaults.map { fallback in
-            saved.first { $0.host == fallback.host } ?? fallback
-        }
+    private static func mergedDefaultMachines(_ saved: [Machine], tombstoned: Set<String>) -> [Machine] {
+        var machines = Machine.defaults
+            .filter { !tombstoned.contains($0.host) }
+            .map { fallback in saved.first { $0.host == fallback.host } ?? fallback }
         for machine in saved where !machines.contains(where: { $0.host == machine.host }) {
             machines.append(machine)
         }
         return machines
+    }
+
+    /// Delete machines and, for dogfood defaults, tombstone the host so the merge on the
+    /// next launch does not resurrect it.
+    func deleteMachines(atOffsets offsets: IndexSet) {
+        let defaultHosts = Set(Machine.defaults.map { $0.host })
+        var tombstoned = Set(UserDefaults.standard.stringArray(forKey: tombstonesKey) ?? [])
+        for idx in offsets where defaultHosts.contains(machines[idx].host) {
+            tombstoned.insert(machines[idx].host)
+        }
+        UserDefaults.standard.set(Array(tombstoned), forKey: tombstonesKey)
+        machines.remove(atOffsets: offsets)
+        save()
     }
 
     func installToken() -> String {
@@ -326,9 +341,9 @@ final class MeshStore: ObservableObject {
     // MARK: Sessions
 
     /// Create a new rmux session on a machine, then refresh so it appears in the list.
-    func newSession(on machine: Machine, name: String, cmd: String?, initialText: String? = nil) async {
+    func newSession(on machine: Machine, name: String, cmd: String?, cwd: String? = nil, initialText: String? = nil) async {
         do {
-            try await MeshClient(machine: machine).newSession(name: name, cmd: cmd, initialText: initialText)
+            try await MeshClient(machine: machine).newSession(name: name, cmd: cmd, cwd: cwd, initialText: initialText)
             await refresh()
         } catch {
             lastError = "create session failed: \(error)"

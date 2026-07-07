@@ -486,7 +486,7 @@ private struct SettingsTab: View {
                             .font(.caption)
                         }
                     }
-                    .onDelete { store.machines.remove(atOffsets: $0); store.save() }
+                    .onDelete { store.deleteMachines(atOffsets: $0) }
                     Button { store.addMachine() } label: {
                         Label("Add machine", systemImage: "plus.circle")
                     }
