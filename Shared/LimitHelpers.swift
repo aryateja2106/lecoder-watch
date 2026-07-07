@@ -30,6 +30,13 @@ enum LimitHelpers {
         status(usedPct: usedPct) == .blocked
     }
 
+    /// Reset-aware: a limit whose reset time has passed is never blocked, even if a
+    /// stale usedPct snapshot still reads >=95% before the next /usage poll lands.
+    static func isBlocked(_ limit: UsageLimit, now: Date = Date()) -> Bool {
+        if let d = resetDate(from: limit.resetsAtISO), d <= now { return false }
+        return isBlocked(usedPct: limit.usedPct)
+    }
+
     static func remainingPct(usedPct: Double?) -> Int? {
         guard let pct = usedPct else { return nil }
         return max(0, min(100, Int((100 - pct).rounded())))

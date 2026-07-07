@@ -297,7 +297,7 @@ final class MeshStore: ObservableObject {
             return
         }
         if let provider = snapshot?.usage?.providers.first(where: { $0.id.lowercased() == providerId.lowercased() }),
-           provider.limits.contains(where: { LimitHelpers.isBlocked(usedPct: $0.usedPct) }) {
+           provider.limits.contains(where: { LimitHelpers.isBlocked($0) }) {
             lastError = "\(provider.displayName) is still at its limit. Try again after it resets."
             return
         }

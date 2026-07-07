@@ -298,7 +298,7 @@ private struct SessionPeekScreen: View {
         guard let providerId = LimitHelpers.providerId(for: session.agentType),
               let provider = store.snapshot?.usage?.providers.first(where: { $0.id.lowercased() == providerId }) else { return false }
         if let sessionLimit = provider.limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }) {
-            return LimitHelpers.isBlocked(usedPct: sessionLimit.usedPct)
+            return LimitHelpers.isBlocked(sessionLimit)
         }
         return false
     }

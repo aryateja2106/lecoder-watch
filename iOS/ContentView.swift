@@ -351,7 +351,7 @@ private struct SessionLimitsBanner: View {
         let rows = ["claude", "codex"].compactMap { id -> Row? in
             guard let p = providers.first(where: { $0.id.lowercased() == id }),
                   let limit = p.limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }) else { return nil }
-            let blocked = LimitHelpers.isBlocked(usedPct: limit.usedPct)
+            let blocked = LimitHelpers.isBlocked(limit)
             let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) ?? "—"
             let left = LimitHelpers.remainingPct(usedPct: limit.usedPct).map { "\($0)% left" } ?? "—"
             return Row(providerId: id,

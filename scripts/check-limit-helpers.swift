@@ -1,5 +1,7 @@
 import Foundation
 
+// Run: swiftc Shared/Models.swift Shared/LimitHelpers.swift scripts/check-limit-helpers.swift -o /tmp/clh && /tmp/clh
+
 @main
 struct CheckLimitHelpers {
     static func main() {
@@ -17,6 +19,14 @@ struct CheckLimitHelpers {
         let now = Date(timeIntervalSince1970: 1_000)
         let reset = ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: 1_000 + 46 * 60))
         assert(LimitHelpers.resetCountdown(from: reset, now: now) == "Resets in 46m")
+
+        // Reset-aware isBlocked: a passed reset unblocks even at 96%; a future reset stays blocked.
+        let past = ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: 500))
+        let future = ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: 5_000))
+        assert(!LimitHelpers.isBlocked(UsageLimit(label: "Session", usedPct: 96, resetsAtISO: past), now: now))
+        assert(LimitHelpers.isBlocked(UsageLimit(label: "Session", usedPct: 96, resetsAtISO: future), now: now))
+        // No reset info: falls back to pct-only.
+        assert(LimitHelpers.isBlocked(UsageLimit(label: "Session", usedPct: 96, resetsAtISO: nil), now: now))
 
         print("check-limit-helpers: OK")
     }
