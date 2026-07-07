@@ -301,8 +301,12 @@ private struct SessionPeekScreen: View {
     @State private var lastUpdated: Date?
 
     private var visibleLines: [String] {
-        let trimmed = output.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        return Array(trimmed.suffix(32))
+        // Keep interior blank lines so TUI output (tables, code, agent panes) stays
+        // vertically aligned; only trim empty lines at the top/bottom of the window.
+        var lines = Array(output.suffix(32))
+        while let first = lines.first, first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.removeFirst() }
+        while let last = lines.last, last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.removeLast() }
+        return lines
     }
 
     private var activePane: Pane? {
@@ -494,11 +498,25 @@ private struct SessionPeekScreen: View {
                 Button(role: .destructive) { Task { await send(key: "ctrl-c") } } label: { Label("Stop", systemImage: "xmark.octagon") }
                 Button { Task { await send(key: "up") } } label: { Label("Up", systemImage: "arrow.up") }
                 Button { Task { await send(key: "down") } } label: { Label("Down", systemImage: "arrow.down") }
+                Button { Task { await send(key: "left") } } label: { Label("Left", systemImage: "arrow.left") }
+                Button { Task { await send(key: "right") } } label: { Label("Right", systemImage: "arrow.right") }
                 Button { Task { await send(key: "tab") } } label: { Label("Tab", systemImage: "arrow.right.to.line") }
                 Button { Task { await send(key: "escape") } } label: { Label("Esc", systemImage: "escape") }
             }
             .buttonStyle(.bordered)
             .labelStyle(.iconOnly)
+            // rmux supports the full key set; cmux surfaces only take the row above.
+            if !session.isCmux {
+                HStack {
+                    Button { Task { await send(key: "page-up") } } label: { Label("Page up", systemImage: "arrow.up.to.line") }
+                    Button { Task { await send(key: "page-down") } } label: { Label("Page down", systemImage: "arrow.down.to.line") }
+                    Button { Task { await send(key: "home") } } label: { Label("Home", systemImage: "arrow.up.left") }
+                    Button { Task { await send(key: "end") } } label: { Label("End", systemImage: "arrow.down.right") }
+                    Button { Task { await send(key: "ctrl-d") } } label: { Label("Ctrl-D", systemImage: "d.square") }
+                }
+                .buttonStyle(.bordered)
+                .labelStyle(.iconOnly)
+            }
             if !session.isCmux {
                 Button(role: .destructive) {
                     Task {
@@ -598,7 +616,7 @@ private struct SessionPeekScreen: View {
     private func refresh() async {
         loading = true
         defer { loading = false }
-        async let out = try? MeshClient(machine: machine).output(agent: session.name, lines: 80, pane: selectedPane)
+        async let out = try? MeshClient(machine: machine).output(agent: session.name, lines: 120, pane: selectedPane)
         async let paneList = try? MeshClient(machine: machine).panes(agent: session.name)
         if let fetched = await out { output = fetched.lines }
         if let fetchedPanes = await paneList {
