@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { appendFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
+import { isAuthorized } from "./auth";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
@@ -668,11 +669,9 @@ async function getTailnet() {
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
+// Header-only, fail-closed, constant-time. See ./auth.ts.
 function authed(req: Request): boolean {
-  if (!TOKEN) return true;
-  const h = req.headers.get("authorization") ?? "";
-  const q = new URL(req.url).searchParams.get("token") ?? "";
-  return h === `Bearer ${TOKEN}` || q === TOKEN;
+  return isAuthorized(TOKEN, req.headers.get("authorization") ?? "");
 }
 
 function localIPs(): Set<string> {
@@ -715,6 +714,11 @@ async function kbFederateSearch(local: any[], sp: URLSearchParams): Promise<any[
   return out;
 }
 
+if (!TOKEN) {
+  console.warn(
+    "[meshd] SECURITY: MESHD_TOKEN is empty — refusing all authenticated requests (fail-closed). Set MESHD_TOKEN to enable the daemon.",
+  );
+}
 Bun.serve({
   port: PORT,
   hostname: HOST,
