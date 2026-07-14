@@ -18,6 +18,9 @@ schemes:
     build:
       targets:
         MeshWatch: all
+    test:
+      targets:
+        - MeshWatchUITests
     run:
       config: Debug
   MeshWatch Watch App:
@@ -44,6 +47,11 @@ targets:
           - UIInterfaceOrientationPortrait
         NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private Tailscale network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
+        NSSupportsLiveActivities: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.lecoder.meshwatch
+            CFBundleURLSchemes:
+              - meshwatch
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
     settings:
@@ -51,9 +59,50 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - target: MeshWatch Watch App
         embed: true
+      - target: MeshWatchWidgets
+        embed: true
+  MeshWatchWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Shared
+      - path: MeshWatchWidgets
+    info:
+      path: MeshWatchWidgets/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.widgets
+        INFOPLIST_KEY_CFBundleDisplayName: MeshWatch Sessions
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+    dependencies:
+      - sdk: SwiftUI.framework
+      - sdk: WidgetKit.framework
+      - sdk: ActivityKit.framework
+  MeshWatchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: MeshWatchUITests
+    info:
+      path: MeshWatchUITests/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.uitests
+        TARGETED_DEVICE_FAMILY: "1,2"
+        TEST_TARGET_NAME: MeshWatch
+    dependencies:
+      - target: MeshWatch
   MeshWatch Watch App:
     type: application
     platform: watchOS
@@ -73,3 +122,4 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.watchkitapp
         TARGETED_DEVICE_FAMILY: "4"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

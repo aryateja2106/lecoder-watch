@@ -3,8 +3,10 @@
 Single entry point to resume. Read this → `docs/PROJECT-STATE-AND-LEARNINGS-2026-07-07.md` → `git log`, then continue.
 Older but still-useful context: `docs/PRODUCT-CONTEXT-2026-06-05.md`, `docs/XCODE-WATCH-DEVICE-RUNBOOK.md`.
 
+**Newer than this file:** work has since moved to branch `consolidation/watch-phase-1` (app icons, widgets/notification-prefs/Live Activity, fail-closed header-only meshd auth, `capture-pane -S -` full-scrollback fix, `aryateja-jetson` in the Machine defaults, watch terminal is still 1.5s poll-based) — see `README.md` Status section for the current picture. Everything below is 2026-07-07 history, kept for context.
+
 ## Resume protocol
-- **Branch `backup/2026-07-02`. NEVER push.** Tree clean; all work committed.
+- **Branch was `backup/2026-07-02` as of 2026-07-07; current work is on `consolidation/watch-phase-1`. NEVER push.** Tree clean; all work committed.
 - **Build gate before every commit** (both must be `** BUILD SUCCEEDED **`):
   ```sh
   cd ~/Projects/lecoder-watch && xcodegen generate

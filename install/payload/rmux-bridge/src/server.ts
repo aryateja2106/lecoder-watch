@@ -240,7 +240,7 @@ async function handleOpen(ws: ServerWebSocket<WsData>): Promise<void> {
     ws.close(1008, "no such session");
     return;
   }
-  const snapshot = await runRmux(["capture-pane", "-p", "-e", "-t", target]);
+  const snapshot = await runRmux(["capture-pane", "-p", "-e", "-S", "-", "-t", target]);
   if (snapshot.code !== 0) {
     ws.close(1011, "snapshot failed");
     return;
