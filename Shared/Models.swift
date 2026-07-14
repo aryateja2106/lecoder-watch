@@ -62,7 +62,8 @@ struct Machine: Codable, Identifiable, Hashable {
     static let defaults: [Machine] = [
         Machine(host: "arya-macbook-pro", ip: "100.94.221.115", port: 8899, token: "testtoken"),
         Machine(host: "arya-pi", ip: "100.94.168.17", port: 8899, token: "testtoken"),
-        Machine(host: "dataflowagents", ip: "100.80.10.95", port: 8899, token: "testtoken")
+        Machine(host: "dataflowagents", ip: "100.80.10.95", port: 8899, token: "testtoken"),
+        Machine(host: "aryateja-jetson", ip: "100.118.47.127", port: 8899, token: "testtoken")
     ]
 }
 
