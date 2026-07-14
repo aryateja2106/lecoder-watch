@@ -51,6 +51,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - target: MeshWatch Watch App
         embed: true
@@ -73,3 +74,4 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.watchkitapp
         TARGETED_DEVICE_FAMILY: "4"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
