@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { appendFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 import { isAuthorized } from "./auth";
+import { captureCmd } from "./mux";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
@@ -282,7 +283,7 @@ async function agentOutput(name: string, lines: number, pane?: string) {
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
   const target = pane ? shq(pane) : shq(name);
-  const out = await sh(`${MUX} capture-pane -p -t ${target} 2>/dev/null`);
+  const out = await sh(captureCmd(MUX, target));
   const arr = out.replace(/\n+$/, "").split("\n");
   return { name, lines: arr.slice(-lines) };
 }

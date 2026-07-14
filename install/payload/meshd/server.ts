@@ -461,7 +461,7 @@ async function agentOutput(name: string, lines: number, pane?: string) {
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
   const target = pane ? shq(pane) : shq(name);
-  const out = await sh(`${MUX} capture-pane -p -t ${target} 2>/dev/null`);
+  const out = await sh(`${MUX} capture-pane -p -S - -t ${target} 2>/dev/null`);
   const arr = out.replace(/\n+$/, "").split("\n");
   return { name, lines: arr.slice(-lines) };
 }
