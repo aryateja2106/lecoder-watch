@@ -6,12 +6,12 @@ struct ContentView: View {
     @EnvironmentObject var store: MeshStore
 
     var body: some View {
-        TabView {
-            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }
-            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }
-            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }
-            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }
-            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }
+        TabView(selection: $store.selectedTab) {
+            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }.tag(0)
+            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }.tag(1)
+            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }.tag(2)
+            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }.tag(3)
+            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }.tag(4)
         }
     }
 }
@@ -88,6 +88,14 @@ private struct MachinesTab: View {
             ? store.snapshot?.machines ?? []
             : store.machines.map { MachineSnapshot(host: $0.host, reachable: false, stats: nil, agents: [], error: "checking...") }
         return activeFirst(machines)
+    }
+
+    /// Cheap card status: the latest event for this session (if any) drives it,
+    /// else fall back to attached→working/idle. Full output classification only
+    /// happens on the opened SessionPeekScreen.
+    private func agentState(for agent: Agent, host: String) -> SessionState {
+        let latest = store.events.last { $0.host == host && $0.session == agent.name }
+        return cardState(forLevel: latest?.level, attached: agent.attached)
     }
 
     var body: some View {
@@ -173,18 +181,26 @@ private struct MachinesTab: View {
                             }
                         }
                         ForEach(m.agents) { a in
-                            HStack {
-                                Image(systemName: "terminal")
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(a.displayName)
-                                    Text(a.isCmux ? "cmux" : "\(a.windows) pane\(a.windows == 1 ? "" : "s")")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 7) {
+                                    AgentBadge(type: a.agentType)
+                                    Text(a.name).font(.headline).lineLimit(1)
+                                    if store.isPrimary(a.name) { PrimaryPill() }
+                                    Spacer()
                                 }
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text(a.agentType ?? "shell").font(.caption)
-                                    Text(sessionCost(a)).font(.caption2).foregroundStyle(.secondary)
+                                HStack {
+                                    SessionStatusLabel(state: agentState(for: a, host: m.host))
+                                    Spacer()
+                                    Text(resourceLine(a)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                            .contextMenu {
+                                Button {
+                                    store.setPrimary(store.isPrimary(a.name) ? nil : a.name)
+                                } label: {
+                                    Label(store.isPrimary(a.name) ? "Unpin primary" : "Pin to Dynamic Island",
+                                          systemImage: store.isPrimary(a.name) ? "pin.slash" : "pin")
                                 }
                             }
                         }
@@ -256,9 +272,11 @@ func copyableCommand(_ command: String) -> some View {
     }
 }
 
-private func sessionCost(_ agent: Agent) -> String {
+private func resourceLine(_ agent: Agent) -> String {
     let cpu = agent.cpuPct.map { String(format: "%.0f%%", $0) }
-    return [cpu, agent.memLabel].compactMap { $0 }.joined(separator: " · ")
+    let paneCount = agent.panes?.count ?? agent.windows
+    let panes = paneCount > 0 ? "\(paneCount) pane\(paneCount == 1 ? "" : "s")" : nil
+    return [cpu, agent.memLabel, panes].compactMap { $0 }.joined(separator: " · ")
 }
 
 private func peerDetail(_ peer: TailnetPeer) -> String {
@@ -439,9 +457,35 @@ private struct SettingsTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var newCommand = ""
 
+    private func typeBinding(_ kind: NotifKind) -> Binding<Bool> {
+        Binding(get: { store.notifPrefs.typeEnabled(kind) },
+                set: { store.notifPrefs.types[kind.rawValue] = $0 })
+    }
+
+    private func sourceBinding(_ source: String) -> Binding<Bool> {
+        Binding(get: { store.notifPrefs.sourceEnabled(source) },
+                set: { store.notifPrefs.sources[source.lowercased()] = $0 })
+    }
+
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    ForEach(NotifKind.allCases, id: \.self) { kind in
+                        Toggle(kind.label, isOn: typeBinding(kind))
+                    }
+                } header: {
+                    Text("Notifications")
+                } footer: {
+                    Text("Needs-input and errors ping loudly; finished is quiet. Routine output never notifies.")
+                }
+
+                Section("Notify from") {
+                    ForEach(NotifPrefs.knownSources, id: \.self) { source in
+                        Toggle(source.capitalized, isOn: sourceBinding(source))
+                    }
+                }
+
                 Section("Machines") {
                     ForEach($store.machines) { $m in
                         VStack(alignment: .leading, spacing: 10) {

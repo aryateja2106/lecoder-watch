@@ -1,9 +1,14 @@
 import Foundation
 import UserNotifications
 
-/// Usage limit lifecycle notifications: warn at 85%, hit at 95%, schedule reset alert,
-/// ping when a blocked limit clears. Tap a reset/available alert to send `continue`
-/// to the pinned session for that provider.
+/// Local notifications for the monitoring layer. Two complementary lanes:
+///  1. Usage-limit lifecycle — warn at 85%, hit at 95%, schedule an OS-persisted
+///     reset alert, ping when a blocked limit clears. Tap a reset/available alert to
+///     send `continue` to the pinned session for that provider (via `onLimitResume`).
+///  2. Agent events — turn agent /events into actionable pings (needs-input /
+///     finished / error), honoring the user's per-source / per-type toggles, and
+///     route a tap back to the machine→session it came from (via `onOpen`).
+/// Delivered to the phone (and mirrored to the watch by watchOS automatically).
 final class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
 
@@ -35,6 +40,9 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     /// Resume handler — MeshStore wires this to send `continue` to the pinned session.
     var onLimitResume: ((String) -> Void)?
 
+    /// Tap routing for agent-event notifications — set by MeshStore. Receives (appHost, session?).
+    var onOpen: ((String, String?) -> Void)?
+
     private override init() {
         super.init()
         if let saved = UserDefaults.standard.stringArray(forKey: firedKeysDefaultsKey) {
@@ -50,6 +58,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     }
 
     func requestAuthorization() {
+        UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
             DispatchQueue.main.async {
                 self.authorizationDenied = !granted
@@ -62,14 +71,24 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         evaluateUsage(snapshot.usage, pinned: pinned)
     }
 
-    func evaluate(events: [AgentEvent]) {
+    /// Turn fresh agent events into notifications, honoring the user's per-source /
+    /// per-type toggles. Routine output (unclassified level) is dropped — only
+    /// needs-input / finished / error ping.
+    /// `primary` is the pinned session id. Codync rule: only the primary session's
+    /// *completion* pings; needs-input and error ping for every session (safety net).
+    func evaluate(events: [AgentEvent], prefs: NotifPrefs, primary: String?) {
         for event in events {
             let key = "event-\(event.id)"
             guard !firedKeys.contains(key) else { continue }
+            guard let kind = notifKind(for: event.level), prefs.allows(event) else { continue }
+            if kind == .finished, let primary, event.session != primary { continue }
             firedKeys.insert(key)
-            notifyNow(id: key,
-                      title: eventNotificationTitle(event),
-                      body: eventNotificationBody(event))
+            notify(id: key,
+                   title: eventNotificationTitle(event),
+                   body: eventNotificationBody(event),
+                   kind: kind,
+                   host: event.host,
+                   session: event.session)
         }
     }
 
@@ -261,48 +280,76 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         UNUserNotificationCenter.current().add(req)
     }
 
-    // MARK: - Agent events
+    /// Agent-event notification: louder + break-through for needs-input/error, quiet
+    /// for finished, and carrying host/session so a tap can open the right session.
+    private func notify(id: String, title: String, body: String, kind: NotifKind, host: String?, session: String?) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        // ponytail: .timeSensitive only breaks through Focus/DND with the matching
+        // entitlement; without it iOS quietly downgrades to .active — no crash. Add
+        // the entitlement when shipping if DND break-through matters.
+        content.interruptionLevel = kind.isLoud ? .timeSensitive : .active
+        if let host { content.threadIdentifier = host }
+        var info: [String: String] = [:]
+        if let host { info["host"] = host }
+        if let session, !session.isEmpty { info["session"] = session }
+        content.userInfo = info
+        let req = UNNotificationRequest(identifier: id, content: content,
+                                        trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))
+        UNUserNotificationCenter.current().add(req)
+    }
+
+    // MARK: - Agent-event copy
 
     private func eventNotificationTitle(_ event: AgentEvent) -> String {
-        let level = event.level?.lowercased()
-        let prefix = (level == "error" || level == "warning") ? "\(level!.capitalized): " : ""
-        let source = event.source.map(displaySource) ?? "Agent"
-        return "\(prefix)\(source): \(event.title)"
+        let source = displaySourceLabel(event.source)
+        switch notifKind(for: event.level) {
+        case .needsInput: return "\(source) needs input"
+        case .finished:   return "Session complete"
+        case .error:      return "Error in \(event.session ?? source)"
+        case nil:         return "\(source): \(event.title)"
+        }
     }
 
     private func eventNotificationBody(_ event: AgentEvent) -> String {
-        let whereText = [event.host, event.session].compactMap { $0 }.joined(separator: " · ")
-        let body = event.body ?? whereText
-        guard !whereText.isEmpty, event.body != nil else { return body.isEmpty ? "agent event" : body }
-        return "\(body)\n\(whereText)"
-    }
-
-    private func displaySource(_ source: String) -> String {
-        switch source.lowercased() {
-        case "claude": return "Claude"
-        case "codex": return "Codex"
-        case "pi", "raspberry-pi": return "Pi"
-        default: return source
+        let sessionHost = [event.session, event.host].compactMap { $0 }.joined(separator: " · ")
+        switch notifKind(for: event.level) {
+        case .finished:
+            return "\(displaySourceLabel(event.source)) · \(event.session ?? "session") finished"
+        case .error:
+            let detail = (event.body?.isEmpty == false) ? event.body! : event.title
+            return [detail, event.host].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        case .needsInput, nil:
+            if let body = event.body, !body.isEmpty { return body }
+            return sessionHost.isEmpty ? event.title : sessionHost
         }
     }
 
     // MARK: UNUserNotificationCenterDelegate
 
+    /// Show the banner even when the app is foregrounded (so a permission ping is
+    /// visible while you're already in the app, and verifiable in the simulator).
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         completionHandler([.banner, .sound, .list])
     }
 
+    /// Tap routing. Usage-limit reset/available alerts send `continue` to the pinned
+    /// session (onLimitResume); agent-event alerts open the machine→session (onOpen).
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
         let action = info["action"] as? String
-        let providerId = info["providerId"] as? String
-        if let providerId,
+        if let providerId = info["providerId"] as? String,
            action == "limitReset" || action == "limitAvailable" {
             onLimitResume?(providerId)
+        } else if let host = info["host"] as? String {
+            let session = (info["session"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            onOpen?(host, session)
         }
         completionHandler()
     }
