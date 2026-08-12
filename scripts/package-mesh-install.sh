@@ -5,6 +5,10 @@
 # standalone install.sh next to it with the source URL baked in, so a bare
 #   curl -fsSL SRC_URL/install.sh | sh
 # fetches SRC_URL/mesh-install.tgz with no extra flags.
+#
+# Membership comes from `git ls-files`, never from a directory walk: v0.2.1 was
+# published with two untracked .omc/ tool-state files because the walk swept the
+# working tree. Anything not committed does not ship.
 
 set -eu
 
@@ -13,15 +17,33 @@ SRC_URL="${2:-}"
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." >/dev/null 2>&1 && pwd)
 
 python3 - "$ROOT" "$OUT" <<'PY'
-import pathlib, sys, tarfile
+import gzip, pathlib, subprocess, sys, tarfile
 root = pathlib.Path(sys.argv[1]); out = pathlib.Path(sys.argv[2])
 keep = ["install/README.md", "install/install.sh", "install/hooks", "install/payload"]
+
+listing = subprocess.run(
+    ["git", "-C", str(root), "ls-files", "-z", "--", *keep],
+    check=True, capture_output=True,
+).stdout
+files = sorted(p for p in listing.decode().split("\0") if p)
+if not files:
+    sys.exit("no tracked files matched; run from a git checkout")
+
+def reset(info: tarfile.TarInfo) -> tarfile.TarInfo:
+    # Fixed metadata so the same commit always produces the same bytes.
+    info.mtime = 0
+    info.uid = info.gid = 0
+    info.uname = info.gname = "root"
+    return info
+
 out.parent.mkdir(parents=True, exist_ok=True)
-with tarfile.open(out, "w:gz") as tar:
-    for rel in keep:
-        p = root / rel
-        if p.exists():
-            tar.add(p, arcname=rel)
+# gzip stamps its own mtime into the header, so drive it explicitly rather than
+# using tarfile's "w:gz" — otherwise the same commit yields different bytes.
+with open(out, "wb") as raw:
+    with gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as gz:
+        with tarfile.open(fileobj=gz, mode="w") as tar:
+            for rel in files:
+                tar.add(root / rel, arcname=rel, filter=reset)
 print(out)
 PY
 

@@ -22,5 +22,14 @@ required = {
 }
 missing = required - names
 assert not missing, missing
-assert not any(name.startswith("install/.omx/") for name in names)
+
+# v0.2.1 shipped install/payload/meshd/.omc/state/... because the packager walked
+# the working tree. Reject ANY dot-entry, not just the one path that bit us.
+junk = sorted(n for n in names if any(part.startswith(".") for part in n.split("/")))
+assert not junk, f"untracked/dot entries in payload: {junk}"
+
+# Belt and braces: nothing outside the intended prefixes.
+allowed = ("install/README.md", "install/install.sh", "install/hooks/", "install/payload/")
+stray = sorted(n for n in names if not n.startswith(allowed) and n not in {"install", "install/"})
+assert not stray, f"unexpected entries: {stray}"
 PY
