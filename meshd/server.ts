@@ -583,7 +583,7 @@ async function kbFederateSearch(local: any[], sp: URLSearchParams): Promise<any[
   const seen = new Set<string>();
   const out: any[] = [];
   for (const e of merged) {
-    const k = `${e.host} ${e.scope} ${e.key}`;
+    const k = `${e.host}\0${e.scope}\0${e.key}`;
     if (!seen.has(k)) { seen.add(k); out.push(e); }
   }
   return out;

@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { appendFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
+import { isOrcaAgent, orcaAvailable, orcaSessions, orcaOutput, orcaSend } from "./orca";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
@@ -87,15 +88,16 @@ async function topProcs(): Promise<any[]> {
   }).filter((p) => p.pid > 0);
 }
 async function getStats() {
-  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount] = await Promise.all([
+  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount, orcaCount] = await Promise.all([
     IS_MAC ? macCpuPct() : linuxCpuPct(),
     IS_MAC ? macMem() : linuxMem(),
     disk(),
     topProcs(),
     rmuxSessions().then((s) => s.length).catch(() => 0),
     cmuxSessions().then((s) => s.length).catch(() => 0),
+    orcaSessions().then((s) => s.length).catch(() => 0),
   ]);
-  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount };
+  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount + orcaCount };
 }
 
 // ---------- agents (rmux) ----------
@@ -341,13 +343,13 @@ async function cmuxSessions(): Promise<any[]> {
 }
 
 async function listAgents() {
-  const [rmux, cmux] = await Promise.all([rmuxSessions(), cmuxSessions()]);
+  const [rmux, cmux, orca] = await Promise.all([rmuxSessions(), cmuxSessions(), orcaSessions()]);
   // #region agent log
   appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
     `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H4", location: "meshd/server.ts:listAgents", message: "agent merge", data: { rmux: rmux.length, cmux: cmux.length, cmuxNames: cmux.map((a) => a.name).join(",") }, timestamp: Date.now() })}\n`,
   ).catch(() => {});
   // #endregion
-  return [...rmux, ...cmux];
+  return [...rmux, ...cmux, ...orca];
 }
 
 async function cmuxPanes(name: string) {
@@ -436,6 +438,8 @@ async function cmuxSend(name: string, text?: string, key?: string): Promise<{ ok
 }
 
 async function agentPanes(name: string) {
+  // Orca addresses a terminal directly; it has no pane tree to expose.
+  if (isOrcaAgent(name)) return { name, panes: [] };
   if (isCmuxAgent(name)) return cmuxPanes(name);
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
@@ -456,6 +460,7 @@ async function agentPanes(name: string) {
   return { name, panes };
 }
 async function agentOutput(name: string, lines: number, pane?: string) {
+  if (isOrcaAgent(name)) return orcaOutput(name, lines);
   if (isCmuxAgent(name)) return cmuxOutput(name, lines);
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
@@ -466,6 +471,7 @@ async function agentOutput(name: string, lines: number, pane?: string) {
 }
 const INFRA = new Set(["meshd", "rmux-bridge"]); // never killable over the wire
 async function agentKill(name: string): Promise<{ ok: boolean; error?: string }> {
+  if (isOrcaAgent(name)) return { ok: false, error: "Orca terminals are closed from Orca, not meshd" };
   if (isCmuxAgent(name)) return { ok: false, error: "cmux sessions cannot be killed from meshd" };
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
@@ -475,12 +481,14 @@ async function agentKill(name: string): Promise<{ ok: boolean; error?: string }>
   return { ok: true };
 }
 async function agentKillPane(name: string, paneId: string): Promise<{ ok: boolean; error?: string }> {
+  if (isOrcaAgent(name)) return { ok: false, error: "Orca terminals have no panes" };
   if (isCmuxAgent(name)) return { ok: false, error: "cmux panes cannot be killed from meshd" };
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
   await sh(`${MUX} kill-pane -t ${shq(paneId)}`);
   return { ok: true };
 }
 async function agentNewPane(name: string, dir?: string): Promise<{ ok: boolean; error?: string }> {
+  if (isOrcaAgent(name)) return { ok: false, error: "Orca terminals do not support new panes via meshd" };
   if (isCmuxAgent(name)) return { ok: false, error: "cmux sessions do not support new panes via meshd" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
     return { ok: false, error: "no such session" };
@@ -508,6 +516,7 @@ const KEY_SEND_KEYS: Record<string, string> = {
 };
 
 async function agentSend(name: string, text?: string, key?: string, pane?: string): Promise<{ ok: boolean; error?: string }> {
+  if (isOrcaAgent(name)) return orcaSend(name, text, key);
   if (isCmuxAgent(name)) return cmuxSend(name, text, key);
   const hasText = typeof text === "string" && text.length > 0;
   const hasKey = typeof key === "string" && key.length > 0;
@@ -709,7 +718,7 @@ async function kbFederateSearch(local: any[], sp: URLSearchParams): Promise<any[
   const seen = new Set<string>();
   const out: any[] = [];
   for (const e of merged) {
-    const k = `${e.host} ${e.scope} ${e.key}`;
+    const k = `${e.host}\0${e.scope}\0${e.key}`;
     if (!seen.has(k)) { seen.add(k); out.push(e); }
   }
   return out;
@@ -722,7 +731,10 @@ Bun.serve({
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/health") {
-      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES });
+      // "orca" is reported only when Orca's runtime is actually reachable, so the
+      // Machines tab distinguishes "not installed" from "installed but not running".
+      const capabilities = (await orcaAvailable()) ? [...CAPABILITIES, "orca"] : CAPABILITIES;
+      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities });
     }
     if (!authed(req)) return json({ error: "unauthorized" }, 401);
     try {
