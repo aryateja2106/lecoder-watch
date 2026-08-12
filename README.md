@@ -17,12 +17,32 @@ Apple Watch (SwiftUI) ──WatchConnectivity── iPhone relay ──HTTP/Tail
 
 The watch never touches the mesh directly — the paired iPhone (a tailnet node) polls every machine's `meshd` and relays the latest snapshot to the watch. "One bot per machine" = one `meshd` per machine.
 
-## meshd — the per-machine agent
+## Setup — one command per machine
 
-bun + TypeScript. `GET /stats` (htop-style), `GET /agents` + `/agents/:name/{output,send}` (rmux), `GET /usage` (OpenUsage, macOS). Bearer-token auth, binds `0.0.0.0:8899` on the private tailnet.
+Run this on every Mac or Linux box you want to reach:
 
 ```bash
-MESHD_TOKEN=yourtoken ./meshd/deploy.sh   # starts on Mac + pi + dataflow (tmux)
+curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh
+```
+
+It installs bun if missing, starts `meshd` (launchd on macOS, systemd on Linux),
+and prints an address and a generated token. In the iPhone app, tap **Paste
+installer output** during setup and it reads both out for you — no transcribing.
+
+Install Tailscale on the machine and the iPhone to reach it from anywhere; on the
+same Wi-Fi you can skip it.
+
+## meshd — the per-machine agent
+
+bun + TypeScript. `GET /stats` (htop-style), `GET /agents` + `/agents/:name/{output,send}`, `GET /usage` (OpenUsage, macOS). Bearer-token auth, binds `0.0.0.0:8899` on the private tailnet.
+
+Sessions come from three sources, merged into one list: **rmux/tmux**, **cmux**, and
+**[Orca](https://github.com/stablyai/orca)** (via its `orca` CLI, when the Orca runtime
+is reachable — this is what gives Orca users a watch client). Orca terminals appear as
+`orca:<handle>` and support read and send; they are closed from Orca itself.
+
+```bash
+MESHD_TOKEN=yourtoken ./meshd/deploy.sh   # dev-only: maintainer's fleet over tmux
 ```
 
 ## App (Xcode)
@@ -33,7 +53,9 @@ open MeshWatch.xcodeproj
 # Watch: scheme "MeshWatch Watch App"  ·  iPhone: scheme "MeshWatch"
 ```
 
-Build/run verified on iPhone 17 + Apple Watch Series 11 simulators (watchOS 26.5). Set each machine's token in the iPhone **Settings** tab (default `testtoken` is a dev placeholder).
+First launch walks through setup: what the app is → the install command → connect a
+machine → notifications. Nothing polls and no permission is requested before that.
+The app ships with **no** machines; add yours in onboarding or the **Settings** tab.
 
 ## Status
 

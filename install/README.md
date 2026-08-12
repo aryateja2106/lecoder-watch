@@ -6,20 +6,29 @@ multiplexer; nothing is hardcoded.
 
 ## Install (single curl command)
 
-Once `install.sh` + `mesh-install.tgz` are hosted together (see Hosting):
-
 ```sh
-curl -fsSL <host>/install.sh | sh
-curl -fsSL <host>/install.sh | sh -s -- --only meshd --token MYTOKEN
+curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh
 ```
 
-Or point at the payload explicitly — no hosting setup needed:
+The payload comes from the same release, so nothing else needs hosting. To pin a
+token the phone already knows, or to install only part of the stack:
 
 ```sh
-curl -fsSL <host>/install.sh | sh -s -- --src <host>/mesh-install.tgz
+curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh -s -- --token MYTOKEN
+curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh -s -- --only meshd
+```
+
+Other sources — useful for forks, air-gapped installs, and local development:
+
+```sh
+sh install.sh --src https://example.com/mesh-install.tgz
 sh install.sh --src /path/to/mesh-install.tgz   # from a local tarball
 sh install.sh                                   # from a repo checkout (uses ./payload)
+MESH_FALLBACK_SRC=https://my.fork/dl sh install.sh   # override the published release
 ```
+
+A checkout beside `install.sh` always wins over the published release, so running
+it from this repo installs your working tree, not the last tagged build.
 
 ## Options
 

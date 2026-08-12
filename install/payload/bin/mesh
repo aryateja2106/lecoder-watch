@@ -131,7 +131,11 @@ async function cmdHosts(cfg: Config) {
 function cmdHostAdd(pos: string[], flags: Record<string, string>, cfg: Config) {
   const [name, ip] = pos;
   if (!name || !ip) die("usage: mesh host add <name> <ip> [--port N] [--token T]");
-  cfg.hosts[name] = { ip, port: Number(flags.port) || 8899, token: flags.token || "testtoken" };
+  // Fall back to this machine's own token, never to a shared literal — a stranger
+  // adding a host with "testtoken" just gets 401s against their own meshd.
+  const token = flags.token || localToken();
+  if (!token) die(`no token: pass --token T, set MESHD_TOKEN, or install meshd here first`);
+  cfg.hosts[name] = { ip, port: Number(flags.port) || 8899, token };
   if (!cfg.default) cfg.default = name;
   saveConfig(cfg);
   out(() => console.log(`added ${name} → ${ip}:${cfg.hosts[name].port}${cfg.default === name ? " (default)" : ""}`), cfg.hosts[name]);
@@ -302,7 +306,7 @@ Send a single key. Supported: enter, ctrl-c, ctrl-d, up, down, left, right,
 tab, escape, backspace, delete, home, end, page-up, page-down.
   mesh key fix-bug enter        # approve a prompt
   mesh key fix-bug ctrl-c       # interrupt`,
-  "host": `mesh host add <name> <ip> [--port N] [--token T]   (default port 8899, token testtoken)
+  "host": `mesh host add <name> <ip> [--port N] [--token T]   (port 8899; token from ~/.mesh/token)
 mesh host rm <name>
 mesh host default <name>
 

@@ -27,8 +27,12 @@ and then calling
 List configured hosts with reachability.
 .TP
 .B mesh host add \fIname\fP \fIip\fP \fR[\fB\-\-port\fP \fIN\fP] [\fB\-\-token\fP \fIT\fP]\fR
-Add or update a host. Port defaults to 8899, token to
-.IR testtoken .
+Add or update a host. Port defaults to 8899. The token defaults to this machine's
+own token from
+.IR ~/.mesh/token
+(or
+.BR $MESHD_TOKEN );
+if neither is set, \fB\-\-token\fP is required.
 The first host added becomes the default.
 .TP
 .B mesh host rm \fIname\fP

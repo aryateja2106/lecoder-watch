@@ -19,6 +19,9 @@ set -eu
 # tarball path. Left as the placeholder = no default source (use --src or a
 # local ./payload checkout).
 MESH_SRC_DEFAULT="__MESH_SRC__"
+# Where to fetch the payload from when this script is piped straight from curl
+# (no checkout beside it and no --src). Overridable for forks/self-hosting.
+MESH_FALLBACK_SRC="${MESH_FALLBACK_SRC:-https://github.com/LeSearch-AI/mesh-install/releases/latest/download}"
 
 MESH_HOME="${MESH_HOME:-$HOME/.mesh}"
 MESHD_DEFAULT_PORT="8899"
@@ -420,9 +423,13 @@ resolve_payload() {
   if [ -z "$src" ]; then
     SCRIPT_DIR=$(resolve_script_dir)
     PAYLOAD_DIR="$SCRIPT_DIR/payload"
-    [ -d "$PAYLOAD_DIR" ] \
+    # A checkout beside us always wins, so local development is unaffected.
+    [ -d "$PAYLOAD_DIR" ] && return
+    # Otherwise we were piped from curl: fetch the published payload instead of dying.
+    [ -n "$MESH_FALLBACK_SRC" ] \
       || die "no payload found. Pass --src <URL|tarball>, set MESH_SRC, or run from a checkout containing payload/."
-    return
+    src="$MESH_FALLBACK_SRC"
+    log "No payload beside install.sh; using the published release."
   fi
   need_cmd tar
   TMP_FETCH=$(mktemp -d "${TMPDIR:-/tmp}/mesh-src.XXXXXX")
@@ -599,7 +606,9 @@ validate_payload
 if want_component meshd || want_component bridge; then
   ensure_bun
   BUN_BIN=$(command -v bun)
-  [ "$NO_START" = "1" ] || ensure_tmux
+  # tmux is only the fallback supervisor. Requiring it under launchd/systemd made a
+  # clean VPS abort on a dependency it would never use.
+  if [ "$NO_START" != "1" ] && [ "$SERVICE_MGR" = "tmux" ]; then ensure_tmux; fi
 fi
 
 TOKEN_VALUE="${TOKEN_FLAG:-${MESHD_TOKEN:-}}"
