@@ -242,32 +242,11 @@ function cleanCmuxLine(line: string): string {
   return (m?.[1] ?? line).trim();
 }
 
-async function cmuxBridgeReady(): Promise<boolean> {
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 2000);
-    const r = await fetch(`${CMUX_BRIDGE}/cmux`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ args: ["tree", "--all", "--json"] }),
-      signal: ctrl.signal,
-    }).finally(() => clearTimeout(t));
-    if (!r.ok) return false;
-    const body = await r.json() as { data?: { windows?: unknown[] } };
-    return Array.isArray(body.data?.windows);
-  } catch {
-    return false;
-  }
-}
-
-async function ensureCmuxBridge(): Promise<void> {
-  if (!IS_MAC) return;
-  const ready = await cmuxBridgeReady();
-}
-
 async function cmuxSessions(): Promise<any[]> {
   if (!IS_MAC) return [];
-  await ensureCmuxBridge();
+  // No readiness probe here: cmuxJson already degrades to null when the bridge is
+  // down, and the old ensureCmuxBridge() only fed a debug log — it spent a 2s
+  // timeout per /agents and /stats call and then discarded the result.
   const tree = await cmuxJson(["tree", "--all", "--json"]);
   const listed = await cmuxJson(["workspace", "list", "--json"]);
   if (!tree?.windows) return [];
