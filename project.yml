@@ -44,6 +44,7 @@ targets:
           - UIInterfaceOrientationPortrait
         NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private Tailscale network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
+        NSFaceIDUsageDescription: "Unlock MeshWatch so only you can reach your machines."
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
     settings:

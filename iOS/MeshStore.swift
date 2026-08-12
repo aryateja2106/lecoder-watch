@@ -66,7 +66,9 @@ final class MeshStore: ObservableObject {
     func load() {
         var changed = false
         let tombstoned = Set(UserDefaults.standard.stringArray(forKey: tombstonesKey) ?? [])
-        if let data = UserDefaults.standard.data(forKey: defaultsKey),
+        // Machines carry meshd tokens, so they live in the Keychain. Builds before
+        // this kept them in UserDefaults in plaintext; migrate those once.
+        if let data = SecureStore.migrateFromUserDefaults(key: defaultsKey),
            let decoded = try? JSONDecoder().decode([Machine].self, from: data),
            !decoded.isEmpty {
             machines = Self.mergedDefaultMachines(decoded, tombstoned: tombstoned)
@@ -109,11 +111,12 @@ final class MeshStore: ObservableObject {
     }
 
     func installToken() -> String {
-        if let saved = UserDefaults.standard.string(forKey: installTokenKey), !saved.isEmpty {
+        if let migrated = SecureStore.migrateFromUserDefaults(key: installTokenKey),
+           let saved = String(data: migrated, encoding: .utf8), !saved.isEmpty {
             return saved
         }
         let token = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
-        UserDefaults.standard.set(token, forKey: installTokenKey)
+        SecureStore.save(token, for: installTokenKey)
         return token
     }
 
@@ -127,7 +130,7 @@ final class MeshStore: ObservableObject {
 
     func save() {
         if let data = try? JSONEncoder().encode(machines) {
-            UserDefaults.standard.set(data, forKey: defaultsKey)
+            SecureStore.save(data, for: defaultsKey)
         }
         UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
         if let data = try? JSONEncoder().encode(pinnedLimitSessions) {

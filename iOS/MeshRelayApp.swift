@@ -3,6 +3,8 @@ import SwiftUI
 @main
 struct MeshRelayApp: App {
     @StateObject private var store: MeshStore
+    @StateObject private var lock = AppLock()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let store = MeshStore()
@@ -16,18 +18,31 @@ struct MeshRelayApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if store.needsOnboarding {
-                // No polling and no permission prompts until the user has been told
-                // what this app is and has a machine to poll.
-                OnboardingView()
-                    .environmentObject(store)
-            } else {
-                ContentView()
-                    .environmentObject(store)
-                    .onAppear {
-                        NotificationManager.shared.requestAuthorization()
-                        store.start()
-                    }
+            Group {
+                if lock.isLocked {
+                    // Nothing is read out of the Keychain and nothing polls until
+                    // the device owner has proved they are present.
+                    LockScreen()
+                } else if store.needsOnboarding {
+                    // No polling and no permission prompts until the user has been
+                    // told what this app is and has a machine to poll.
+                    OnboardingView()
+                } else {
+                    ContentView()
+                        .onAppear {
+                            NotificationManager.shared.requestAuthorization()
+                            store.start()
+                        }
+                }
+            }
+            .environmentObject(store)
+            .environmentObject(lock)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background: lock.didEnterBackground()
+            case .active:     lock.willEnterForeground()
+            default:          break
             }
         }
     }
