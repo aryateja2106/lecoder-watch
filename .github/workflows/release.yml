@@ -1,0 +1,164 @@
+name: release
+
+# Cuts a mesh-install release from this repo and publishes it to the PUBLIC
+# installer repo, LeSearch-AI/mesh-install. That repo holds no source: it exists
+# only so the advertised one-liner resolves without auth —
+#   curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh
+#
+# REQUIRED SECRET: RELEASE_TOKEN
+#   The automatic GITHUB_TOKEN is scoped to THIS repo and cannot create a release
+#   in another one, so cross-repo publishing needs a PAT:
+#     - classic PAT with `repo`, or
+#     - fine-grained PAT, resource owner LeSearch-AI, repo mesh-install,
+#       permission "Contents: Read and write".
+#   Store it here:  gh secret set RELEASE_TOKEN --repo aryateja2106/lecoder-watch
+#
+# Trigger:  git tag v0.2.2 && git push origin v0.2.2
+# Retry a failed publish without re-tagging via workflow_dispatch. `gh release
+# create` refuses an existing release, so to republish the same tag first run:
+#   gh release delete v0.2.2 --repo LeSearch-AI/mesh-install --cleanup-tag --yes
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag in this repo to publish (e.g. v0.2.2)"
+        required: true
+
+# Nothing is written back to this repo; the release lands in TARGET_REPO using
+# RELEASE_TOKEN, not GITHUB_TOKEN.
+permissions:
+  contents: read
+
+env:
+  TARGET_REPO: LeSearch-AI/mesh-install
+  # Baked into the published install.sh as MESH_SRC_DEFAULT. `latest/download` is
+  # what v0.2.1 shipped and what every doc advertises: install.sh and the tarball
+  # then always come from the same (latest) release, so a stale cached install.sh
+  # still pulls a matching payload. Switch to
+  #   https://github.com/LeSearch-AI/mesh-install/releases/download/<tag>
+  # if you ever need an old install.sh to keep resolving to its own payload.
+  SRC_URL: https://github.com/LeSearch-AI/mesh-install/releases/latest/download
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # install.sh is POSIX sh piped straight into `sh` by strangers, so a parse
+      # error is a broken install for everyone. `sh -n` is the hard gate.
+      # shellcheck runs at --severity=error only: the informational pass below is
+      # advisory, because style/info findings in a 689-line installer must not be
+      # able to block a release.
+      - name: Lint install.sh
+        run: |
+          set -eu
+          sh -n install/install.sh
+          shellcheck --shell=sh --severity=error install/install.sh
+
+      - name: shellcheck (advisory)
+        continue-on-error: true
+        run: shellcheck --shell=sh install/install.sh
+
+      # Payload-only self-checks. The Swift ones
+      # (check-install-summary / check-limit-helpers / check-session-state) need
+      # Xcode and cover the app, not the tarball, so they are deliberately absent.
+      - name: Self-checks
+        run: |
+          set -eu
+          bun scripts/check-orca-adapter.ts
+          sh scripts/check-package-mesh-install.sh
+
+      - name: Build payload
+        run: |
+          set -eu
+          mkdir -p dist
+          sh scripts/package-mesh-install.sh "$PWD/dist/mesh-install.tgz" "$SRC_URL"
+          test -f dist/install.sh
+
+          # An unstamped install.sh dies with "no payload found" when piped.
+          if grep -q '^MESH_SRC_DEFAULT="__MESH_SRC__"' dist/install.sh; then
+            echo "install.sh was not stamped with $SRC_URL" >&2; exit 1
+          fi
+          grep -q "^MESH_SRC_DEFAULT=\"$SRC_URL\"" dist/install.sh
+
+          # Since 0.2.2 the packager takes membership from `git ls-files`, so
+          # untracked cruft cannot ship. This stays as a backstop: v0.2.1 carried
+          # install/payload/meshd/.omc/state/sessions/<uuid>/ from a working-tree
+          # walk, and a regression there must fail the release, not the users.
+          if tar tzf dist/mesh-install.tgz | grep -E '/\.(omc|omx|git|DS_Store)'; then
+            echo "payload contains untracked tool state" >&2; exit 1
+          fi
+          tar tzf dist/mesh-install.tgz | grep -qx 'install/payload/bin/mesh'
+          tar tzf dist/mesh-install.tgz | grep -qx 'install/payload/meshd/server.ts'
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          set -eu
+          # Same two-line layout as the v0.2.1 asset, so `shasum -a 256 -c
+          # SHA256SUMS.txt` works from a directory holding both downloads.
+          sha256sum install.sh mesh-install.tgz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Release notes from CHANGELOG
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -eu
+          ver="${TAG#v}"
+          # From "## [<ver>]" to the next version heading, or to the link-reference
+          # footer when it is the last section.
+          awk -v v="$ver" '
+            index($0, "## [" v "]") == 1 { p = 1; next }
+            p && index($0, "## [") == 1  { exit }
+            p && /^\[[^]]+\]: /          { exit }
+            p                            { print }
+          ' CHANGELOG.md > dist/NOTES.md
+          if [ ! -s dist/NOTES.md ]; then
+            echo "no CHANGELOG.md section for [$ver]" >&2; exit 1
+          fi
+          cat dist/NOTES.md
+
+      # `gh release create` against another repo creates the tag there from that
+      # repo's default branch (main) — the tag only needs to exist HERE.
+      - name: Publish to LeSearch-AI/mesh-install
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -eu
+          [ -n "${GH_TOKEN:-}" ] || { echo "RELEASE_TOKEN secret is not set" >&2; exit 1; }
+          gh release create "$TAG" \
+            --repo "$TARGET_REPO" \
+            --title "$TAG" \
+            --notes-file dist/NOTES.md \
+            dist/install.sh dist/mesh-install.tgz dist/SHA256SUMS.txt
+
+      # Clean-download test against the public URLs a stranger actually uses.
+      # Byte-identical assets, and the one-liner's install.sh parses.
+      - name: Verify published assets
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -eu
+          base="https://github.com/$TARGET_REPO/releases/download/$TAG"
+          mkdir -p verify && cd verify
+          for f in install.sh mesh-install.tgz SHA256SUMS.txt; do
+            curl -fsSL -o "$f" "$base/$f"
+          done
+          sha256sum -c SHA256SUMS.txt
+          cmp install.sh ../dist/install.sh
+          cmp mesh-install.tgz ../dist/mesh-install.tgz
+          sh -n install.sh
+          curl -fsSL "https://github.com/$TARGET_REPO/releases/latest/download/install.sh" \
+            | cmp - install.sh

@@ -1,0 +1,111 @@
+# MeshWatch
+
+> The Apple Watch + iPhone client for [Orca](https://github.com/stablyai/orca) and
+> for any machine on your Tailscale mesh. One `meshd` per machine exposes htop-style
+> stats, coding-agent sessions and usage limits over HTTP; the phone polls the mesh
+> and relays to the watch. Local-first: no cloud service, no account, bearer token
+> per machine.
+
+Orca ships desktop, iOS and Android clients but no watchOS app. `meshd` merges
+sessions from three sources into one list — rmux/tmux, cmux, and Orca via its `orca`
+CLI — so an Orca user gets a watch client without changing anything on their side.
+Orca terminals appear as `orca:<handle>` and support read and send; they are closed
+from Orca itself.
+
+Two things ship from this repo: the **SwiftUI app** (Xcode project, iPhone relay +
+watchOS app, not on the App Store) and the **mesh payload** (`meshd`, `rmux-bridge`,
+hook tools, and the `mesh` CLI — bun + TypeScript), which is published as a release
+of the public repo LeSearch-AI/mesh-install.
+
+Install a machine into the mesh — this is the whole setup, on macOS, Linux or WSL:
+
+```sh
+curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh
+```
+
+It installs bun if missing, installs into `~/.mesh`, starts `meshd` under launchd
+(macOS) or `systemd --user` (Linux), and prints an address and a generated token.
+Useful suffixes: `-s -- --upgrade`, `-s -- --token <t>`, `-s -- --only meshd`,
+`-s -- --uninstall --purge`.
+
+`mesh` CLI (`~/.mesh/bin/mesh`, config `~/.mesh/hosts.json`, `--json` on every
+command for machine-readable output):
+
+```sh
+mesh host add <name> <ip> [--port N] [--token T]   # hosts: add / rm / default
+mesh hosts                                          # list hosts + reachability
+mesh ls            [-H host]                        # sessions (alias: agents)
+mesh peek <s>      [-H host] [-n lines] [--pane P]  # recent output
+mesh send <s> <text...>                             # type text + Enter
+mesh key  <s> <enter|ctrl-c|up|down|tab|escape|...> # single key
+mesh new  <name> [--cmd claude|codex|pi|...] [--cwd DIR] [--task "..."]
+mesh kill <s>
+mesh usage         [-H host]                        # limits (alias: limits)
+mesh health                                         # is meshd up?
+mesh events        [--since ISO]
+mesh help [cmd] | mesh man | mesh version
+```
+
+meshd HTTP API — `0.0.0.0:8899`, `Authorization: Bearer <token>` on everything
+except `/health`:
+
+```
+GET    /health                       # unauthenticated; ok, host, platform, arch,
+                                     # uptimeSec, meshdVersion, capabilities[]
+                                     # ("orca" present only when Orca is reachable)
+GET    /stats                        # cpu / memory / disk / load / top processes
+GET    /tailnet                      # tailscale peers
+GET    /agents                       # merged sessions: rmux/tmux + cmux + orca:*
+POST   /agents/new                   # {name, cmd?, cwd?, initialText?}
+DELETE /agents/:name                 # kill session
+GET    /agents/:name/output?lines=&pane=
+POST   /agents/:name/send            # {text?, key?, pane?}
+GET    /agents/:name/panes
+POST   /agents/:name/panes           # {dir?}
+DELETE /agents/:name/panes/:pane
+GET    /usage                        # OpenUsage limits (macOS)
+GET    /screen.jpg                   # screenshot
+GET    /events?since=ISO             # agent events (hook notifications)
+POST   /events
+PUT    /kb   ·  POST /kb             # knowledge base entry
+GET    /kb/search?q=&scope=&kind=&limit=&federate=0   # federates across peers
+GET    /kb/:scope/:key
+```
+
+The source repo (`aryateja2106/lecoder-watch`) is **private**, so the relative paths
+below resolve only in a checkout. Everything under an `https://` URL is public.
+
+## Install and distribution
+
+- [Installer README](install/README.md): flags, components, env vars, what lands in `~/.mesh`, hook smoke tests, uninstall.
+- [install.sh](install/install.sh): the POSIX-sh installer itself. Payload resolution order: a `payload/` dir beside the script, then `--src`, then `MESH_FALLBACK_SRC` (defaults to the published release).
+- [mesh CLI + remote install runbook](docs/mesh-cli-and-remote-install.md): adding a host over SSH, upgrading, the dev/air-gapped serving path.
+- [LeSearch-AI/mesh-install](https://github.com/LeSearch-AI/mesh-install): public release-hosting repo. No source; only the assets the one-liner resolves against.
+- [install.sh (latest release)](https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh): what the one-liner actually downloads.
+- [mesh-install.tgz (latest release)](https://github.com/LeSearch-AI/mesh-install/releases/latest/download/mesh-install.tgz): the payload tarball, layout `install/{install.sh,README.md,hooks/,payload/}`.
+- [SHA256SUMS.txt (latest release)](https://github.com/LeSearch-AI/mesh-install/releases/latest/download/SHA256SUMS.txt): verify with `shasum -a 256 -c SHA256SUMS.txt`.
+
+## Source
+
+- [README](README.md): what the app does, the architecture diagram, Xcode build commands.
+- [meshd/server.ts](install/payload/meshd/server.ts): the daemon — routing table, stats, session merge, usage, events, KB.
+- [meshd/orca.ts](install/payload/meshd/orca.ts): the Orca adapter — maps `orca terminal list/read/send` onto meshd's agent shape.
+- [bin/mesh](install/payload/bin/mesh): the CLI, dependency-free bun script.
+- [mesh(1)](install/payload/share/man/man1/mesh.1): the man page, also readable as `mesh man`.
+- [check-orca-adapter.ts](scripts/check-orca-adapter.ts): hermetic self-check that replays captured `orca --json` envelopes; run with `bun scripts/check-orca-adapter.ts`.
+
+## Releasing
+
+- [CHANGELOG](CHANGELOG.md): Keep a Changelog, semver, back to 0.1.0.
+- [RELEASING](docs/RELEASING.md): the versioning contract, how to cut a release, how to verify it.
+- [release workflow](.github/workflows/release.yml): tag `v*` builds and publishes to LeSearch-AI/mesh-install.
+- [package-mesh-install.sh](scripts/package-mesh-install.sh): builds the tarball and stamps `install.sh` with its source URL.
+
+## Optional
+
+- [Orca](https://github.com/stablyai/orca): MIT-licensed agent orchestrator. Integration is over its bundled `orca` CLI with `--json`, its documented agent contract — not the `:6768` WebSocket, which is end-to-end encrypted behind an undocumented handshake.
+- [Homebrew formula](packaging/homebrew/lesearch-mesh.rb): `mesh` CLI only, not meshd. The tap repo does not exist yet.
+- [npm launcher](packaging/npm/package.json): `npx @lesearch/mesh`. Unpublished.
+- [Tailscale](https://tailscale.com): how machines reach each other. On one Wi-Fi it can be skipped.
+- [bun](https://bun.sh): the only runtime dependency; the installer fetches it when missing.
+- [Project state and learnings](docs/PROJECT-STATE-AND-LEARNINGS-2026-07-07.md): design decisions and known device-testing gaps.

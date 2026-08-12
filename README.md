@@ -2,8 +2,13 @@
 
 Control and monitor your Tailscale-mesh machines and AI agents from your **Apple Watch + iPhone**.
 
+It is also **the Apple Watch client for [Orca](https://github.com/stablyai/orca)**, which
+ships desktop, iOS and Android apps but no watchOS one: `meshd` surfaces Orca's agent
+terminals alongside your other sessions, so an Orca user gets a wrist client without
+changing anything on their side.
+
 - **htop on your wrist** — CPU / memory / disk / load / top processes for every machine, live.
-- **Agents across the mesh** — list rmux/agent sessions per machine; send commands by voice, Scribble, quick-keys, or presets.
+- **Agents across the mesh** — list rmux/tmux, cmux and Orca sessions per machine; send commands by voice, Scribble, quick-keys, or presets.
 - **Usage glance** — OpenUsage limits (Codex / Claude / Cursor / Gemini), % used and reset times — built for overnight loops.
 - **Notifications** — usage thresholds (>85%) and machine offline/online transitions.
 
@@ -56,6 +61,14 @@ open MeshWatch.xcodeproj
 First launch walks through setup: what the app is → the install command → connect a
 machine → notifications. Nothing polls and no permission is requested before that.
 The app ships with **no** machines; add yours in onboarding or the **Settings** tab.
+
+## Releases
+
+Payload releases are published to the public repo
+[LeSearch-AI/mesh-install](https://github.com/LeSearch-AI/mesh-install), which is what
+the one-liner above resolves against. See [CHANGELOG.md](CHANGELOG.md) for what shipped
+and [docs/RELEASING.md](docs/RELEASING.md) for the versioning contract and how a release
+is cut and verified. [`llms.txt`](llms.txt) is the machine-readable map of all of this.
 
 ## Status
 

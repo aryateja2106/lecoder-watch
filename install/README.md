@@ -61,6 +61,12 @@ curl -fsSL https://<host>/dl/install.sh | sh
 Privacy-first option: serve `/dl` from a machine already on your Tailscale mesh,
 so new nodes install over the tailnet with no public host.
 
+For a real release this is automated — pushing a `v*` tag runs
+`.github/workflows/release.yml`, which builds these two files plus
+`SHA256SUMS.txt` and publishes them to LeSearch-AI/mesh-install. Running the
+packaging script by hand tars the **working tree**, untracked files included, so
+do it from a clean checkout. See [../docs/RELEASING.md](../docs/RELEASING.md).
+
 What gets installed:
 
 - `~/.mesh/meshd` and `~/.mesh/rmux-bridge` copied from `payload/`

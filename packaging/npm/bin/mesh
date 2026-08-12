@@ -1,0 +1,94 @@
+#!/usr/bin/env node
+// @lesearch/mesh — launcher for the real `mesh` CLI, so `npx @lesearch/mesh …`
+// and `bun x @lesearch/mesh …` work without a global install.
+//
+// This package deliberately ships NO CLI logic. The real client is
+// ~/.mesh/bin/mesh, a bun script that the installer writes alongside meshd:
+//   curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh
+// Vendoring a copy here would mean two implementations to keep in sync, and the
+// CLI needs the token file the installer writes anyway. So this does three
+// things: find ~/.mesh/bin/mesh, find bun, exec — and otherwise explains itself.
+//
+// Nothing here touches the network unless you explicitly run
+// `npx @lesearch/mesh install`, which fetches and runs the official installer.
+//
+// TODO: neither this repo nor LeSearch-AI/mesh-install has a LICENSE file, so
+// package.json says "UNLICENSED". Pick a license before publishing to npm.
+
+"use strict";
+
+const { spawnSync } = require("node:child_process");
+const { existsSync, rmSync } = require("node:fs");
+const { homedir, tmpdir } = require("node:os");
+const { join, delimiter } = require("node:path");
+
+const MESH_HOME = process.env.MESH_HOME || join(homedir(), ".mesh");
+const MESH_BIN = join(MESH_HOME, "bin", "mesh");
+const INSTALL_URL =
+  "https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh";
+
+const args = process.argv.slice(2);
+
+function die(msg, code = 1) {
+  console.error(msg);
+  process.exit(code);
+}
+
+// Minimal `which`, plus the location the installer puts bun in when it has to
+// install it itself (which is not on PATH in a fresh non-login shell).
+function which(cmd) {
+  const dirs = (process.env.PATH || "").split(delimiter);
+  dirs.push(join(homedir(), ".bun", "bin"));
+  for (const dir of dirs) {
+    if (!dir) continue;
+    const p = join(dir, cmd);
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+function exec(cmd, argv) {
+  const r = spawnSync(cmd, argv, { stdio: "inherit" });
+  if (r.error) die(`mesh: ${r.error.message}`);
+  // A signalled child (Ctrl-C) has status null; 130 is the conventional stand-in.
+  process.exit(r.signal ? 130 : r.status ?? 1);
+}
+
+// `npx @lesearch/mesh install [installer flags...]` — the one networked path.
+// `install` is not a `mesh` subcommand, so nothing is shadowed; if one is ever
+// added upstream, this branch has to go.
+if (args[0] === "install") {
+  if (!which("curl")) die("mesh: curl not found; install it, or run the one-liner by hand.");
+  const script = join(tmpdir(), `mesh-install-${process.pid}.sh`);
+  const dl = spawnSync("curl", ["-fsSL", "-o", script, INSTALL_URL], { stdio: "inherit" });
+  if (dl.status !== 0) die(`mesh: failed to download ${INSTALL_URL}`);
+  // Args go through argv, never a shell string, so no quoting hazard.
+  const run = spawnSync("sh", [script, ...args.slice(1)], { stdio: "inherit" });
+  rmSync(script, { force: true });
+  process.exit(run.signal ? 130 : run.status ?? 1);
+}
+
+if (!existsSync(MESH_BIN)) {
+  die(
+    `mesh: not installed — no ${MESH_BIN}\n\n` +
+      `Install meshd and the CLI on this machine:\n` +
+      `  curl -fsSL ${INSTALL_URL} | sh\n` +
+      `or the same thing through this launcher:\n` +
+      `  npx @lesearch/mesh install\n\n` +
+      `Already installed elsewhere? Set MESH_HOME to that prefix.`,
+    127,
+  );
+}
+
+const bun = which("bun");
+if (!bun) {
+  die(
+    `mesh: bun not found.\n\n` +
+      `${MESH_BIN} is a bun script (#!/usr/bin/env bun). Install bun with\n` +
+      `  brew install bun    # or: curl -fsSL https://bun.sh/install | bash\n` +
+      `or run \`npx @lesearch/mesh install\`, which installs bun when it is missing.`,
+    127,
+  );
+}
+
+exec(bun, [MESH_BIN, ...args]);

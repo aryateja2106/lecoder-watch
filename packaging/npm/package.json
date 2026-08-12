@@ -1,0 +1,22 @@
+{
+  "name": "@lesearch/mesh",
+  "version": "0.2.1",
+  "description": "Launcher for the mesh CLI: control coding-agent sessions on your machines over the meshd HTTP API",
+  "keywords": ["mesh", "meshd", "meshwatch", "orca", "tmux", "cmux", "agents", "tailscale", "cli"],
+  "homepage": "https://github.com/LeSearch-AI/mesh-install",
+  "bugs": "https://github.com/LeSearch-AI/mesh-install/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LeSearch-AI/mesh-install.git"
+  },
+  "license": "UNLICENSED",
+  "bin": {
+    "mesh": "./bin/mesh"
+  },
+  "files": ["bin/mesh"],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": ["darwin", "linux"],
+  "dependencies": {}
+}
