@@ -12,6 +12,8 @@ final class MeshStore: ObservableObject {
     @Published var events: [AgentEvent] = []
     @Published var lastError: String?
     @Published var polling = false
+    /// First run, or every run until the user has a machine to talk to.
+    @Published var needsOnboarding = false
 
     private var timer: Timer?
     private let defaultsKey = "mesh.machines.v1"
@@ -19,6 +21,7 @@ final class MeshStore: ObservableObject {
     private let quickCommandsKey = "mesh.quickCommands.v1"
     private let pinnedLimitsKey = "mesh.pinnedLimits.v1"
     private let tombstonesKey = "mesh.deletedDefaults.v1"
+    private let onboardedKey = "mesh.onboarded.v1"
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
@@ -30,9 +33,32 @@ final class MeshStore: ObservableObject {
 
     init() {
         load()
+        // Re-offer setup after a delete-everything too: an empty app with no
+        // explanation is the state that made this app unusable for new users.
+        needsOnboarding = !UserDefaults.standard.bool(forKey: onboardedKey) || machines.isEmpty
         PhoneConnectivity.shared.commandHandler = { [weak self] cmd in
             await self?.handle(cmd)
         }
+    }
+
+    func completeOnboarding() {
+        UserDefaults.standard.set(true, forKey: onboardedKey)
+        needsOnboarding = false
+        start()
+    }
+
+    /// Replay onboarding from Settings without wiping the machines already added.
+    func restartOnboarding() {
+        needsOnboarding = true
+    }
+
+    /// Load the maintainer's dogfood fleet (Settings ▸ Developer).
+    func loadDevSeed() {
+        for machine in Machine.devSeed where !machines.contains(where: { $0.host == machine.host }) {
+            machines.append(machine)
+        }
+        UserDefaults.standard.set([String](), forKey: tombstonesKey)
+        save()
     }
 
     // MARK: Persistence
@@ -47,13 +73,6 @@ final class MeshStore: ObservableObject {
             changed = machines != decoded
         } else {
             machines = Machine.defaults.filter { !tombstoned.contains($0.host) }
-        }
-        let generated = UserDefaults.standard.string(forKey: installTokenKey)
-        for idx in machines.indices {
-            if generated == machines[idx].token, Machine.defaults.contains(where: { $0.host == machines[idx].host }) {
-                machines[idx].token = "testtoken"
-                changed = true
-            }
         }
         if changed { save() }
         if let decoded = UserDefaults.standard.stringArray(forKey: quickCommandsKey), !decoded.isEmpty {
@@ -128,6 +147,51 @@ final class MeshStore: ObservableObject {
     func addMachine() {
         machines.append(Machine(host: "new-machine", ip: "", port: 8899, token: installToken()))
         save()
+    }
+
+    /// Add (or update) a machine from onboarding. Clears any tombstone for the host so a
+    /// previously deleted machine can be re-added.
+    func addMachine(host: String, ip: String, port: Int = 8899, token: String, bridgeURL: String? = nil) {
+        var tombstoned = Set(UserDefaults.standard.stringArray(forKey: tombstonesKey) ?? [])
+        if tombstoned.remove(host) != nil {
+            UserDefaults.standard.set(Array(tombstoned), forKey: tombstonesKey)
+        }
+        if let idx = machines.firstIndex(where: { $0.host == host }) {
+            machines[idx].ip = ip
+            machines[idx].port = port
+            machines[idx].token = token
+            if let bridgeURL { machines[idx].bridgeURL = bridgeURL }
+        } else {
+            machines.append(Machine(host: host, ip: ip, port: port, token: token, bridgeURL: bridgeURL))
+        }
+        save()
+    }
+
+    /// What "Test connection" reports during onboarding.
+    enum ProbeResult: Equatable {
+        case ok(host: String?, sessions: Int)
+        case unauthorized
+        case unreachable(String)
+    }
+
+    /// One-shot check of a candidate machine before we save it.
+    nonisolated static func probe(_ machine: Machine) async -> ProbeResult {
+        let client = MeshClient(machine: machine)
+        do {
+            let health = try await client.healthInfo()
+            guard health.ok else { return .unreachable("meshd reported not ok") }
+            // /health can be unauthenticated; /stats is what proves the token.
+            do {
+                let stats = try await client.stats()
+                return .ok(host: health.host ?? stats.host, sessions: stats.agentsCount)
+            } catch {
+                if isAuthError(error) { return .unauthorized }
+                return .ok(host: health.host, sessions: 0)
+            }
+        } catch {
+            if isAuthError(error) { return .unauthorized }
+            return .unreachable(describe(error))
+        }
     }
 
     // MARK: Polling

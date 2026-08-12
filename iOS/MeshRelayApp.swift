@@ -16,12 +16,19 @@ struct MeshRelayApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(store)
-                .onAppear {
-                    NotificationManager.shared.requestAuthorization()
-                    store.start()
-                }
+            if store.needsOnboarding {
+                // No polling and no permission prompts until the user has been told
+                // what this app is and has a machine to poll.
+                OnboardingView()
+                    .environmentObject(store)
+            } else {
+                ContentView()
+                    .environmentObject(store)
+                    .onAppear {
+                        NotificationManager.shared.requestAuthorization()
+                        store.start()
+                    }
+            }
         }
     }
 }

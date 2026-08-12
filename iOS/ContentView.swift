@@ -122,7 +122,7 @@ private struct MachinesTab: View {
                             ServiceStatusRow(label: "meshd", ok: true, detail: "active")
                             ServiceStatusRow(label: "auth", ok: m.authError == nil, detail: m.authError ?? "active")
                             if m.authError != nil, let machine = store.machines.first(where: { $0.host == m.host }) {
-                                copyableCommand("sh install.sh --token \(machine.token)")
+                                copyableCommand(MeshInstall.command(token: machine.token))
                             }
                             ServiceStatusRow(label: "bridge", ok: m.bridgeReachable, detail: m.bridgeError)
                             ServiceStatusRow(label: "VNC", ok: m.vncReachable, detail: m.vncError)
@@ -193,8 +193,8 @@ private struct MachinesTab: View {
                                 Text("Update command")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                copyableCommand("sh install.sh --token \(machine.token)")
-                                Text("Run from the Mesh installer folder on \(machineShortName(m.host)).")
+                                copyableCommand(MeshInstall.command(token: machine.token))
+                                Text("Run this on \(machineShortName(m.host)) to upgrade meshd in place. Your token is preserved.")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -204,8 +204,8 @@ private struct MachinesTab: View {
                                 Text("Terminal bridge")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-                                copyableCommand("sh install.sh --token \(machine.token)")
-                                Text("Starts rmux-bridge on \(machineShortName(m.host)) so phone terminals can open.")
+                                copyableCommand(MeshInstall.command(token: machine.token))
+                                Text("Run this on \(machineShortName(m.host)) to start rmux-bridge so phone terminals can open.")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -227,7 +227,14 @@ private struct MachinesTab: View {
             .navigationTitle("Mesh")
             .overlay {
                 if rows.isEmpty {
-                    ContentUnavailableView("No machines", systemImage: "server.rack", description: Text("Add one in Settings."))
+                    ContentUnavailableView {
+                        Label("No machines", systemImage: "server.rack")
+                    } description: {
+                        Text("Run the installer on a Mac or Linux box, then connect to it.")
+                    } actions: {
+                        Button("Set up a machine") { store.restartOnboarding() }
+                            .buttonStyle(.borderedProminent)
+                    }
                 }
             }
             .toolbar {
@@ -477,7 +484,7 @@ private struct SettingsTab: View {
                                     Label("Copy token", systemImage: "key")
                                 }
                                 Button {
-                                    UIPasteboard.general.string = "sh install.sh --token \(m.token)"
+                                    UIPasteboard.general.string = MeshInstall.command(token: m.token)
                                 } label: {
                                     Label("Copy install", systemImage: "doc.on.doc")
                                 }
@@ -525,6 +532,34 @@ private struct SettingsTab: View {
                     }
                 } header: {
                     Text("Limit resume pins")
+                }
+
+                Section {
+                    copyableCommand(MeshInstall.command)
+                    Text("Run this on any Mac or Linux machine to install meshd, then add it above.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        store.restartOnboarding()
+                    } label: {
+                        Label("Show setup guide again", systemImage: "sparkles")
+                    }
+                } header: {
+                    Text("Add a machine")
+                }
+
+                Section {
+                    Button {
+                        store.loadDevSeed()
+                        Task { await store.refresh() }
+                    } label: {
+                        Label("Load dogfood fleet", systemImage: "ant")
+                    }
+                    Text("Adds the maintainer's tailnet machines. Not shipped as a default — every other user starts empty.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Developer")
                 }
             }
             .navigationTitle("Settings")

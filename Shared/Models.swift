@@ -58,8 +58,12 @@ struct Machine: Codable, Identifiable, Hashable {
         return URL(string: s)
     }
 
-    // Dogfood default: current local services use this token; custom machines can use generated tokens.
-    static let defaults: [Machine] = [
+    /// A new install starts empty — onboarding adds the first machine. Shipping
+    /// seeds here would hand every user someone else's tailnet IPs and token.
+    static let defaults: [Machine] = []
+
+    /// Dogfood fleet, loaded on demand from Settings ▸ Developer. Not a default.
+    static let devSeed: [Machine] = [
         Machine(host: "arya-macbook-pro", ip: "100.94.221.115", port: 8899, token: "testtoken"),
         Machine(host: "arya-pi", ip: "100.94.168.17", port: 8899, token: "testtoken"),
         Machine(host: "dataflowagents", ip: "100.80.10.95", port: 8899, token: "testtoken")

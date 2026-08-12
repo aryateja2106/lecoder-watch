@@ -87,7 +87,17 @@ struct MachinesListView: View {
         }
         .overlay {
             if store.snaps.isEmpty {
-                ProgressView("Connecting…")
+                if store.machines.isEmpty {
+                    // Nothing is configured yet: spinning forever here is what made a
+                    // fresh install look broken. Point at the iPhone, which owns setup.
+                    ContentUnavailableView {
+                        Label("No machines", systemImage: "iphone.gen3")
+                    } description: {
+                        Text("Open MeshWatch on your iPhone to add your first machine.")
+                    }
+                } else {
+                    ProgressView("Connecting…")
+                }
             }
         }
         // ponytail: pull-to-refresh instead of a toolbar button — on watchOS a bare

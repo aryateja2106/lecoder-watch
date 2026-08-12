@@ -52,7 +52,7 @@ struct TerminalTab: View {
                                     Text("Update this machine's token in Settings, then refresh.")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                    copyableCommand("sh install.sh --token \(m.token)")
+                                    copyableCommand(MeshInstall.command(token: m.token))
                                 }
                             }
                             ForEach(snap.agents) { agent in
