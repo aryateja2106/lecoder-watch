@@ -1,0 +1,14 @@
+{
+  "name": "lecoder-watch-dev",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only tooling for typechecking the meshd/bridge TypeScript. Not shipped: scripts/package-mesh-install.sh only packages install/**.",
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json",
+    "preflight": "sh scripts/preflight.sh"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}

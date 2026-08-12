@@ -54,29 +54,20 @@ jobs:
         with:
           bun-version: latest
 
-      # install.sh is POSIX sh piped straight into `sh` by strangers, so a parse
-      # error is a broken install for everyone. `sh -n` is the hard gate.
-      # shellcheck runs at --severity=error only: the informational pass below is
-      # advisory, because style/info findings in a 689-line installer must not be
-      # able to block a release.
-      - name: Lint install.sh
+      - name: Install gitleaks
         run: |
           set -eu
-          sh -n install/install.sh
-          shellcheck --shell=sh --severity=error install/install.sh
+          v=8.28.0
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${v}/gitleaks_${v}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
 
-      - name: shellcheck (advisory)
-        continue-on-error: true
-        run: shellcheck --shell=sh install/install.sh
-
-      # Payload-only self-checks. The Swift ones
-      # (check-install-summary / check-limit-helpers / check-session-state) need
-      # Xcode and cover the app, not the tarball, so they are deliberately absent.
-      - name: Self-checks
-        run: |
-          set -eu
-          bun scripts/check-orca-adapter.ts
-          sh scripts/check-package-mesh-install.sh
+      # One gate for everything: secret scan (history AND working tree), shell
+      # syntax, strict TypeScript, every bundle entry point, and the payload
+      # self-checks. The Swift checks and app builds self-skip here — no Xcode on
+      # a Linux runner — so this is the payload gate, not the app gate.
+      - name: Preflight
+        run: sh scripts/preflight.sh
 
       - name: Build payload
         run: |

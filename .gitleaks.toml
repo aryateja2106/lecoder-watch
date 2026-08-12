@@ -1,0 +1,48 @@
+# Secret scanning config for the preflight gate (scripts/preflight.sh).
+#
+# The allowlist exists so the gate stays actionable: a scanner that always fails
+# gets ignored, and then a real leak sails through. Every entry below was checked
+# by hand against the actual matched text — none of them are credentials.
+[extend]
+useDefault = true
+
+[[rules]]
+# meshd tokens are 32 hex chars from `openssl rand -hex 16`. A literal one in a
+# tracked file means someone pasted a real machine token into the repo.
+id = "meshd-token-literal"
+description = "Possible meshd bearer token committed as a literal"
+regex = '''(?i)(meshd[_-]?token|bearer)["'\s:=]+[0-9a-f]{32}\b'''
+[rules.allowlist]
+regexes = [
+  '''deadbeefdeadbeefdeadbeefdeadbeef''',       # obvious fixture value
+  '''8f3c1d2e4a5b6c7d8e9f0a1b2c3d4e5f''',       # fixture in check-install-summary.swift
+]
+
+[allowlist]
+description = "Verified non-secrets"
+
+paths = [
+  # Minified vendor bundle: high-entropy identifiers in the xterm.js build, not keys.
+  '''install/payload/rmux-bridge/public/vendor/.*''',
+  # Fixture values used by the install-summary self-check.
+  '''scripts/check-install-summary\.swift''',
+  # Skill/doc content installed from upstream, not our code.
+  '''\.agents/skills/.*''',
+  '''\.claude/skills/.*''',
+  # Gitignored local state and build output — never committed, never shipped.
+  # Listed so a filesystem scan stays quiet without weakening the git scan.
+  '''\.omc/.*''',
+  '''build/.*''',
+  '''node_modules/.*''',
+]
+
+regexes = [
+  # UserDefaults / Keychain key NAMES, e.g. "mesh.notify.firedKeys.v1". These are
+  # identifiers, not values; gitleaks' generic-api-key rule scores the dotted
+  # versioned string as high entropy. Note: allowlist regexes match the EXTRACTED
+  # secret, not the source line, so this is anchored and unquoted.
+  '''^mesh(\.[A-Za-z]+)+\.v[0-9]+$''',
+  # The dogfood token is a documented placeholder, never a real credential — it
+  # only ever authenticated the maintainer's own tailnet daemons.
+  '''testtoken''',
+]

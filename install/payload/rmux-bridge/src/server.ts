@@ -1,3 +1,4 @@
+import type { ServerWebSocket } from "bun";
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

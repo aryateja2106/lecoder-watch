@@ -1,0 +1,23 @@
+{
+  // Dev-only typecheck config. `strict` is on because this code parses untrusted
+  // pty/tmux/Orca output — the places a null or a wrong shape slips through are
+  // exactly the places that corrupt a terminal stream or leak the wrong buffer.
+  // It passed strict with zero errors on day one; keep it that way.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["bun"],
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false
+  },
+  "include": [
+    "install/payload/meshd/*.ts",
+    "install/payload/rmux-bridge/src/*.ts",
+    "scripts/*.ts"
+  ]
+}
