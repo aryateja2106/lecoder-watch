@@ -19,6 +19,25 @@ const CMUX = process.env.CMUX_BIN ?? "cmux";
 const CMUX_SOCKET_HINT = process.env.CMUX_SOCKET_HINT ?? "/tmp/cmux-last-socket-path";
 const CMUX_BRIDGE = process.env.CMUX_BRIDGE ?? "http://127.0.0.1:8901";
 const EVENTS_PATH = process.env.MESHD_EVENTS_PATH ?? join(homedir(), ".mesh", "agent-events.jsonl");
+// Opt-in escape hatch for local development only. An unauthenticated meshd is
+// remote shell access, so it is refused outright unless this is set AND the
+// daemon is bound to loopback.
+const ALLOW_NO_AUTH = process.env.MESHD_ALLOW_NO_AUTH === "1";
+
+if (!TOKEN) {
+  const loopback = HOST === "127.0.0.1" || HOST === "localhost" || HOST === "::1";
+  if (!ALLOW_NO_AUTH || !loopback) {
+    console.error(
+      "meshd: refusing to start without MESHD_TOKEN.\n" +
+      "  This service runs shell commands; an empty token would leave it open to\n" +
+      `  anyone who can reach ${HOST}:${PORT}.\n` +
+      "  Fix: MESHD_TOKEN=$(openssl rand -hex 16) (install.sh does this for you).\n" +
+      "  Local dev only: MESHD_ALLOW_NO_AUTH=1 with MESHD_HOST=127.0.0.1."
+    );
+    process.exit(1);
+  }
+  console.warn(`meshd: running UNAUTHENTICATED on ${HOST}:${PORT} (MESHD_ALLOW_NO_AUTH=1)`);
+}
 
 async function sh(cmd: string): Promise<string> {
   const p = Bun.spawn(["/bin/sh", "-c", cmd], { stdout: "pipe", stderr: "ignore" });
@@ -627,7 +646,10 @@ function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
 function authed(req: Request): boolean {
-  if (!TOKEN) return true;
+  // Never fail open: this daemon starts shells and sends keystrokes to them.
+  // Running without a token is only reachable via the explicit opt-in checked at
+  // startup, which also forces a loopback bind.
+  if (!TOKEN) return ALLOW_NO_AUTH;
   const h = req.headers.get("authorization") ?? "";
   const q = new URL(req.url).searchParams.get("token") ?? "";
   return h === `Bearer ${TOKEN}` || q === TOKEN;
