@@ -502,7 +502,7 @@ final class MeshStore: ObservableObject {
         return await withTaskGroup(of: (ok: Bool, error: String?).self) { group in
             group.addTask {
                 var req = URLRequest(url: url)
-                req.timeoutInterval = 2
+                req.timeoutInterval = MeshClient.probeTimeout
                 do {
                     let (_, resp) = try await URLSession.shared.data(for: req)
                     guard let http = resp as? HTTPURLResponse else { return (true, nil) }
@@ -513,7 +513,9 @@ final class MeshStore: ObservableObject {
                 }
             }
             group.addTask {
-                try? await Task.sleep(for: .seconds(2))
+                // Must not be shorter than the request deadline above, or this race
+                // reports "timed out" while the request is still in flight.
+                try? await Task.sleep(for: .seconds(MeshClient.probeTimeout))
                 return (false, "timed out")
             }
             let first = await group.next() ?? (false, "timed out")

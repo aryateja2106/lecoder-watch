@@ -78,6 +78,11 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     private func evaluateReachability(_ machines: [MachineSnapshot]) {
         for m in machines {
             if let prev = lastReachable[m.host], prev != m.reachable {
+                // Retract the opposite claim: "went offline" is wrong once it is
+                // back, and two contradictory alerts side by side is noise.
+                UNUserNotificationCenter.current().removeDeliveredNotifications(
+                    withIdentifiers: ["reach-\(m.host)-\(!m.reachable)"]
+                )
                 notifyNow(id: "reach-\(m.host)-\(m.reachable)",
                           title: m.host,
                           body: m.reachable ? "back online" : "went offline")
@@ -111,6 +116,10 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
 
                 let window = limit.resetsAtISO ?? "none"
                 let remaining = LimitHelpers.remainingPct(usedPct: pct) ?? 100
+
+                // Anything delivered for an earlier window is describing a budget
+                // that no longer exists — clear it before adding to the pile.
+                pruneDeliveredAlerts(limitKey: limitKey, currentWindow: window)
 
                 // A session window opening is itself worth knowing: it starts the
                 // clock you are budgeting against.
@@ -162,6 +171,10 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                     let availKey = "usage-available-\(limitKey)-\(limit.resetsAtISO ?? "none")"
                     if !firedKeys.contains(availKey) {
                         firedKeys.insert(availKey)
+                        // The budget warnings and the "limit reached" alert are all
+                        // false now — retract them rather than leaving them stacked
+                        // above the good news.
+                        pruneDeliveredAlerts(limitKey: limitKey, currentWindow: window, clearAll: true)
                         notifyNow(id: availKey,
                                   title: "\(provider.displayName) limit reset",
                                   body: availableBody(provider: provider, limit: limit, pinned: pinned),
@@ -213,6 +226,28 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                  loud: true)
 
         return id
+    }
+
+    /// Alert identifiers that describe a *state*, so a delivered one stops being
+    /// true the moment that state changes. `usage-available-` is excluded: it
+    /// reports an event you may still want to act on.
+    private static let statefulAlertPrefixes = ["usage-start-", "usage-tier", "usage-hit-", "usage-warn-"]
+
+    /// Drop delivered alerts for a limit that no longer apply — either they belong
+    /// to an earlier reset window, or the limit has since cleared. Without this
+    /// every window leaves its alerts stacked in Notification Center and the list
+    /// only ever grows, which is exactly what makes them stop being read.
+    private func pruneDeliveredAlerts(limitKey: String, currentWindow: String, clearAll: Bool = false) {
+        let center = UNUserNotificationCenter.current()
+        center.getDeliveredNotifications { delivered in
+            let stale = delivered.map(\.request.identifier).filter { id in
+                guard Self.statefulAlertPrefixes.contains(where: { id.hasPrefix($0) }),
+                      id.contains("-\(limitKey)-") else { return false }
+                return clearAll || !id.hasSuffix("-\(currentWindow)")
+            }
+            guard !stale.isEmpty else { return }
+            center.removeDeliveredNotifications(withIdentifiers: stale)
+        }
     }
 
     private func cancelStaleResetNotifications(keeping desired: Set<String>) {
@@ -283,6 +318,9 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         content.title = title
         content.body = body
         content.sound = .default
+        // Group per provider/machine so Notification Center collapses a run of
+        // alerts into one stack instead of a wall of separate rows.
+        content.threadIdentifier = id.split(separator: "-").dropLast().joined(separator: "-")
         if loud { content.interruptionLevel = .timeSensitive }
         content.userInfo = userInfo
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, interval), repeats: false)

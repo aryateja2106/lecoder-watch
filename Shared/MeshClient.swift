@@ -6,6 +6,15 @@ struct MeshClient {
 
     enum MeshError: Error { case badURL, http(Int), decode }
 
+    /// Generous on purpose. A phone reaching a Mac over Tailscale is often relayed
+    /// through a DERP node rather than connected directly — a measured round trip
+    /// on a relayed international path was over 4s, so the previous 3s deadline
+    /// timed out every request and the whole mesh read as offline.
+    static let requestTimeout: TimeInterval = 12
+    /// Liveness probes for the bridge and VNC. Shorter than the main timeout since
+    /// these are decorative status dots, but still above a relayed round trip.
+    static let probeTimeout: TimeInterval = 6
+
     private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
         guard !machine.baseURLs.isEmpty else {
             throw MeshError.badURL
@@ -15,7 +24,7 @@ struct MeshClient {
             guard let url = URL(string: path, relativeTo: base) else { continue }
             var req = URLRequest(url: url)
             req.httpMethod = method
-            req.timeoutInterval = 3
+            req.timeoutInterval = Self.requestTimeout
             req.setValue("Bearer \(machine.token)", forHTTPHeaderField: "Authorization")
             if let body {
                 req.httpBody = body
