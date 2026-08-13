@@ -109,16 +109,39 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                 let blocked = pct >= blockedThreshold
                 let wasBlocked = lastBlockedByLimitKey[limitKey] ?? false
 
-                if pct >= usageThreshold {
-                    let warnKey = "usage-warn-\(limitKey)-\(limit.resetsAtISO ?? "none")"
-                    if !firedKeys.contains(warnKey) {
-                        firedKeys.insert(warnKey)
-                        notifyNow(id: warnKey,
-                                  title: "\(provider.displayName) \(limit.label)",
+                let window = limit.resetsAtISO ?? "none"
+                let remaining = LimitHelpers.remainingPct(usedPct: pct) ?? 100
+
+                // A session window opening is itself worth knowing: it starts the
+                // clock you are budgeting against.
+                if LimitHelpers.isSessionLimit(label: limit.label), pct > 0 {
+                    let startKey = "usage-start-\(limitKey)-\(window)"
+                    if !firedKeys.contains(startKey) {
+                        firedKeys.insert(startKey)
+                        notifyNow(id: startKey,
+                                  title: "\(provider.displayName) session started",
+                                  body: sessionStartedBody(limit: limit))
+                    }
+                }
+
+                // Budget tiers: 50% then 25% left. Firing the lowest crossed tier and
+                // suppressing the ones above it means a fast burn produces one alert,
+                // not a burst.
+                if let tier = LimitHelpers.crossedTier(remainingPct: remaining) {
+                    let tierKey = "usage-tier\(tier)-\(limitKey)-\(window)"
+                    if !firedKeys.contains(tierKey) {
+                        for passed in LimitHelpers.tiersAtOrAbove(tier) {
+                            firedKeys.insert("usage-tier\(passed)-\(limitKey)-\(window)")
+                        }
+                        notifyNow(id: tierKey,
+                                  title: "\(provider.displayName) \(limit.label) — \(tier)% left",
                                   body: warningBody(provider: provider, limit: limit, pct: pct))
                     }
-                    // Pre-arm the OS-persisted reset alert from the warning band so it
-                    // still fires if the app is backgrounded or killed before the limit hits.
+                }
+
+                if remaining <= LimitHelpers.remainingAlertTiers.max() ?? 50 {
+                    // Pre-arm the OS-persisted reset alert as soon as the budget starts
+                    // mattering, so it still fires if the app is backgrounded or killed.
                     if let resetId = scheduleResetNotification(provider: provider,
                                                                limit: limit,
                                                                pinned: pinned) {
@@ -204,6 +227,12 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     }
 
     // MARK: - Copy helpers
+
+    private func sessionStartedBody(limit: UsageLimit) -> String {
+        LimitHelpers.resetCountdown(from: limit.resetsAtISO)
+            .map { "Your window is open · \($0)" }
+            ?? "Your session window is open."
+    }
 
     private func warningBody(provider: UsageProvider, limit: UsageLimit, pct: Double) -> String {
         let left = LimitHelpers.remainingPct(usedPct: pct).map { "\($0)% left" } ?? String(format: "%.0f%% used", pct)
