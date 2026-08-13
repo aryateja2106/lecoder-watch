@@ -14,6 +14,8 @@ struct MeshRelayApp: App {
         NotificationManager.shared.onLimitResume = { providerId in
             Task { await store.resumePinnedLimit(providerId: providerId) }
         }
+        // Must happen before launch completes, so it cannot move to onAppear.
+        BackgroundRefresh.register(store: store)
     }
 
     var body: some Scene {
@@ -40,9 +42,15 @@ struct MeshRelayApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
-            case .background: lock.didEnterBackground()
-            case .active:     lock.willEnterForeground()
-            default:          break
+            case .background:
+                lock.didEnterBackground()
+                // Queue a usage check for while the app is closed — this is what
+                // notices you crossed a limit when you aren't looking.
+                BackgroundRefresh.schedule()
+            case .active:
+                lock.willEnterForeground()
+            default:
+                break
             }
         }
     }
