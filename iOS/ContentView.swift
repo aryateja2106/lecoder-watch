@@ -550,6 +550,17 @@ private struct SettingsTab: View {
                 }
 
                 Section {
+                    ForEach(store.machines) { machine in
+                        DiagnoseRow(machine: machine)
+                    }
+                    Text("Tries each address on its own and reports what happened. /health needs no token, so a green address with a red token means the network is fine and only the token is wrong.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Connection diagnosis")
+                }
+
+                Section {
                     Toggle(isOn: $lock.enabled) {
                         Label("Require \(AppLock.methodName)", systemImage: "lock.fill")
                     }
@@ -580,6 +591,45 @@ private struct SettingsTab: View {
             .navigationTitle("Settings")
             .toolbar { Button("Save") { store.save(); Task { await store.refresh() } } }
         }
+    }
+}
+
+private struct DiagnoseRow: View {
+    let machine: Machine
+    @State private var results: [MeshStore.AddressDiagnosis] = []
+    @State private var running = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(machine.host).font(.headline)
+                Spacer()
+                Button {
+                    Task {
+                        running = true
+                        results = await MeshStore.diagnose(machine)
+                        running = false
+                    }
+                } label: {
+                    if running { ProgressView().controlSize(.small) } else { Text("Test") }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(running)
+            }
+            ForEach(results) { r in
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: r.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(r.ok ? .green : .red)
+                        .font(.caption)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(r.address).font(.caption.monospaced())
+                        Text(r.outcome).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 

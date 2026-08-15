@@ -177,6 +177,53 @@ final class MeshStore: ObservableObject {
         case unreachable(String)
     }
 
+    /// Per-address result of a connection attempt. "timed out" on the machine row
+    /// only reports whichever address failed last, which hides whether the address
+    /// was unreachable, unresolvable, or answering with the wrong token.
+    struct AddressDiagnosis: Identifiable {
+        var id: String { address }
+        var address: String
+        var outcome: String
+        var ok: Bool
+    }
+
+    /// Try every address a machine would use, separately, and report each result.
+    nonisolated static func diagnose(_ machine: Machine) async -> [AddressDiagnosis] {
+        var results: [AddressDiagnosis] = []
+        for address in machine.addresses {
+            guard let url = URL(string: "http://\(address):\(machine.port)/health") else {
+                results.append(.init(address: address, outcome: "bad URL", ok: false))
+                continue
+            }
+            var req = URLRequest(url: url)
+            req.timeoutInterval = MeshClient.requestTimeout
+            let started = Date()
+            do {
+                let (_, resp) = try await URLSession.shared.data(for: req)
+                let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                let ms = Int(Date().timeIntervalSince(started) * 1000)
+                // /health needs no token, so reaching it proves the network path
+                // independently of whether the saved token is correct.
+                results.append(.init(address: address,
+                                     outcome: "HTTP \(code) in \(ms)ms",
+                                     ok: (200...299).contains(code)))
+            } catch {
+                results.append(.init(address: address, outcome: describe(error), ok: false))
+            }
+        }
+        // A reachable machine still fails everything if the token is wrong, so
+        // check an authenticated endpoint too — that separates network from auth.
+        switch await probe(machine) {
+        case .ok(let host, let sessions):
+            results.append(.init(address: "auth", outcome: "token OK · \(host ?? "meshd") · \(sessions) sessions", ok: true))
+        case .unauthorized:
+            results.append(.init(address: "auth", outcome: "token REJECTED — fix it in Settings", ok: false))
+        case .unreachable(let why):
+            results.append(.init(address: "auth", outcome: "unreachable: \(why)", ok: false))
+        }
+        return results
+    }
+
     /// One-shot check of a candidate machine before we save it.
     nonisolated static func probe(_ machine: Machine) async -> ProbeResult {
         let client = MeshClient(machine: machine)
