@@ -87,17 +87,35 @@ using daily. One slice at a time, full build gate, commit only when green.
   reach. A relayed session now re-probes the direct path every 20s instead of staying
   slow for the rest of the session.
 
+## In the morning
+
+1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →
+   Available Apps → Install.
+2. Tap **Control arya-macbook-pro** — the first row.
+3. Display chips `1` `2` switch which screen you're driving. Tap the preview to place the
+   cursor, drag the pad to nudge it, crown scrolls, `⋯` opens everything else.
+
+If the trackpad says **"via phone"** that's the relay and it still works, just slower.
+**"Needs Accessibility"** means the grant lapsed — the hub has *Ask the Mac now*.
+
 ## Next
 
-1. **S11 verify on the watch** — the dev tunnel is still refusing; once it connects,
-   install straight to the watch and confirm the trackpad drives the cursor.
-2. **S12 docs** — refresh `docs/mac-remote-control.md` for displays, apps, media,
-   system, windows and the relay reply path.
+1. **Verify on the watch itself** — dev tunnel still refuses (see Blockers), so nothing
+   has been driven from an actual watch yet; everything below the watch UI is verified
+   against the live daemon.
+2. **Tune `pointerGain`** once the pad has been used in anger — the three constants were
+   picked by reasoning, not by feel.
+3. **Backport** the meshd input routes into the repo `meshd/` lineage if it is ever
+   revived (currently stale; `install/payload/meshd/` is canonical).
 
 ## Blockers
 
-- **Watch dev tunnel unavailable.** `devicectl` pairs the watch but every connection is
-  refused; an unpair/re-pair cycle dropped it from discovery entirely. Developer Mode is
-  on. A background watcher retries every 30s. Until it returns, watch verification is
-  build-gate + the Mac-side input probe, not on-watch logs. The app still reaches the
-  watch embedded in the iPhone bundle.
+- **Watch dev tunnel unavailable.** `devicectl` could pair the watch but every
+  connection was refused ("rejected the Bluetooth connection attempt"); an unpair/re-pair
+  cycle then dropped it from discovery entirely and it has not come back, with the iPhone
+  wired and Developer Mode on. Xcode's Devices window is the usual way to re-establish it.
+  Until then, watch-side verification is the build gate plus a Mac-side CGEventTap probe,
+  not on-watch logs — the app itself still reaches the watch embedded in the iPhone bundle.
+- **The `~/.mesh/meshd/server.ts` patch is three lines in a file another agent owns.**
+  `input.ts` and `mesh-input.swift` are standalone, but if that lineage is redeployed the
+  import + route line go with it. Re-apply from `install/payload/meshd/server.ts`.
