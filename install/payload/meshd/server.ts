@@ -5,12 +5,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { appendFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
+import { handleInput } from "./input";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.2.1";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek"];
+const VERSION = "0.2.2";
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -726,6 +727,9 @@ Bun.serve({
     }
     if (!authed(req)) return json({ error: "unauthorized" }, 401);
     try {
+      // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
+      const remote = await handleInput(req, url);
+      if (remote) return remote;
       if (path === "/stats") return json(await getStats());
       if (path === "/tailnet") return json(await getTailnet());
       if (path === "/agents") return json(await listAgents());

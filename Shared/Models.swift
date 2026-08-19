@@ -272,6 +272,54 @@ struct MachineSnapshot: Codable, Hashable, Identifiable {
     var tailnetError: String? = nil
 }
 
+// MARK: - Mac remote control (meshd 0.2.2+, macOS hosts)
+
+/// One synthetic input event for the Mac. Mirrors `bin/mesh-input`'s NDJSON shape;
+/// nil fields are omitted by JSONEncoder, so the wire stays small enough to batch.
+struct InputEvent: Codable, Hashable {
+    var t: String
+    var dx: Double? = nil
+    var dy: Double? = nil
+    var x: Double? = nil
+    var y: Double? = nil
+    var button: String? = nil
+    var count: Int? = nil
+    var key: String? = nil
+    var mods: [String]? = nil
+    var s: String? = nil
+
+    static func move(dx: Double, dy: Double) -> InputEvent { .init(t: "move", dx: dx, dy: dy) }
+    /// Normalized 0…1 over the Mac's main display — the same frame `/screen.jpg` shows.
+    static func moveTo(x: Double, y: Double) -> InputEvent { .init(t: "moveTo", x: x, y: y) }
+    static func click(_ button: String = "left", count: Int = 1) -> InputEvent {
+        .init(t: "click", button: button, count: count)
+    }
+    static let hold = InputEvent(t: "down")
+    static let release = InputEvent(t: "up")
+    static func scroll(dy: Double) -> InputEvent { .init(t: "scroll", dy: dy) }
+    static func key(_ key: String, _ mods: [String] = []) -> InputEvent {
+        .init(t: "key", key: key, mods: mods.isEmpty ? nil : mods)
+    }
+    static func text(_ s: String) -> InputEvent { .init(t: "text", s: s) }
+}
+
+struct InputStatus: Codable, Hashable {
+    var ok: Bool
+    /// False until the helper binary is in System Settings › Privacy › Accessibility.
+    /// Quartz drops every event silently until then, so the UI has to say it out loud.
+    var trusted: Bool
+    var helper: String?
+    var hint: String?
+    var error: String?
+}
+
+struct VolumeState: Codable, Hashable {
+    var ok: Bool
+    var level: Int?
+    var muted: Bool?
+    var error: String?
+}
+
 // MARK: - Watch -> Phone command
 
 enum WatchCommandKind: String, Codable {
@@ -283,6 +331,7 @@ enum WatchCommandKind: String, Codable {
     case newPane
     case killAgent
     case killPane
+    case input
 }
 
 struct WatchCommand: Codable {
@@ -294,6 +343,7 @@ struct WatchCommand: Codable {
     var pane: String? = nil
     var cmd: String? = nil
     var initialText: String? = nil
+    var input: [InputEvent]? = nil
 }
 
 // MARK: - Tiny local phrase mapper

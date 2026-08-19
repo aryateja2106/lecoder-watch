@@ -120,6 +120,44 @@ struct MeshClient {
         _ = try await request("/agents/\(enc)", method: "DELETE")
     }
 
+    // MARK: - Mac remote control
+
+    /// Is the Mac's input helper allowed to inject events yet? `?prompt=1` makes
+    /// macOS raise the Accessibility dialog on that Mac.
+    func inputStatus(prompt: Bool = false) async throws -> InputStatus {
+        let data = try await request("/input\(prompt ? "?prompt=1" : "")")
+        return try JSONDecoder().decode(InputStatus.self, from: data)
+    }
+
+    /// Batch — a drag is dozens of moves, and one request per move would be all latency.
+    func input(_ events: [InputEvent]) async throws {
+        guard !events.isEmpty else { return }
+        let body = try JSONEncoder().encode(["events": events])
+        _ = try await request("/input", method: "POST", body: body)
+    }
+
+    func clipboard() async throws -> String {
+        let data = try await request("/clipboard")
+        return try JSONDecoder().decode([String: String].self, from: data)["text"] ?? ""
+    }
+
+    func setClipboard(_ text: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["text": text])
+        _ = try await request("/clipboard", method: "POST", body: body)
+    }
+
+    /// Pass `level` (0…100) or `delta`, and/or `muted`. No arguments = read current.
+    @discardableResult
+    func volume(level: Int? = nil, delta: Int? = nil, muted: Bool? = nil) async throws -> VolumeState {
+        var payload: [String: Any] = [:]
+        if let level { payload["level"] = level }
+        if let delta { payload["delta"] = delta }
+        if let muted { payload["muted"] = muted }
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        let data = try await request("/volume", method: "POST", body: body)
+        return try JSONDecoder().decode(VolumeState.self, from: data)
+    }
+
     /// Kill a single pane within a session.
     func killPane(agent: String, paneId: String) async throws {
         let a = agent.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? agent

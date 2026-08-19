@@ -401,6 +401,11 @@ final class MeshStore: ObservableObject {
                   let machine = machines.first(where: { $0.host == host }) else { return }
             try? await MeshClient(machine: machine).newPane(agent: agent)
             await refresh()
+        case .input:
+            // Watch trackpad/keys, relayed when the watch itself can't reach meshd.
+            guard let host = command.host, let events = command.input,
+                  let machine = machines.first(where: { $0.host == host }) else { return }
+            try? await MeshClient(machine: machine).input(events)
         }
     }
 

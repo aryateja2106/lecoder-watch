@@ -221,6 +221,14 @@ struct SessionsView: View {
                     Label("Screen peek", systemImage: "display")
                 }
                 .disabled(snap?.reachable != true || snap?.authError != nil)
+                if let machine = store.machines.first(where: { $0.host == host }), supportsInput {
+                    NavigationLink {
+                        RemoteView(machine: machine)
+                    } label: {
+                        Label("Control Mac", systemImage: "cursorarrow.motionlines")
+                    }
+                    .disabled(snap?.reachable != true || snap?.authError != nil)
+                }
             }
             Section("New") {
                 Button { openNewSession(cmd: nil) } label: {
@@ -267,6 +275,9 @@ struct SessionsView: View {
         }
         .sheet(isPresented: $showTask) { taskSheet }
     }
+
+    /// meshd advertises "input" only on macOS hosts that ship the injector.
+    private var supportsInput: Bool { snap?.capabilities?.contains("input") ?? false }
 
     private var emptySessionHint: String {
         if snap?.authError != nil { return "Open Mesh on iPhone, fix the token, then refresh." }
@@ -720,10 +731,10 @@ private func resetText(_ iso: String?) -> String? {
 }
 
 #if canImport(UIKit)
-private func meshImage(from data: Data) -> Image? {
+func meshImage(from data: Data) -> Image? {
     guard let image = UIImage(data: data) else { return nil }
     return Image(uiImage: image)
 }
 #else
-private func meshImage(from data: Data) -> Image? { nil }
+func meshImage(from data: Data) -> Image? { nil }
 #endif
