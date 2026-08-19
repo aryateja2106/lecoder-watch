@@ -369,6 +369,17 @@ struct VolumeState: Codable, Hashable {
     var error: String?
 }
 
+/// Pointer gain for one drag callback, given the distance that callback moved.
+///
+/// A fixed multiplier cannot serve both jobs: what makes a 40mm pad cross a 3432pt
+/// two-screen arrangement in one flick makes it impossible to hit a close button. So
+/// slow movement stays near the base gain for precision and fast movement scales up.
+/// ponytail: tuned by feel on a 46mm watch — these three numbers are the knob.
+func pointerGain(step: Double, base: Double = 2.2, softening: Double = 6, ceiling: Double = 3.5) -> Double {
+    guard step > 0, softening > 0 else { return base }
+    return base * min(ceiling, 1 + step / softening)
+}
+
 /// Where a tap on the watch's screen preview lands, as 0…1 of the actual screenshot.
 ///
 /// The preview is scaled to fit, so it is letterboxed whenever its aspect ratio differs

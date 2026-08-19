@@ -81,6 +81,11 @@ using daily. One slice at a time, full build gate, commit only when green.
   vacuous: Swift strips `assert` under `-O`, and a deliberately broken implementation
   still exited 0. `scripts/check-all.sh` compiles every Swift check with `-Onone` and
   runs the shell checks too — verified it goes red on a broken implementation.
+- **S12 pointer feel + reconnect** — velocity-based gain (`pointerGain`), because one
+  fixed multiplier cannot both cross a 3432pt two-screen arrangement and let you hit a
+  close button; covered by `check-pointer-gain` for monotonicity, the ceiling, and
+  reach. A relayed session now re-probes the direct path every 20s instead of staying
+  slow for the rest of the session.
 
 ## Next
 

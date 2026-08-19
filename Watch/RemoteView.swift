@@ -283,6 +283,14 @@ struct RemoteView: View {
                 try? await Task.sleep(for: .seconds(2))
             }
         }
+        .task {
+            // A relayed session is a fallback, not a verdict — retry the direct path so
+            // a watch that comes back onto the network stops paying 150ms a batch.
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(20))
+                if remote.viaRelay { await remote.refreshStatus() }
+            }
+        }
         .onChange(of: store.machines) { _, updated in
             if let match = updated.first(where: { $0.host == remote.machine.host }) {
                 remote.update(machine: match)
@@ -374,7 +382,8 @@ struct RemoteView: View {
                         let dy = value.translation.height - lastTranslation.height
                         lastTranslation = value.translation
                         if abs(dx) > 0 || abs(dy) > 0 { moved = true }
-                        remote.move(dx: dx * 2.2, dy: dy * 2.2)   // watch-sized pad, Mac-sized screen
+                        let gain = pointerGain(step: hypot(dx, dy))
+                        remote.move(dx: dx * gain, dy: dy * gain)
                     }
                     .onEnded { value in
                         let distance = hypot(value.translation.width, value.translation.height)
