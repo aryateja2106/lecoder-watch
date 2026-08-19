@@ -70,13 +70,24 @@ function ensureHelper(): Promise<string | null> {
   return ensuring;
 }
 
-async function stream(): Promise<any> {
-  if (helper && helper.exitCode === null) return helper;
+// macOS decides a process's Accessibility trust when it starts, so a helper spawned
+// before the user granted permission stays deaf forever. Remember what it was born
+// with and recycle it the moment a status check sees the grant land.
+let helperWasTrusted = false;
+
+async function stream(trusted: boolean): Promise<any> {
+  if (helper && helper.exitCode === null && helperWasTrusted === trusted) return helper;
+  if (helper && helper.exitCode === null) helper.kill();
   const bin = await ensureHelper();
   if (!bin) return null;
   helper = Bun.spawn([bin], { stdin: "pipe", stdout: "ignore", stderr: "ignore" });
+  helperWasTrusted = trusted;
   return helper;
 }
+
+/// Cached so the injection path never pays a process spawn per request; only a
+/// status check (which the watch runs on open, and after "Ask the Mac now") moves it.
+let trustedCache = false;
 
 // ---------- actions ----------
 export async function injectEvents(events: any[]): Promise<{ ok: boolean; count?: number; error?: string }> {
@@ -84,7 +95,7 @@ export async function injectEvents(events: any[]): Promise<{ ok: boolean; count?
   if (!Array.isArray(events) || events.length === 0) return { ok: false, error: "events required" };
   const batch = events.slice(0, MAX_EVENTS).filter((e) => e && typeof e.t === "string");
   if (batch.length === 0) return { ok: false, error: "no valid events" };
-  const proc = await stream();
+  const proc = await stream(trustedCache);
   if (!proc) return { ok: false, error: buildError || "mesh-input unavailable" };
   proc.stdin.write(batch.map((e) => JSON.stringify(e)).join("\n") + "\n");
   proc.stdin.flush();
@@ -97,6 +108,7 @@ export async function inputStatus(prompt = false) {
   if (!bin) return { ok: false, trusted: false, helper: HELPER_BIN, error: buildError };
   const out = await run(prompt ? [bin, "--check", "--prompt"] : [bin, "--check"]);
   const trusted = /"trusted"\s*:\s*true/.test(out);
+  trustedCache = trusted;
   return {
     ok: true,
     trusted,

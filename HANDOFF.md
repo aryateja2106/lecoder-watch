@@ -19,6 +19,10 @@ Older but still-useful context: `docs/PRODUCT-CONTEXT-2026-06-05.md`, `docs/XCOD
 - Fleet: **mac up · dataflow (arya@100.80.10.95, Ubuntu) up · pi down**. Check: `./install/payload/bin/mesh hosts`.
 - **Watch clean terminal** — confirmed live showing real remote `ls` output, crown-scroll + auto-follow + key bar (`5ef5167`).
 - **iOS app** — S1–S6 shipped, crash fixed, builds green, real remote output on phone.
+- **Mac remote control from the watch** (`docs/mac-remote-control.md`) — meshd 0.2.2 `/input`
+  `/clipboard` `/volume`; Swift CGEvent helper at `~/.mesh/bin/mesh-input`; watch screen +
+  trackpad + crown + keys at Sessions › Monitor › Control Mac. Deployed to the live daemon
+  2026-08-19 (backup in `~/.mesh/backups/pre-input-*`); cursor/keys/scroll verified on :8899.
 - **`mesh` CLI + one-curl installer + tailnet serving** — all verified. The prior P0s (phone terminal readability, pane nav, agent-view usability) are addressed.
 
 ## Open tasks (resume here)
@@ -38,6 +42,10 @@ Older but still-useful context: `docs/PRODUCT-CONTEXT-2026-06-05.md`, `docs/XCOD
 - One `-derivedDataPath`; DerivedData fragments across `-target`/`-scheme` and leaves a stale embedded watch — clean when in doubt.
 - Watch sim runs the **companion-embedded** watch app; uninstall the iOS app first to test a standalone watch build.
 - **Watch deep-nav in the sim needs the Digital Crown** (automation can't scroll there) — verify deepest screens on device or via a paired phone relay.
+- **Accessibility trust is per-process-launch and per-binary.** `mesh-input` run from a shell
+  inherits the terminal's grant and reports `trusted:true` — that proves nothing about the
+  launchd-run daemon. Always check via `curl .../input` against :8899. Recompiling the helper
+  voids the grant; meshd recycles the child when a status check sees trust flip.
 - `strings | grep` can't see Swift small-string literals (≤15 bytes) — not a valid build check.
 - **build-green ≠ crash-free**: run the app past its first poll (~10s) and check `~/Library/Logs/DiagnosticReports/*.ips` (this session's `SIGABRT` came from `UserDefaults.set(aSet)` — Set isn't a plist type).
 
