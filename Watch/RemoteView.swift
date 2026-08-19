@@ -22,6 +22,8 @@ final class RemoteControl: ObservableObject {
     @Published var displays: [DisplayInfo] = []
     /// Which screen the preview shows and taps/window snaps target. 1-based.
     @Published var activeDisplay = 1
+    /// Crown scrolls sideways instead of up/down — wide timelines, spreadsheets, code.
+    @Published var horizontalScroll = false
     @Published var sticky: Set<String> = []      // modifiers held for the next key
 
     /// Relay through the phone when the watch can't reach meshd itself — the normal
@@ -31,6 +33,7 @@ final class RemoteControl: ObservableObject {
     private var pendingDX = 0.0
     private var pendingDY = 0.0
     private var pendingScroll = 0.0
+    private var pendingScrollX = 0.0
     private var discrete: [InputEvent] = []
     private var inFlight = false
 
@@ -50,7 +53,9 @@ final class RemoteControl: ObservableObject {
     // MARK: queueing
 
     func move(dx: Double, dy: Double) { pendingDX += dx; pendingDY += dy }
-    func scroll(_ dy: Double) { pendingScroll += dy }
+    func scroll(_ amount: Double) {
+        if horizontalScroll { pendingScrollX += amount } else { pendingScroll += amount }
+    }
 
     func perform(_ events: [InputEvent]) {
         discrete.append(contentsOf: events)
@@ -105,9 +110,10 @@ final class RemoteControl: ObservableObject {
             batch.insert(.move(dx: pendingDX, dy: pendingDY), at: 0)
             pendingDX = 0; pendingDY = 0
         }
-        if abs(pendingScroll) >= 1 {
-            batch.append(.scroll(dy: pendingScroll))
+        if abs(pendingScroll) >= 1 || abs(pendingScrollX) >= 1 {
+            batch.append(.scroll(dx: pendingScrollX, dy: pendingScroll))
             pendingScroll = 0
+            pendingScrollX = 0
         }
         guard !batch.isEmpty else { return }
 
@@ -441,6 +447,27 @@ struct RemoteKeysView: View {
                     keyButton("right", "arrow.right")
                 }
             }
+            Section("Mouse") {
+                HStack(spacing: 4) {
+                    Button { remote.perform([.click(count: 2)]) } label: { Image(systemName: "cursorarrow.click.2") }
+                        .accessibilityLabel("Double click")
+                    Button { remote.perform([.click("right")]) } label: { Image(systemName: "cursorarrow.rays") }
+                        .accessibilityLabel("Right click")
+                    Button { remote.perform([.click("middle")]) } label: { Image(systemName: "cursorarrow.motionlines") }
+                        .accessibilityLabel("Middle click")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                Toggle("Crown scrolls sideways", isOn: $remote.horizontalScroll)
+                    .font(.caption2)
+            }
+            Section {
+                NavigationLink {
+                    RemoteKeyboardView(remote: remote)
+                } label: {
+                    Label("Full keyboard", systemImage: "keyboard")
+                }
+            }
             Section("Hold for next key") {
                 HStack(spacing: 4) {
                     ForEach(["cmd", "shift", "opt", "ctrl"], id: \.self) { mod in
@@ -554,6 +581,86 @@ struct RemoteKeysView: View {
             .buttonStyle(.bordered)
             .controlSize(.mini)
             .accessibilityLabel(key)
+    }
+}
+
+// MARK: - Full keyboard
+
+/// Every key the Mac knows, so a modified keystroke (ctrl-C, cmd-K, alt-F) is
+/// reachable — dictation can produce letters but never a chord. Rows are literals so
+/// check-mesh-input can prove each one maps to a keycode.
+let KEYBOARD_ROWS: [[String]] = [
+    ["q", "w", "e", "r", "t", "y"],
+    ["u", "i", "o", "p", "a", "s"],
+    ["d", "f", "g", "h", "j", "k"],
+    ["l", "z", "x", "c", "v", "b"],
+    ["n", "m", "-", "=", "[", "]"],
+    ["1", "2", "3", "4", "5", "6"],
+    ["7", "8", "9", "0", ";", "'"],
+    [",", ".", "/", "grave", "space", "tab"],
+]
+
+let FUNCTION_ROWS: [[String]] = [
+    ["f1", "f2", "f3", "f4", "f5", "f6"],
+    ["f7", "f8", "f9", "f10", "f11", "f12"],
+    ["home", "end", "pageup", "pagedown", "forwarddelete", "escape"],
+]
+
+struct RemoteKeyboardView: View {
+    @ObservedObject var remote: RemoteControl
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 6)
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 6) {
+                modifierRow
+                grid(KEYBOARD_ROWS)
+                Text("Function & navigation").font(.caption2).foregroundStyle(.secondary)
+                grid(FUNCTION_ROWS)
+            }
+            .padding(.horizontal, 2)
+        }
+        .navigationTitle("Keyboard")
+    }
+
+    /// Sticky, so a chord is two taps rather than an impossible simultaneous press.
+    private var modifierRow: some View {
+        HStack(spacing: 3) {
+            ForEach(["cmd", "shift", "opt", "ctrl"], id: \.self) { mod in
+                Button(mod) {
+                    if remote.sticky.contains(mod) { remote.sticky.remove(mod) } else { remote.sticky.insert(mod) }
+                } 
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .tint(remote.sticky.contains(mod) ? .orange : nil)
+            }
+        }
+    }
+
+    private func grid(_ rows: [[String]]) -> some View {
+        LazyVGrid(columns: columns, spacing: 2) {
+            ForEach(rows.flatMap { $0 }, id: \.self) { key in
+                Button(label(key)) { remote.key(key) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .font(.system(size: 11))
+                    .accessibilityLabel(key)
+            }
+        }
+    }
+
+    private func label(_ key: String) -> String {
+        switch key {
+        case "grave": return "`"
+        case "space": return "␣"
+        case "tab": return "⇥"
+        case "escape": return "esc"
+        case "forwarddelete": return "⌦"
+        case "pageup": return "⇞"
+        case "pagedown": return "⇟"
+        default: return key
+        }
     }
 }
 

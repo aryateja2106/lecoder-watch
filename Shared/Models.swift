@@ -304,7 +304,7 @@ struct InputEvent: Codable, Hashable {
     }
     static let hold = InputEvent(t: "down")
     static let release = InputEvent(t: "up")
-    static func scroll(dy: Double) -> InputEvent { .init(t: "scroll", dy: dy) }
+    static func scroll(dx: Double = 0, dy: Double = 0) -> InputEvent { .init(t: "scroll", dx: dx, dy: dy) }
     static func key(_ key: String, _ mods: [String] = []) -> InputEvent {
         .init(t: "key", key: key, mods: mods.isEmpty ? nil : mods)
     }

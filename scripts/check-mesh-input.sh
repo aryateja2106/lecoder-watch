@@ -24,8 +24,11 @@ names() { sed -n 's/.*"\([a-z0-9]*\)"[[:space:]]*:.*/\1/p' | sort -u; }
 
 # --- keyboard keys ---
 awk '/^let KEYCODES/,/^\]/' "$SRC" | tr ',' '\n' | names > "$TMP/known-keys"
-sed -n 's/.*\.key("\([a-z0-9]*\)".*/\1/p;s/.*keyButton("\([a-z0-9]*\)".*/\1/p;s/.*("[^"]*", *"\([a-z0-9]*\)", *\[.*/\1/p' "$VIEW" \
-  | sort -u > "$TMP/used-keys"
+{
+  sed -n 's/.*\.key("\([a-z0-9]*\)".*/\1/p;s/.*keyButton("\([a-z0-9]*\)".*/\1/p;s/.*("[^"]*", *"\([a-z0-9]*\)", *\[.*/\1/p' "$VIEW"
+  # every literal in the on-screen keyboard grids
+  awk '/^let (KEYBOARD|FUNCTION)_ROWS/,/^\]/' "$VIEW" | tr ',' '\n' | sed -n 's/.*"\([a-z0-9]*\)".*/\1/p'
+} | sort -u > "$TMP/used-keys"
 
 # --- media keys ---
 awk '/^let MEDIA_KEYS/,/^\]/' "$SRC" | tr ',' '\n' | names > "$TMP/known-media"

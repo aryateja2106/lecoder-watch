@@ -64,6 +64,12 @@ using daily. One slice at a time, full build gate, commit only when green.
   repoints the preview, tap-to-place and window snapping together, so the screen you
   are looking at is the one you are driving. "Move window to <display>" per screen.
   The relayed path carries the display index too, so it works through the phone.
+- **S10 complete mouse & keyboard** — middle click, horizontal scroll (crown-sideways
+  toggle), and a full on-screen keyboard: 48 letter/digit/punctuation keys plus F1–F12
+  and home/end/page keys, all honouring the sticky modifiers, so chords like ctrl-C and
+  cmd-K are reachable — dictation can produce letters but never a chord. check-mesh-input
+  validates all 63 key literals against the helper's keycode table. Verified live:
+  dx=40, dy=-25 and middle button=2 observed on a listen-only tap.
 
 ## Next
 
