@@ -5,17 +5,18 @@
 //   mesh-input                    stream mode — one JSON object per line on stdin
 //   mesh-input --check            print {"trusted":…}; exit 0 when Accessibility is granted
 //   mesh-input --check --prompt   same, but ask macOS to show the Accessibility dialog
+//   mesh-input --displays         print the display arrangement as JSON and exit
 //
 // Events (t = type):
 //   {"t":"move","dx":3,"dy":-2}            relative cursor move (drag when button held)
-//   {"t":"moveTo","x":0.5,"y":0.25}        absolute, normalized to the main display
+//   {"t":"moveTo","x":0.5,"y":0.25,"display":2}  absolute, normalized within a display
 //   {"t":"click","button":"left","count":2}
 //   {"t":"down"} / {"t":"up"}              hold/release left button (drag lock)
 //   {"t":"scroll","dx":0,"dy":-40}         pixel scroll
 //   {"t":"key","key":"c","mods":["cmd"]}
 //   {"t":"text","s":"hello"}               arbitrary Unicode, no keycode needed
 //   {"t":"media","key":"playpause"}        media / brightness / backlight keys
-//   {"t":"window","place":"left"}          snap the frontmost window
+//   {"t":"window","place":"left","display":2}    snap the frontmost window
 //
 // Without Accessibility permission for THIS binary, macOS silently drops every event.
 // ponytail: one long-lived process reading stdin, so a drag streams at gesture rate
@@ -41,7 +42,50 @@ if flags.contains("--check") {
     exit(trusted ? 0 : 1)
 }
 
+// MARK: - Displays
+
+/// Active displays in CGGetActiveDisplayList order, which is also `screencapture -D`
+/// order (1 = main). Bounds are already AX coordinates: origin top-left of the main
+/// display, y downward — the same space CGEvent cursor positions live in.
+struct Display {
+    let index: Int          // 1-based, matches screencapture -D
+    let id: CGDirectDisplayID
+    let bounds: CGRect
+    let isMain: Bool
+}
+
+func activeDisplays() -> [Display] {
+    var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+    var count: UInt32 = 0
+    guard CGGetActiveDisplayList(16, &ids, &count) == .success, count > 0 else { return [] }
+    return (0..<Int(count)).map { i in
+        Display(index: i + 1, id: ids[i], bounds: CGDisplayBounds(ids[i]),
+                isMain: CGDisplayIsMain(ids[i]) != 0)
+    }
+}
+
+/// 1-based index, or the main display when the caller did not say.
+func display(_ index: Int?) -> Display? {
+    let all = activeDisplays()
+    if let index, let match = all.first(where: { $0.index == index }) { return match }
+    return all.first(where: \.isMain) ?? all.first
+}
+
 // MARK: - Event synthesis
+
+if flags.contains("--displays") {
+    let rows = activeDisplays().map { d -> String in
+        let name = NSScreen.screens.first {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) == d.id
+        }?.localizedName ?? "Display \(d.index)"
+        let escaped = name.replacingOccurrences(of: "\"", with: "")
+        return "{\"index\":\(d.index),\"id\":\(d.id),\"x\":\(Int(d.bounds.minX)),\"y\":\(Int(d.bounds.minY))," +
+               "\"width\":\(Int(d.bounds.width)),\"height\":\(Int(d.bounds.height))," +
+               "\"main\":\(d.isMain),\"name\":\"\(escaped)\"}"
+    }
+    print("{\"ok\":true,\"displays\":[\(rows.joined(separator: ","))]}")
+    exit(0)
+}
 
 let source = CGEventSource(stateID: .hidSystemState)
 var leftIsDown = false
@@ -78,14 +122,19 @@ func post(_ event: CGEvent?) {
 
 func cursor() -> CGPoint { CGEvent(source: nil)?.location ?? .zero }
 
-func moveCursor(to point: CGPoint) {
+/// `delta` is the movement the user actually made, for apps that read raw deltas
+/// (editors, canvases, games) rather than positions. It must stay nil for absolute
+/// jumps: the WindowServer re-derives position from a delta and runs it through
+/// pointer acceleration, so a delta-carrying jump lands somewhere near the target
+/// rather than on it.
+func moveCursor(to point: CGPoint, delta: CGVector? = nil) {
     let type: CGEventType = leftIsDown ? .leftMouseDragged : .mouseMoved
-    let from = cursor()
     let event = CGEvent(mouseEventSource: source, mouseType: type,
                         mouseCursorPosition: point, mouseButton: .left)
-    // Some apps (editors, games, canvases) read raw deltas rather than positions.
-    event?.setDoubleValueField(.mouseEventDeltaX, value: point.x - from.x)
-    event?.setDoubleValueField(.mouseEventDeltaY, value: point.y - from.y)
+    if let delta {
+        event?.setDoubleValueField(.mouseEventDeltaX, value: delta.dx)
+        event?.setDoubleValueField(.mouseEventDeltaY, value: delta.dy)
+    }
     post(event)
 }
 
@@ -212,19 +261,50 @@ func frontmostWindow() -> AXUIElement? {
     return (window as! AXUIElement)
 }
 
-/// Usable area of the main display in AX coordinates (menu bar and Dock excluded).
-func workArea() -> CGRect {
-    guard let screen = NSScreen.main else { return .zero }
-    let visible = screen.visibleFrame
+/// Usable area of one display in AX coordinates (menu bar and Dock excluded).
+/// AppKit measures y upward from the bottom of the zero-origin screen; AX measures it
+/// downward from the top of that same screen, so the flip is against its height.
+func workArea(of screen: Display) -> CGRect {
+    let match = NSScreen.screens.first {
+        ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) == screen.id
+    }
+    guard let ns = match,
+          let origin = NSScreen.screens.first(where: { $0.frame.origin == .zero }) else { return screen.bounds }
+    let visible = ns.visibleFrame
     return CGRect(x: visible.minX,
-                  y: screen.frame.height - visible.maxY,
+                  y: origin.frame.height - visible.maxY,
                   width: visible.width,
                   height: visible.height)
 }
 
-func placeWindow(_ place: String) {
+func windowFrame(_ window: AXUIElement) -> CGRect? {
+    var positionValue: AnyObject?
+    var sizeValue: AnyObject?
+    guard AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &positionValue) == .success,
+          AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue) == .success
+    else { return nil }
+    var point = CGPoint.zero
+    var size = CGSize.zero
+    AXValueGetValue(positionValue as! AXValue, .cgPoint, &point)
+    AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
+    return CGRect(origin: point, size: size)
+}
+
+/// Snapping "left" should mean the left half of the screen the window is already on,
+/// not always the built-in one.
+func displayContaining(_ window: AXUIElement) -> Display? {
+    guard let frame = windowFrame(window) else { return nil }
+    let centre = CGPoint(x: frame.midX, y: frame.midY)
+    return activeDisplays().first { $0.bounds.contains(centre) }
+}
+
+func placeWindow(_ place: String, displayIndex: Int?) {
     guard let window = frontmostWindow() else { return }
-    let a = workArea()
+    let screen = displayIndex.flatMap { index in activeDisplays().first { $0.index == index } }
+        ?? displayContaining(window)
+        ?? display(nil)
+    guard let screen else { return }
+    let a = workArea(of: screen)
     guard a.width > 0 else { return }
     let target: CGRect
     switch place.lowercased() {
@@ -254,18 +334,27 @@ func number(_ object: [String: Any], _ key: String, _ fallback: Double = 0) -> D
     (object[key] as? NSNumber)?.doubleValue ?? fallback
 }
 
+func integer(_ object: [String: Any], _ key: String) -> Int? {
+    (object[key] as? NSNumber)?.intValue
+}
+
 func clamp01(_ value: Double) -> Double { min(max(value, 0), 1) }
 
 func apply(_ command: [String: Any]) {
     switch (command["t"] as? String ?? "").lowercased() {
     case "move":
         let from = cursor()
-        moveCursor(to: CGPoint(x: from.x + number(command, "dx"), y: from.y + number(command, "dy")))
+        let dx = number(command, "dx")
+        let dy = number(command, "dy")
+        moveCursor(to: CGPoint(x: from.x + dx, y: from.y + dy), delta: CGVector(dx: dx, dy: dy))
     case "moveto":
-        // ponytail: normalized to the MAIN display only — same display `screencapture`
-        // gives the watch, so tap-on-preview lands where you tapped. Extend to the
-        // full arrangement (CGGetActiveDisplayList) if a second screen ever matters.
-        let bounds = CGDisplayBounds(CGMainDisplayID())
+        // Normalized within one display, so a tap on the watch's preview of screen 2
+        // lands on screen 2 — the preview and the coordinates share an index.
+        guard let screen = display(integer(command, "display")) else { break }
+        // Inset by a point: the exact corner of a display sits on the seam with its
+        // neighbour and the WindowServer drops the event, leaving a dead spot in the
+        // top-left of the watch's preview.
+        let bounds = screen.bounds.insetBy(dx: 1, dy: 1)
         moveCursor(to: CGPoint(x: bounds.minX + bounds.width * clamp01(number(command, "x")),
                                y: bounds.minY + bounds.height * clamp01(number(command, "y"))))
     case "click":
@@ -281,7 +370,7 @@ func apply(_ command: [String: Any]) {
     case "media":
         pressMedia(command["key"] as? String ?? "")
     case "window":
-        placeWindow(command["place"] as? String ?? "")
+        placeWindow(command["place"] as? String ?? "", displayIndex: integer(command, "display"))
     default:
         break
     }

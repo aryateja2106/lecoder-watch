@@ -46,13 +46,29 @@ using daily. One slice at a time, full build gate, commit only when green.
 - **S7 haptics** — a click, drag-lock start/stop and every discrete action now tap the
   wrist. The screen preview is two seconds behind, so without it you cannot tell a
   landed click from a missed touch.
+- **P0 phone tokens** — the phone had NO saved machine list, so it fell back to compiled
+  defaults with `testtoken`, which meshd rotated away from on 2026-08-13: every host
+  showed "token rejected". Wrote the real tokens from the Mac's `~/.mesh/hosts.json`
+  into the app's UserDefaults over devicectl; verified they survive relaunch. ("timed
+  out" in the relayed snapshot is just iOS suspending a backgrounded app, not a fault.)
+- **S9a multi-display, Mac side** — `mesh-input --displays` enumerates the arrangement;
+  `moveTo` and `window` take a 1-based display index matching `screencapture -D`;
+  window snapping defaults to the display the window is already on. meshd gained
+  `/displays` and `/screen.jpg?display=N`. Two fixes found by testing on the real
+  two-screen setup: absolute jumps must not carry a delta (the WindowServer re-derives
+  position from it through pointer acceleration, so the cursor drifted instead of
+  landing), and the target rect is inset 1pt because the exact corner sits on the seam
+  between displays and the event is dropped. Verified: every corner and centre exact on
+  both screens; captures 480x311 and 480x270 confirm distinct displays.
 
 ## Next
 
-1. **S8 one Control hub** — the Keys screen has grown into a pile of eight sections.
+1. **S9b multi-display on the watch** — display picker, preview per screen, tap maps
+   into the selected screen, "move window to display N".
+2. **S8 one Control hub** — the Keys screen has grown into a pile of eight sections.
    Split into Keys / Window / Media & System / Clipboard behind a short hub, and add
    quick actions (Spotlight, Mission Control, screenshot, Launchpad).
-2. **S9 ship it** — rebuild signed, reinstall on the phone, refresh docs.
+3. **S10 ship it** — rebuild signed, reinstall on the phone, refresh docs.
 
 ## Blockers
 

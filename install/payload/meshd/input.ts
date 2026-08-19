@@ -10,21 +10,27 @@
 //   POST /system           <- { action: "displaysleep" | "lock" | "screensaver" | "sleep" }
 //   GET  /apps             -> { front, running: [{name,bundleID,front}], installed: [name] }
 //   POST /apps             <- { activate: "Safari" }
+//   GET  /displays         -> { displays: [{index,id,x,y,width,height,main,name}] }
+//   GET  /screen.jpg?display=2  capture one display (no param: server.ts handles it)
 //
 // ponytail: its own module, not inlined into server.ts, because three meshd
 // lineages (repo, payload, deployed) have drifted — this keeps the patch each of
 // them needs down to an import plus one route line.
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
-import { stat, mkdir } from "node:fs/promises";
+import { stat, mkdir, readFile, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
 
 const IS_MAC = process.platform === "darwin";
 const MAX_EVENTS = 200;
 const HELPER_BIN = join(homedir(), ".mesh", "bin", "mesh-input");
 // Deployed layout is ~/.mesh/{meshd,bin}; a repo checkout is install/payload/{meshd,bin}.
+// Co-located source first: a meshd run straight from a checkout must build ITS helper,
+// not silently keep using whatever was deployed last. Both paths are the same file
+// once installed.
 const HELPER_SRC = [
-  join(homedir(), ".mesh", "bin", "mesh-input.swift"),
   join(import.meta.dir, "..", "bin", "mesh-input.swift"),
+  join(homedir(), ".mesh", "bin", "mesh-input.swift"),
 ];
 
 function json(data: any, status = 200) {
@@ -198,6 +204,36 @@ async function activateApp(name: string) {
   return { ok: true, activated: name };
 }
 
+async function listDisplays() {
+  if (!IS_MAC) return { ok: false, error: "displays are macOS only" };
+  const bin = await ensureHelper();
+  if (!bin) return { ok: false, error: buildError || "mesh-input unavailable" };
+  const out = await run([bin, "--displays"]);
+  try {
+    return JSON.parse(out);
+  } catch {
+    return { ok: false, error: out.trim().slice(0, 200) || "could not read displays" };
+  }
+}
+
+/// screencapture -D is 1-based with 1 = main, the same order mesh-input reports, so a
+/// preview and a moveTo on the watch agree about which screen "2" is.
+async function captureDisplay(index: number): Promise<Response> {
+  const path = join(tmpdir(), `meshd-display-${index}-${process.pid}.jpg`);
+  try {
+    const shot = Bun.spawn(["/usr/sbin/screencapture", "-x", "-D", String(index), "-t", "jpg", path],
+      { stdout: "ignore", stderr: "ignore" });
+    if ((await shot.exited) !== 0) return json({ error: "screenshot unavailable" }, 503);
+    const scale = Bun.spawn(["/usr/bin/sips", "-Z", "480", path], { stdout: "ignore", stderr: "ignore" });
+    await scale.exited;
+    return new Response(await readFile(path), {
+      headers: { "content-type": "image/jpeg", "cache-control": "no-store" },
+    });
+  } finally {
+    unlink(path).catch(() => {});
+  }
+}
+
 // ---------- routing ----------
 /// Returns a Response for the routes this module owns, or null so server.ts keeps matching.
 export async function handleInput(req: Request, url: URL): Promise<Response | null> {
@@ -222,6 +258,17 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     if (typeof body?.text !== "string") return json({ error: "text required" }, 400);
     await run(["/usr/bin/pbcopy"], body.text);
     return json({ ok: true });
+  }
+  if (path === "/displays" && req.method === "GET") {
+    const result = await listDisplays();
+    return json(result, result.ok ? 200 : 404);
+  }
+  // Only claim /screen.jpg when a display is named; the plain route stays in server.ts.
+  if (path === "/screen.jpg" && req.method === "GET" && url.searchParams.has("display")) {
+    if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
+    const index = Number(url.searchParams.get("display"));
+    if (!Number.isInteger(index) || index < 1) return json({ error: "bad display" }, 400);
+    return await captureDisplay(index);
   }
   if (path === "/apps" && req.method === "GET") {
     const result = await listApps();
