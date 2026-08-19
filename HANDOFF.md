@@ -19,10 +19,16 @@ Older but still-useful context: `docs/PRODUCT-CONTEXT-2026-06-05.md`, `docs/XCOD
 - Fleet: **mac up · dataflow (arya@100.80.10.95, Ubuntu) up · pi down**. Check: `./install/payload/bin/mesh hosts`.
 - **Watch clean terminal** — confirmed live showing real remote `ls` output, crown-scroll + auto-follow + key bar (`5ef5167`).
 - **iOS app** — S1–S6 shipped, crash fixed, builds green, real remote output on phone.
-- **Mac remote control from the watch** (`docs/mac-remote-control.md`) — meshd 0.2.2 `/input`
-  `/clipboard` `/volume`; Swift CGEvent helper at `~/.mesh/bin/mesh-input`; watch screen +
-  trackpad + crown + keys at Sessions › Monitor › Control Mac. Deployed to the live daemon
-  2026-08-19 (backup in `~/.mesh/backups/pre-input-*`); cursor/keys/scroll verified on :8899.
+- **Full Mac control from the watch** (`docs/mac-remote-control.md`) — meshd 0.2.2
+  `/input` `/clipboard` `/volume` `/system` `/apps` `/displays`; Swift CGEvent +
+  AXUIElement helper at `~/.mesh/bin/mesh-input`. Watch has "Control <mac>" as the first
+  row of the machines list: display picker, tap-to-place cursor, trackpad, crown scroll,
+  every-key keyboard, app switcher, window snapping, media, system power. Multi-display
+  throughout. Deployed live 2026-08-19 (backup `~/.mesh/backups/pre-input-*`); all of it
+  verified against :8899 and a listen-only CGEventTap. See PROGRESS.md for the slice log.
+- **Phone tokens repaired 2026-08-19** — the iOS app had no saved machine list and fell
+  back to `testtoken`, which meshd rotated away from on 08-13, so every host read "token
+  rejected". Real tokens (from `~/.mesh/hosts.json`) written into the app's UserDefaults.
 - **`mesh` CLI + one-curl installer + tailnet serving** — all verified. The prior P0s (phone terminal readability, pane nav, agent-view usability) are addressed.
 
 ## Open tasks (resume here)
