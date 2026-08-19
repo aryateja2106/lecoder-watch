@@ -92,10 +92,47 @@ final class WatchMeshStore: ObservableObject {
     private var pollTask: Task<Void, Never>?
     private var outputTask: Task<Void, Never>?
 
+    /// Adopt the phone's machine list — addresses, ports and, critically, current
+    /// tokens. The watch's compiled-in defaults go stale the moment a token is
+    /// rotated on the Mac, and a 401 quietly demotes every screen to the slow relay.
+    private func adoptConfigs(from snap: MeshSnapshot) {
+        let configs = snap.machines.compactMap(\.config)
+        guard !configs.isEmpty else { return }
+        var merged = machines
+        var changed = false
+        for config in configs {
+            if let idx = merged.firstIndex(where: { $0.host == config.host }) {
+                if merged[idx] != config { merged[idx] = config; changed = true }
+            } else {
+                merged.append(config); changed = true
+            }
+        }
+        guard changed else { return }
+        machines = merged
+        if let data = try? JSONEncoder().encode(merged) {
+            // Survive relaunch: the watch app often opens before the phone answers.
+            UserDefaults.standard.set(data, forKey: Self.machinesKey)
+        }
+        Task { await refresh() }
+    }
+
+    private static let machinesKey = "watch.machines.v1"
+
+    private func loadCachedMachines() {
+        guard let data = UserDefaults.standard.data(forKey: Self.machinesKey),
+              let cached = try? JSONDecoder().decode([Machine].self, from: data),
+              !cached.isEmpty else { return }
+        machines = cached
+    }
+
     func start() {
+        loadCachedMachines()
         // Wire the relay.
         WatchLink.shared.onSnapshot = { [weak self] snap in
-            Task { @MainActor in self?.relayed = snap }
+            Task { @MainActor in
+                self?.relayed = snap
+                self?.adoptConfigs(from: snap)
+            }
             Task { @MainActor in
                 guard let self, snap.screenHost == self.screenHost else { return }
                 self.screenJPEGData = snap.screenJPEGData

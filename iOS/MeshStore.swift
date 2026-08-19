@@ -167,6 +167,7 @@ final class MeshStore: ObservableObject {
                     }
                     guard health?.ok == true else {
                         return MachineSnapshot(host: machine.host,
+                                               config: machine,
                                                reachable: false,
                                                stats: nil,
                                                agents: [],
@@ -203,6 +204,7 @@ final class MeshStore: ObservableObject {
                     }
                     let reachable = stats != nil || health?.ok == true
                     return MachineSnapshot(host: machine.host,
+                                           config: machine,
                                            reachable: reachable,
                                            stats: stats,
                                            agents: agents,

@@ -12,7 +12,7 @@ import Combine
 /// trackpad over the tailnet feel like a trackpad rather than a telegraph.
 @MainActor
 final class RemoteControl: ObservableObject {
-    let machine: Machine
+    private(set) var machine: Machine
 
     @Published var status: InputStatus?
     @Published var screen: Data?
@@ -31,6 +31,15 @@ final class RemoteControl: ObservableObject {
     private var inFlight = false
 
     init(machine: Machine) { self.machine = machine }
+
+    /// Credentials can land after the view opens (the phone relays them on its next
+    /// poll). Re-probe on the new config so a relayed session upgrades to direct
+    /// instead of staying slow until the user backs out and comes in again.
+    func update(machine: Machine) {
+        guard machine != self.machine else { return }
+        self.machine = machine
+        Task { await refreshStatus() }
+    }
 
     private var client: MeshClient { MeshClient(machine: machine) }
 
@@ -197,6 +206,11 @@ struct RemoteView: View {
                     await remote.refreshScreen()
                 }
                 try? await Task.sleep(for: .seconds(2))
+            }
+        }
+        .onChange(of: store.machines) { _, updated in
+            if let match = updated.first(where: { $0.host == remote.machine.host }) {
+                remote.update(machine: match)
             }
         }
         .onDisappear { store.stopScreen() }

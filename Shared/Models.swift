@@ -257,6 +257,10 @@ struct MeshSnapshot: Codable, Hashable {
 struct MachineSnapshot: Codable, Hashable, Identifiable {
     var id: String { host }
     var host: String
+    /// The phone's own config for this machine — address, port and current token.
+    /// The watch ships hard-coded defaults that go stale the moment a token is
+    /// rotated, which silently demotes it to the slow relay; this keeps it honest.
+    var config: Machine? = nil
     var reachable: Bool
     var stats: Stats?
     var agents: [Agent]
