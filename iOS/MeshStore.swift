@@ -406,6 +406,14 @@ final class MeshStore: ObservableObject {
             guard let host = command.host, let events = command.input,
                   let machine = machines.first(where: { $0.host == host }) else { return }
             try? await MeshClient(machine: machine).input(events)
+        case .volume:
+            guard let host = command.host,
+                  let machine = machines.first(where: { $0.host == host }) else { return }
+            try? await MeshClient(machine: machine).volume(delta: command.volumeDelta, muted: command.volumeMuted)
+        case .clipboard:
+            guard let host = command.host, let text = command.text,
+                  let machine = machines.first(where: { $0.host == host }) else { return }
+            try? await MeshClient(machine: machine).setClipboard(text)
         }
     }
 

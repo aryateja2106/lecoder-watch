@@ -18,13 +18,17 @@ final class WatchLink: NSObject, WCSessionDelegate, @unchecked Sendable {
 
     var isReachable: Bool { WCSession.isSupported() && WCSession.default.isReachable }
 
-    func send(_ command: WatchCommand) {
+    /// `queueIfUnreachable: false` drops the command instead of parking it in the
+    /// user-info queue. Required for remote control: a click or keystroke delivered
+    /// ten minutes late lands on whatever is on screen then, which is worse than
+    /// losing it.
+    func send(_ command: WatchCommand, queueIfUnreachable: Bool = true) {
         guard WCSession.isSupported(), let data = try? JSONEncoder().encode(command) else { return }
         let session = WCSession.default
         guard session.activationState == .activated else { return }
         if session.isReachable {
             session.sendMessage(["command": data], replyHandler: nil, errorHandler: nil)
-        } else {
+        } else if queueIfUnreachable {
             session.transferUserInfo(["command": data])
         }
     }

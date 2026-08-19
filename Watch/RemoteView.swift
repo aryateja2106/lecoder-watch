@@ -20,9 +20,10 @@ final class RemoteControl: ObservableObject {
     @Published var dragLocked = false
     @Published var sticky: Set<String> = []      // modifiers held for the next key
 
-    /// Relay through the phone when the watch can't reach meshd itself. Much slower,
-    /// so the flush loop backs off — WCSession is not built for a 25Hz stream.
-    private var viaRelay = false
+    /// Relay through the phone when the watch can't reach meshd itself — the normal
+    /// case on a real watch, which has no Tailscale. Slower, so the flush loop backs
+    /// off; WCSession is not built for a 25Hz stream.
+    @Published private(set) var viaRelay = false
     private var pendingDX = 0.0
     private var pendingDY = 0.0
     private var pendingScroll = 0.0
@@ -79,8 +80,7 @@ final class RemoteControl: ObservableObject {
         inFlight = true
         defer { inFlight = false }
         if viaRelay {
-            WatchLink.shared.send(WatchCommand(kind: .input, host: machine.host, agent: nil,
-                                               text: nil, key: nil, input: batch))
+            relay(batch)
             return
         }
         do {
@@ -91,17 +91,32 @@ final class RemoteControl: ObservableObject {
             // cursor delta is better than a late one.
             viaRelay = true
             note = "via phone"
-            WatchLink.shared.send(WatchCommand(kind: .input, host: machine.host, agent: nil,
-                                               text: nil, key: nil, input: batch))
+            relay(batch)
         }
     }
 
-    var flushInterval: Duration { viaRelay ? .milliseconds(300) : .milliseconds(40) }
+    private func relay(_ batch: [InputEvent]) {
+        WatchLink.shared.send(WatchCommand(kind: .input, host: machine.host, agent: nil,
+                                           text: nil, key: nil, input: batch),
+                              queueIfUnreachable: false)
+    }
+
+    var flushInterval: Duration { viaRelay ? .milliseconds(150) : .milliseconds(40) }
 
     // MARK: status + screen
 
     func refreshStatus(prompt: Bool = false) async {
-        status = try? await client.inputStatus(prompt: prompt)
+        do {
+            status = try await client.inputStatus(prompt: prompt)
+            viaRelay = false
+            note = nil
+        } catch {
+            // Probe doubles as the route check: one 3s timeout here beats the first
+            // drag stalling while URLSession works through every address.
+            status = nil
+            viaRelay = true
+            note = "via phone"
+        }
     }
 
     func refreshScreen() async {
@@ -109,6 +124,13 @@ final class RemoteControl: ObservableObject {
     }
 
     func volume(delta: Int? = nil, muted: Bool? = nil) {
+        guard !viaRelay else {
+            WatchLink.shared.send(WatchCommand(kind: .volume, host: machine.host, agent: nil,
+                                               text: nil, key: nil,
+                                               volumeDelta: delta, volumeMuted: muted))
+            note = muted == true ? "muted" : "volume sent"
+            return
+        }
         Task {
             if let state = try? await client.volume(delta: delta, muted: muted) {
                 note = state.muted == true ? "muted" : state.level.map { "volume \($0)%" }
@@ -116,9 +138,18 @@ final class RemoteControl: ObservableObject {
         }
     }
 
-    func pullClipboard() async -> String? { try? await client.clipboard() }
+    /// Reading needs a reply, and the phone relay is one-way — direct only.
+    func pullClipboard() async -> String? {
+        viaRelay ? nil : try? await client.clipboard()
+    }
 
     func pushClipboard(_ text: String) {
+        guard !viaRelay else {
+            WatchLink.shared.send(WatchCommand(kind: .clipboard, host: machine.host, agent: nil,
+                                               text: text, key: nil))
+            note = "copied to Mac"
+            return
+        }
         Task {
             try? await client.setClipboard(text)
             note = "copied to Mac"
@@ -129,6 +160,7 @@ final class RemoteControl: ObservableObject {
 // MARK: - Trackpad screen
 
 struct RemoteView: View {
+    @EnvironmentObject var store: WatchMeshStore
     @StateObject private var remote: RemoteControl
     @State private var lastTranslation: CGSize = .zero
     @State private var crown: Double = 0
@@ -159,10 +191,20 @@ struct RemoteView: View {
         .task {
             // Slow second loop: the preview is for "did that land?", not a video feed.
             while !Task.isCancelled {
-                await remote.refreshScreen()
+                if remote.viaRelay {
+                    store.requestScreen(host: remote.machine.host)
+                } else {
+                    await remote.refreshScreen()
+                }
                 try? await Task.sleep(for: .seconds(2))
             }
         }
+        .onDisappear { store.stopScreen() }
+    }
+
+    /// Direct grab when we have one, else whatever the phone last relayed.
+    private var screenData: Data? {
+        remote.screen ?? (store.screenHost == remote.machine.host ? store.screenJPEGData : nil)
     }
 
     // Tap the preview to put the cursor exactly there — far more usable on a 40mm
@@ -170,7 +212,7 @@ struct RemoteView: View {
     private var preview: some View {
         GeometryReader { geo in
             ZStack {
-                if let data = remote.screen, let image = meshImage(from: data) {
+                if let data = screenData, let image = meshImage(from: data) {
                     image.resizable().scaledToFit()
                 } else {
                     RoundedRectangle(cornerRadius: 6).fill(.gray.opacity(0.2))
@@ -313,8 +355,13 @@ struct RemoteKeysView: View {
                 .controlSize(.mini)
             }
             Section("Clipboard") {
-                Button("Read Mac clipboard") {
-                    Task { macClipboard = await remote.pullClipboard() }
+                if remote.viaRelay {
+                    Text("Reading the Mac clipboard needs a direct connection; sending still works.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                } else {
+                    Button("Read Mac clipboard") {
+                        Task { macClipboard = await remote.pullClipboard() }
+                    }
                 }
                 if let text = macClipboard {
                     Text(text.isEmpty ? "(empty)" : text)

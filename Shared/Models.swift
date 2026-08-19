@@ -332,6 +332,8 @@ enum WatchCommandKind: String, Codable {
     case killAgent
     case killPane
     case input
+    case volume
+    case clipboard
 }
 
 struct WatchCommand: Codable {
@@ -344,6 +346,8 @@ struct WatchCommand: Codable {
     var cmd: String? = nil
     var initialText: String? = nil
     var input: [InputEvent]? = nil
+    var volumeDelta: Int? = nil
+    var volumeMuted: Bool? = nil
 }
 
 // MARK: - Tiny local phrase mapper

@@ -223,7 +223,7 @@ struct SessionsView: View {
                 .disabled(snap?.reachable != true || snap?.authError != nil)
                 if let machine = store.machines.first(where: { $0.host == host }), supportsInput {
                     NavigationLink {
-                        RemoteView(machine: machine)
+                        RemoteView(machine: machine).environmentObject(store)
                     } label: {
                         Label("Control Mac", systemImage: "cursorarrow.motionlines")
                     }
