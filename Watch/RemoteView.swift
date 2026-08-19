@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import WatchKit
+import UIKit
 
 // Drive the Mac from the wrist: screen preview + trackpad + crown scroll + keys.
 // The watch never injects anything itself — it POSTs high-level events to meshd,
@@ -65,10 +66,10 @@ final class RemoteControl: ObservableObject {
         Task { await flush() }
     }
 
-    func tap(at point: CGPoint, in size: CGSize) {
-        guard size.width > 0, size.height > 0 else { return }
-        perform([.moveTo(x: point.x / size.width, y: point.y / size.height, display: activeDisplay),
-                 .click()])
+    func tap(at point: CGPoint, in size: CGSize, imageAspect: Double?) {
+        let aspect = imageAspect ?? (size.height > 0 ? Double(size.width / size.height) : 0)
+        guard let p = normalizedPreviewPoint(tap: point, container: size, imageAspect: aspect) else { return }
+        perform([.moveTo(x: p.x, y: p.y, display: activeDisplay), .click()])
     }
 
     /// Snap on whichever screen the preview is showing.
@@ -295,6 +296,8 @@ struct RemoteView: View {
         remote.screen ?? (store.screenHost == remote.machine.host ? store.screenJPEGData : nil)
     }
 
+    private var screenShot: UIImage? { screenData.flatMap(UIImage.init(data:)) }
+
     /// One chip per screen. Switching repoints the preview, taps and window snaps
     /// together, so "the screen I'm looking at" is always the one I'm driving.
     private var displayPicker: some View {
@@ -323,8 +326,8 @@ struct RemoteView: View {
     private var preview: some View {
         GeometryReader { geo in
             ZStack {
-                if let data = screenData, let image = meshImage(from: data) {
-                    image.resizable().scaledToFit()
+                if let shot = screenShot {
+                    Image(uiImage: shot).resizable().scaledToFit()
                 } else {
                     RoundedRectangle(cornerRadius: 6).fill(.gray.opacity(0.2))
                         .overlay(Text("screen…").font(.caption2).foregroundStyle(.secondary))
@@ -332,10 +335,20 @@ struct RemoteView: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .contentShape(Rectangle())
-            .onTapGesture { point in remote.tap(at: point, in: geo.size) }
+            .onTapGesture { point in
+                remote.tap(at: point, in: geo.size, imageAspect: screenAspect)
+            }
         }
         .frame(height: 56)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// Measured from the screenshot itself, so it is right even before /displays answers.
+    private var screenAspect: Double? {
+        guard let shot = screenShot, shot.size.height > 0 else {
+            return remote.displays.first { $0.index == remote.activeDisplay }?.aspect
+        }
+        return Double(shot.size.width / shot.size.height)
     }
 
     private var trackpad: some View {

@@ -11,7 +11,9 @@ Older but still-useful context: `docs/PRODUCT-CONTEXT-2026-06-05.md`, `docs/XCOD
   xcodebuild -project MeshWatch.xcodeproj -scheme MeshWatch -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData build
   xcodebuild -project MeshWatch.xcodeproj -scheme 'MeshWatch Watch App' -destination 'generic/platform=watchOS Simulator' -derivedDataPath build/DerivedData build
   ```
-  Then `scripts/check-*.swift` (swiftc + run). **No test targets** — self-checks are the pattern.
+  Then **`sh scripts/check-all.sh`**. **No test targets** — self-checks are the pattern.
+  Swift checks must build with **`-Onone`**: `assert` is stripped under `-O`, so an
+  optimised assert-based check passes even when the code under test is broken.
 - **Commit per green slice**; stage only that slice's files (never `git add -A` — the Cursor agent has WIP in `meshd/`+`install/`).
 - **Don't run `install.sh` against the Mac** — it clobbers the Cursor agent's deployed `~/.mesh` cmux-bridge fixes (see state doc → Ownership).
 

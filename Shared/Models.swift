@@ -369,6 +369,26 @@ struct VolumeState: Codable, Hashable {
     var error: String?
 }
 
+/// Where a tap on the watch's screen preview lands, as 0…1 of the actual screenshot.
+///
+/// The preview is scaled to fit, so it is letterboxed whenever its aspect ratio differs
+/// from its container's — a 16:9 external display shown in a 1.54 slot. Mapping the tap
+/// against the container rather than the drawn image would put the cursor somewhere
+/// else entirely. Returns nil for taps in the letterbox, which point at no pixel.
+func normalizedPreviewPoint(tap: CGPoint, container: CGSize, imageAspect: Double) -> CGPoint? {
+    guard container.width > 0, container.height > 0, imageAspect > 0 else { return nil }
+    let containerAspect = Double(container.width / container.height)
+    let drawn = imageAspect > containerAspect
+        ? CGSize(width: container.width, height: container.width / imageAspect)
+        : CGSize(width: container.height * imageAspect, height: container.height)
+    let origin = CGPoint(x: (container.width - drawn.width) / 2,
+                         y: (container.height - drawn.height) / 2)
+    let x = (tap.x - origin.x) / drawn.width
+    let y = (tap.y - origin.y) / drawn.height
+    guard (0...1).contains(x), (0...1).contains(y) else { return nil }
+    return CGPoint(x: x, y: y)
+}
+
 // MARK: - Watch -> Phone command
 
 enum WatchCommandKind: String, Codable {

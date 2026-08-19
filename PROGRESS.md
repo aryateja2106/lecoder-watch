@@ -74,6 +74,13 @@ using daily. One slice at a time, full build gate, commit only when green.
   hub (Quick chords · Apps · Keyboard · Windows · Media · System · Clipboard · Mouse),
   each its own short page, reached by one button on the trackpad screen. Quick row adds
   Spotlight, Mission Control, App windows, Screenshot, Show desktop, Force quit.
+- **S11 tap mapping + a check suite that actually runs** — tap-to-place-cursor mapped
+  against the container, not the drawn image, so every tap was wrong whenever the
+  preview letterboxed (16:9 external screen in a 2.86 slot). Extracted the geometry to
+  `normalizedPreviewPoint` and covered it. Then found the checks themselves were
+  vacuous: Swift strips `assert` under `-O`, and a deliberately broken implementation
+  still exited 0. `scripts/check-all.sh` compiles every Swift check with `-Onone` and
+  runs the shell checks too — verified it goes red on a broken implementation.
 
 ## Next
 
