@@ -407,6 +407,18 @@ struct RemoteKeysView: View {
                     Button(name) { remote.perform([.key(key, mods)]) }
                 }
             }
+            Section("Window") {
+                HStack(spacing: 4) {
+                    windowButton("left", "rectangle.lefthalf.filled")
+                    windowButton("right", "rectangle.righthalf.filled")
+                    windowButton("full", "rectangle.fill")
+                }
+                HStack(spacing: 4) {
+                    windowButton("top", "rectangle.tophalf.filled")
+                    windowButton("bottom", "rectangle.bottomhalf.filled")
+                    windowButton("center", "rectangle.center.inset.filled")
+                }
+            }
             Section("Media") {
                 HStack(spacing: 4) {
                     mediaButton("previous", "backward.end")
@@ -459,6 +471,13 @@ struct RemoteKeysView: View {
             }
         }
         .navigationTitle("Keys")
+    }
+
+    private func windowButton(_ place: String, _ symbol: String) -> some View {
+        Button { remote.perform([.window(place)]) } label: { Image(systemName: symbol).font(.caption) }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .accessibilityLabel("Snap window \(place)")
     }
 
     private func mediaButton(_ key: String, _ symbol: String) -> some View {

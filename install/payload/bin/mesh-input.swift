@@ -15,6 +15,7 @@
 //   {"t":"key","key":"c","mods":["cmd"]}
 //   {"t":"text","s":"hello"}               arbitrary Unicode, no keycode needed
 //   {"t":"media","key":"playpause"}        media / brightness / backlight keys
+//   {"t":"window","place":"left"}          snap the frontmost window
 //
 // Without Accessibility permission for THIS binary, macOS silently drops every event.
 // ponytail: one long-lived process reading stdin, so a drag streams at gesture rate
@@ -197,6 +198,56 @@ func typeText(_ text: String) {
     }
 }
 
+// MARK: - Window placement
+
+// The Accessibility permission this process already needs for CGEvent also buys
+// AXUIElement, so snapping windows costs no extra grant and no helper app.
+// AX is top-left origin, AppKit is bottom-left, hence the flip.
+func frontmostWindow() -> AXUIElement? {
+    guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+    let axApp = AXUIElementCreateApplication(app.processIdentifier)
+    var value: AnyObject?
+    guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &value) == .success,
+          let window = value else { return nil }
+    return (window as! AXUIElement)
+}
+
+/// Usable area of the main display in AX coordinates (menu bar and Dock excluded).
+func workArea() -> CGRect {
+    guard let screen = NSScreen.main else { return .zero }
+    let visible = screen.visibleFrame
+    return CGRect(x: visible.minX,
+                  y: screen.frame.height - visible.maxY,
+                  width: visible.width,
+                  height: visible.height)
+}
+
+func placeWindow(_ place: String) {
+    guard let window = frontmostWindow() else { return }
+    let a = workArea()
+    guard a.width > 0 else { return }
+    let target: CGRect
+    switch place.lowercased() {
+    case "left":   target = CGRect(x: a.minX, y: a.minY, width: a.width / 2, height: a.height)
+    case "right":  target = CGRect(x: a.midX, y: a.minY, width: a.width / 2, height: a.height)
+    case "top":    target = CGRect(x: a.minX, y: a.minY, width: a.width, height: a.height / 2)
+    case "bottom": target = CGRect(x: a.minX, y: a.midY, width: a.width, height: a.height / 2)
+    case "center": target = CGRect(x: a.minX + a.width * 0.15, y: a.minY + a.height * 0.1,
+                                   width: a.width * 0.7, height: a.height * 0.8)
+    case "full":   target = a
+    default: return
+    }
+    var origin = target.origin
+    var size = target.size
+    // Position before size: a window pinned at the right edge cannot grow until it moves.
+    if let p = AXValueCreate(.cgPoint, &origin) {
+        AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, p)
+    }
+    if let sz = AXValueCreate(.cgSize, &size) {
+        AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sz)
+    }
+}
+
 // MARK: - Dispatch
 
 func number(_ object: [String: Any], _ key: String, _ fallback: Double = 0) -> Double {
@@ -229,6 +280,8 @@ func apply(_ command: [String: Any]) {
         typeText(command["s"] as? String ?? "")
     case "media":
         pressMedia(command["key"] as? String ?? "")
+    case "window":
+        placeWindow(command["place"] as? String ?? "")
     default:
         break
     }

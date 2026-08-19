@@ -291,6 +291,7 @@ struct InputEvent: Codable, Hashable {
     var key: String? = nil
     var mods: [String]? = nil
     var s: String? = nil
+    var place: String? = nil
 
     static func move(dx: Double, dy: Double) -> InputEvent { .init(t: "move", dx: dx, dy: dy) }
     /// Normalized 0…1 over the Mac's main display — the same frame `/screen.jpg` shows.
@@ -307,6 +308,8 @@ struct InputEvent: Codable, Hashable {
     static func text(_ s: String) -> InputEvent { .init(t: "text", s: s) }
     /// Media / brightness / keyboard-backlight — the NX channel, not a keycode.
     static func media(_ key: String) -> InputEvent { .init(t: "media", key: key) }
+    /// Snap the frontmost window: left, right, top, bottom, center, full.
+    static func window(_ place: String) -> InputEvent { .init(t: "window", place: place) }
 }
 
 struct InputStatus: Codable, Hashable {

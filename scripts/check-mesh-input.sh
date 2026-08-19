@@ -31,12 +31,16 @@ sed -n 's/.*\.key("\([a-z0-9]*\)".*/\1/p;s/.*keyButton("\([a-z0-9]*\)".*/\1/p;s/
 awk '/^let MEDIA_KEYS/,/^\]/' "$SRC" | tr ',' '\n' | names > "$TMP/known-media"
 sed -n 's/.*mediaButton("\([a-z0-9]*\)".*/\1/p;s/.*\.media("\([a-z0-9]*\)".*/\1/p' "$VIEW" | sort -u > "$TMP/used-media"
 
+# --- window placements (the helper's switch is the source of truth) ---
+awk '/^func placeWindow/,/^}/' "$SRC" | sed -n 's/.*case "\([a-z]*\)".*/\1/p' | sort -u > "$TMP/known-window"
+sed -n 's/.*windowButton("\([a-z]*\)".*/\1/p;s/.*\.window("\([a-z]*\)").*/\1/p' "$VIEW" | sort -u > "$TMP/used-window"
+
 # --- system actions (allowlisted in meshd, not the helper) ---
 awk '/^const SYSTEM_ACTIONS/,/^};/' "$MESHD" | sed -n 's/^  \([a-z]*\):.*/\1/p' | sort -u > "$TMP/known-system"
 sed -n 's/.*\.system("\([a-z]*\)").*/\1/p' "$VIEW" | sort -u > "$TMP/used-system"
 
 fail=0
-for kind in keys media system; do
+for kind in keys media window system; do
   missing="$(comm -23 "$TMP/used-$kind" "$TMP/known-$kind")"
   if [ -n "$missing" ]; then
     echo "FAIL: watch sends $kind the Mac cannot map:"
@@ -46,7 +50,8 @@ for kind in keys media system; do
 done
 [ "$fail" -eq 0 ] || exit 1
 
-printf 'OK: mesh-input compiles; %s keys, %s media, %s system actions all mapped\n' \
+printf 'OK: mesh-input compiles; %s keys, %s media, %s window, %s system all mapped\n' \
   "$(wc -l < "$TMP/used-keys" | tr -d ' ')" \
   "$(wc -l < "$TMP/used-media" | tr -d ' ')" \
+  "$(wc -l < "$TMP/used-window" | tr -d ' ')" \
   "$(wc -l < "$TMP/used-system" | tr -d ' ')"
