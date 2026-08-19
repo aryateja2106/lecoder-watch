@@ -60,11 +60,13 @@ using daily. One slice at a time, full build gate, commit only when green.
   landing), and the target rect is inset 1pt because the exact corner sits on the seam
   between displays and the event is dropped. Verified: every corner and centre exact on
   both screens; captures 480x311 and 480x270 confirm distinct displays.
+- **S9b multi-display on the watch** — a chip per screen above the preview; switching
+  repoints the preview, tap-to-place and window snapping together, so the screen you
+  are looking at is the one you are driving. "Move window to <display>" per screen.
+  The relayed path carries the display index too, so it works through the phone.
 
 ## Next
 
-1. **S9b multi-display on the watch** — display picker, preview per screen, tap maps
-   into the selected screen, "move window to display N".
 2. **S8 one Control hub** — the Keys screen has grown into a pile of eight sections.
    Split into Keys / Window / Media & System / Clipboard behind a short hub, and add
    quick actions (Spotlight, Mission Control, screenshot, Launchpad).

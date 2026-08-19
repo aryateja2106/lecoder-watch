@@ -59,8 +59,14 @@ struct MeshClient {
         return try JSONDecoder().decode(UsageSnapshot.self, from: data)
     }
 
-    func screenImage() async throws -> Data {
-        try await request("/screen.jpg")
+    /// Whole main screen, or one display when `display` is given (1-based).
+    func screenImage(display: Int? = nil) async throws -> Data {
+        try await request(display.map { "/screen.jpg?display=\($0)" } ?? "/screen.jpg")
+    }
+
+    func displays() async throws -> DisplayList {
+        let data = try await request("/displays")
+        return try JSONDecoder().decode(DisplayList.self, from: data)
     }
 
     func tailnet() async throws -> TailnetSnapshot {

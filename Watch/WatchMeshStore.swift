@@ -294,22 +294,22 @@ final class WatchMeshStore: ObservableObject {
         return newSession(host: host, cmd: agent, initialText: trimmed + "\n")
     }
 
-    func requestScreen(host: String) {
+    func requestScreen(host: String, display: Int? = nil) {
         screenHost = host
         screenError = nil
         if directReachable(host), let m = machines.first(where: { $0.host == host }) {
             Task {
                 do {
-                    screenJPEGData = try await MeshClient(machine: m).screenImage()
+                    screenJPEGData = try await MeshClient(machine: m).screenImage(display: display)
                     screenUpdatedISO = ISO8601DateFormatter().string(from: Date())
                 } catch {
                     screenError = "screen unavailable"
-                    WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil))
+                    WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil, display: display))
                 }
             }
         } else {
             screenJPEGData = nil
-            WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil))
+            WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil, display: display))
         }
     }
 

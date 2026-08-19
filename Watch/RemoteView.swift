@@ -19,6 +19,9 @@ final class RemoteControl: ObservableObject {
     @Published var screen: Data?
     @Published var note: String?
     @Published var dragLocked = false
+    @Published var displays: [DisplayInfo] = []
+    /// Which screen the preview shows and taps/window snaps target. 1-based.
+    @Published var activeDisplay = 1
     @Published var sticky: Set<String> = []      // modifiers held for the next key
 
     /// Relay through the phone when the watch can't reach meshd itself — the normal
@@ -59,7 +62,24 @@ final class RemoteControl: ObservableObject {
 
     func tap(at point: CGPoint, in size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
-        perform([.moveTo(x: point.x / size.width, y: point.y / size.height), .click()])
+        perform([.moveTo(x: point.x / size.width, y: point.y / size.height, display: activeDisplay),
+                 .click()])
+    }
+
+    /// Snap on whichever screen the preview is showing.
+    func snap(_ place: String) { perform([.window(place, display: activeDisplay)]) }
+
+    func loadDisplays() async {
+        if !viaRelay, let list = try? await client.displays(), list.ok {
+            displays = list.displays
+        } else {
+            let reply = await WatchLink.shared.request(
+                WatchCommand(kind: .listDisplays, host: machine.host, agent: nil, text: nil, key: nil))
+            displays = reply.flatMap { try? JSONDecoder().decode(DisplayList.self, from: $0) }?.displays ?? []
+        }
+        if !displays.contains(where: { $0.index == activeDisplay }) {
+            activeDisplay = displays.first(where: { $0.main == true })?.index ?? displays.first?.index ?? 1
+        }
     }
 
     func key(_ name: String, _ extraMods: [String] = []) {
@@ -139,7 +159,7 @@ final class RemoteControl: ObservableObject {
     }
 
     func refreshScreen() async {
-        screen = try? await client.screenImage()
+        screen = try? await client.screenImage(display: displays.count > 1 ? activeDisplay : nil)
     }
 
     func volume(delta: Int? = nil, muted: Bool? = nil) {
@@ -227,6 +247,7 @@ struct RemoteView: View {
 
     var body: some View {
         VStack(spacing: 4) {
+            if remote.displays.count > 1 { displayPicker }
             preview
             trackpad
             controls
@@ -237,6 +258,7 @@ struct RemoteView: View {
         .sheet(isPresented: $typing) { TypeSheet(remote: remote, presented: $typing) }
         .task {
             await remote.refreshStatus()
+            await remote.loadDisplays()
             while !Task.isCancelled {
                 await remote.flush()
                 try? await Task.sleep(for: remote.flushInterval)
@@ -246,7 +268,8 @@ struct RemoteView: View {
             // Slow second loop: the preview is for "did that land?", not a video feed.
             while !Task.isCancelled {
                 if remote.viaRelay {
-                    store.requestScreen(host: remote.machine.host)
+                    store.requestScreen(host: remote.machine.host,
+                                        display: remote.displays.count > 1 ? remote.activeDisplay : nil)
                 } else {
                     await remote.refreshScreen()
                 }
@@ -264,6 +287,29 @@ struct RemoteView: View {
     /// Direct grab when we have one, else whatever the phone last relayed.
     private var screenData: Data? {
         remote.screen ?? (store.screenHost == remote.machine.host ? store.screenJPEGData : nil)
+    }
+
+    /// One chip per screen. Switching repoints the preview, taps and window snaps
+    /// together, so "the screen I'm looking at" is always the one I'm driving.
+    private var displayPicker: some View {
+        HStack(spacing: 3) {
+            ForEach(remote.displays) { display in
+                Button {
+                    remote.activeDisplay = display.index
+                    remote.screen = nil
+                    Task { await remote.refreshScreen() }
+                } label: {
+                    Text("\(display.index)")
+                        .font(.caption2)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .tint(remote.activeDisplay == display.index ? .blue : nil)
+                .accessibilityLabel(display.label)
+            }
+        }
+        .frame(height: 20)
     }
 
     // Tap the preview to put the cursor exactly there — far more usable on a 40mm
@@ -424,6 +470,17 @@ struct RemoteKeysView: View {
                     windowButton("center", "rectangle.center.inset.filled")
                 }
             }
+            if remote.displays.count > 1 {
+                Section("Move window to") {
+                    ForEach(remote.displays) { display in
+                        Button(display.label) {
+                            remote.perform([.window("full", display: display.index)])
+                            remote.activeDisplay = display.index
+                        }
+                        .lineLimit(1)
+                    }
+                }
+            }
             Section("Media") {
                 HStack(spacing: 4) {
                     mediaButton("previous", "backward.end")
@@ -479,7 +536,7 @@ struct RemoteKeysView: View {
     }
 
     private func windowButton(_ place: String, _ symbol: String) -> some View {
-        Button { remote.perform([.window(place)]) } label: { Image(systemName: symbol).font(.caption) }
+        Button { remote.snap(place) } label: { Image(systemName: symbol).font(.caption) }
             .buttonStyle(.bordered)
             .controlSize(.mini)
             .accessibilityLabel("Snap window \(place)")

@@ -292,10 +292,13 @@ struct InputEvent: Codable, Hashable {
     var mods: [String]? = nil
     var s: String? = nil
     var place: String? = nil
+    var display: Int? = nil
 
     static func move(dx: Double, dy: Double) -> InputEvent { .init(t: "move", dx: dx, dy: dy) }
-    /// Normalized 0…1 over the Mac's main display — the same frame `/screen.jpg` shows.
-    static func moveTo(x: Double, y: Double) -> InputEvent { .init(t: "moveTo", x: x, y: y) }
+    /// Normalized 0…1 within one display — the same frame `/screen.jpg?display=` shows.
+    static func moveTo(x: Double, y: Double, display: Int? = nil) -> InputEvent {
+        .init(t: "moveTo", x: x, y: y, display: display)
+    }
     static func click(_ button: String = "left", count: Int = 1) -> InputEvent {
         .init(t: "click", button: button, count: count)
     }
@@ -309,7 +312,9 @@ struct InputEvent: Codable, Hashable {
     /// Media / brightness / keyboard-backlight — the NX channel, not a keycode.
     static func media(_ key: String) -> InputEvent { .init(t: "media", key: key) }
     /// Snap the frontmost window: left, right, top, bottom, center, full.
-    static func window(_ place: String) -> InputEvent { .init(t: "window", place: place) }
+    static func window(_ place: String, display: Int? = nil) -> InputEvent {
+        .init(t: "window", place: place, display: display)
+    }
 }
 
 struct InputStatus: Codable, Hashable {
@@ -320,6 +325,27 @@ struct InputStatus: Codable, Hashable {
     var helper: String?
     var hint: String?
     var error: String?
+}
+
+struct DisplayInfo: Codable, Hashable, Identifiable {
+    var id: Int { index }
+    /// 1-based and shared with `screencapture -D`, so the preview and the cursor
+    /// coordinates always mean the same screen.
+    var index: Int
+    var x: Int
+    var y: Int
+    var width: Int
+    var height: Int
+    var main: Bool?
+    var name: String?
+
+    var label: String { name ?? "Display \(index)" }
+    var aspect: Double { height > 0 ? Double(width) / Double(height) : 1.6 }
+}
+
+struct DisplayList: Codable, Hashable {
+    var ok: Bool
+    var displays: [DisplayInfo]
 }
 
 struct MacApp: Codable, Hashable, Identifiable {
@@ -362,6 +388,7 @@ enum WatchCommandKind: String, Codable {
     case inputStatus
     case listApps
     case activateApp
+    case listDisplays
 }
 
 struct WatchCommand: Codable {
@@ -374,6 +401,7 @@ struct WatchCommand: Codable {
     var cmd: String? = nil
     var initialText: String? = nil
     var input: [InputEvent]? = nil
+    var display: Int? = nil
     var volumeDelta: Int? = nil
     var volumeMuted: Bool? = nil
 }

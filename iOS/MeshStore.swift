@@ -25,6 +25,7 @@ final class MeshStore: ObservableObject {
     private var watchedAgent: String?
     private var watchedPane: String?
     private var watchedScreenHost: String?
+    private var watchedScreenDisplay: Int?
     private var lastEventISOByHost: [String: String] = [:]
     private var initializedEventHosts = Set<String>()
 
@@ -244,7 +245,7 @@ final class MeshStore: ObservableObject {
         if let host = watchedScreenHost,
            let m = targets.first(where: { $0.host == host }) {
             do {
-                screenJPEGData = try await MeshClient(machine: m).screenImage()
+                screenJPEGData = try await MeshClient(machine: m).screenImage(display: watchedScreenDisplay)
             } catch {
                 screenError = Self.describe(error)
             }
@@ -395,6 +396,7 @@ final class MeshStore: ObservableObject {
             await refresh()
         case .screenPeek:
             watchedScreenHost = command.host
+            watchedScreenDisplay = command.display
             await refresh()
         case .newAgent:
             guard let host = command.host, let name = command.text,
@@ -436,6 +438,11 @@ final class MeshStore: ObservableObject {
             guard let host = command.host, let name = command.text,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
             try? await MeshClient(machine: machine).activateApp(name)
+        case .listDisplays:
+            guard let host = command.host,
+                  let machine = machines.first(where: { $0.host == host }),
+                  let list = try? await MeshClient(machine: machine).displays() else { return nil }
+            return try? JSONEncoder().encode(list)
         case .inputStatus:
             guard let host = command.host,
                   let machine = machines.first(where: { $0.host == host }),
