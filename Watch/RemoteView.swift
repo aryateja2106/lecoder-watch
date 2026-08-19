@@ -386,16 +386,9 @@ struct RemoteView: View {
             }
             padButton("keyboard", "Type") { typing = true }
             NavigationLink {
-                RemoteAppsView(remote: remote)
+                RemoteHubView(remote: remote)
             } label: {
-                Image(systemName: "square.grid.2x2").font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
-            NavigationLink {
-                RemoteKeysView(remote: remote)
-            } label: {
-                Image(systemName: "command").font(.caption)
+                Image(systemName: "ellipsis.circle").font(.caption)
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)
@@ -411,40 +404,56 @@ struct RemoteView: View {
     }
 }
 
-// MARK: - Keys, shortcuts, clipboard, volume
+// MARK: - Hub
 
-struct RemoteKeysView: View {
+/// One screen listing what the Mac can be told to do, each area its own short page.
+/// The previous single Keys screen had grown to eleven sections — on a 40mm display
+/// that is a scroll marathon to reach "lock screen".
+struct RemoteHubView: View {
     @ObservedObject var remote: RemoteControl
-    @State private var macClipboard: String?
-    @State private var armSleep = false
 
-    private let shortcuts: [(String, String, [String])] = [
-        ("Copy", "c", ["cmd"]),
-        ("Paste", "v", ["cmd"]),
-        ("Cut", "x", ["cmd"]),
-        ("Undo", "z", ["cmd"]),
-        ("Save", "s", ["cmd"]),
-        ("Select all", "a", ["cmd"]),
-        ("Spotlight", "space", ["cmd"]),
-        ("Switch app", "tab", ["cmd"]),
-        ("Close window", "w", ["cmd"]),
-        ("Quit app", "q", ["cmd"]),
+    /// System-wide chords worth one tap; everything else lives on its own page.
+    private let quick: [(String, String, String, [String])] = [
+        ("Spotlight", "magnifyingglass", "space", ["cmd"]),
+        ("Mission Control", "rectangle.3.group", "up", ["ctrl"]),
+        ("App windows", "rectangle.stack", "down", ["ctrl"]),
+        ("Screenshot", "camera.viewfinder", "4", ["cmd", "shift"]),
+        ("Show desktop", "menubar.dock.rectangle", "f11", []),
+        ("Force quit", "xmark.octagon", "escape", ["cmd", "opt"]),
     ]
 
     var body: some View {
         List {
-            Section("Keys") {
-                HStack(spacing: 4) {
-                    keyButton("return", "return")
-                    keyButton("escape", "esc")
-                    keyButton("delete", "delete.left")
-                    keyButton("tab", "arrow.right.to.line")
+            Section("Quick") {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: 3), spacing: 3) {
+                    ForEach(quick, id: \.0) { name, symbol, key, mods in
+                        Button { remote.perform([.key(key, mods)]) } label: {
+                            Image(systemName: symbol).font(.caption)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                        .accessibilityLabel(name)
+                    }
                 }
-                HStack(spacing: 4) {
-                    keyButton("up", "arrow.up")
-                    keyButton("down", "arrow.down")
-                    keyButton("left", "arrow.left")
-                    keyButton("right", "arrow.right")
+            }
+            Section {
+                NavigationLink { RemoteAppsView(remote: remote) } label: {
+                    Label("Apps", systemImage: "square.grid.2x2")
+                }
+                NavigationLink { RemoteKeysView(remote: remote) } label: {
+                    Label("Keyboard", systemImage: "keyboard")
+                }
+                NavigationLink { RemoteWindowView(remote: remote) } label: {
+                    Label("Windows", systemImage: "macwindow")
+                }
+                NavigationLink { RemoteMediaView(remote: remote) } label: {
+                    Label("Media & sound", systemImage: "speaker.wave.2")
+                }
+                NavigationLink { RemoteSystemView(remote: remote) } label: {
+                    Label("System", systemImage: "power")
+                }
+                NavigationLink { RemoteClipboardView(remote: remote) } label: {
+                    Label("Clipboard", systemImage: "doc.on.clipboard")
                 }
             }
             Section("Mouse") {
@@ -461,11 +470,50 @@ struct RemoteKeysView: View {
                 Toggle("Crown scrolls sideways", isOn: $remote.horizontalScroll)
                     .font(.caption2)
             }
-            Section {
-                NavigationLink {
-                    RemoteKeyboardView(remote: remote)
-                } label: {
-                    Label("Full keyboard", systemImage: "keyboard")
+            if let status = remote.status, !status.trusted {
+                Section("Permission") {
+                    Text(status.hint ?? status.error ?? "meshd cannot inject input yet.")
+                        .font(.caption2).foregroundStyle(.orange)
+                    Button("Ask the Mac now") { Task { await remote.refreshStatus(prompt: true) } }
+                }
+            }
+        }
+        .navigationTitle("Mac")
+    }
+}
+
+// MARK: - Keyboard
+
+struct RemoteKeysView: View {
+    @ObservedObject var remote: RemoteControl
+
+    private let shortcuts: [(String, String, [String])] = [
+        ("Copy", "c", ["cmd"]),
+        ("Paste", "v", ["cmd"]),
+        ("Cut", "x", ["cmd"]),
+        ("Undo", "z", ["cmd"]),
+        ("Save", "s", ["cmd"]),
+        ("Select all", "a", ["cmd"]),
+        ("Find", "f", ["cmd"]),
+        ("Switch app", "tab", ["cmd"]),
+        ("Close window", "w", ["cmd"]),
+        ("Quit app", "q", ["cmd"]),
+    ]
+
+    var body: some View {
+        List {
+            Section("Keys") {
+                HStack(spacing: 4) {
+                    keyButton("return", "return")
+                    keyButton("escape", "escape")
+                    keyButton("delete", "delete.left")
+                    keyButton("tab", "arrow.right.to.line")
+                }
+                HStack(spacing: 4) {
+                    keyButton("up", "arrow.up")
+                    keyButton("down", "arrow.down")
+                    keyButton("left", "arrow.left")
+                    keyButton("right", "arrow.right")
                 }
             }
             Section("Hold for next key") {
@@ -480,12 +528,36 @@ struct RemoteKeysView: View {
                     }
                 }
             }
+            Section {
+                NavigationLink { RemoteKeyboardView(remote: remote) } label: {
+                    Label("Every key", systemImage: "keyboard.badge.ellipsis")
+                }
+            }
             Section("Shortcuts") {
                 ForEach(shortcuts, id: \.0) { name, key, mods in
                     Button(name) { remote.perform([.key(key, mods)]) }
                 }
             }
-            Section("Window") {
+        }
+        .navigationTitle("Keyboard")
+    }
+
+    private func keyButton(_ key: String, _ symbol: String) -> some View {
+        Button { remote.key(key) } label: { Image(systemName: symbol).font(.caption) }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .accessibilityLabel(key)
+    }
+}
+
+// MARK: - Windows
+
+struct RemoteWindowView: View {
+    @ObservedObject var remote: RemoteControl
+
+    var body: some View {
+        List {
+            Section(remote.displays.count > 1 ? "Snap on display \(remote.activeDisplay)" : "Snap") {
                 HStack(spacing: 4) {
                     windowButton("left", "rectangle.lefthalf.filled")
                     windowButton("right", "rectangle.righthalf.filled")
@@ -508,58 +580,8 @@ struct RemoteKeysView: View {
                     }
                 }
             }
-            Section("Media") {
-                HStack(spacing: 4) {
-                    mediaButton("previous", "backward.end")
-                    mediaButton("playpause", "playpause")
-                    mediaButton("next", "forward.end")
-                }
-                HStack(spacing: 4) {
-                    mediaButton("brightnessdown", "sun.min")
-                    mediaButton("brightnessup", "sun.max")
-                    mediaButton("keyboardbrightnessdown", "keyboard.chevron.compact.down")
-                    mediaButton("keyboardbrightnessup", "keyboard")
-                }
-            }
-            Section("System") {
-                Button("Lock screen") { remote.system("lock") }
-                Button("Sleep display") { remote.system("displaysleep") }
-                Button("Screen saver") { remote.system("screensaver") }
-                // Two taps: sleeping the Mac cuts the very link being used to send
-                // this, and an accidental wrist tap mid-agent-run is expensive.
-                Button(armSleep ? "Tap again to sleep Mac" : "Sleep Mac") {
-                    if armSleep { remote.system("sleep"); armSleep = false } else { armSleep = true }
-                }
-                .foregroundStyle(armSleep ? .orange : .primary)
-            }
-            Section("Volume") {
-                HStack {
-                    Button { remote.volume(delta: -10) } label: { Image(systemName: "speaker.minus") }
-                    Button { remote.volume(delta: 10) } label: { Image(systemName: "speaker.plus") }
-                    Button { remote.volume(muted: true) } label: { Image(systemName: "speaker.slash") }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
-            }
-            Section("Clipboard") {
-                Button("Read Mac clipboard") {
-                    Task { macClipboard = await remote.pullClipboard() ?? "(unavailable)" }
-                }
-                if let text = macClipboard {
-                    Text(text.isEmpty ? "(empty)" : text)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let status = remote.status, !status.trusted {
-                Section("Permission") {
-                    Text(status.hint ?? status.error ?? "meshd cannot inject input yet.")
-                        .font(.caption2).foregroundStyle(.orange)
-                    Button("Ask the Mac now") { Task { await remote.refreshStatus(prompt: true) } }
-                }
-            }
         }
-        .navigationTitle("Keys")
+        .navigationTitle("Windows")
     }
 
     private func windowButton(_ place: String, _ symbol: String) -> some View {
@@ -568,6 +590,42 @@ struct RemoteKeysView: View {
             .controlSize(.mini)
             .accessibilityLabel("Snap window \(place)")
     }
+}
+
+// MARK: - Media & sound
+
+struct RemoteMediaView: View {
+    @ObservedObject var remote: RemoteControl
+
+    var body: some View {
+        List {
+            Section("Playback") {
+                HStack(spacing: 4) {
+                    mediaButton("previous", "backward.end")
+                    mediaButton("playpause", "playpause")
+                    mediaButton("next", "forward.end")
+                }
+            }
+            Section("Volume") {
+                HStack(spacing: 4) {
+                    Button { remote.volume(delta: -10) } label: { Image(systemName: "speaker.minus") }
+                    Button { remote.volume(delta: 10) } label: { Image(systemName: "speaker.plus") }
+                    Button { remote.volume(muted: true) } label: { Image(systemName: "speaker.slash") }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            }
+            Section("Brightness") {
+                HStack(spacing: 4) {
+                    mediaButton("brightnessdown", "sun.min")
+                    mediaButton("brightnessup", "sun.max")
+                    mediaButton("keyboardbrightnessdown", "keyboard.chevron.compact.down")
+                    mediaButton("keyboardbrightnessup", "keyboard")
+                }
+            }
+        }
+        .navigationTitle("Media")
+    }
 
     private func mediaButton(_ key: String, _ symbol: String) -> some View {
         Button { remote.media(key) } label: { Image(systemName: symbol).font(.caption) }
@@ -575,12 +633,62 @@ struct RemoteKeysView: View {
             .controlSize(.mini)
             .accessibilityLabel(key)
     }
+}
 
-    private func keyButton(_ key: String, _ symbol: String) -> some View {
-        Button { remote.key(key) } label: { Image(systemName: symbol).font(.caption) }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
-            .accessibilityLabel(key)
+// MARK: - System
+
+struct RemoteSystemView: View {
+    @ObservedObject var remote: RemoteControl
+    @State private var armSleep = false
+
+    var body: some View {
+        List {
+            Button("Lock screen") { remote.system("lock") }
+            Button("Sleep display") { remote.system("displaysleep") }
+            Button("Screen saver") { remote.system("screensaver") }
+            // Two taps: sleeping the Mac cuts the very link being used to send this,
+            // and an accidental wrist tap mid-agent-run is expensive.
+            Button(armSleep ? "Tap again to sleep Mac" : "Sleep Mac") {
+                if armSleep { remote.system("sleep"); armSleep = false } else { armSleep = true }
+            }
+            .foregroundStyle(armSleep ? .orange : .primary)
+        }
+        .navigationTitle("System")
+    }
+}
+
+// MARK: - Clipboard
+
+struct RemoteClipboardView: View {
+    @ObservedObject var remote: RemoteControl
+    @State private var macClipboard: String?
+    @State private var loading = false
+
+    var body: some View {
+        List {
+            Section {
+                Button("Read Mac clipboard") {
+                    loading = true
+                    Task {
+                        macClipboard = await remote.pullClipboard() ?? "(unavailable)"
+                        loading = false
+                    }
+                }
+                if loading {
+                    ProgressView()
+                } else if let macClipboard {
+                    Text(macClipboard.isEmpty ? "(empty)" : macClipboard)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Section {
+                Text("Dictate into the Mac's clipboard from the Type button on the trackpad.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Clipboard")
     }
 }
 

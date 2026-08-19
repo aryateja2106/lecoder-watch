@@ -70,13 +70,17 @@ using daily. One slice at a time, full build gate, commit only when green.
   cmd-K are reachable — dictation can produce letters but never a chord. check-mesh-input
   validates all 63 key literals against the helper's keycode table. Verified live:
   dx=40, dy=-25 and middle button=2 observed on a listen-only tap.
+- **S8 one Control hub** — the Keys screen had grown to eleven sections. Replaced with a
+  hub (Quick chords · Apps · Keyboard · Windows · Media · System · Clipboard · Mouse),
+  each its own short page, reached by one button on the trackpad screen. Quick row adds
+  Spotlight, Mission Control, App windows, Screenshot, Show desktop, Force quit.
 
 ## Next
 
-2. **S8 one Control hub** — the Keys screen has grown into a pile of eight sections.
-   Split into Keys / Window / Media & System / Clipboard behind a short hub, and add
-   quick actions (Spotlight, Mission Control, screenshot, Launchpad).
-3. **S10 ship it** — rebuild signed, reinstall on the phone, refresh docs.
+1. **S11 verify on the watch** — the dev tunnel is still refusing; once it connects,
+   install straight to the watch and confirm the trackpad drives the cursor.
+2. **S12 docs** — refresh `docs/mac-remote-control.md` for displays, apps, media,
+   system, windows and the relay reply path.
 
 ## Blockers
 
