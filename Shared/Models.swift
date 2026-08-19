@@ -305,6 +305,8 @@ struct InputEvent: Codable, Hashable {
         .init(t: "key", key: key, mods: mods.isEmpty ? nil : mods)
     }
     static func text(_ s: String) -> InputEvent { .init(t: "text", s: s) }
+    /// Media / brightness / keyboard-backlight — the NX channel, not a keycode.
+    static func media(_ key: String) -> InputEvent { .init(t: "media", key: key) }
 }
 
 struct InputStatus: Codable, Hashable {
@@ -338,6 +340,7 @@ enum WatchCommandKind: String, Codable {
     case input
     case volume
     case clipboard
+    case system
 }
 
 struct WatchCommand: Codable {

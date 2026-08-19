@@ -158,6 +158,12 @@ struct MeshClient {
         return try JSONDecoder().decode(VolumeState.self, from: data)
     }
 
+    /// Power/session action: displaysleep, lock, screensaver, sleep.
+    func system(_ action: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["action": action])
+        _ = try await request("/system", method: "POST", body: body)
+    }
+
     /// Kill a single pane within a session.
     func killPane(agent: String, paneId: String) async throws {
         let a = agent.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? agent

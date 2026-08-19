@@ -7,6 +7,7 @@
 //   GET  /clipboard        -> { text }
 //   POST /clipboard        <- { text }
 //   POST /volume           <- { level } | { delta } | { muted }   (GET reads current)
+//   POST /system           <- { action: "displaysleep" | "lock" | "screensaver" | "sleep" }
 //
 // ponytail: its own module, not inlined into server.ts, because three meshd
 // lineages (repo, payload, deployed) have drifted — this keeps the patch each of
@@ -140,6 +141,24 @@ async function volume(body: any) {
   return { ok: true, ...(await read()) };
 }
 
+/// Power/session actions that have no HID equivalent. Allowlisted by name — the
+/// watch never gets to name a command. Deliberately no restart/shutdown: those kill
+/// every running agent session, and a wrist tap is too cheap for that.
+const SYSTEM_ACTIONS: Record<string, string[]> = {
+  displaysleep: ["/usr/bin/pmset", "displaysleepnow"],
+  sleep: ["/usr/bin/pmset", "sleepnow"],
+  lock: ["/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession", "-suspend"],
+  screensaver: ["/usr/bin/open", "-a", "ScreenSaverEngine"],
+};
+
+async function systemAction(action: string) {
+  if (!IS_MAC) return { ok: false, error: "system actions are macOS only" };
+  const cmd = SYSTEM_ACTIONS[action];
+  if (!cmd) return { ok: false, error: `unknown action: ${action}` };
+  await run(cmd);
+  return { ok: true, action };
+}
+
 // ---------- routing ----------
 /// Returns a Response for the routes this module owns, or null so server.ts keeps matching.
 export async function handleInput(req: Request, url: URL): Promise<Response | null> {
@@ -164,6 +183,11 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     if (typeof body?.text !== "string") return json({ error: "text required" }, 400);
     await run(["/usr/bin/pbcopy"], body.text);
     return json({ ok: true });
+  }
+  if (path === "/system" && req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    const result = await systemAction(String(body?.action ?? ""));
+    return json(result, result.ok ? 200 : 400);
   }
   if (path === "/volume" && (req.method === "POST" || req.method === "GET")) {
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};

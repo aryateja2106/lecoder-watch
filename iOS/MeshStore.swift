@@ -416,6 +416,10 @@ final class MeshStore: ObservableObject {
             guard let host = command.host, let text = command.text,
                   let machine = machines.first(where: { $0.host == host }) else { return }
             try? await MeshClient(machine: machine).setClipboard(text)
+        case .system:
+            guard let host = command.host, let action = command.text,
+                  let machine = machines.first(where: { $0.host == host }) else { return }
+            try? await MeshClient(machine: machine).system(action)
         }
     }
 

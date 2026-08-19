@@ -22,13 +22,17 @@ using daily. One slice at a time, full build gate, commit only when green.
   machines list for any host advertising the `input` capability, instead of four taps
   deep. Both schemes build.
 
+- **S3 media + system** — `{"t":"media"}` posts NX system-defined events (play/pause,
+  next/prev, display + keyboard brightness); meshd `/system` allowlists lock, display
+  sleep, screen saver and sleep. Watch Keys screen gained Media and System sections;
+  Sleep Mac is two-tap. Verified on the live daemon: media events reach the HID stream
+  (observed key=21/22 on a listen-only tap), allowlist rejects anything unnamed.
+
 ## Next
 
-1. **S3 media + system keys** — play/pause, next/prev, brightness, lock, sleep display,
-   Mission Control, Spotlight, screenshot.
-2. **S4 app switcher** — list running apps from meshd, focus/launch/quit by name.
-3. **S5 window control** — snap left/right/full/centre for the frontmost window.
-4. **S6 UI pass** — one coherent Control screen, not a pile of sections.
+1. **S4 app switcher** — list running apps from meshd, focus/launch/quit by name.
+2. **S5 window control** — snap left/right/full/centre for the frontmost window.
+3. **S6 UI pass** — one coherent Control screen, not a pile of sections.
 
 ## Blockers
 

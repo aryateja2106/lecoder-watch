@@ -14,6 +14,7 @@
 //   {"t":"scroll","dx":0,"dy":-40}         pixel scroll
 //   {"t":"key","key":"c","mods":["cmd"]}
 //   {"t":"text","s":"hello"}               arbitrary Unicode, no keycode needed
+//   {"t":"media","key":"playpause"}        media / brightness / backlight keys
 //
 // Without Accessibility permission for THIS binary, macOS silently drops every event.
 // ponytail: one long-lived process reading stdin, so a drag streams at gesture rate
@@ -23,6 +24,7 @@
 import Foundation
 import CoreGraphics
 import ApplicationServices
+import AppKit
 
 let flags = Set(CommandLine.arguments.dropFirst())
 
@@ -151,6 +153,36 @@ func pressKey(_ name: String, mods: [String]) {
     }
 }
 
+/// Media, brightness and backlight live on the NX system-defined channel, not the
+/// keyboard one — there is no virtual keycode for them. Subtype 8 with the key in the
+/// high half of data1 is how the hardware Fn row reports itself.
+let MEDIA_KEYS: [String: Int32] = [
+    "volumeup": 0, "volumedown": 1,
+    "brightnessup": 2, "brightnessdown": 3,
+    "mute": 7,
+    "playpause": 16, "play": 16, "pause": 16,
+    "next": 17, "previous": 18, "prev": 18,
+    "fastforward": 19, "rewind": 20,
+    "keyboardbrightnessup": 21, "keyboardbrightnessdown": 22,
+]
+
+func pressMedia(_ name: String) {
+    guard let code = MEDIA_KEYS[name.lowercased()] else { return }
+    for isDown in [true, false] {
+        let state: Int32 = isDown ? 0xA : 0xB
+        let event = NSEvent.otherEvent(with: .systemDefined,
+                                       location: .zero,
+                                       modifierFlags: NSEvent.ModifierFlags(rawValue: UInt(state) << 8),
+                                       timestamp: 0,
+                                       windowNumber: 0,
+                                       context: nil,
+                                       subtype: 8,
+                                       data1: Int((code << 16) | (state << 8)),
+                                       data2: -1)
+        post(event?.cgEvent)
+    }
+}
+
 /// Type arbitrary text without mapping it to keycodes — handles any layout and emoji.
 func typeText(_ text: String) {
     let units = Array(text.utf16)
@@ -195,6 +227,8 @@ func apply(_ command: [String: Any]) {
         pressKey(command["key"] as? String ?? "", mods: command["mods"] as? [String] ?? [])
     case "text":
         typeText(command["s"] as? String ?? "")
+    case "media":
+        pressMedia(command["key"] as? String ?? "")
     default:
         break
     }

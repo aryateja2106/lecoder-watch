@@ -147,6 +147,21 @@ final class RemoteControl: ObservableObject {
         }
     }
 
+    func media(_ key: String) { perform([.media(key)]) }
+
+    func system(_ action: String) {
+        guard !viaRelay else {
+            WatchLink.shared.send(WatchCommand(kind: .system, host: machine.host, agent: nil,
+                                               text: action, key: nil))
+            note = action
+            return
+        }
+        Task {
+            try? await client.system(action)
+            note = action
+        }
+    }
+
     /// Reading needs a reply, and the phone relay is one-way — direct only.
     func pullClipboard() async -> String? {
         viaRelay ? nil : try? await client.clipboard()
@@ -312,6 +327,7 @@ struct RemoteView: View {
 struct RemoteKeysView: View {
     @ObservedObject var remote: RemoteControl
     @State private var macClipboard: String?
+    @State private var armSleep = false
 
     private let shortcuts: [(String, String, [String])] = [
         ("Copy", "c", ["cmd"]),
@@ -359,6 +375,30 @@ struct RemoteKeysView: View {
                     Button(name) { remote.perform([.key(key, mods)]) }
                 }
             }
+            Section("Media") {
+                HStack(spacing: 4) {
+                    mediaButton("previous", "backward.end")
+                    mediaButton("playpause", "playpause")
+                    mediaButton("next", "forward.end")
+                }
+                HStack(spacing: 4) {
+                    mediaButton("brightnessdown", "sun.min")
+                    mediaButton("brightnessup", "sun.max")
+                    mediaButton("keyboardbrightnessdown", "keyboard.chevron.compact.down")
+                    mediaButton("keyboardbrightnessup", "keyboard")
+                }
+            }
+            Section("System") {
+                Button("Lock screen") { remote.system("lock") }
+                Button("Sleep display") { remote.system("displaysleep") }
+                Button("Screen saver") { remote.system("screensaver") }
+                // Two taps: sleeping the Mac cuts the very link being used to send
+                // this, and an accidental wrist tap mid-agent-run is expensive.
+                Button(armSleep ? "Tap again to sleep Mac" : "Sleep Mac") {
+                    if armSleep { remote.system("sleep"); armSleep = false } else { armSleep = true }
+                }
+                .foregroundStyle(armSleep ? .orange : .primary)
+            }
             Section("Volume") {
                 HStack {
                     Button { remote.volume(delta: -10) } label: { Image(systemName: "speaker.minus") }
@@ -392,6 +432,13 @@ struct RemoteKeysView: View {
             }
         }
         .navigationTitle("Keys")
+    }
+
+    private func mediaButton(_ key: String, _ symbol: String) -> some View {
+        Button { remote.media(key) } label: { Image(systemName: symbol).font(.caption) }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .accessibilityLabel(key)
     }
 
     private func keyButton(_ key: String, _ symbol: String) -> some View {
