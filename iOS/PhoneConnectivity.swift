@@ -8,7 +8,8 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     static let shared = PhoneConnectivity()
 
     /// Set by MeshStore so we can service watch commands (send to agent, refresh).
-    var commandHandler: ((WatchCommand) async -> Void)?
+    /// Returns optional payload data for reads the watch is waiting on.
+    var commandHandler: ((WatchCommand) async -> Data?)?
 
     private override init() {
         super.init()
@@ -54,13 +55,15 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
             return
         }
         Task {
-            await commandHandler?(command)
-            replyHandler(["ok": true])
+            let data = await commandHandler?(command)
+            var reply: [String: Any] = ["ok": true]
+            if let data { reply["data"] = data }
+            replyHandler(reply)
         }
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         guard let command = decodeCommand(userInfo) else { return }
-        Task { await commandHandler?(command) }
+        Task { _ = await commandHandler?(command) }
     }
 }

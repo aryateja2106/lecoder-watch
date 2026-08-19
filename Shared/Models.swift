@@ -341,6 +341,8 @@ enum WatchCommandKind: String, Codable {
     case volume
     case clipboard
     case system
+    case readClipboard
+    case inputStatus
 }
 
 struct WatchCommand: Codable {

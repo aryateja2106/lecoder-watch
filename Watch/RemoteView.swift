@@ -122,9 +122,14 @@ final class RemoteControl: ObservableObject {
         } catch {
             // Probe doubles as the route check: one 3s timeout here beats the first
             // drag stalling while URLSession works through every address.
-            status = nil
             viaRelay = true
             note = "via phone"
+            // The phone can still answer for us — including raising the Accessibility
+            // prompt on the Mac, which is the one thing the user must be told about.
+            let reply = await WatchLink.shared.request(
+                WatchCommand(kind: .inputStatus, host: machine.host, agent: nil,
+                             text: prompt ? "prompt" : nil, key: nil))
+            status = reply.flatMap { try? JSONDecoder().decode(InputStatus.self, from: $0) }
         }
     }
 
@@ -162,9 +167,11 @@ final class RemoteControl: ObservableObject {
         }
     }
 
-    /// Reading needs a reply, and the phone relay is one-way — direct only.
     func pullClipboard() async -> String? {
-        viaRelay ? nil : try? await client.clipboard()
+        if !viaRelay { return try? await client.clipboard() }
+        let reply = await WatchLink.shared.request(
+            WatchCommand(kind: .readClipboard, host: machine.host, agent: nil, text: nil, key: nil))
+        return reply.flatMap { try? JSONDecoder().decode(String.self, from: $0) }
     }
 
     func pushClipboard(_ text: String) {
@@ -409,13 +416,8 @@ struct RemoteKeysView: View {
                 .controlSize(.mini)
             }
             Section("Clipboard") {
-                if remote.viaRelay {
-                    Text("Reading the Mac clipboard needs a direct connection; sending still works.")
-                        .font(.caption2).foregroundStyle(.secondary)
-                } else {
-                    Button("Read Mac clipboard") {
-                        Task { macClipboard = await remote.pullClipboard() }
-                    }
+                Button("Read Mac clipboard") {
+                    Task { macClipboard = await remote.pullClipboard() ?? "(unavailable)" }
                 }
                 if let text = macClipboard {
                     Text(text.isEmpty ? "(empty)" : text)

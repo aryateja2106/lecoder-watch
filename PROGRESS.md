@@ -28,11 +28,16 @@ using daily. One slice at a time, full build gate, commit only when green.
   Sleep Mac is two-tap. Verified on the live daemon: media events reach the HID stream
   (observed key=21/22 on a listen-only tap), allowlist rejects anything unnamed.
 
+- **S4 relay reply path** — `WCSession.sendMessage`'s reply handler was being thrown
+  away, so every *read* died whenever the watch was off the tailnet. `WatchLink.request`
+  now awaits an answer (double-resume-safe under the timeout), the phone handler returns
+  payload data, and clipboard read + input status work relayed. Enabler for the app list.
+
 ## Next
 
-1. **S4 app switcher** — list running apps from meshd, focus/launch/quit by name.
-2. **S5 window control** — snap left/right/full/centre for the frontmost window.
-3. **S6 UI pass** — one coherent Control screen, not a pile of sections.
+1. **S5 app switcher** — list running apps from meshd, focus/launch/quit by name.
+2. **S6 window control** — snap left/right/full/centre for the frontmost window.
+3. **S7 UI pass** — one coherent Control screen, not a pile of sections.
 
 ## Blockers
 

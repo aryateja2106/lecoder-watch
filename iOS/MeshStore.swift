@@ -364,22 +364,24 @@ final class MeshStore: ObservableObject {
 
     // MARK: Watch commands
 
-    func handle(_ command: WatchCommand) async {
+    /// Returns payload data for commands the watch is waiting on an answer for.
+    @discardableResult
+    func handle(_ command: WatchCommand) async -> Data? {
         switch command.kind {
         case .refresh:
             await refresh()
         case .agentSend:
             guard let host = command.host, let agent = command.agent,
-                  let machine = machines.first(where: { $0.host == host }) else { return }
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
             try? await MeshClient(machine: machine).send(agent: agent, text: command.text, key: command.key, pane: command.pane)
             await refresh()
         case .killAgent:
             guard let host = command.host, let agent = command.agent,
-                  let machine = machines.first(where: { $0.host == host }) else { return }
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
             await kill(on: machine, name: agent)
         case .killPane:
             guard let host = command.host, let agent = command.agent, let pane = command.pane,
-                  let machine = machines.first(where: { $0.host == host }) else { return }
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
             try? await MeshClient(machine: machine).killPane(agent: agent, paneId: pane)
             if watchedHost == host, watchedAgent == agent, watchedPane == pane {
                 watchedPane = nil
@@ -396,31 +398,43 @@ final class MeshStore: ObservableObject {
             await refresh()
         case .newAgent:
             guard let host = command.host, let name = command.text,
-                  let machine = machines.first(where: { $0.host == host }) else { return }
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
             await newSession(on: machine, name: name, cmd: command.cmd, initialText: command.initialText)
         case .newPane:
             guard let host = command.host, let agent = command.agent,
-                  let machine = machines.first(where: { $0.host == host }) else { return }
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
             try? await MeshClient(machine: machine).newPane(agent: agent)
             await refresh()
         case .input:
             // Watch trackpad/keys, relayed when the watch itself can't reach meshd.
             guard let host = command.host, let events = command.input,
-                  let machine = machines.first(where: { $0.host == host }) else { return }
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
             try? await MeshClient(machine: machine).input(events)
         case .volume:
             guard let host = command.host,
-                  let machine = machines.first(where: { $0.host == host }) else { return }
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
             try? await MeshClient(machine: machine).volume(delta: command.volumeDelta, muted: command.volumeMuted)
         case .clipboard:
             guard let host = command.host, let text = command.text,
-                  let machine = machines.first(where: { $0.host == host }) else { return }
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
             try? await MeshClient(machine: machine).setClipboard(text)
         case .system:
             guard let host = command.host, let action = command.text,
-                  let machine = machines.first(where: { $0.host == host }) else { return }
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
             try? await MeshClient(machine: machine).system(action)
+        case .readClipboard:
+            guard let host = command.host,
+                  let machine = machines.first(where: { $0.host == host }),
+                  let text = try? await MeshClient(machine: machine).clipboard() else { return nil }
+            return try? JSONEncoder().encode(text)
+        case .inputStatus:
+            guard let host = command.host,
+                  let machine = machines.first(where: { $0.host == host }),
+                  let status = try? await MeshClient(machine: machine).inputStatus(prompt: command.text == "prompt")
+            else { return nil }
+            return try? JSONEncoder().encode(status)
         }
+        return nil
     }
 
     private nonisolated static func describe(_ error: Error) -> String {

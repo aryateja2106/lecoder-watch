@@ -33,6 +33,39 @@ final class WatchLink: NSObject, WCSessionDelegate, @unchecked Sendable {
         }
     }
 
+    /// Ask the phone something and wait for its answer. WCSession has always had a
+    /// reply handler; not using it meant every read (clipboard, status, app list)
+    /// simply had no answer whenever the watch was off the tailnet.
+    func request(_ command: WatchCommand, timeout: TimeInterval = 6) async -> Data? {
+        guard WCSession.isSupported(), let payload = try? JSONEncoder().encode(command) else { return nil }
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable else { return nil }
+        return await withCheckedContinuation { continuation in
+            let once = Resumer(continuation)
+            session.sendMessage(["command": payload]) { reply in
+                once.finish(reply["data"] as? Data)
+            } errorHandler: { _ in
+                once.finish(nil)
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { once.finish(nil) }
+        }
+    }
+
+    /// WCSession can call neither handler (phone asleep), so the timeout has to be
+    /// able to resume too — and a continuation resumed twice traps.
+    private final class Resumer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Data?, Never>?
+        init(_ continuation: CheckedContinuation<Data?, Never>) { self.continuation = continuation }
+        func finish(_ data: Data?) {
+            lock.lock()
+            let pending = continuation
+            continuation = nil
+            lock.unlock()
+            pending?.resume(returning: data)
+        }
+    }
+
     private func decode(_ payload: [String: Any]) {
         guard let data = payload["snapshot"] as? Data,
               let snap = try? JSONDecoder().decode(MeshSnapshot.self, from: data) else { return }
