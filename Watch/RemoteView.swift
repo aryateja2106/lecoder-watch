@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import WatchKit
 
 // Drive the Mac from the wrist: screen preview + trackpad + crown scroll + keys.
 // The watch never injects anything itself — it POSTs high-level events to meshd,
@@ -50,6 +51,9 @@ final class RemoteControl: ObservableObject {
 
     func perform(_ events: [InputEvent]) {
         discrete.append(contentsOf: events)
+        // Confirm at the wrist, not on the Mac: the screen preview is two seconds
+        // behind, so without a tap you cannot tell a click from a missed touch.
+        WKInterfaceDevice.current().play(events.contains { $0.t == "click" } ? .click : .success)
         Task { await flush() }
     }
 
@@ -67,6 +71,7 @@ final class RemoteControl: ObservableObject {
     func toggleDragLock() {
         dragLocked.toggle()
         perform([dragLocked ? .hold : .release])
+        WKInterfaceDevice.current().play(dragLocked ? .start : .stop)
     }
 
     // MARK: loop

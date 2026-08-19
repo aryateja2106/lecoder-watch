@@ -43,12 +43,16 @@ using daily. One slice at a time, full build gate, commit only when green.
   permission and no helper app. left/right/top/bottom/center/full, position set before
   size so an edge-pinned window can grow. Verified against a real window: 99,33
   1349x897 → left 0,33 756x897 → right 756,33 → center 226,123 1058x718.
+- **S7 haptics** — a click, drag-lock start/stop and every discrete action now tap the
+  wrist. The screen preview is two seconds behind, so without it you cannot tell a
+  landed click from a missed touch.
 
 ## Next
 
-1. **S7 window control** — list running apps from meshd, focus/launch/quit by name.
-2. **S7 UI pass** — snap left/right/full/centre for the frontmost window.
-3. **S7 UI pass** — one coherent Control screen, not a pile of sections.
+1. **S8 one Control hub** — the Keys screen has grown into a pile of eight sections.
+   Split into Keys / Window / Media & System / Clipboard behind a short hub, and add
+   quick actions (Spotlight, Mission Control, screenshot, Launchpad).
+2. **S9 ship it** — rebuild signed, reinstall on the phone, refresh docs.
 
 ## Blockers
 
