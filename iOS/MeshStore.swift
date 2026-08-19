@@ -427,6 +427,15 @@ final class MeshStore: ObservableObject {
                   let machine = machines.first(where: { $0.host == host }),
                   let text = try? await MeshClient(machine: machine).clipboard() else { return nil }
             return try? JSONEncoder().encode(text)
+        case .listApps:
+            guard let host = command.host,
+                  let machine = machines.first(where: { $0.host == host }),
+                  let apps = try? await MeshClient(machine: machine).apps() else { return nil }
+            return try? JSONEncoder().encode(apps)
+        case .activateApp:
+            guard let host = command.host, let name = command.text,
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
+            try? await MeshClient(machine: machine).activateApp(name)
         case .inputStatus:
             guard let host = command.host,
                   let machine = machines.first(where: { $0.host == host }),

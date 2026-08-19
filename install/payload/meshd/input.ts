@@ -8,6 +8,8 @@
 //   POST /clipboard        <- { text }
 //   POST /volume           <- { level } | { delta } | { muted }   (GET reads current)
 //   POST /system           <- { action: "displaysleep" | "lock" | "screensaver" | "sleep" }
+//   GET  /apps             -> { front, running: [{name,bundleID,front}], installed: [name] }
+//   POST /apps             <- { activate: "Safari" }
 //
 // ponytail: its own module, not inlined into server.ts, because three meshd
 // lineages (repo, payload, deployed) have drifted — this keeps the patch each of
@@ -159,6 +161,43 @@ async function systemAction(action: string) {
   return { ok: true, action };
 }
 
+// lsappinfo, not AppleScript: `tell application "System Events"` would make meshd
+// ask for Automation permission on top of Accessibility, and the watch only needs
+// names. One shell pass so a dozen apps cost one spawn, not a dozen.
+const RUNNING_APPS_SH =
+  `/usr/bin/lsappinfo visibleProcessList | tr ' ' '\\n' | sed 's/:$//' | ` +
+  `while read -r a; do [ -n "$a" ] && /usr/bin/lsappinfo info -only name,bundleID "$a" 2>/dev/null | tr '\\n' ' ' && echo; done`;
+const INSTALLED_APPS_SH =
+  `ls -1 /Applications /Applications/Utilities /System/Applications /System/Applications/Utilities ` +
+  `"$HOME/Applications" 2>/dev/null | sed -n 's/\\.app$//p' | sort -u`;
+
+async function listApps() {
+  if (!IS_MAC) return { ok: false, error: "app control is macOS only" };
+  const [rawRunning, rawFront, rawInstalled] = await Promise.all([
+    run(["/bin/sh", "-c", RUNNING_APPS_SH]),
+    run(["/bin/sh", "-c", `/usr/bin/lsappinfo info -only name "$(/usr/bin/lsappinfo front)" 2>/dev/null`]),
+    run(["/bin/sh", "-c", INSTALLED_APPS_SH]),
+  ]);
+  const front = rawFront.match(/"name"="([^"]+)"/)?.[1] ?? rawFront.match(/^"([^"]+)"/)?.[1];
+  const running = rawRunning.split("\n").flatMap((line) => {
+    const m = line.match(/^"([^"]+)".*?bundleID="([^"]+)"/);
+    return m ? [{ name: m[1], bundleID: m[2], front: m[1] === front }] : [];
+  });
+  const installed = rawInstalled.split("\n").map((x) => x.trim()).filter(Boolean);
+  return { ok: true, front, running, installed };
+}
+
+/// `open -a` via argv, never a shell string — the name comes from the watch.
+async function activateApp(name: string) {
+  if (!IS_MAC) return { ok: false, error: "app control is macOS only" };
+  if (!name.trim()) return { ok: false, error: "app name required" };
+  const p = Bun.spawn(["/usr/bin/open", "-a", name], { stdout: "ignore", stderr: "pipe" });
+  if ((await p.exited) !== 0) {
+    return { ok: false, error: (await new Response(p.stderr).text()).trim().slice(0, 200) || "could not open" };
+  }
+  return { ok: true, activated: name };
+}
+
 // ---------- routing ----------
 /// Returns a Response for the routes this module owns, or null so server.ts keeps matching.
 export async function handleInput(req: Request, url: URL): Promise<Response | null> {
@@ -183,6 +222,15 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     if (typeof body?.text !== "string") return json({ error: "text required" }, 400);
     await run(["/usr/bin/pbcopy"], body.text);
     return json({ ok: true });
+  }
+  if (path === "/apps" && req.method === "GET") {
+    const result = await listApps();
+    return json(result, result.ok ? 200 : 404);
+  }
+  if (path === "/apps" && req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    const result = await activateApp(String(body?.activate ?? ""));
+    return json(result, result.ok ? 200 : 400);
   }
   if (path === "/system" && req.method === "POST") {
     const body = await req.json().catch(() => ({}));

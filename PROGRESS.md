@@ -33,10 +33,15 @@ using daily. One slice at a time, full build gate, commit only when green.
   now awaits an answer (double-resume-safe under the timeout), the phone handler returns
   payload data, and clipboard read + input status work relayed. Enabler for the app list.
 
+- **S5 app switcher** — meshd `/apps` lists running (via `lsappinfo`, so no Automation
+  prompt on top of Accessibility) and installed apps; POST activates by name through
+  `open -a` argv. Watch gained an Apps screen: running first with a front-app dot, then
+  everything installed. Verified live — front went Claude → Finder, unknown app errors cleanly.
+
 ## Next
 
-1. **S5 app switcher** — list running apps from meshd, focus/launch/quit by name.
-2. **S6 window control** — snap left/right/full/centre for the frontmost window.
+1. **S6 window control** — list running apps from meshd, focus/launch/quit by name.
+2. **S7 UI pass** — snap left/right/full/centre for the frontmost window.
 3. **S7 UI pass** — one coherent Control screen, not a pile of sections.
 
 ## Blockers

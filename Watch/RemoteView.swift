@@ -154,6 +154,24 @@ final class RemoteControl: ObservableObject {
 
     func media(_ key: String) { perform([.media(key)]) }
 
+    func apps() async -> AppList? {
+        if !viaRelay, let list = try? await client.apps() { return list }
+        let reply = await WatchLink.shared.request(
+            WatchCommand(kind: .listApps, host: machine.host, agent: nil, text: nil, key: nil),
+            timeout: 8)
+        return reply.flatMap { try? JSONDecoder().decode(AppList.self, from: $0) }
+    }
+
+    func activate(_ app: String) {
+        note = app
+        guard !viaRelay else {
+            WatchLink.shared.send(WatchCommand(kind: .activateApp, host: machine.host, agent: nil,
+                                               text: app, key: nil))
+            return
+        }
+        Task { try? await client.activateApp(app) }
+    }
+
     func system(_ action: String) {
         guard !viaRelay else {
             WatchLink.shared.send(WatchCommand(kind: .system, host: machine.host, agent: nil,
@@ -311,6 +329,13 @@ struct RemoteView: View {
             }
             padButton("keyboard", "Type") { typing = true }
             NavigationLink {
+                RemoteAppsView(remote: remote)
+            } label: {
+                Image(systemName: "square.grid.2x2").font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            NavigationLink {
                 RemoteKeysView(remote: remote)
             } label: {
                 Image(systemName: "command").font(.caption)
@@ -448,6 +473,59 @@ struct RemoteKeysView: View {
             .buttonStyle(.bordered)
             .controlSize(.mini)
             .accessibilityLabel(key)
+    }
+}
+
+// MARK: - Apps
+
+/// Switch to what's already running, or launch anything installed. Running first —
+/// switching is the common case; launching is the occasional one.
+struct RemoteAppsView: View {
+    @ObservedObject var remote: RemoteControl
+    @State private var list: AppList?
+    @State private var loading = true
+
+    var body: some View {
+        List {
+            if let list {
+                Section("Running") {
+                    ForEach(list.running) { app in
+                        Button {
+                            remote.activate(app.name)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: app.front == true ? "largecircle.fill.circle" : "circle")
+                                    .font(.caption2)
+                                    .foregroundStyle(app.front == true ? .green : .secondary)
+                                Text(app.name).lineLimit(1)
+                            }
+                        }
+                    }
+                }
+                Section("Launch") {
+                    ForEach(list.installed.filter { name in
+                        !list.running.contains { $0.name == name }
+                    }, id: \.self) { name in
+                        Button(name) { remote.activate(name) }
+                            .lineLimit(1)
+                    }
+                }
+            } else if loading {
+                ProgressView("Reading apps…")
+            } else {
+                Text("Could not read the app list.")
+                    .font(.caption2).foregroundStyle(.orange)
+            }
+        }
+        .navigationTitle("Apps")
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func load() async {
+        loading = true
+        list = await remote.apps()
+        loading = false
     }
 }
 

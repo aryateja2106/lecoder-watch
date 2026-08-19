@@ -319,6 +319,20 @@ struct InputStatus: Codable, Hashable {
     var error: String?
 }
 
+struct MacApp: Codable, Hashable, Identifiable {
+    var id: String { name }
+    var name: String
+    var bundleID: String?
+    var front: Bool?
+}
+
+struct AppList: Codable, Hashable {
+    var ok: Bool
+    var front: String?
+    var running: [MacApp]
+    var installed: [String]
+}
+
 struct VolumeState: Codable, Hashable {
     var ok: Bool
     var level: Int?
@@ -343,6 +357,8 @@ enum WatchCommandKind: String, Codable {
     case system
     case readClipboard
     case inputStatus
+    case listApps
+    case activateApp
 }
 
 struct WatchCommand: Codable {

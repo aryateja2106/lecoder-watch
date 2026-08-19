@@ -158,6 +158,18 @@ struct MeshClient {
         return try JSONDecoder().decode(VolumeState.self, from: data)
     }
 
+    /// Running and installed apps on the Mac.
+    func apps() async throws -> AppList {
+        let data = try await request("/apps")
+        return try JSONDecoder().decode(AppList.self, from: data)
+    }
+
+    /// Bring an app to the front, launching it if needed.
+    func activateApp(_ name: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["activate": name])
+        _ = try await request("/apps", method: "POST", body: body)
+    }
+
     /// Power/session action: displaysleep, lock, screensaver, sleep.
     func system(_ action: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["action": action])
