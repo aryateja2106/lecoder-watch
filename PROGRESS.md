@@ -18,15 +18,17 @@ using daily. One slice at a time, full build gate, commit only when green.
   UserDefaults for cold start, and re-probes an open Control screen so a relayed session
   upgrades to direct in place. Both schemes build; self-checks pass.
 
+- **S2 Control at the top level** — "Control <mac>" is now the first section of the
+  machines list for any host advertising the `input` capability, instead of four taps
+  deep. Both schemes build.
+
 ## Next
 
-1. **S2 Mac control at the top level** — Control is four taps deep (Machines → Sessions →
-   Monitor → Control Mac). Put it on the machine row.
-3. **S3 media + system keys** — play/pause, next/prev, brightness, lock, sleep display,
+1. **S3 media + system keys** — play/pause, next/prev, brightness, lock, sleep display,
    Mission Control, Spotlight, screenshot.
-4. **S4 app switcher** — list running apps from meshd, focus/launch/quit by name.
-5. **S5 window control** — snap left/right/full/centre for the frontmost window.
-6. **S6 UI pass** — one coherent Control screen, not a pile of sections.
+2. **S4 app switcher** — list running apps from meshd, focus/launch/quit by name.
+3. **S5 window control** — snap left/right/full/centre for the frontmost window.
+4. **S6 UI pass** — one coherent Control screen, not a pile of sections.
 
 ## Blockers
 

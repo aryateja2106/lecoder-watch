@@ -51,6 +51,19 @@ struct MachinesListView: View {
                     Text("Limits")
                 }
             }
+            // Driving the Mac is the headline feature; it should not live four taps
+            // deep under Sessions › Monitor.
+            if !controllable.isEmpty {
+                Section {
+                    ForEach(controllable) { m in
+                        NavigationLink {
+                            RemoteView(machine: m).environmentObject(store)
+                        } label: {
+                            Label("Control \(shortName(m.host))", systemImage: "cursorarrow.motionlines")
+                        }
+                    }
+                }
+            }
             ForEach(activeFirst(store.snaps)) { m in
                 NavigationLink {
                     SessionsView(host: m.host).environmentObject(store)
@@ -94,6 +107,14 @@ struct MachinesListView: View {
         // .toolbar Button renders as a full-width top button that covered the first
         // machine and showed no managed spinner. .refreshable self-dismisses.
         .refreshable { await store.refresh() }
+    }
+
+    /// Machines whose meshd advertises input injection and answered this poll.
+    private var controllable: [Machine] {
+        store.machines.filter { machine in
+            guard let snap = store.snaps.first(where: { $0.host == machine.host }) else { return false }
+            return snap.reachable && snap.authError == nil && (snap.capabilities?.contains("input") ?? false)
+        }
     }
 
     private struct LimitGlanceRow {
