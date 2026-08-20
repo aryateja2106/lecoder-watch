@@ -67,10 +67,27 @@ launch, and ask the user for on-device taps.
   reliability fix first. Known bad: Machines shows a duplicate-looking Status list;
   hosts and `testtoken` are compiled into `Machine.defaults`; quick commands are a
   fixed table.
-- **Linux parity.** `mesh-input` is macOS-only (CGEvent/AXUIElement). Linux needs an
-  equivalent (X11 XTEST or Wayland/uinput) plus capture, behind the same `/input`,
-  `/screen.jpg`, `/displays` contract so no client changes.
+- ~~**Linux parity.**~~ DONE 2026-08-20 (`feat/apns-push`, 0f497e5). `input-linux.ts`:
+  pointer/click/drag/scroll/keys(cmd→ctrl)/text/media via xdotool, clipboard via
+  xclip, volume via pactl, lock/displaysleep. `input.ts` dispatches per-platform, same
+  `/input` contract — no client changes. Verified end-to-end on dataflowagents (POST
+  /input moved the Xvfb pointer to exact coords). Still TODO: Linux `/screen.jpg`
+  capture (Mac-only today) and Wayland (ydotool/uinput; xdotool is X11-only). Gotcha:
+  bare Xvfb resets on last-client-disconnect — start with `-noreset`.
 - **SSH onboarding** — add a machine by IP + credentials, then run the installer over
   SSH so any box joins the mesh.
 - **`testtoken` still ships** in `Models.swift` `Machine.defaults`, and it now grants
-  keystroke injection. Rotate it.
+  keystroke injection. Rotate it. (Note 2026-08-20: dataflow's `~/.mesh/token` still
+  reads `testtoken` while its systemd unit carries the real token `dcf9e5ea…` — the
+  daemon token is the unit's `MESHD_TOKEN`, not the file.)
+
+## 2026-08-20 — reliability fix + APNs + Linux, verified
+
+- **"Inconsistent connection" was the Mac sleeping** (Deep Idle on AC), not the mesh.
+  Stopgap `caffeinate -s` live; permanent fix (user): `sudo pmset -c sleep 0`.
+- **"Inconsistent alerts" was the polling model** (iOS suspends the app). Fixed: APNs
+  pushed directly from each meshd on every `POST /events`. Key `7GD3G8AY4V` installed
+  on macbook + dataflow (`~/.mesh/apns/`), both `configured:true`. `devices:0` until
+  the iPhone app (rebuilt from this branch) launches once and uploads its token.
+- ff-merged `claude/mesh-watch-mac-remote-a62154` → local `main`; work continues on
+  `feat/apns-push`. Not pushed (policy: never push main).

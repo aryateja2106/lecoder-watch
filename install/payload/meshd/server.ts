@@ -6,13 +6,14 @@ import { join } from "node:path";
 import { appendFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 import { handleInput } from "./input";
+import { handleFiles } from "./files";
 import { handlePush, pushAlert } from "./push";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
 const VERSION = "0.2.2";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "push"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -742,6 +743,8 @@ Bun.serve({
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
       const remote = await handleInput(req, url);
       if (remote) return remote;
+      const files = await handleFiles(req, url);
+      if (files) return files;
       // APNs device registration + status + test — see push.ts.
       const pushed = await handlePush(req, url);
       if (pushed) return pushed;
