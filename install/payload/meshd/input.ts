@@ -11,7 +11,7 @@
 //   GET  /apps             -> { front, running: [{name,bundleID,front}], installed: [name] }
 //   POST /apps             <- { activate: "Safari" }
 //   GET  /displays         -> { displays: [{index,id,x,y,width,height,main,name}] }
-//   GET  /screen.jpg?display=2  capture one display (no param: server.ts handles it)
+//   GET  /screen.jpg?display=2[&width=1400]  capture one display (no display: server.ts)
 //
 // ponytail: its own module, not inlined into server.ts, because three meshd
 // lineages (repo, payload, deployed) have drifted — this keeps the patch each of
@@ -218,13 +218,13 @@ async function listDisplays() {
 
 /// screencapture -D is 1-based with 1 = main, the same order mesh-input reports, so a
 /// preview and a moveTo on the watch agree about which screen "2" is.
-async function captureDisplay(index: number): Promise<Response> {
+async function captureDisplay(index: number, width = 480): Promise<Response> {
   const path = join(tmpdir(), `meshd-display-${index}-${process.pid}.jpg`);
   try {
     const shot = Bun.spawn(["/usr/sbin/screencapture", "-x", "-D", String(index), "-t", "jpg", path],
       { stdout: "ignore", stderr: "ignore" });
     if ((await shot.exited) !== 0) return json({ error: "screenshot unavailable" }, 503);
-    const scale = Bun.spawn(["/usr/bin/sips", "-Z", "480", path], { stdout: "ignore", stderr: "ignore" });
+    const scale = Bun.spawn(["/usr/bin/sips", "-Z", String(width), path], { stdout: "ignore", stderr: "ignore" });
     await scale.exited;
     return new Response(await readFile(path), {
       headers: { "content-type": "image/jpeg", "cache-control": "no-store" },
@@ -268,7 +268,10 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
     const index = Number(url.searchParams.get("display"));
     if (!Number.isInteger(index) || index < 1) return json({ error: "bad display" }, 400);
-    return await captureDisplay(index);
+    // Wider captures for reading UI, not just "did my click land"; capped so a watch
+    // can never ask for a 6MB frame.
+    const width = Math.min(2000, Math.max(240, Number(url.searchParams.get("width") ?? "480") || 480));
+    return await captureDisplay(index, width);
   }
   if (path === "/apps" && req.method === "GET") {
     const result = await listApps();
