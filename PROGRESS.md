@@ -87,6 +87,14 @@ using daily. One slice at a time, full build gate, commit only when green.
   reach. A relayed session now re-probes the direct path every 20s instead of staying
   slow for the rest of the session.
 
+- **S12b CHANGELOG** — `CHANGELOG.md` now carries the user-facing history, and its
+  `Unreleased` block is the source for TestFlight "What to Test" notes.
+- **0.1.0 on TestFlight** — build `202608201519`, processingState VALID, watch app
+  verified inside the IPA (8 entries under `Watch/`). Gotchas paid for: upload with the
+  stable Xcode (a beta-built binary is accepted then fails processing with 90534), iPad
+  in `TARGETED_DEVICE_FAMILY` demands all four orientations (90474), and
+  `ITSAppUsesNonExemptEncryption` must be declared. See `docs/release-workflow.md`.
+
 ## In the morning
 
 1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →
@@ -100,13 +108,30 @@ If the trackpad says **"via phone"** that's the relay and it still works, just s
 
 ## Next
 
-1. **Verify on the watch itself** — dev tunnel still refuses (see Blockers), so nothing
-   has been driven from an actual watch yet; everything below the watch UI is verified
-   against the live daemon.
-2. **Tune `pointerGain`** once the pad has been used in anger — the three constants were
-   picked by reasoning, not by feel.
-3. **Backport** the meshd input routes into the repo `meshd/` lineage if it is ever
-   revived (currently stale; `install/payload/meshd/` is canonical).
+Ordered by what stops a stranger using this. Everything above shipped for *one* user with
+three hardcoded machines; none of it is reachable by anyone else.
+
+**P0 — anyone can onboard**
+1. **S13 pairing.** Kill `Machine.defaults`. `mesh pair` mints a short-lived code; the
+   phone enters address + code and gets the real token back over `/pair/claim`. Pairing
+   one machine imports the rest of the fleet from its `hosts.json`.
+2. **S14 first-run.** An empty machine list must teach, not look broken: the install
+   one-liner, then the pairing screen.
+
+**P1 — the watch is the product**
+3. **S15 watch widgets.** Smart Stack + watch-face complications: machines up, agents
+   waiting on you. This is the reason to keep the app on the wrist.
+4. **S16 actionable notifications.** "Claude needs attention" with Approve / Deny /
+   Reply, answered from the wrist without opening anything.
+5. **S17 Live Activity** — merge `MeshWatchWidgets` from `claude/eloquent-hopper-0a653d`.
+
+**P2 — earned polish**
+6. **S18 UI rework** — machines list duplicates the status list; quick commands are a
+   fixed table.
+7. **S19 SSH onboarding** — add a machine by address + credentials, run the installer
+   over SSH.
+8. **S20 Linux `/screen.jpg`** — input and files work headless; capture is Mac-only.
+9. Rotate `arya-pi`'s token when it comes back online.
 
 ## Blockers
 
