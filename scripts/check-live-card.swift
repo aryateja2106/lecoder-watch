@@ -100,6 +100,19 @@ struct CheckLiveCard {
         assert(sessionsNeedingAttention(from: snapshot([machine("studio", [agent("api")])], events: [headless])).isEmpty)
 
         assert(sessionsNeedingAttention(from: snapshot([])).isEmpty)
+
+        // Two vocabularies reach /events. Real events on this mesh have used
+        // "needs-input" and "finished" as levels, not only mesh-hook's warning/info.
+        for level in ["warning", "needs-input", "needs_input", "NEEDS-INPUT", "error", "failed"] {
+            let one = snapshot([machine("studio", [agent("api")])],
+                               events: [event("studio", "api", level: level)])
+            assert(sessionsNeedingAttention(from: one).count == 1, "level \(level) must count as blocked")
+        }
+        for level in ["info", "finished", "", "debug"] {
+            let one = snapshot([machine("studio", [agent("api")])],
+                               events: [event("studio", "api", level: level)])
+            assert(sessionsNeedingAttention(from: one).isEmpty, "level \(level) must not raise a row")
+        }
     }
 
     // A fleet of busy sessions is not a reason to occupy the Lock Screen. A permanent

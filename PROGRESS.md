@@ -155,6 +155,23 @@ using daily. One slice at a time, full build gate, commit only when green.
   the other gateway once and remembers the answer before dropping anything.
   `check-apns-env` (negative-tested) and the push check cover it.
 
+- **S20 the hooks nobody was firing** — `mesh-hook` was installed by the installer and
+  registered by nothing, so the entire attention loop (notification, live card,
+  complication, "Needs you") had no source of events; the last real one on this Mac was
+  from 2026-06-17. `mesh hooks install|status|remove` merges into
+  `~/.claude/settings.json` alongside other tools' hooks, backs it up, and is
+  idempotent; the installer calls it. `mesh-hook` now reports the tmux/rmux session it
+  is inside rather than the cwd — without that the reply posts to
+  `/agents/<a directory>/send` and goes nowhere. Level vocabulary widened to accept
+  `needs-input`/`finished`, with a cross-language check comparing Swift's
+  `cardStateForLevel` to meshd's `BLOCKED_LEVELS`.
+  **Verified end to end on the live daemon**: hook fired from inside a real rmux
+  session -> event with `session: e2eattention` and `level: warning` -> Reply text and
+  Continue (`key: enter`) both posted over the tailnet with a real bearer token and
+  both landed in the session (`REPLY-FROM-WRIST-LANDED` echoed back). Only APNs ->
+  device is unproven, and that needs the phone.
+  `check-mesh-hooks` was negative-tested against a merge that clobbers another tool.
+
 ## In the morning
 
 1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →

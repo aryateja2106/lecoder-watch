@@ -396,13 +396,19 @@ func liveSessionPick(from snapshot: MeshSnapshot) -> LiveSessionPick? {
     return nil
 }
 
-/// Level-to-state, duplicated free of SwiftUI so the selection above stays testable
-/// with bare swiftc. `cardState(forLevel:attached:)` in SessionCard.swift wraps it.
+/// Level-to-state, free of SwiftUI so the selection above stays testable with bare
+/// swiftc. `cardState(forLevel:attached:)` in SessionCard.swift wraps it.
+///
+/// More than one vocabulary reaches `/events`: `mesh-hook` grades warning/error/info,
+/// while `mesh-event` and older producers write "needs-input" and "finished" straight
+/// through. Accepting both costs three lines; rejecting one silently drops the exact
+/// events this app exists to surface. Must stay in step with `isActionable` in
+/// `meshd/push.ts`.
 func cardStateForLevel(_ level: String?) -> SessionState {
     switch (level ?? "").lowercased() {
-    case "warning": return .waiting
-    case "error":   return .error
-    default:        return .unknown
+    case "warning", "needs-input", "needs_input", "needsinput": return .waiting
+    case "error", "failed", "failure":                          return .error
+    default:                                                    return .unknown
     }
 }
 

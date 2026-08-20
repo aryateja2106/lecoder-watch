@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -50,6 +51,28 @@ def event_title(source, doc, override=None):
     return pick(doc, "title", "event", "hook_event_name", "tool_name") or "Agent event"
 
 
+def mux_session():
+    """The multiplexer session this hook is running inside, or None.
+
+    This is not cosmetic. The reply buttons on a notification post to
+    /agents/<session>/send, so `session` has to be the name `mesh ls` shows. Falling
+    back to the working directory -- which is what happens without this -- produces an
+    event you can see and cannot answer.
+    """
+    for var, cmd in (("TMUX", "tmux"), ("RMUX", "rmux")):
+        if not os.getenv(var):
+            continue
+        try:
+            out = subprocess.run([cmd, "display-message", "-p", "#S"],
+                                 capture_output=True, text=True, timeout=2)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        name = out.stdout.strip()
+        if out.returncode == 0 and name:
+            return name
+    return None
+
+
 def event_level(source, doc):
     hook = pick(doc, "hook_event_name", "event", "type")
     haystack = " ".join(
@@ -84,7 +107,8 @@ def main():
     doc = load_stdin()
     title = event_title(args.source, doc, args.title)
     body = args.body or pick(doc, "body", "message", "prompt", "command", "transcript_path")
-    session = args.session or pick(doc, "session", "cwd", "workspace")
+    # Multiplexer session first: it is the only name the reply path can address.
+    session = args.session or mux_session() or pick(doc, "session", "cwd", "workspace")
     payload_doc = {
         "source": args.source,
         "title": title,

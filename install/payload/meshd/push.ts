@@ -89,11 +89,16 @@ async function sendOne(dev: DeviceToken, payload: any): Promise<{ ok: boolean; s
 }
 
 /// An alert you can act on is one where there is a live session to answer and the agent
-/// is actually stopped waiting — that is `mesh-hook`'s "warning" (Claude's Notification
-/// hook) or an outright error. A finished-turn "info" is worth a glance, not a prompt
+/// is actually stopped waiting. A finished-turn event is worth a glance, not a prompt
 /// with buttons that would type Enter into a session nobody is waiting on.
+///
+/// More than one vocabulary reaches /events: `mesh-hook` grades warning/error/info,
+/// while `mesh-event` and older producers write "needs-input" and "finished" straight
+/// through. Must stay in step with `cardStateForLevel` in `Shared/Models.swift`.
+export const BLOCKED_LEVELS = ["warning", "needs-input", "needs_input", "needsinput", "error", "failed", "failure"];
+
 export function isActionable(level?: string, session?: string): boolean {
-  return Boolean(session) && (level === "warning" || level === "error");
+  return Boolean(session) && BLOCKED_LEVELS.includes(String(level ?? "").toLowerCase());
 }
 
 /// The APNs body. Pure and exported so its shape can be asserted — it is a contract

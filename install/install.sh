@@ -487,6 +487,23 @@ install_components() {
   fi
 }
 
+# Wire agent alerts into Claude Code. Everything the watch does about agents -- the
+# notification with its reply buttons, the live card, the face complication -- hangs off
+# one event an agent posts when it stops and waits for a human. Without this the tools
+# are installed and nothing ever fires them, which reads as "the app does not do that".
+# Merges into an existing settings.json (other tools own hooks there too) and is a
+# no-op when already present.
+install_agent_hooks() {
+  want_component tools || return 0
+  command -v bun >/dev/null 2>&1 || return 0
+  [ -x "$MESH_HOME/bin/mesh" ] || return 0
+  if "$MESH_HOME/bin/mesh" hooks install >/dev/null 2>&1; then
+    log "Wired agent alerts into Claude Code (mesh hooks status to check)"
+  else
+    log "Could not wire Claude Code hooks — run: $MESH_HOME/bin/mesh hooks install"
+  fi
+}
+
 install_deps() { ( cd "$1" && bun install ); }
 
 # ---------- actions ----------
@@ -621,6 +638,7 @@ printf '%s\n' "$TOKEN_VALUE" > "$MESH_HOME/token"
 chmod 600 "$MESH_HOME/token" 2>/dev/null || true
 want_component meshd && install_deps "$MESH_HOME/meshd"
 want_component bridge && install_deps "$MESH_HOME/rmux-bridge"
+install_agent_hooks
 
 MESHD_STATUS="skipped"; BRIDGE_STATUS="skipped"
 if [ "$NO_START" = "1" ]; then
@@ -672,6 +690,8 @@ fi
 if want_component tools; then
   printf 'Self-check: %s/bin/mesh-self-check\n' "$MESH_HOME"
   printf 'Notify test: %s/bin/mesh-event codex "Needs input" "phone/watch smoke test"\n' "$MESH_HOME"
+  printf 'Agent alerts: %s/bin/mesh hooks status\n' "$MESH_HOME"
+  printf '\nPair this machine with your phone:\n  %s/bin/mesh pair\n' "$MESH_HOME"
 fi
 if [ "$OS_NAME" = "Darwin" ] && command -v cmux >/dev/null 2>&1 && want_component meshd; then
   printf 'cmux-bridge: source ~/.mesh/hooks/cmux-bridge.zsh (auto via ~/.zshrc in new terminals)\n'

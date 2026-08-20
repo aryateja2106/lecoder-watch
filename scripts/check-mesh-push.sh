@@ -74,6 +74,18 @@ if (!isWrongEnvironment({ status: 400 })) throw new Error("a bare 400 must trigg
 if (isWrongEnvironment({ status: 410, reason: "Unregistered" })) throw new Error("410 Unregistered is a real removal, not an environment mismatch");
 if (isWrongEnvironment({ status: 200 })) throw new Error("success is not a mismatch");
 
+// The two languages grade the same events; if they drift, the wrist shows buttons the
+// push never carries, or carries buttons the wrist will not draw.
+const { BLOCKED_LEVELS } = await import("./push.ts");
+const swift = (await Bun.file(new URL("../../../Shared/Models.swift", import.meta.url).pathname).text())
+  .match(/case ([^:]+): return \.waiting[\s\S]*?case ([^:]+):\s+return \.error/);
+if (!swift) throw new Error("cardStateForLevel is not where the check expects it");
+for (const level of BLOCKED_LEVELS) {
+  if (!`${swift[1]} ${swift[2]}`.includes(`"${level}"`)) {
+    throw new Error(`meshd treats "${level}" as blocked but cardStateForLevel does not`);
+  }
+}
+
 console.log("check-mesh-push: OK");
 '
 

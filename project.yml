@@ -76,12 +76,12 @@ targets:
     info:
       path: MeshWatchWidgets/Info.plist
       properties:
+        CFBundleDisplayName: LeSearch Mesh Sessions
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.widgets
-        INFOPLIST_KEY_CFBundleDisplayName: LeSearch Mesh Sessions
         # "1" and not "1,2": an iPad-capable target must declare all four orientations
         # or App Store Connect rejects the build with 90474. Learned the expensive way.
         TARGETED_DEVICE_FAMILY: "1"
@@ -127,13 +127,13 @@ targets:
     info:
       path: WatchWidgets/Info.plist
       properties:
+        CFBundleDisplayName: Agents waiting
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.watchkitapp.glance
         CODE_SIGN_ENTITLEMENTS: WatchWidgets/WatchWidgets.entitlements
-        INFOPLIST_KEY_CFBundleDisplayName: Agents waiting
         TARGETED_DEVICE_FAMILY: "4"
         SKIP_INSTALL: YES
     dependencies:
