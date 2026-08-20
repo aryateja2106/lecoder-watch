@@ -25,10 +25,23 @@ final class WatchNotifications: NSObject, UNUserNotificationCenterDelegate {
     func activate() {
         UNUserNotificationCenter.current().delegate = self
         AgentNotification.registerCategories()
-        // Forwarded alerts arrive under the phone's authorisation, but the watch app
-        // also raises its own (session ended, machine back) and would be silent without
-        // this. Declining costs nothing here — the forwarded path is unaffected.
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    /// Ask only once the watch knows about a machine.
+    ///
+    /// Registering the categories has to happen at launch — a forwarded alert can
+    /// arrive before any UI exists — but *asking* does not. The watch cannot pair
+    /// anything itself, so on a first run it was putting a permission prompt in front
+    /// of a screen that had nothing to notify anyone about, and watchOS asks once.
+    ///
+    /// Forwarded alerts arrive under the phone's authorisation regardless; this covers
+    /// only the ones the watch raises itself.
+    func requestAuthorizationOncePaired(hasMachines: Bool) {
+        guard hasMachines else { return }
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else { return }
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
     }
 
     private func drain() {

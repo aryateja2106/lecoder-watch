@@ -21,6 +21,12 @@ struct WatchRootView: View {
             WatchNotifications.shared.onAgentAction = { [weak store] host, session, text, key in
                 store?.respondToAgent(host: host, session: session, text: text, key: key)
             }
+            WatchNotifications.shared.requestAuthorizationOncePaired(hasMachines: !store.machines.isEmpty)
+        }
+        .onChange(of: store.machines.count) { _, count in
+            // The watch learns its machines from the phone, seconds after launch — so
+            // the moment it has one is the moment the ask makes sense.
+            WatchNotifications.shared.requestAuthorizationOncePaired(hasMachines: count > 0)
         }
     }
 }
@@ -32,10 +38,11 @@ struct MachinesListView: View {
 
     var body: some View {
         List {
+            if store.hasNoMachines { noMachines }
             // The reason to look at your wrist. Above machines, above limits, above
             // everything — an agent that is blocked is the only thing here that is
             // costing you time right now.
-            if !store.needsAttention.isEmpty {
+            if !store.hasNoMachines, !store.needsAttention.isEmpty {
                 Section {
                     ForEach(store.needsAttention, id: \.self) { item in
                         AttentionRow(item: item)
@@ -44,7 +51,7 @@ struct MachinesListView: View {
                     Label("Needs you", systemImage: "exclamationmark.bubble.fill")
                         .foregroundStyle(.orange)
                 }
-            } else if !store.machines.isEmpty {
+            } else if !store.hasNoMachines {
                 // Say "nothing is waiting" out loud. Rendering nothing makes an all-clear
                 // look exactly like a dead poll, and on a glance surface that ambiguity
                 // is the whole failure — you cannot tell whether to trust the silence.
@@ -115,15 +122,17 @@ struct MachinesListView: View {
                     }
                 }
             }
-            NavigationLink {
-                UsageView().environmentObject(store)
-            } label: {
-                Label("Usage", systemImage: "gauge.with.dots.needle.67percent")
-            }
-            NavigationLink {
-                EventsView().environmentObject(store)
-            } label: {
-                Label("Events", systemImage: "bell")
+            if !store.hasNoMachines {
+                NavigationLink {
+                    UsageView().environmentObject(store)
+                } label: {
+                    Label("Usage", systemImage: "gauge.with.dots.needle.67percent")
+                }
+                NavigationLink {
+                    EventsView().environmentObject(store)
+                } label: {
+                    Label("Events", systemImage: "bell")
+                }
             }
             // The watch reaches the mesh through the phone, so when something is wrong
             // the first question is always "is the phone answering". Answer it in place
@@ -137,21 +146,11 @@ struct MachinesListView: View {
             }
         }
         .overlay {
-            // "Connecting…" forever is what an unpaired watch used to show, because
-            // an empty list and an unanswered poll looked the same from here.
-            if store.hasNoMachines {
-                // Say which of the four ways this can be empty actually happened. The
-                // old copy told someone with three paired machines to pair a machine.
-                let reason = store.emptyStateReason
-                ContentUnavailableView {
-                    Label(reason.title, systemImage: "iphone.gen3")
-                } description: {
-                    Text(reason.detail)
-                } actions: {
-                    Button("Retry") { Task { await store.refresh() } }
-                        .buttonStyle(.borderedProminent)
-                }
-            } else if store.snaps.isEmpty {
+            // "Connecting…" forever is what an unpaired watch used to show, because an
+            // empty list and an unanswered poll looked the same from here. The
+            // no-machines case is a row now, not an overlay: as an overlay it was drawn
+            // straight over the live Usage and Events rows and they showed through it.
+            if !store.hasNoMachines && store.snaps.isEmpty {
                 ProgressView("Connecting…")
             }
         }
@@ -159,6 +158,28 @@ struct MachinesListView: View {
         // .toolbar Button renders as a full-width top button that covered the first
         // machine and showed no managed spinner. .refreshable self-dismisses.
         .refreshable { await store.refresh() }
+    }
+
+    /// Why there is nothing here, and the one button that might change it.
+    @ViewBuilder
+    private var noMachines: some View {
+        let reason = store.emptyStateReason
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(reason.title, systemImage: "iphone.gen3")
+                    .font(.headline)
+                    .foregroundStyle(.orange)
+                Text(reason.detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Button("Retry") { Task { await store.refresh() } }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 2)
+            }
+            .padding(.vertical, 2)
+        }
     }
 
     /// Machines whose meshd advertises input injection and answered this poll.
