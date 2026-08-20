@@ -18,10 +18,51 @@ struct CheckScreenZoom {
         checkMoveScalesWithZoom()
         checkClamps()
         checkDegenerate()
+        checkTapInverse()
         print("check-screen-zoom: OK")
     }
 
     static func near(_ a: CGFloat, _ b: CGFloat, _ tol: CGFloat = 0.5) -> Bool { abs(a - b) <= tol }
+
+    // The watch places the cursor by tapping the preview, so the tap inverse and the
+    // cursor we draw have to be the same function read backwards. If they drift, the
+    // pointer lands somewhere other than the pixel under the finger and it looks like
+    // the Mac is wrong.
+    static func checkTapInverse() {
+        for zoom in [CGFloat(1), 2, 4] {
+            for target in [CGPoint(x: 0.5, y: 0.5), CGPoint(x: 0.2, y: 0.8), CGPoint(x: 0.93, y: 0.07)] {
+                let cursor = CGPoint(x: 0.4, y: 0.6)   // where the view is currently centred
+                let screen = pointerScreenPosition(pointer: target, imageAspect: wide,
+                                                   container: container, zoom: zoom)
+                // Draw with the *target* as the centring pointer, then invert with the
+                // same one: the round trip must return the target.
+                let back = normalizedPoint(fromTap: screen, pointer: target, imageAspect: wide,
+                                           container: container, zoom: zoom)
+                assert(back != nil, "a tap on the drawn cursor must map back, zoom \(zoom)")
+                assert(near(back!.x, target.x, 0.002) && near(back!.y, target.y, 0.002),
+                       "tap inverse drifted at zoom \(zoom): \(back!) vs \(target)")
+                _ = cursor
+            }
+        }
+
+        // At zoom 1 it must agree with the mapping the watch already shipped, or the
+        // fit-to-screen behaviour silently changes underneath a tested feature.
+        let tap = CGPoint(x: 137, y: 260)
+        let a = normalizedPoint(fromTap: tap, pointer: CGPoint(x: 0.5, y: 0.5),
+                                imageAspect: wide, container: container, zoom: 1)
+        let b = normalizedPreviewPoint(tap: tap, container: container, imageAspect: wide)
+        assert((a == nil) == (b == nil), "the two must agree about the letterbox")
+        if let a, let b {
+            assert(near(a.x, b.x, 0.001) && near(a.y, b.y, 0.001),
+                   "zoom 1 must be exactly the old mapping, got \(a) vs \(b)")
+        }
+
+        // A tap in the letterbox points at no pixel and must not be clamped to an edge.
+        let letterbox = CGPoint(x: container.width / 2, y: 4)
+        assert(normalizedPoint(fromTap: letterbox, pointer: CGPoint(x: 0.5, y: 0.5),
+                               imageAspect: wide, container: container, zoom: 1) == nil,
+               "a tap above a letterboxed image must map to nothing, not to the top edge")
+    }
 
     static func checkFit() {
         // A landscape screen in a portrait container is width-limited and letterboxed.

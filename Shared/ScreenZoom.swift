@@ -80,3 +80,25 @@ public func movedPointer(_ pointer: CGPoint, by delta: CGSize,
 /// nothing, and past 6 a Retina screenshot is being magnified well beyond the detail it
 /// contains, which looks broken rather than close.
 public func clampedZoom(_ zoom: CGFloat) -> CGFloat { min(max(zoom, 1), 6) }
+
+/// Which point on the remote screen a tap refers to, undoing the zoom and the offset
+/// the picture was drawn with. Nil for a tap in the letterbox, which points at nothing.
+///
+/// The inverse of `pointerScreenPosition`, and it has to stay exactly that: the watch
+/// places the cursor by tapping the preview, so if these two disagree the cursor lands
+/// somewhere other than the pixel under your finger. At zoom 1 it is identical to
+/// `normalizedPreviewPoint`, which is asserted rather than assumed.
+public func normalizedPoint(fromTap location: CGPoint, pointer: CGPoint,
+                            imageAspect: Double, container: CGSize, zoom: CGFloat) -> CGPoint? {
+    let fit = fittedSize(imageAspect: imageAspect, container: container)
+    guard fit.width > 0, fit.height > 0, zoom > 0 else { return nil }
+    let scaled = CGSize(width: fit.width * zoom, height: fit.height * zoom)
+    let offset = zoomedOffset(pointer: pointer, imageAspect: imageAspect,
+                              container: container, zoom: zoom)
+    let centre = CGPoint(x: container.width / 2 + offset.width,
+                         y: container.height / 2 + offset.height)
+    let x = (location.x - centre.x) / scaled.width + 0.5
+    let y = (location.y - centre.y) / scaled.height + 0.5
+    guard (0...1).contains(x), (0...1).contains(y) else { return nil }
+    return CGPoint(x: x, y: y)
+}

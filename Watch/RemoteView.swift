@@ -82,7 +82,25 @@ final class RemoteControl: ObservableObject {
 
     // MARK: queueing
 
-    func move(dx: Double, dy: Double) { pendingDX += dx; pendingDY += dy }
+    /// Where we believe the Mac's cursor is, 0…1 of the active display, so the preview
+    /// can draw it. A tap sets it exactly; a trackpad drag advances it by the same pixel
+    /// delta meshd is about to apply, which stays true unless something else moves the
+    /// mouse — and the next tap re-syncs it regardless.
+    @Published var pointer = CGPoint(x: 0.5, y: 0.5)
+    /// Preview magnification. A 44mm watch showing a 15" display is the most extreme
+    /// version of the aiming problem in the whole product.
+    @Published var previewZoom: CGFloat = 1
+
+    private var activeDisplayInfo: DisplayInfo? { displays.first { $0.index == activeDisplay } }
+
+    func move(dx: Double, dy: Double) {
+        pendingDX += dx; pendingDY += dy
+        guard let d = activeDisplayInfo, d.width > 0, d.height > 0 else { return }
+        pointer = CGPoint(x: min(max(pointer.x + dx / Double(d.width), 0), 1),
+                          y: min(max(pointer.y + dy / Double(d.height), 0), 1))
+    }
+
+    func zoomPreview(_ delta: CGFloat) { previewZoom = clampedZoom(previewZoom + delta) }
     func scroll(_ amount: Double) {
         if horizontalScroll { pendingScrollX += amount } else { pendingScroll += amount }
     }
@@ -97,7 +115,11 @@ final class RemoteControl: ObservableObject {
 
     func tap(at point: CGPoint, in size: CGSize, imageAspect: Double?) {
         let aspect = imageAspect ?? (size.height > 0 ? Double(size.width / size.height) : 0)
-        guard let p = normalizedPreviewPoint(tap: point, container: size, imageAspect: aspect) else { return }
+        // Through the zoom, not around it: at 3x the picture under your finger is not
+        // the picture the old mapping assumed, and the cursor would land elsewhere.
+        guard let p = normalizedPoint(fromTap: point, pointer: pointer, imageAspect: aspect,
+                                      container: size, zoom: previewZoom) else { return }
+        pointer = p
         perform([.moveTo(x: p.x, y: p.y, display: activeDisplay), .click()])
     }
 
@@ -362,22 +384,57 @@ struct RemoteView: View {
     // screen than nudging a relative pointer across a 15" display.
     private var preview: some View {
         GeometryReader { geo in
+            let aspect = screenAspect ?? 1.6
             ZStack {
                 if let shot = screenShot {
-                    Image(uiImage: shot).resizable().scaledToFit()
+                    Image(uiImage: shot)
+                        .resizable()
+                        .scaledToFit()
+                        .scaleEffect(remote.previewZoom)
+                        .offset(zoomedOffset(pointer: remote.pointer, imageAspect: aspect,
+                                             container: geo.size, zoom: remote.previewZoom))
                 } else {
                     RoundedRectangle(cornerRadius: 6).fill(.gray.opacity(0.2))
                         .overlay(Text("screen…").font(.caption2).foregroundStyle(.secondary))
                 }
+                // Where the cursor is. On a 44mm watch the Mac's own pointer is well
+                // under a pixel, so without this you are aiming at nothing.
+                if screenShot != nil {
+                    Image(systemName: "cursorarrow")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.9), radius: 1)
+                        .offset(x: 3, y: 4)          // the glyph's hotspot is its tip
+                        .position(pointerScreenPosition(pointer: remote.pointer, imageAspect: aspect,
+                                                        container: geo.size, zoom: remote.previewZoom))
+                        .allowsHitTesting(false)
+                }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
             .contentShape(Rectangle())
             .onTapGesture { point in
                 remote.tap(at: point, in: geo.size, imageAspect: screenAspect)
             }
         }
-        .frame(height: 56)
+        .frame(height: remote.previewZoom > 1 ? 96 : 56)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(alignment: .topTrailing) { zoomChips }
+    }
+
+    /// Two chips rather than a pinch: a 44mm screen has no room for two fingers, and
+    /// the crown is already spoken for by scroll.
+    private var zoomChips: some View {
+        HStack(spacing: 2) {
+            Button { remote.zoomPreview(-1) } label: { Image(systemName: "minus") }
+                .disabled(remote.previewZoom <= 1)
+            Button { remote.zoomPreview(1) } label: { Image(systemName: "plus") }
+                .disabled(remote.previewZoom >= 6)
+        }
+        .font(.system(size: 9, weight: .bold))
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .padding(2)
     }
 
     /// Measured from the screenshot itself, so it is right even before /displays answers.
