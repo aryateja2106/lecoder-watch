@@ -397,6 +397,33 @@ struct VolumeState: Codable, Hashable {
     var error: String?
 }
 
+/// Wrist rotation → cursor velocity, the air-mouse mapping.
+///
+/// WowMouse does this on Wear OS by pairing as a Bluetooth HID mouse. watchOS gives
+/// third-party apps no HID peripheral role at all, so that exact route is closed to
+/// us — but the useful half is the motion mapping, and CoreMotion gives us the same
+/// signal. We send the resulting delta over the network instead of over HID.
+///
+/// Rotation *rate* rather than attitude: rate is self-centring (stop moving your arm
+/// and the cursor stops), where attitude drifts and needs a re-zero. The deadzone
+/// exists because a resting wrist is never actually still.
+/// ponytail: sensitivity and deadzone are the calibration knobs — a wrist is not a
+/// mouse and these want tuning per person, not per first principles.
+func airMouseDelta(pitchRate: Double, yawRate: Double,
+                   sensitivity: Double = 9, deadzone: Double = 0.06) -> CGVector? {
+    guard sensitivity > 0 else { return nil }
+    // Ignore tremor, but measure the throw from the deadzone edge so crossing it is
+    // smooth instead of jumping by a whole deadzone's worth.
+    func shaped(_ rate: Double) -> Double {
+        let magnitude = abs(rate)
+        guard magnitude > deadzone else { return 0 }
+        return (magnitude - deadzone) * (rate < 0 ? -1 : 1) * sensitivity
+    }
+    let dx = shaped(yawRate)
+    let dy = shaped(pitchRate)
+    return (dx == 0 && dy == 0) ? nil : CGVector(dx: dx, dy: dy)
+}
+
 /// Pointer gain for one drag callback, given the distance that callback moved.
 ///
 /// A fixed multiplier cannot serve both jobs: what makes a 40mm pad cross a 3432pt

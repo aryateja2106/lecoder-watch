@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import WatchKit
 import UIKit
+import CoreMotion
 
 // Drive the Mac from the wrist: screen preview + trackpad + crown scroll + keys.
 // The watch never injects anything itself — it POSTs high-level events to meshd,
@@ -25,6 +26,8 @@ final class RemoteControl: ObservableObject {
     @Published var activeDisplay = 1
     /// Crown scrolls sideways instead of up/down — wide timelines, spreadsheets, code.
     @Published var horizontalScroll = false
+    /// Point with your arm instead of stroking a 40mm pad.
+    @Published private(set) var airMouse = false
     @Published var sticky: Set<String> = []      // modifiers held for the next key
 
     /// Relay through the phone when the watch can't reach meshd itself — the normal
@@ -37,8 +40,34 @@ final class RemoteControl: ObservableObject {
     private var pendingScrollX = 0.0
     private var discrete: [InputEvent] = []
     private var inFlight = false
+    private let motion = CMMotionManager()
 
     init(machine: Machine) { self.machine = machine }
+
+    /// Arm as cursor. The wrist's yaw drives x and its pitch drives y; the mapping and
+    /// its calibration live in `airMouseDelta`. Deltas join the same coalescing queue
+    /// as pad drags, so they ship at the normal flush rate rather than 50 times a second.
+    func setAirMouse(_ on: Bool) {
+        guard on else {
+            motion.stopDeviceMotionUpdates()
+            airMouse = false
+            return
+        }
+        guard motion.isDeviceMotionAvailable else {
+            note = "no motion sensor"
+            return
+        }
+        airMouse = true
+        motion.deviceMotionUpdateInterval = 1.0 / 50
+        motion.startDeviceMotionUpdates(to: .main) { [weak self] sample, _ in
+            guard let self, let sample else { return }
+            guard let delta = airMouseDelta(pitchRate: sample.rotationRate.x,
+                                            yawRate: sample.rotationRate.z) else { return }
+            self.move(dx: delta.dx, dy: delta.dy)
+        }
+    }
+
+    func stopMotion() { motion.stopDeviceMotionUpdates() }
 
     /// Credentials can land after the view opens (the phone relays them on its next
     /// poll). Re-probe on the new config so a relayed session upgrades to direct
@@ -296,7 +325,7 @@ struct RemoteView: View {
                 remote.update(machine: match)
             }
         }
-        .onDisappear { store.stopScreen() }
+        .onDisappear { store.stopScreen(); remote.stopMotion() }
     }
 
     /// Direct grab when we have one, else whatever the phone last relayed.
@@ -369,6 +398,8 @@ struct RemoteView: View {
                     Text("Needs Accessibility").font(.caption2).foregroundStyle(.orange)
                 } else if remote.dragLocked {
                     Text("drag held").font(.caption2).foregroundStyle(.orange)
+                } else if remote.airMouse {
+                    Text("air mouse — point your arm").font(.caption2).foregroundStyle(.blue)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -401,8 +432,11 @@ struct RemoteView: View {
 
     private var controls: some View {
         HStack(spacing: 4) {
-            padButton("cursorarrow.click.2", "Double click") { remote.perform([.click(count: 2)]) }
-            padButton("cursorarrow.rays", "Right click") { remote.perform([.click("right")]) }
+            // Primary action = the Double Tap hand gesture on Series 9 and later, which
+            // is the pinch-to-click WowMouse is built around — native, no BLE needed.
+            primaryClickButton
+            padButton(remote.airMouse ? "hand.point.up.braille.fill" : "hand.point.up.braille",
+                      "Air mouse") { remote.setAirMouse(!remote.airMouse) }
             padButton(remote.dragLocked ? "hand.raised.fill" : "hand.raised", "Drag lock") {
                 remote.toggleDragLock()
             }
@@ -416,6 +450,22 @@ struct RemoteView: View {
             .controlSize(.mini)
         }
         .frame(height: 30)
+    }
+
+    @ViewBuilder
+    private var primaryClickButton: some View {
+        let button = Button { remote.perform([.click()]) } label: {
+            Image(systemName: "cursorarrow.click").font(.caption)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .accessibilityLabel("Click")
+
+        if #available(watchOS 11.0, *) {
+            button.handGestureShortcut(.primaryAction)
+        } else {
+            button
+        }
     }
 
     private func padButton(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
