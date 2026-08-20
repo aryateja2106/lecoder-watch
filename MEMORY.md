@@ -112,6 +112,25 @@ launch, and ask the user for on-device taps.
   now carry `pair.ts` and the actionable `push.ts`, applied as module + two-line patch.
   Backups: `~/.mesh/meshd/*.pre-pair-*.bak`, `*.pre-actionable-*.bak`, `*.pre-envretry-*.bak`.
 
+## The lesson from 2026-08-20, worth more than the code
+
+**Two features shipped correct and dead.** The attention loop was built end to end —
+hook, event, push, category, buttons, live card, complication, "Needs you" — and two
+separate things meant no user would ever have seen any of it:
+
+1. **Nothing registered the hook.** `mesh-hook` was installed by the installer and wired
+   into nothing, so no event had been posted since 17 June.
+2. **The host names never matched.** macOS puts `.local` on the hostname in the event;
+   the app stores the name pairing gave it. An `==` comparison found no machine, so the
+   list was always empty.
+
+Both were invisible to the build gate and to a suite whose fixtures I wrote myself —
+every one used matching names on both sides. Both were obvious within a minute of
+running the app against the live daemon. **Run the thing.** A green build and a green
+check suite say the code does what the code says; only running it says the product does
+what the product claims. The same mistake in a different costume as
+"verified on the wrong side of the boundary".
+
 ## Still open
 
 - Watch/phone **UI/UX rework** — owner asked for it, then asked to check the
