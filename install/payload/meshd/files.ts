@@ -103,13 +103,13 @@ export async function handleFiles(req: Request, url: URL): Promise<Response | nu
     return await readTextFile(target, Number(url.searchParams.get("max") ?? "65536") || 65536);
   }
   if (path === "/fs/mkdir" && req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as any;
     if (typeof body?.path !== "string" || !body.path) return json({ error: "path required" }, 400);
     await mkdir(resolve(body.path), { recursive: true });
     return json({ ok: true, path: resolve(body.path) }, 201);
   }
   if (path === "/fs/move" && req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as any;
     if (typeof body?.from !== "string" || typeof body?.to !== "string") {
       return json({ error: "from and to required" }, 400);
     }

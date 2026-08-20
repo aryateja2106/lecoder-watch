@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - 'fix/**'
+      - 'claude/**'
+      - 'codex/**'
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  daemon:
+    name: daemon (bun/TypeScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Typecheck meshd
+        working-directory: install/payload/meshd
+        run: |
+          # bun-types + typescript are installed ephemerally (--no-save) so this
+          # step never writes to the committed package.json/lockfile.
+          bun add -D --no-save bun-types "typescript@~5.7.0"
+          bun x tsc --noEmit -p tsconfig.json
+
+      # Pure shell/python checks that need no macOS-only tool, rmux, cmux, or a
+      # running daemon — each runs against a throwaway HOME/tmp dir. See
+      # scripts/check-all.sh for the full (macOS-only) suite these are a subset of.
+      - name: check-mesh-self-check.sh
+        run: sh scripts/check-mesh-self-check.sh
+
+      - name: check-mesh-input-linux.sh
+        run: sh scripts/check-mesh-input-linux.sh
+
+      - name: check-mesh-pair.sh
+        run: sh scripts/check-mesh-pair.sh
+
+      - name: check-mesh-push.sh
+        run: sh scripts/check-mesh-push.sh
+
+      - name: check-mesh-hooks.sh
+        run: sh scripts/check-mesh-hooks.sh
+
+      - name: check-package-mesh-install.sh
+        run: sh scripts/check-package-mesh-install.sh
+
+      - name: check-mesh-hook.py
+        run: python3 scripts/check-mesh-hook.py
+
+  apps:
+    name: apps (Xcode)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build MeshWatch (iOS)
+        run: |
+          xcodebuild -project MeshWatch.xcodeproj -scheme "MeshWatch" \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build MeshWatch Watch App
+        run: |
+          xcodebuild -project MeshWatch.xcodeproj -scheme "MeshWatch Watch App" \
+            -destination "generic/platform=watchOS Simulator" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Run self-checks
+        run: sh scripts/check-all.sh

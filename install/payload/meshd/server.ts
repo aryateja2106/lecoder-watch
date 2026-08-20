@@ -804,9 +804,9 @@ Bun.serve({
       if (path === "/usage") return json(await getUsage());
       if (path === "/screen.jpg" && req.method === "GET") return await screenImage();
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));
-      if (path === "/events" && req.method === "POST") return json(await addEvent(await req.json().catch(() => ({}))), 201);
+      if (path === "/events" && req.method === "POST") return json(await addEvent((await req.json().catch(() => ({}))) as any), 201);
       if (path === "/kb" && (req.method === "PUT" || req.method === "POST")) {
-        try { return json(kbPut(await req.json().catch(() => ({})), os.hostname()), 201); }
+        try { return json(kbPut((await req.json().catch(() => ({}))) as any, os.hostname()), 201); }
         catch (e: any) { return json({ error: String(e?.message ?? e) }, 400); }
       }
       if (path === "/kb/search" && req.method === "GET") {
@@ -829,7 +829,7 @@ Bun.serve({
         return res ? json(res) : json({ error: "no such session" }, 404);
       }
       if (panesM && req.method === "POST") {
-        const body = await req.json().catch(() => ({}));
+        const body = (await req.json().catch(() => ({}))) as any;
         const res = await agentNewPane(decodeURIComponent(panesM[1]), body.dir);
         return json(res, res.ok ? 201 : 404);
       }
@@ -840,7 +840,7 @@ Bun.serve({
       }
       const sendM = path.match(/^\/agents\/([^/]+)\/send$/);
       if (sendM && req.method === "POST") {
-        const body = await req.json().catch(() => ({}));
+        const body = (await req.json().catch(() => ({}))) as any;
         const res = await agentSend(decodeURIComponent(sendM[1]), body.text, body.key, body.pane);
         return json(res, res.ok ? 200 : 400);
       }
@@ -855,7 +855,7 @@ Bun.serve({
         return json(res, res.ok ? 200 : (res.error === "no such session" ? 404 : 400));
       }
       if (path === "/agents/new" && req.method === "POST") {
-        const b = await req.json().catch(() => ({}));
+        const b = (await req.json().catch(() => ({}))) as any;
         const name = sanitize(b.name ?? "");
         if (!name) return json({ error: "name required" }, 400);
         if ((await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) return json({ error: "exists" }, 409);

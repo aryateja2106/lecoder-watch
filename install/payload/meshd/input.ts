@@ -250,7 +250,7 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     return json(await inputStatus(url.searchParams.get("prompt") === "1"));
   }
   if (path === "/input" && req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as any;
     const events = Array.isArray(body) ? body : Array.isArray(body?.events) ? body.events : body?.t ? [body] : [];
     const result = await injectEvents(events);
     return json(result, result.ok ? 200 : 400);
@@ -260,7 +260,7 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     return json({ text: await run(["/usr/bin/pbpaste"]) });
   }
   if (path === "/clipboard" && req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as any;
     if (typeof body?.text !== "string") return json({ error: "text required" }, 400);
     if (!IS_MAC) { const r = await linuxClipboard(body.text); return json(r, r.ok ? 200 : 404); }
     await run(["/usr/bin/pbcopy"], body.text);
@@ -292,17 +292,17 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     return json(result, result.ok ? 200 : 404);
   }
   if (path === "/apps" && req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as any;
     const result = await activateApp(String(body?.activate ?? ""));
     return json(result, result.ok ? 200 : 400);
   }
   if (path === "/system" && req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as any;
     const result = await systemAction(String(body?.action ?? ""));
     return json(result, result.ok ? 200 : 400);
   }
   if (path === "/volume" && (req.method === "POST" || req.method === "GET")) {
-    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+    const body = req.method === "POST" ? (await req.json().catch(() => ({}))) as any : {};
     const result = await volume(body);
     return json(result, result.ok ? 200 : 404);
   }

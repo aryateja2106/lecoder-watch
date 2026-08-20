@@ -210,7 +210,7 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
     return json({ ok: true, ...(await pushStatus()) });
   }
   if (url.pathname === "/push/register" && req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as any;
     const token = String(body.token ?? "").toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(token)) return json({ error: "bad token" }, 400);
     const env: "dev" | "prod" = body.env === "prod" ? "prod" : "dev";
@@ -220,7 +220,7 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
     return json({ ok: true, devices: tokens.length });
   }
   if (url.pathname === "/push/test" && req.method === "POST") {
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as any;
     return json(await pushAlert(
       String(body.title ?? "MeshWatch test"),
       body.body ? String(body.body) : undefined,
