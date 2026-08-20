@@ -12,6 +12,7 @@
 //   POST /apps             <- { activate: "Safari" }
 //   GET  /displays         -> { displays: [{index,id,x,y,width,height,main,name}] }
 //   GET  /screen.jpg?display=2[&width=1400]  capture one display (no display: server.ts)
+//   GET  /desktop?token=…   remote desktop page (polls /screen.jpg, posts /input)
 //
 // ponytail: its own module, not inlined into server.ts, because three meshd
 // lineages (repo, payload, deployed) have drifted — this keeps the patch each of
@@ -258,6 +259,13 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     if (typeof body?.text !== "string") return json({ error: "text required" }, 400);
     await run(["/usr/bin/pbcopy"], body.text);
     return json({ ok: true });
+  }
+  // A remote desktop assembled from capture + injection: no VNC server, no
+  // websockify, no Screen Sharing toggle, same bearer token as everything else.
+  if (path === "/desktop" && req.method === "GET") {
+    const page = Bun.file(join(import.meta.dir, "desktop.html"));
+    if (!(await page.exists())) return json({ error: "desktop.html missing" }, 404);
+    return new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } });
   }
   if (path === "/displays" && req.method === "GET") {
     const result = await listDisplays();

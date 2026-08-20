@@ -39,6 +39,14 @@ struct Machine: Codable, Identifiable, Hashable {
         return addresses.last.map { "http://\($0):7820" }
     }
 
+    /// meshd's own remote desktop: polls /screen.jpg, posts /input. Needs no VNC
+    /// server, no websockify and no Screen Sharing — unlike `resolvedVNC`, which
+    /// points at a noVNC bridge that has to be installed and running separately.
+    func desktopURL(display: Int? = nil) -> URL? {
+        guard let base = baseURL else { return nil }
+        return URL(string: "/desktop\(display.map { "?display=\($0)" } ?? "")", relativeTo: base)
+    }
+
     var resolvedVNC: String {
         if let v = vncURL, !v.isEmpty { return v }
         let address = addresses.last ?? ip

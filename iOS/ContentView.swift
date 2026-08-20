@@ -606,18 +606,29 @@ private struct RemoteControlTab: View {
             List {
                 ForEach(machines) { machine in
                     Section(machine.host) {
-                        NavigationLink {
-                            RemoteWebScreen(title: machine.host, urlString: machine.resolvedVNC)
-                        } label: {
-                            Label("Open VNC", systemImage: "display")
+                        if let desktop = machine.desktopURL() {
+                            NavigationLink {
+                                RemoteWebScreen(title: machine.host,
+                                                urlString: desktop.absoluteString,
+                                                bearer: machine.token)
+                            } label: {
+                                Label("Screen & control", systemImage: "display")
+                            }
+                            .disabled(snap(for: machine)?.reachable != true)
                         }
                         if let snap = snap(for: machine) {
-                            ServiceStatusRow(label: "machine", ok: snap.reachable, detail: snap.reachable ? "active" : snap.error)
-                            ServiceStatusRow(label: "VNC", ok: snap.vncReachable, detail: snap.vncError)
+                            ServiceStatusRow(label: "machine", ok: snap.reachable, detail: snap.statusLabel)
+                            ServiceStatusRow(label: "input", ok: snap.capabilities?.contains("input"),
+                                             detail: (snap.capabilities?.contains("input") ?? false) ? "ready" : "needs meshd 0.2.2")
                         }
-                        Text(machine.resolvedVNC)
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
+                        // Legacy noVNC bridge: only offered where one is actually up.
+                        if snap(for: machine)?.vncReachable == true {
+                            NavigationLink {
+                                RemoteWebScreen(title: "\(machine.host) VNC", urlString: machine.resolvedVNC)
+                            } label: {
+                                Label("Open VNC", systemImage: "rectangle.on.rectangle")
+                            }
+                        }
                     }
                 }
             }
@@ -634,12 +645,15 @@ private struct RemoteControlTab: View {
 struct RemoteWebScreen: View {
     let title: String
     let urlString: String
+    /// Sent as an Authorization header and injected as window.MESH_TOKEN — meshd
+    /// accepts the header only, so the secret never enters a URL.
+    var bearer: String? = nil
     @State private var reloadToken = UUID()
 
     var body: some View {
         Group {
             if let url = URL(string: urlString) {
-                ControlWebView(url: url, reloadToken: reloadToken)
+                ControlWebView(url: url, bearer: bearer, reloadToken: reloadToken)
                     .ignoresSafeArea(edges: .bottom)
             } else {
                 ContentUnavailableView("Bad URL", systemImage: "link", description: Text(urlString))
@@ -657,17 +671,32 @@ struct RemoteWebScreen: View {
 
 private struct ControlWebView: UIViewRepresentable {
     let url: URL
+    var bearer: String? = nil
     let reloadToken: UUID
+
+    private func request() -> URLRequest {
+        var req = URLRequest(url: url)
+        if let bearer { req.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
+        return req
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
+        if let bearer {
+            // The header only covers the main document; the page's own fetches need
+            // the token too, so hand it over before any page script runs.
+            let encoded = bearer.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "\"", with: "")
+            config.userContentController.addUserScript(
+                WKUserScript(source: "window.MESH_TOKEN = \"\(encoded)\";",
+                             injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         let web = WKWebView(frame: .zero, configuration: config)
         web.allowsBackForwardNavigationGestures = true
         web.scrollView.minimumZoomScale = 0.25
         web.scrollView.maximumZoomScale = 6
         web.scrollView.bouncesZoom = true
-        web.load(URLRequest(url: url))
+        web.load(request())
         context.coordinator.lastReloadToken = reloadToken
         return web
     }
@@ -675,7 +704,7 @@ private struct ControlWebView: UIViewRepresentable {
     func updateUIView(_ web: WKWebView, context: Context) {
         if web.url != url || context.coordinator.lastReloadToken != reloadToken {
             context.coordinator.lastReloadToken = reloadToken
-            web.load(URLRequest(url: url))
+            web.load(request())
         }
     }
 
