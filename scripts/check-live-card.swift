@@ -226,6 +226,25 @@ struct CheckLiveCard {
         let expected = ISO8601DateFormatter().date(from: "2026-08-20T09:30:00Z")
         assert(pick?.blockedSince == expected, "and be the event's own time, not now")
 
+        // The shape meshd actually emits. Every fixture above is hand-written as
+        // `...:00Z`, and `ISO8601DateFormatter()` in its default configuration parses
+        // that happily while returning nil for a fraction — so this check was green
+        // while the timer rendered as nothing at all against the live daemon. The
+        // fixture, not the code, was the thing that was wrong.
+        let real = snapshot([machine("studio", [agent("api")])],
+                            events: [event("studio", "api", level: "warning",
+                                           at: "2026-08-20T14:02:35.185Z")])
+        let fromDaemon = sessionsNeedingAttention(from: real).first
+        assert(fromDaemon?.blockedSince != nil,
+               "a fractional-seconds stamp is what meshd sends; it must parse")
+
+        // And the helper itself, both ways plus the junk case.
+        assert(parseISO("2026-08-20T14:02:35.185Z") != nil)
+        assert(parseISO("2026-08-20T14:02:35Z") != nil)
+        assert(parseISO("not a date") == nil)
+        assert(parseISO("") == nil)
+        assert(parseISO(nil) == nil)
+
         // A watched-but-not-blocked session is not waiting on anyone, so it must not
         // grow a stopwatch implying it is.
         let watched = snapshot([machine("studio", [agent("api")])],

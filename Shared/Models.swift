@@ -324,6 +324,26 @@ struct PinnedLimitSession: Codable, Hashable, Identifiable {
     var sessionName: String
 }
 
+// MARK: - Time
+
+/// Parse an ISO-8601 stamp from the daemon, with or without fractional seconds.
+///
+/// `ISO8601DateFormatter()` in its default configuration silently refuses anything
+/// with a fraction, and meshd stamps events as `2026-08-20T14:02:35.185Z` — so the
+/// bare initialiser returns nil for every real event while passing any fixture written
+/// by hand as `...:00Z`. That combination is invisible in tests and total in
+/// production: it is why the blocked-since timer rendered as nothing at all against
+/// the live daemon while its check was green.
+func parseISO(_ iso: String?) -> Date? {
+    guard let iso, !iso.isEmpty else { return nil }
+    let withFraction = ISO8601DateFormatter()
+    withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = withFraction.date(from: iso) { return date }
+    let plain = ISO8601DateFormatter()
+    plain.formatOptions = [.withInternetDateTime]
+    return plain.date(from: iso)
+}
+
 // MARK: - Agent hooks
 
 struct AgentEvent: Codable, Hashable, Identifiable {
@@ -391,7 +411,7 @@ func sessionsNeedingAttention(from snapshot: MeshSnapshot) -> [LiveSessionPick] 
         return LiveSessionPick(host: machine.host, session: session, agentType: agent.agentType ?? "shell",
                                state: state, lastLine: line,
                                cpuPct: agent.cpuPct, memLabel: agent.memLabel,
-                               blockedSince: ISO8601DateFormatter().date(from: event.createdISO),
+                               blockedSince: parseISO(event.createdISO),
                                // Classify the question, not the title: the title is
                                // usually boilerplate ("Claude needs attention") while
                                // the body carries the command being asked about.

@@ -24,7 +24,7 @@ struct WatchGlance: Codable, Hashable {
     static let empty = WatchGlance(updatedISO: "", waiting: [], machinesUp: 0, machinesTotal: 0)
 
     var updated: Date? {
-        updatedISO.isEmpty ? nil : ISO8601DateFormatter().date(from: updatedISO)
+        parseISO(updatedISO)
     }
 
     /// Minutes since the app last wrote, or nil when it never has.

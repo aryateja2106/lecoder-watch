@@ -863,7 +863,7 @@ func shortName(_ host: String) -> String {
 }
 
 private func resetText(_ iso: String?) -> String? {
-    guard let iso, let date = ISO8601DateFormatter().date(from: iso) else { return nil }
+    guard let date = parseISO(iso) else { return nil }
     return "resets \(date.formatted(date: .abbreviated, time: .shortened))"
 }
 
