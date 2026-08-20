@@ -9,6 +9,11 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-20
+
+The release that makes the app installable by someone who is not its author, and turns
+"an agent is waiting on you" into one tap on your wrist.
+
 ### Added
 - **A watch-face complication.** How many agents are waiting on you, on your face all
   day, in every accessory family (circular, corner, inline, rectangular) — plus the

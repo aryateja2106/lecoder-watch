@@ -5,6 +5,27 @@ nobody re-litigates a settled call or re-walks a dead end.
 
 ## Settled decisions
 
+**Onboarding is pairing, not configuration.** `mesh pair` mints an 8-character code
+over loopback; the phone redeems it at `/pair/claim` — the one route that answers
+without a token — and gets the real token plus every host in that machine's
+`hosts.json`. No machines are compiled into the app. The claim window only exists for
+the ten minutes after a human ran the command, it is single use, and five wrong
+guesses burn it, which is why an unauthenticated route is acceptable here.
+
+**Everything that shows "what needs me" reads one function.** `sessionsNeedingAttention`
+in `Shared/Models.swift` feeds the watch home, the phone's Machines tab, the Live
+Activity and the complication. A second answer to the same question is a bug waiting to
+happen — the same reasoning makes `check-mesh-push.sh` grep the `AGENT_ATTENTION`
+category string across Swift *and* TypeScript.
+
+**Continue sends Enter, never a guessed "y" or "1".** Enter accepts whatever option the
+agent has highlighted, which is exactly what pressing return at the terminal does.
+Anything else is answering a question we cannot see, on someone's real machine.
+
+**The complication degrades rather than lying.** It cannot poll, so it renders the
+app's last reading and shows a dash past fifteen minutes. "2 agents waiting" from three
+hours ago sends someone to their desk for nothing.
+
 **Transport is `URLSession` to meshd, not BLE.** watchOS blocks low-level networking
 for normal apps (TN3135): no `NWConnection`, no WebSocket, no Bonjour. HTTP over
 Tailscale is the one channel that works, and it already carried the rest of the app.
@@ -65,6 +86,32 @@ launch, and ask the user for on-device taps.
   rendered what the phone pushed before iOS suspended it.
 - **Notification showed a generic icon** — the project had no asset catalog at all.
 
+## 2026-08-20 (later) — pairing, actionable alerts, live card, complication
+
+- **Push would have been dead on arrival in TestFlight.** The app registered
+  `env: "dev"` unconditionally, but an archive signs `aps-environment` from the
+  provisioning profile — `production` for TestFlight. A production token sent to the
+  sandbox gateway returns `BadDeviceToken`, and `pushAlert` treated that as a dead
+  device and deleted it: first push after install, push gone permanently, no error
+  visible anywhere. Fixed both ends — `APNsEnvironment` parses the embedded profile,
+  and meshd retries the other gateway once and remembers the answer before dropping a
+  device. Found only by inspecting the signed entitlements of a probe archive.
+- **A deleted App ID cannot be reused.** Apple answers "An App ID with Identifier … is
+  not available", which reads like a name clash. `…watchkitapp.complication` is burned;
+  the complication target uses `…watchkitapp.glance`.
+- **Xcode creates and assigns App Groups by itself** once `APP_GROUPS` is enabled on
+  the bundle IDs and the entitlement names the group — no portal visit, no API for it
+  in `asc`. Verified in the signed entitlements of a Release archive.
+- **`~/.mesh/hosts.json` records the Mac as `127.0.0.1`,** which is true for the daemon
+  and useless for a phone. Pairing rewrites loopback entries to the address the client
+  actually reached, and dedupes them against the self entry.
+- **Removing `Machine.defaults` made the watch hang on "Connecting…"** — an empty list
+  and an unanswered poll looked identical from there. Any "we have nothing" state needs
+  to be distinguishable from "we do not know yet".
+- The repo `install/payload/meshd/` lineage and the deployed `~/.mesh/meshd/` one both
+  now carry `pair.ts` and the actionable `push.ts`, applied as module + two-line patch.
+  Backups: `~/.mesh/meshd/*.pre-pair-*.bak`, `*.pre-actionable-*.bak`, `*.pre-envretry-*.bak`.
+
 ## Still open
 
 - Watch/phone **UI/UX rework** — owner asked for it, then asked to check the
@@ -80,10 +127,14 @@ launch, and ask the user for on-device taps.
   bare Xvfb resets on last-client-disconnect — start with `-noreset`.
 - **SSH onboarding** — add a machine by IP + credentials, then run the installer over
   SSH so any box joins the mesh.
-- **`testtoken` still ships** in `Models.swift` `Machine.defaults`, and it now grants
-  keystroke injection. Rotate it. (Note 2026-08-20: dataflow's `~/.mesh/token` still
-  reads `testtoken` while its systemd unit carries the real token `dcf9e5ea…` — the
-  daemon token is the unit's `MESHD_TOKEN`, not the file.)
+- ~~**`testtoken` still ships**~~ — `Machine.defaults` is gone entirely; nothing ships
+  with a token. (Still true and still a trap: dataflow's `~/.mesh/token` file reads
+  `testtoken` while its systemd unit carries the real one — the daemon's token is the
+  unit's `MESHD_TOKEN`, not the file.) `arya-pi` is offline and still on the old shared
+  token; re-pair it when it returns.
+- **Push-to-start for the Live Activity.** ActivityKit only starts an activity in the
+  foreground, so the card appears from a pocket only after you next open the app.
+  `Activity.pushToStartTokenUpdates` plus a `liveactivity` push from meshd lifts that.
 
 ## 2026-08-20 — reliability fix + APNs + Linux, verified
 
