@@ -9,6 +9,69 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-20
+
+The release about what happens when you actually press the button — and the first one
+where driving your Mac from your phone is a real trackpad rather than a web page.
+
+### Added
+- **The affirmative now names what it will do.** "Continue" sends a bare Return, and
+  Return accepts whichever option the agent has highlighted — so it was never
+  "acknowledge", it was "yes", pressed by someone walking who read two lines at most.
+  A question that would force-push, `rm -rf`, hard-reset, drop a table, pipe a download
+  into a shell or run as root now gets a **red button naming the verb** — *Force push*,
+  *Delete files* — and one line saying what happens. Everything else stays a calm
+  Continue. The rule list is deliberately narrow: flagging everything trains you to
+  skip the warning.
+- **A live wait timer.** Every blocked agent shows how long it has been sitting there,
+  counting up on the row, the Lock Screen card and the watch face. Six minutes of a
+  machine doing nothing is the number this whole app exists to shrink.
+- **A real trackpad on the iPhone.** Remote was a web view; now it is native. One
+  finger moves the pointer with acceleration, tap clicks, two fingers scroll, two-finger
+  tap right-clicks, press-and-hold drags. The menu carries the things you reach for from
+  a phone: **Paste from iPhone** (your phone's clipboard into whatever has focus on the
+  Mac), **Copy from the machine**, **Recenter pointer**, a display picker, and window
+  snapping. The picture is four times sharper — the old one was sized for a watch.
+  meshd's web console is still there, one row down.
+- **An honest all-clear.** The watch says "Nothing waiting on you" instead of rendering
+  no section at all. An empty list and a dead poll used to look identical, which on a
+  glance surface is the whole failure.
+
+### Changed
+- **The complication keeps the question.** With two agents waiting it used to say
+  "2 agents waiting" over a bare session name — the only line you can act on vanished
+  exactly when things got busy. Now it always shows three bands: how many, which one,
+  and what it asked. A destructive question gets the warning glyph instead of the
+  speech bubble.
+- **Notifications are asked for after you pair a machine**, not on first launch. iOS
+  shows that prompt exactly once ever; asking a stranger to accept alerts from an app
+  that has nothing to alert them about yet spends the only chance this product gets.
+- **The stale complication says "Tap to reconnect"** rather than naming the app you are
+  already wearing a complication for.
+
+### Fixed
+- **The answer button was inside the row's tap target.** On the watch, Continue was a
+  24pt control nested in a full-row `NavigationLink`; on iOS the same row had a tap
+  gesture over the whole thing. Whichever gesture the system resolved a tap to, you
+  could not tell by looking — and one of the two presses Return in a live shell. Both
+  rows are rebuilt: the question is the payload, the actions are siblings of it, and
+  the row navigates nowhere by itself.
+- **Every timestamp from the daemon failed to parse.** `ISO8601DateFormatter` in its
+  default configuration refuses fractional seconds, and meshd stamps events as
+  `…:35.185Z`. The blocked-since timer rendered as nothing, and event times in Monitor
+  rendered as empty strings, on both iOS and the watch. Every fixture in the repo was
+  hand-written as `…:00Z`, so the checks were green throughout.
+- A glance written by 0.2.0 would have failed to decode on upgrade and blanked the
+  complication until the app next refreshed.
+
+### Known limits
+- The Live Activity still has no buttons on the card, and can only be *started* while
+  the app is in the foreground — from a cold pocket you get the notification but not
+  the Lock Screen card.
+- Screen capture is macOS only. Linux gets input, files and shell, and now says so
+  instead of spinning on a picture that is never coming.
+- APNs delivery to a real device is still unproven.
+
 ## [0.2.0] — 2026-08-20
 
 The release that makes the app installable by someone who is not its author, and turns

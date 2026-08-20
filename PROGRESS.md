@@ -6,6 +6,29 @@ using daily. One slice at a time, full build gate, commit only when green.
 
 ## Done
 
+### 0.3.0 — 2026-08-20
+- **Risk-classified answers.** `Shared/RiskClassifier.swift` + `check-risk`, mutation
+  tested both ways. The affirmative names the verb and turns red for a force push,
+  `rm -rf`, hard reset, `DROP TABLE`, `| sh`, `--no-verify` or `sudo`.
+- **Both attention rows rebuilt.** The answer button was inside the row's tap target on
+  the watch (a Button in a NavigationLink label) and under a whole-row `onTapGesture` on
+  iOS. Question is now the payload, actions are siblings, row navigates nowhere.
+- **`parseISO`.** Every `ISO8601DateFormatter().date(from:)` in the app refused the
+  fractional-seconds stamps meshd actually emits. Found by running it, not by building
+  it — the timer rendered as nothing while `check-live-card` was green.
+- **Native iOS remote screen.** Trackpad/scroll/right-click/drag over a 1400px capture,
+  Paste from iPhone, Copy from machine, Recenter, display picker, window snapping.
+  Verified against the live daemon: both displays capture at the aspect `/displays`
+  reports, width clamps at 2000, `/clipboard` round-trips, `/input` moveTo moves the
+  real pointer.
+- **Complication keeps the question** when more than one agent waits; `entry(now:)` is
+  asserted in all five states; a 0.2.0 glance still decodes.
+- **Notification permission asked after pairing**, not at first launch.
+- Landing page at `web/`, deployed to Vercel, `install.sh` redirect for a clean curl.
+- TestFlight external group + public link, submitted for Beta App Review.
+
+
+
 - **Remote control core** — meshd 0.2.2 `/input` `/clipboard` `/volume`, Swift CGEvent
   helper, watch trackpad + crown + keys. Verified live on `:8899` (cursor, keys with
   modifier flags, pixel scroll, clipboard, volume). `64d5eb7`, `21c6166`.
@@ -231,10 +254,24 @@ three hardcoded machines; none of it is reachable by anyone else.
 6. **S17b push-to-start.** `Activity.pushToStartTokenUpdates` -> meshd, and a
    `liveactivity` push, so the card appears from a pocket rather than only when the
    app is already open.
+7. **Buttons on the live card.** An ActivityKit `AppIntent` for Continue/Stop needs
+   target membership in both the app and the widget extension, and cannot be trusted
+   from a simulator. 0.3.0 ships the blocked *rendering*; the buttons are still a deep
+   link.
+8. **Ordering of the needs-you list.** It is newest-first, which is right for the card
+   (you are reacting to a buzz) and arguably wrong for the list (the longest wait is
+   the one bleeding time). Now that the wait is visible, watch which one you reach for.
+9. **Sync the risk vocabulary into `push.ts`.** `classifyRisk` runs client-side, so the
+   in-app rows and the live card name the verb but the *notification* buttons are still
+   generic — and the notification is the surface most likely to be answered from a
+   pocket. Needs a mirrored list in the daemon plus a cross-language grep in
+   `check-mesh-push.sh`, the pattern already used for the category id.
 
 **P2 — earned polish**
-6. **S18b UI, second pass** — quick commands are still a fixed table; five tabs is
-   probably two too many; Settings still exposes bridge/VNC/token as raw fields.
+6. **S18b UI, second pass** — ~~the attention rows~~ and ~~the complication~~ are done
+   (0.3.0). Still open: quick commands are a fixed table; five tabs is probably two too
+   many; Settings still exposes bridge/VNC/token as raw fields, and the token should
+   never be rendered at all — "stored in Keychain" plus a Rotate button.
 7. **S19 SSH onboarding** — add a machine by address + credentials, run the installer
    over SSH.
 8. **S20 Linux `/screen.jpg`** — input and files work headless; capture is Mac-only.
