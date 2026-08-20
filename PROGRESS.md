@@ -116,6 +116,16 @@ using daily. One slice at a time, full build gate, commit only when green.
   `Aryas-MacBook-Pro.local`. Delivery to a device is still unproven — `devices:0` until
   the phone runs the app once.
 
+- **S17 live card** — `MeshWatchWidgets` app extension (WidgetKit + ActivityKit),
+  embedded in the iOS app, bundle id `com.lecoder.meshwatch.widgets` registered on the
+  portal. `liveSessionPick` chooses the session with no pinning UI: blocked or broken
+  first (newest event wins — `events` arrives oldest-first, so it walks backwards),
+  else the session being watched, else no card at all. `check-live-card` covers all
+  five cases and was negative-tested against two separate breaks. Verified the
+  `.appex` lands in `MeshWatch.app/PlugIns/`. Deep link `meshwatch://session/<host>/<name>`
+  routes to the session, stubbing the Agent when the poll no longer lists it.
+  Limit: ActivityKit only starts an activity in the foreground — push-to-start is S17b.
+
 ## In the morning
 
 1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →
@@ -142,7 +152,10 @@ three hardcoded machines; none of it is reachable by anyone else.
    waiting on you. This is the reason to keep the app on the wrist.
 4. ~~**S16 actionable notifications.**~~ DONE — see Done. Needs a device to prove
    delivery end to end.
-5. **S17 Live Activity** — merge `MeshWatchWidgets` from `claude/eloquent-hopper-0a653d`.
+5. ~~**S17 Live Activity.**~~ DONE — see Done.
+6. **S17b push-to-start.** `Activity.pushToStartTokenUpdates` -> meshd, and a
+   `liveactivity` push, so the card appears from a pocket rather than only when the
+   app is already open.
 
 **P2 — earned polish**
 6. **S18 UI rework** — machines list duplicates the status list; quick commands are a

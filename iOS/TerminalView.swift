@@ -118,7 +118,28 @@ struct TerminalTab: View {
             .sheet(item: $creatingOn) { m in
                 NewSessionSheet(machine: m)
             }
+            // Arriving from meshwatch://session/... — the live card, or anything else
+            // that wants to put someone in front of one session.
+            .navigationDestination(item: $store.deepLinkSession) { target in
+                if let m = machineMatching(target.host, in: store.machines) {
+                    SessionPeekScreen(machine: m, session: agent(named: target.session, on: target.host))
+                } else {
+                    ContentUnavailableView(
+                        "Machine not paired",
+                        systemImage: "questionmark.folder",
+                        description: Text("\(target.host) isn't in your list. Pair it from Machines."),
+                    )
+                }
+            }
         }
+    }
+
+    /// The live session if we have it, else a stub by name — a card can outlive the
+    /// poll that last saw the session, and landing on "kill it / reply to it" is more
+    /// use than landing on "not found".
+    private func agent(named name: String, on host: String) -> Agent {
+        store.snapshot?.machines.first { $0.host == host }?.agents.first { $0.name == name }
+            ?? Agent(name: name, windows: 1, attached: false)
     }
 }
 

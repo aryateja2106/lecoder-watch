@@ -298,6 +298,9 @@ final class MeshStore: ObservableObject {
         snapshot = snap
         PhoneConnectivity.shared.push(snap)
         NotificationManager.shared.evaluate(snap, pinned: pinnedLimitSessions)
+        // Only off the full snapshot: a partial one is missing hosts, and a card that
+        // flickers to another session mid-poll is worse than one that lands a beat late.
+        LiveActivityController.shared.sync(snapshot: snap)
     }
 
     /// Emit a snapshot containing the hosts that have answered so far, with the rest
@@ -444,6 +447,26 @@ final class MeshStore: ObservableObject {
         guard let machine = machineMatching(host, in: machines) else { return }
         try? await MeshClient(machine: machine).send(agent: session, text: text, key: key)
         await refresh()
+    }
+
+    /// Set by a `meshwatch://session/<host>/<name>` link (the live card, or a
+    /// notification tap) and consumed by the Terminal tab.
+    @Published var deepLinkSession: SessionTarget?
+
+    struct SessionTarget: Identifiable, Hashable {
+        var host: String
+        var session: String
+        var id: String { "\(host)/\(session)" }
+    }
+
+    /// `meshwatch://session/<host>/<session>`. Anything else is ignored rather than
+    /// guessed at.
+    func open(url: URL) -> Bool {
+        guard url.scheme == "meshwatch", url.host == "session" else { return false }
+        let parts = url.path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }
+        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return false }
+        deepLinkSession = SessionTarget(host: parts[0], session: parts[1])
+        return true
     }
 
     func handle(_ command: WatchCommand) async -> Data? {

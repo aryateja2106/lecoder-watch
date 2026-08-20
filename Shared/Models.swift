@@ -326,6 +326,71 @@ struct AgentEvent: Codable, Hashable, Identifiable {
     var createdISO: String
 }
 
+// MARK: - The live card
+
+/// The one session worth a Lock Screen card, a Dynamic Island and a slot in the watch
+/// Smart Stack, chosen from a whole mesh.
+struct LiveSessionPick: Hashable {
+    var host: String
+    var session: String
+    var agentType: String
+    var state: SessionState
+    var lastLine: String
+    var cpuPct: Double?
+    var memLabel: String?
+}
+
+/// Pick the session that deserves the live card, or nil for "show nothing".
+///
+/// Two reasons qualify and no others. A session that is **blocked or broken** is the
+/// whole point — that is the interruption worth carrying on your wrist. A session the
+/// user is **actively watching** qualifies because they have already said they care.
+/// A merely-busy session somewhere in the fleet does not: a permanent card that says
+/// "Working" is wallpaper, and every update spends a budget ActivityKit enforces.
+///
+/// Ties break towards the most recent event, so the newest thing to block wins.
+func liveSessionPick(from snapshot: MeshSnapshot) -> LiveSessionPick? {
+    func agent(_ host: String, _ name: String) -> Agent? {
+        snapshot.machines.first { $0.host == host }?.agents.first { $0.name == name }
+    }
+    func pick(host: String, agent: Agent, state: SessionState, lastLine: String) -> LiveSessionPick {
+        LiveSessionPick(host: host, session: agent.name, agentType: agent.agentType ?? "shell",
+                        state: state, lastLine: String(lastLine.prefix(80)),
+                        cpuPct: agent.cpuPct, memLabel: agent.memLabel)
+    }
+
+    // 1. Something is blocked or broken. Newest event first — `events` arrives oldest
+    //    first, so walk it backwards.
+    for event in (snapshot.events ?? []).reversed() {
+        guard let host = event.host, let name = event.session else { continue }
+        let state = cardStateForLevel(event.level)
+        guard state.wantsAttentionState else { continue }
+        guard let match = agent(host, name) else { continue }
+        return pick(host: host, agent: match, state: state, lastLine: event.body ?? event.title)
+    }
+
+    // 2. The session the user opened. Its real output beats any event guess.
+    if let host = snapshot.watchedHost, let name = snapshot.watchedAgent, let match = agent(host, name) {
+        let lines = snapshot.watchedOutput ?? []
+        let state = lines.isEmpty ? (match.attached ? SessionState.running : .idle)
+                                  : sessionState(lines: lines, attached: match.attached)
+        let last = lines.last { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? ""
+        return pick(host: host, agent: match, state: state, lastLine: last)
+    }
+
+    return nil
+}
+
+/// Level-to-state, duplicated free of SwiftUI so the selection above stays testable
+/// with bare swiftc. `cardState(forLevel:attached:)` in SessionCard.swift wraps it.
+func cardStateForLevel(_ level: String?) -> SessionState {
+    switch (level ?? "").lowercased() {
+    case "warning": return .waiting
+    case "error":   return .error
+    default:        return .unknown
+    }
+}
+
 // MARK: - Relay envelope (iPhone -> Watch over WatchConnectivity)
 
 /// One bundle the phone pushes to the watch so the watch never talks to the mesh directly.
@@ -724,6 +789,13 @@ func shellQuotedArgument(_ value: String) -> String {
 /// and "it's still thinking" at a glance.
 /// ponytail: pure heuristic over the captured tail, no agent-specific protocol. Tighten
 /// the marker lists (or fold in /events hook signals) if it misclassifies in practice.
+extension SessionState {
+    /// The states that justify interrupting someone. Kept next to the enum and free of
+    /// SwiftUI so `liveSessionPick` stays checkable; `wantsAttention` in
+    /// SessionCard.swift is the same predicate for view code.
+    var wantsAttentionState: Bool { self == .waiting || self == .error }
+}
+
 enum SessionState: String {
     case waiting   // shell/agent is asking the user something — needs attention
     case running   // producing output, no prompt yet — busy

@@ -10,6 +10,12 @@ each entry as you ship the slice, not at release time.
 ## [Unreleased]
 
 ### Added
+- **A live card for the session that needs you.** Lock Screen, Dynamic Island, and —
+  on watchOS 11 and later — the watch Smart Stack, from one activity. It shows the
+  agent, its state, the last line it printed, and CPU/memory; tapping it opens that
+  session. Nothing is pinned by hand: the card follows whichever session is blocked or
+  broken, falling back to the one you have open. A merely-busy session gets no card,
+  because a permanent "Working" banner is wallpaper.
 - **Answer a blocked agent from the notification.** When an agent stops and waits for
   you, the alert now carries three buttons on the wrist and the phone: **Continue**
   (Enter — accepts whatever the agent has highlighted, rather than guessing a "y"),
@@ -27,6 +33,11 @@ each entry as you ship the slice, not at release time.
   are rewritten to the address your phone actually reached, because `127.0.0.1` is true
   for the daemon and useless for the phone.
 - A first-run screen that explains the two steps instead of showing an empty list.
+
+### Known limits
+- The live card can only *start* while the app is open — an ActivityKit rule. From a
+  pocket, the actionable notification is what reaches you and the card appears next
+  time you open the app. Lifting this needs push-to-start.
 
 ### Changed
 - **No machines ship with the app.** It used to seed three of the author's own tailnet

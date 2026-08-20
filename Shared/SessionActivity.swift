@@ -1,0 +1,33 @@
+import Foundation
+#if canImport(ActivityKit)
+import ActivityKit
+
+/// The live card for one session: Lock Screen, Dynamic Island, and — on watchOS 11 and
+/// later — the watch Smart Stack, for free. Static identity lives in the attributes;
+/// everything that changes each poll lives in ContentState.
+///
+/// The identical type compiles into both the app and the widget extension, since both
+/// pull in `Shared/`. ActivityKit is iOS-only, so the `#if` keeps the watch target —
+/// which also compiles `Shared/` — building.
+struct SessionActivityAttributes: ActivityAttributes {
+    struct ContentState: Codable, Hashable {
+        var stateRaw: String     // SessionState.rawValue
+        var agentType: String    // "claude" / "codex" / "shell"
+        var cpuPct: Double?
+        var memLabel: String?
+        var lastLine: String     // freshest output or event line
+
+        var state: SessionState { SessionState(rawValue: stateRaw) ?? .unknown }
+
+        /// "38% · 1.2 GB", or nil when the daemon reported neither.
+        var resourceText: String? {
+            let cpu = cpuPct.map { String(format: "%.0f%%", $0) }
+            let joined = [cpu, memLabel].compactMap { $0 }.joined(separator: " · ")
+            return joined.isEmpty ? nil : joined
+        }
+    }
+
+    var host: String       // as the app displays it
+    var session: String    // the multiplexer session name == Agent.name
+}
+#endif

@@ -4,14 +4,22 @@ import WebKit
 
 struct ContentView: View {
     @EnvironmentObject var store: MeshStore
+    @State private var tab = Tab.machines
+
+    enum Tab: Hashable { case machines, terminal, remote, monitor, settings }
 
     var body: some View {
-        TabView {
-            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }
-            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }
-            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }
-            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }
-            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }
+        TabView(selection: $tab) {
+            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }.tag(Tab.machines)
+            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }.tag(Tab.terminal)
+            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }.tag(Tab.remote)
+            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }.tag(Tab.monitor)
+            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }.tag(Tab.settings)
+        }
+        // meshwatch://session/<host>/<name> — from the live card, and anywhere else we
+        // want to land someone on the session rather than on the app in general.
+        .onOpenURL { url in
+            if store.open(url: url) { tab = .terminal }
         }
     }
 }

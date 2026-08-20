@@ -48,6 +48,11 @@ targets:
           - UIInterfaceOrientationPortrait
         NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private Tailscale network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
+        NSSupportsLiveActivities: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.lecoder.meshwatch
+            CFBundleURLSchemes:
+              - meshwatch
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
     settings:
@@ -60,6 +65,31 @@ targets:
     dependencies:
       - target: MeshWatch Watch App
         embed: true
+      - target: MeshWatchWidgets
+        embed: true
+  MeshWatchWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Shared
+      - path: MeshWatchWidgets
+    info:
+      path: MeshWatchWidgets/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.widgets
+        INFOPLIST_KEY_CFBundleDisplayName: LeSearch Mesh Sessions
+        # "1" and not "1,2": an iPad-capable target must declare all four orientations
+        # or App Store Connect rejects the build with 90474. Learned the expensive way.
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+    dependencies:
+      - sdk: SwiftUI.framework
+      - sdk: WidgetKit.framework
+      - sdk: ActivityKit.framework
   MeshWatch Watch App:
     type: application
     platform: watchOS
