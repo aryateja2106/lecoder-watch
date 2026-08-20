@@ -66,12 +66,17 @@ struct Machine: Codable, Identifiable, Hashable {
         return URL(string: s)
     }
 
-    // Dogfood default: current local services use this token; custom machines can use generated tokens.
+    /// Addresses only — never a token. A shipped shared secret is a shared secret, and
+    /// this one now grants keystroke injection and arbitrary shell on every host that
+    /// still honours it. A machine with an empty token is inert until it is given one
+    /// in Settings, which is the correct failure.
     static let defaults: [Machine] = [
-        Machine(host: "arya-macbook-pro", ip: "100.94.221.115", port: 8899, token: "testtoken"),
-        Machine(host: "arya-pi", ip: "100.94.168.17", port: 8899, token: "testtoken"),
-        Machine(host: "dataflowagents", ip: "100.80.10.95", port: 8899, token: "testtoken")
+        Machine(host: "arya-macbook-pro", ip: "100.94.221.115", port: 8899, token: ""),
+        Machine(host: "arya-pi", ip: "100.94.168.17", port: 8899, token: ""),
+        Machine(host: "dataflowagents", ip: "100.80.10.95", port: 8899, token: "")
     ]
+
+    var isConfigured: Bool { !token.isEmpty }
 }
 
 // MARK: - Stats (htop-style)

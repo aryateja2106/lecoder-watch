@@ -55,13 +55,9 @@ final class MeshStore: ObservableObject {
         } else {
             machines = Machine.defaults.filter { !tombstoned.contains($0.host) }
         }
-        let generated = UserDefaults.standard.string(forKey: installTokenKey)
-        for idx in machines.indices {
-            if generated == machines[idx].token, Machine.defaults.contains(where: { $0.host == machines[idx].host }) {
-                machines[idx].token = "testtoken"
-                changed = true
-            }
-        }
+        // (Removed: the old code reset the three default hosts back to the shared
+        // "testtoken" whenever their token matched the generated install token. That
+        // shared secret is retired — resurrecting it would undo a rotation.)
         if changed { save() }
         if let decoded = UserDefaults.standard.stringArray(forKey: quickCommandsKey), !decoded.isEmpty {
             quickCommands = Self.mergedQuickCommands(decoded)
@@ -244,7 +240,14 @@ final class MeshStore: ObservableObject {
                                            tailnetError: tailnetError)
                 }
             }
-            for await snap in group { results.append(snap) }
+            // Publish each machine the moment it answers. Waiting for the whole group
+            // means the slowest host sets first paint, and one host that has been off
+            // for days (two addresses x the full timeout) held the entire UI on
+            // "checking…" — with every control disabled behind it.
+            for await snap in group {
+                results.append(snap)
+                publishPartial(results, targets: targets)
+            }
         }
         // Stable order matching the machine list.
         let ordered = targets.compactMap { m in results.first { $0.host == m.host } }
@@ -294,6 +297,29 @@ final class MeshStore: ObservableObject {
         snapshot = snap
         PhoneConnectivity.shared.push(snap)
         NotificationManager.shared.evaluate(snap, pinned: pinnedLimitSessions)
+    }
+
+    /// Emit a snapshot containing the hosts that have answered so far, with the rest
+    /// carrying whatever we last knew, so the list fills in progressively.
+    private func publishPartial(_ answered: [MachineSnapshot], targets: [Machine]) {
+        let byHost = Dictionary(uniqueKeysWithValues: answered.map { ($0.host, $0) })
+        let merged = targets.map { machine -> MachineSnapshot in
+            if let fresh = byHost[machine.host] { return holdRecentlyGood(fresh) }
+            if let remembered = lastGood[machine.host] {
+                var held = remembered.snapshot
+                held.staleSeconds = max(1, Int(Date().timeIntervalSince(remembered.at)))
+                return held
+            }
+            return MachineSnapshot(host: machine.host, config: machine, reachable: false,
+                                   stats: nil, agents: [], error: "checking…")
+        }
+        snapshot = MeshSnapshot(updatedISO: ISO8601DateFormatter().string(from: Date()),
+                                machines: merged,
+                                usage: snapshot?.usage,
+                                quickCommands: quickCommands,
+                                events: events,
+                                pinnedLimitSessions: pinnedLimitSessions)
+        PhoneConnectivity.shared.push(snapshot!)
     }
 
     /// Keep showing a machine's last good state through a few missed polls.
