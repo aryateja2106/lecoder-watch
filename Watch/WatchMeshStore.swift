@@ -259,6 +259,20 @@ final class WatchMeshStore: ObservableObject {
             usage = try? await MeshClient(machine: mac).usage()
         }
         await phone
+        publishGlance()
+    }
+
+    /// Hand the face complications the little they can show. Written after every
+    /// refresh, from whichever path answered — the complication runs in another
+    /// process and has no way to ask.
+    func publishGlance() {
+        let reachable = snaps.filter { $0.reachable && $0.authError == nil }
+        GlanceStore.write(WatchGlance(
+            updatedISO: ISO8601DateFormatter().string(from: Date()),
+            waiting: needsAttention.map { .init(host: $0.host, session: $0.session, line: $0.lastLine) },
+            machinesUp: reachable.count,
+            machinesTotal: machines.count,
+        ))
     }
 
     // MARK: Watch a single agent

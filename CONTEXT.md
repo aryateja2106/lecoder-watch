@@ -1,13 +1,24 @@
 # CONTEXT — MeshWatch
 
-Read this first. Then `PROGRESS.md` (slice log), then `docs/mac-remote-control.md`
-(the control surface), then `git log`.
+Read this first. Then `CHANGELOG.md` (what shipped, in a user's words), `PROGRESS.md`
+(slice log), `docs/mac-remote-control.md` (the control surface), then `git log`.
 
 ## What this is
 
 Control any machine you own from an Apple Watch and iPhone, over your own Tailscale
 mesh. Local-first: no cloud relay anywhere in the path. The watch is the product; the
 phone is the config surface and the relay of last resort.
+
+Two loops, in priority order:
+
+1. **Reach your machines from anywhere** — pointer, keyboard, screen, files, shell.
+2. **Run agents 24/7 and answer them when they get stuck** — the notification, the
+   live card and the complication all exist to make "an agent is waiting on you"
+   reach your wrist and be answerable in one tap.
+
+Loop 2 is the differentiator, and every surface derives from one shared function:
+`sessionsNeedingAttention(from:)` in `Shared/Models.swift`. If you are adding a place
+that shows "what needs me", read from that rather than inventing a second answer.
 
 ## The shape of it
 
@@ -33,8 +44,10 @@ Watch ──URLSession──▶ meshd ──▶ mesh-input (CGEvent/AXUIElement)
 | `install/payload/meshd/` | **Canonical** meshd. `server.ts`, `input.ts` (Mac control), `push.ts` (APNs), `kb.ts`, `desktop.html` |
 | `install/payload/bin/` | `mesh-input.swift`, `mesh` CLI, hooks |
 | `install/install.sh` | The one-curl installer. Detects OS/arch/multiplexer |
-| `Shared/` | `Models.swift` (wire types + pure helpers), `MeshClient.swift` |
+| `Shared/` | `Models.swift` (wire types + pure helpers incl. pairing, attention, live-card selection), `MeshClient.swift`, `AgentNotifications.swift` (the notification-action contract), `SessionCard.swift` (SwiftUI status vocabulary), `SessionActivity.swift`, `WatchGlance.swift` (complication data + App Group) |
 | `iOS/`, `Watch/` | The two apps |
+| `MeshWatchWidgets/` | iOS widget extension — the Live Activity (Lock Screen, Dynamic Island, watch Smart Stack) |
+| `WatchWidgets/` | watchOS widget extension — the face complication |
 | `scripts/check-all.sh` | **The test suite.** Run this, not individual checks |
 | `docs/mac-remote-control.md` | The whole control surface, API and gotchas |
 | `~/.mesh/` | Deployed runtime: `meshd/`, `bin/`, `token`, `hosts.json`, `apns/` |
@@ -69,6 +82,13 @@ and `push.ts` both follow this.
   relaunches it), not wait to be told.
 - **Build gate**: `xcodegen generate`, then both schemes for generic simulator
   destinations, then `scripts/check-all.sh`. Never commit red.
+- **A deleted App ID cannot be reused.** Apple answers "not available", which reads
+  like a name clash. `…watchkitapp.complication` was burned this way; the target uses
+  `…watchkitapp.glance`.
+- **Anything shown in two places must come from one function.** The attention list,
+  the live card and the complication are three renderings of
+  `sessionsNeedingAttention`; the notification category string is grepped across
+  Swift and TypeScript by `check-mesh-push.sh` for the same reason.
 
 ## Devices
 
@@ -76,6 +96,17 @@ Physical iPhone 15 Pro (iOS 27) and Apple Watch Series 9 (watchOS 27) are paired
 this Mac for development and can be installed to directly with `devicectl`. **Xcode 27
 beta is required** (`DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer`);
 Xcode 26.6 only has the iOS 26.5 SDK and cannot deploy to these.
+
+## Onboarding (how anyone but you gets in)
+
+1. `curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh`
+2. `mesh pair` on that machine — prints an address and an 8-character code, 10 minutes,
+   one use.
+3. Phone → Machines → Pair. The daemon hands back its real token **and every host in
+   its `hosts.json`**, so a fleet takes one code. The watch inherits over WatchConnectivity.
+
+`/pair/claim` is the only route that answers without a token; see `meshd/pair.ts` for
+why that is safe. No machines ship compiled into the app.
 
 ## Secrets
 

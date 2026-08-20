@@ -211,7 +211,10 @@ struct MeshClient {
     /// Register this phone's APNs device token so meshd can push alerts directly.
     // ponytail: env hardcoded "dev" — flip to "prod" when a distribution-signed build exists.
     func registerPush(deviceToken: String) async throws {
-        let body = try JSONSerialization.data(withJSONObject: ["token": deviceToken, "env": "dev"])
+        // Read from the embedded profile, never hardcoded: a TestFlight build's token
+        // is only valid at the production gateway, and sending it to the sandbox one
+        // gets BadDeviceToken — which used to make meshd drop the device for good.
+        let body = try JSONSerialization.data(withJSONObject: ["token": deviceToken, "env": APNsEnvironment.current])
         _ = try await request("/push/register", method: "POST", body: body)
     }
 

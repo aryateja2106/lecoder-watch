@@ -123,6 +123,11 @@ export function buildPayload(
   };
 }
 
+/// A refusal that is explained by having asked the wrong APNs gateway.
+export function isWrongEnvironment(result: { status: number; reason?: string }): boolean {
+  return result.reason === "BadDeviceToken" || result.status === 400;
+}
+
 export async function pushAlert(
   title: string, body?: string, opts?: { level?: string; session?: string; host?: string },
 ) {
@@ -130,15 +135,33 @@ export async function pushAlert(
   if (!tokens.length) return { ok: false, sent: 0, reason: "no registered devices" };
   const payload = buildPayload(title, body, opts);
   let sent = 0;
+  let changed = false;
   const keep: DeviceToken[] = [];
   for (const dev of tokens) {
-    const r = await sendOne(dev, payload);
+    let r = await sendOne(dev, payload);
+    // BadDeviceToken usually means the token is dead — but it says exactly the same
+    // thing when the token is alive and we simply asked the wrong gateway. A build
+    // that moves from sideloaded to TestFlight flips environments, so try the other
+    // side once before writing the device off, and remember the answer.
+    if (!r.ok && isWrongEnvironment(r)) {
+      const flipped: DeviceToken = { ...dev, env: dev.env === "prod" ? "dev" : "prod" };
+      const retry = await sendOne(flipped, payload);
+      if (retry.ok) {
+        sent++;
+        keep.push(flipped);
+        changed = true;
+        continue;
+      }
+      r = retry;
+    }
     if (r.ok) sent++;
-    // 410 Gone / BadDeviceToken = token is dead, drop it; keep on transient failures.
-    if (r.status === 410 || r.reason === "BadDeviceToken") continue;
-    keep.push(dev);
+    if (r.status === 410 || r.reason === "BadDeviceToken" || r.reason === "Unregistered") {
+      changed = true;   // genuinely gone, on both gateways
+      continue;
+    }
+    keep.push(dev);     // transient: keep it and try again next time
   }
-  if (keep.length !== tokens.length) await writeTokens(keep);
+  if (changed) await writeTokens(keep);
   return { ok: sent > 0, sent, of: tokens.length };
 }
 

@@ -134,6 +134,27 @@ using daily. One slice at a time, full build gate, commit only when green.
   a rejected token routes to `mesh pair`. Fixed a regression from S13 — with
   `Machine.defaults` gone, an unpaired watch sat on "Connecting…" forever.
 
+- **S15 watch complication** — `WatchWidgets` app extension (watchOS, embedded in the
+  watch app) reading a small `WatchGlance` the app writes to the App Group
+  `group.com.lecoder.meshwatch` after every refresh. Four accessory families plus the
+  Smart Stack. `APP_GROUPS` enabled on `…watchkitapp` and `…watchkitapp.glance`.
+  The whole design turns on staleness: a complication cannot poll, so it shows the
+  app's last reading and degrades to a dash past 15 minutes — `check-glance` covers
+  that boundary and was negative-tested against a stale glance still asserting a count.
+  The timeline carries a second entry at the exact moment the reading goes stale, so
+  the face corrects itself without the app waking up.
+  Gotcha: `com.lecoder.meshwatch.watchkitapp.complication` came back "not available"
+  from Apple (a deleted App ID cannot be reused); `.glance` was created instead.
+
+- **S19 APNs environment** — found while verifying the archive: the app registered
+  `env: "dev"` unconditionally, but the archive signs `aps-environment` from the
+  profile, so a TestFlight build's token is a *production* token. Sent to the sandbox
+  gateway it returns `BadDeviceToken`, which `pushAlert` treated as a dead device and
+  deleted — first push after install, push gone forever, no error anywhere. Fixed on
+  both sides: `APNsEnvironment.current` parses the embedded profile, and meshd retries
+  the other gateway once and remembers the answer before dropping anything.
+  `check-apns-env` (negative-tested) and the push check cover it.
+
 ## In the morning
 
 1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →
@@ -156,8 +177,7 @@ three hardcoded machines; none of it is reachable by anyone else.
    `mesh pair` already emits is one step instead of two.
 
 **P1 — the watch is the product**
-3. **S15 watch widgets.** Smart Stack + watch-face complications: machines up, agents
-   waiting on you. This is the reason to keep the app on the wrist.
+3. ~~**S15 watch widgets.**~~ DONE — see Done.
 4. ~~**S16 actionable notifications.**~~ DONE — see Done. Needs a device to prove
    delivery end to end.
 5. ~~**S17 Live Activity.**~~ DONE — see Done.

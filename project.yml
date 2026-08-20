@@ -112,5 +112,30 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.watchkitapp
+        CODE_SIGN_ENTITLEMENTS: Watch/MeshWatchWatch.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "4"
+    dependencies:
+      - target: WatchWidgets
+        embed: true
+  WatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - path: Shared
+      - path: WatchWidgets
+    info:
+      path: WatchWidgets/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.watchkitapp.glance
+        CODE_SIGN_ENTITLEMENTS: WatchWidgets/WatchWidgets.entitlements
+        INFOPLIST_KEY_CFBundleDisplayName: Agents waiting
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: YES
+    dependencies:
+      - sdk: SwiftUI.framework
+      - sdk: WidgetKit.framework

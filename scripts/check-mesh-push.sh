@@ -65,6 +65,15 @@ if (!buildPayload("x", undefined, { level: "warning", session: "s" }).host) thro
 const huge = buildPayload("t".repeat(500), "b".repeat(5000), { level: "warning", session: "s", host: "h" });
 if (huge.aps.alert.title.length > 120 || huge.aps.alert.body.length > 500) throw new Error("alert text not clamped");
 
+// A BadDeviceToken is indistinguishable from "you asked the wrong gateway", and a
+// build moving from sideloaded to TestFlight flips environments. Dropping the device
+// on the first refusal is how push dies silently and permanently.
+const { isWrongEnvironment } = await import("./push.ts");
+if (!isWrongEnvironment({ status: 400, reason: "BadDeviceToken" })) throw new Error("BadDeviceToken must trigger the retry");
+if (!isWrongEnvironment({ status: 400 })) throw new Error("a bare 400 must trigger the retry");
+if (isWrongEnvironment({ status: 410, reason: "Unregistered" })) throw new Error("410 Unregistered is a real removal, not an environment mismatch");
+if (isWrongEnvironment({ status: 200 })) throw new Error("success is not a mismatch");
+
 console.log("check-mesh-push: OK");
 '
 

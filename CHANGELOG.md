@@ -10,6 +10,10 @@ each entry as you ship the slice, not at release time.
 ## [Unreleased]
 
 ### Added
+- **A watch-face complication.** How many agents are waiting on you, on your face all
+  day, in every accessory family (circular, corner, inline, rectangular) — plus the
+  watch Smart Stack. When nothing is waiting it shows how much of your mesh is up. When
+  the reading goes stale it says so rather than asserting a count from three hours ago.
 - **"Needs you" is now the top of both apps.** Every agent across every machine that is
   stopped waiting on you, newest first, with **Continue** on the row. This is the list
   the product is for; it used to be buried under a machine list. A question you have
@@ -60,6 +64,14 @@ each entry as you ship the slice, not at release time.
 - Machine names are shown as-is; the old code stripped one particular person's naming
   prefix and mangled everyone else's.
 - Pull to refresh on Machines.
+
+### Fixed
+- **Push would have died on its first TestFlight notification.** The app hardcoded the
+  sandbox APNs environment, but a TestFlight build's device token is only valid at the
+  production gateway — Apple answers `BadDeviceToken`, which meshd read as "this device
+  is gone" and unregistered it permanently, silently, with nothing to see anywhere. The
+  app now reads the environment out of its own embedded provisioning profile, and meshd
+  tries the other gateway once before writing any device off.
 
 ## [0.1.0] — 2026-08-20 · build 202608201519
 
