@@ -112,6 +112,26 @@ func normalizedPairingCode(_ input: String) -> String {
     input.uppercased().filter { $0.isASCII && ($0.isNumber || ($0.isLetter && $0.isUppercase)) }
 }
 
+/// `machineMatching` over snapshots rather than configs — same rules, and they have to
+/// stay the same rules, so both defer to `hostNamesMatch`.
+func snapshotMachineMatching(_ name: String, in machines: [MachineSnapshot]) -> MachineSnapshot? {
+    machines.first { $0.host == name }
+        ?? machines.first { hostNamesMatch($0.host, name) }
+}
+
+/// Do these two names refer to the same machine? Case-insensitive, and tolerant of one
+/// being the leading component of the other (`studio` vs `studio.local`,
+/// `dataflow` vs `dataflowagents`).
+func hostNamesMatch(_ a: String, _ b: String) -> Bool {
+    if a.lowercased() == b.lowercased() { return true }
+    func head(_ value: String) -> String {
+        value.lowercased().split(separator: ".").first.map(String.init) ?? value.lowercased()
+    }
+    let (x, y) = (head(a), head(b))
+    guard !x.isEmpty, !y.isEmpty else { return false }
+    return x == y || x.hasPrefix(y) || y.hasPrefix(x)
+}
+
 /// Find the machine a daemon means by `name`.
 ///
 /// The name in an APNs payload comes from `os.hostname()` on that machine, which is not
@@ -124,18 +144,9 @@ func normalizedPairingCode(_ input: String) -> String {
 /// session names are not unique across machines and typing Enter into the wrong box is
 /// worse than doing nothing.
 func machineMatching(_ name: String, in machines: [Machine]) -> Machine? {
-    if let exact = machines.first(where: { $0.host == name }) { return exact }
-    let wanted = name.lowercased()
-    if let insensitive = machines.first(where: { $0.host.lowercased() == wanted }) { return insensitive }
-    func head(_ value: String) -> String {
-        value.lowercased().split(separator: ".").first.map(String.init) ?? value.lowercased()
-    }
-    let wantedHead = head(name)
-    guard !wantedHead.isEmpty else { return nil }
-    return machines.first {
-        let mine = head($0.host)
-        return !mine.isEmpty && (mine == wantedHead || mine.hasPrefix(wantedHead) || wantedHead.hasPrefix(mine))
-    }
+    guard !name.isEmpty else { return nil }
+    return machines.first { $0.host == name }
+        ?? machines.first { hostNamesMatch($0.host, name) }
 }
 
 /// Fold newly paired hosts into the saved list. Identity is the address, because that
@@ -358,13 +369,19 @@ func sessionsNeedingAttention(from snapshot: MeshSnapshot) -> [LiveSessionPick] 
     }
 
     return (snapshot.events ?? []).reversed().compactMap { event -> LiveSessionPick? in
-        guard let host = event.host, let session = event.session else { return nil }
-        guard latestByKey["\(host)\u{1}\(session)"]?.id == event.id else { return nil }  // superseded
+        guard let eventHost = event.host, let session = event.session else { return nil }
+        guard latestByKey["\(eventHost)\u{1}\(session)"]?.id == event.id else { return nil }  // superseded
         let state = cardStateForLevel(event.level)
         guard state.wantsAttentionState else { return nil }
-        guard let agent = snapshot.machines.first(where: { $0.host == host })?
-                .agents.first(where: { $0.name == session }) else { return nil }
-        return LiveSessionPick(host: host, session: session, agentType: agent.agentType ?? "shell",
+        // The event carries the name the *daemon* uses — macOS says
+        // "Aryas-MacBook-Pro.local" where the app stored "Aryas-MacBook-Pro" — so an
+        // exact match finds nothing and the whole list stays silently empty. Observed
+        // live before this line existed.
+        guard let machine = snapshotMachineMatching(eventHost, in: snapshot.machines),
+              let agent = machine.agents.first(where: { $0.name == session }) else { return nil }
+        // Report the host the app knows, so the row, the reply and the deep link all
+        // address the same machine.
+        return LiveSessionPick(host: machine.host, session: session, agentType: agent.agentType ?? "shell",
                                state: state, lastLine: String((event.body ?? event.title).prefix(80)),
                                cpuPct: agent.cpuPct, memLabel: agent.memLabel)
     }

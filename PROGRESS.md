@@ -172,6 +172,20 @@ using daily. One slice at a time, full build gate, commit only when green.
   device is unproven, and that needs the phone.
   `check-mesh-hooks` was negative-tested against a merge that clobbers another tool.
 
+- **S21 verified in the simulator, and it found the bug** — first run of the app
+  against the live mesh. Confirmed: first-run empty state, the pairing screen, pairing's
+  own tokens authenticating two live machines over the tailnet, `pi` correctly offline,
+  one row per machine. Then "Needs you" did not appear for a real blocked agent:
+  macOS puts `.local` on the hostname in the event and the app compares it exactly with
+  the paired name, so `sessionsNeedingAttention` found no machine and returned nothing —
+  the flagship feature silently dead on every Mac. `snapshotMachineMatching` +
+  `hostNamesMatch` now back every lookup, the row reports the app's name so the reply
+  routes, and `check-live-card` carries the exact live case (negative-tested).
+  Then verified the payoff end to end: hook fired -> "Needs you" row with the body text
+  -> tapped **Continue** in the app -> Enter landed in the real rmux session on the Mac
+  and the pending line executed. Also verified with instrumentation that cold launch
+  publishes `attention=2`.
+
 ## In the morning
 
 1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →

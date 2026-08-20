@@ -15,15 +15,6 @@ The release that makes the app installable by someone who is not its author, and
 "an agent is waiting on you" into one tap on your wrist.
 
 ### Added
-- **`mesh hooks install` — the thing that makes all of the above actually fire.** Every
-  agent alert in this app starts with a hook an agent runs when it stops and waits for
-  you, and nothing was registering one: the tools were installed and the events never
-  came, which reads as "the app doesn't do that". The installer now wires it into
-  Claude Code automatically, merging into your existing settings rather than replacing
-  them, backing the file up first, and doing nothing on a re-run.
-- **Alerts now name the session you can actually answer.** The hook reports the
-  tmux/rmux session it is running inside; it used to fall back to the working
-  directory, which produced an alert you could see and could not reply to.
 - **A watch-face complication.** How many agents are waiting on you, on your face all
   day, in every accessory family (circular, corner, inline, rectangular) — plus the
   watch Smart Stack. When nothing is waiting it shows how much of your mesh is up. When
@@ -56,6 +47,16 @@ The release that makes the app installable by someone who is not its author, and
   for the daemon and useless for the phone.
 - A first-run screen that explains the two steps instead of showing an empty list.
 
+- **`mesh hooks install` — the thing that makes all of the above actually fire.** Every
+  agent alert in this app starts with a hook an agent runs when it stops and waits for
+  you, and nothing was registering one: the tools were installed and the events never
+  came, which reads as "the app doesn't do that". The installer now wires it into
+  Claude Code automatically, merging into your existing settings rather than replacing
+  them, backing the file up first, and doing nothing on a re-run.
+- **Alerts now name the session you can actually answer.** The hook reports the
+  tmux/rmux session it is running inside; it used to fall back to the working
+  directory, which produced an alert you could see and could not reply to.
+
 ### Known limits
 - The live card can only *start* while the app is open — an ActivityKit rule. From a
   pocket, the actionable notification is what reaches you and the card appears next
@@ -80,6 +81,11 @@ The release that makes the app installable by someone who is not its author, and
 - Pull to refresh on Machines.
 
 ### Fixed
+- **"Needs you" was empty on every Mac.** macOS reports its hostname with a `.local`
+  suffix in the event, while the app stores the name pairing gave it, and the two were
+  compared exactly — so a real blocked agent produced no row, no live card and no
+  complication count. Caught by running the app against a live daemon, not by reading
+  it. Every surface now matches host names the same way.
 - **Agent events graded `needs-input` or `finished` were being ignored.** Two
   vocabularies reach the event feed and only one was understood, so real alerts from
   some producers never reached the wrist. Both are accepted now, and a check compares

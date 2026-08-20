@@ -101,6 +101,30 @@ struct CheckLiveCard {
 
         assert(sessionsNeedingAttention(from: snapshot([])).isEmpty)
 
+        // Observed live, and it made the whole feature silently do nothing: macOS
+        // reports its hostname as "Aryas-MacBook-Pro.local" in the event, while the app
+        // stored "Aryas-MacBook-Pro" from pairing. An == match found no machine, so a
+        // real blocked agent produced no row anywhere.
+        let dotted = MeshSnapshot(updatedISO: "", machines: [machine("Aryas-MacBook-Pro", [agent("deploy-api")])])
+        var withEvent = dotted
+        withEvent.events = [event("Aryas-MacBook-Pro.local", "deploy-api", level: "warning",
+                                  title: "Claude needs attention", body: "run git push --force?")]
+        let matched = sessionsNeedingAttention(from: withEvent)
+        assert(matched.count == 1, "a .local hostname in the event must still find the machine")
+        assert(matched[0].host == "Aryas-MacBook-Pro",
+               "the row must carry the name the app knows, so the reply reaches the same machine")
+
+        // The daemon's own name vs a hosts.json key, the other direction.
+        var keyed = MeshSnapshot(updatedISO: "", machines: [machine("dataflow", [agent("build")])])
+        keyed.events = [event("dataflowagents", "build", level: "error", title: "failed")]
+        assert(sessionsNeedingAttention(from: keyed).first?.host == "dataflow")
+
+        // Tolerance must not become guessing: an unrelated machine still matches nothing.
+        var wrong = MeshSnapshot(updatedISO: "", machines: [machine("studio", [agent("api")])])
+        wrong.events = [event("someone-elses-laptop", "api", level: "warning", title: "x")]
+        assert(sessionsNeedingAttention(from: wrong).isEmpty,
+               "a different machine with a same-named session must never match")
+
         // Two vocabularies reach /events. Real events on this mesh have used
         // "needs-input" and "finished" as levels, not only mesh-hook's warning/info.
         for level in ["warning", "needs-input", "needs_input", "NEEDS-INPUT", "error", "failed"] {

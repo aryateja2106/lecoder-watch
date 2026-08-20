@@ -73,11 +73,13 @@ ASC_KEY_ID=Y4MR7X24UL ASC_ISSUER_ID=<uuid> sh scripts/release-testflight.sh
 or `asc`, which already holds the credentials in the keychain and needs no issuer id:
 
 ```bash
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-asc publish testflight --app 6803438426 --project MeshWatch.xcodeproj --scheme MeshWatch \
-  --version 0.1.0 --build-number "$(date +%Y%m%d%H%M)" --configuration Release \
-  --upload-only --wait --output json
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer asc publish testflight --app 6803438426 --project MeshWatch.xcodeproj --scheme MeshWatch --version 0.2.0 --build-number "$(date +%Y%m%d%H%M)" --configuration Release --upload-only --wait --output json
 ```
+
+`asc` holds the issuer id in the keychain and never prints it, so `xcodebuild` invoked
+directly cannot use `-authenticationKeyPath` (it demands `-authenticationKeyIssuerID`
+alongside). Plain `-allowProvisioningUpdates` works instead — Xcode's signed-in account
+covers it — which is what `scripts/release-testflight.sh` and the probe archives use.
 
 Which runs the self-checks, archives Release, and exports straight to App Store
 Connect. Build numbers are a UTC timestamp because App Store Connect refuses a reused
@@ -101,9 +103,24 @@ asc testflight groups list --app <APP_ID>
 
 - App Store Connect app id **6803438426** (`LeSearch Mesh`, `com.lecoder.meshwatch`)
 - Internal TestFlight group **f0b2cc09-9776-409c-865a-4706e881bccd**
-- First build: **0.1.0 (202608201519)**, processingState VALID
+- Bundle IDs: app `com.lecoder.meshwatch` · watch `…watchkitapp` ·
+  iOS widget `…widgets` · watch complication `…watchkitapp.glance`
+- App Group `group.com.lecoder.meshwatch` — Xcode creates and assigns it itself once
+  `APP_GROUPS` is on both watch bundle IDs; there is no `asc` command for it.
+- Release notes come from the top section of `CHANGELOG.md`.
 
 ## Gotchas already paid for
+
+- **Every app extension needs `CFBundleDisplayName` in its Info.plist** or processing
+  fails with **90360**, once per extension. `INFOPLIST_KEY_CFBundleDisplayName` does
+  *not* supply it here: that build setting is only read when `GENERATE_INFOPLIST_FILE`
+  is `YES`, and this project sets it to `NO` project-wide. Put the key in the plist.
+- **A deleted App ID cannot be reused.** Apple answers "An App ID with Identifier … is
+  not available", which reads like someone else took it. Pick a different suffix.
+- **The APNs environment comes from the provisioning profile, not the build config.**
+  TestFlight and App Store builds are signed `aps-environment = production`; a token
+  from one of those is rejected by the sandbox gateway with `BadDeviceToken`. The app
+  reads its own embedded profile (`Shared/APNsEnvironment.swift`) rather than guessing.
 
 - **Two Xcodes, and using the wrong one wastes a build number.**
   - *Installing to the devices* needs **Xcode 27 beta** — they run iOS/watchOS 27 and
