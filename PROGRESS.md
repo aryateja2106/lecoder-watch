@@ -186,6 +186,22 @@ using daily. One slice at a time, full build gate, commit only when green.
   and the pending line executed. Also verified with instrumentation that cold launch
   publishes `attention=2`.
 
+- **S22 the loop is live on both machines** — pairing + `mesh hooks` deployed to
+  dataflow as well. That lineage is older (`async fetch(req)`, no loopback exemption),
+  so the module+two-line patch needed `server` threading through as well; backups at
+  `~/.mesh/meshd/server.ts.pre-pair-*`. Verified on Linux: `mesh pair` mints a code,
+  the Mac claims it unauthenticated and gets a 64-char token back, `mesh hooks install`
+  merged into that box's `~/.claude/settings.json`, and a hook fired from a real tmux
+  session produced an event with `session: linux-agent` at `level: warning`.
+  The `~/.mesh/token`-vs-unit-token trap MEMORY warned about is gone — both are the
+  same 64-char token now.
+- **0.2.0 on TestFlight** — build `202608201718`, VALID, attached to the internal group
+  with What-to-Test notes generated from `CHANGELOG.md`. Two builds were burned getting
+  there: `202608201642` (90360, every app extension needs `CFBundleDisplayName` in its
+  own plist — `INFOPLIST_KEY_*` does nothing while `GENERATE_INFOPLIST_FILE` is `NO`)
+  and `202608201652` (shipped before the `.local` host-matching fix, so "Needs you"
+  would have been empty on every Mac).
+
 ## In the morning
 
 1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →
