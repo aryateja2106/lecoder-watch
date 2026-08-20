@@ -349,6 +349,12 @@ struct LiveSessionPick: Hashable {
     var lastLine: String
     var cpuPct: Double?
     var memLabel: String?
+    /// When the agent stopped, so the row can count the wait up live instead of
+    /// re-rendering on a poll. Nil for a session picked because it is being watched
+    /// rather than because it is blocked — that one is not waiting on anybody.
+    var blockedSince: Date?
+    /// What answering would actually do. See `classifyRisk`.
+    var risk: RiskVerdict = .safe
 }
 
 /// Every session across the whole mesh that is stopped waiting on a human, newest
@@ -381,9 +387,15 @@ func sessionsNeedingAttention(from snapshot: MeshSnapshot) -> [LiveSessionPick] 
               let agent = machine.agents.first(where: { $0.name == session }) else { return nil }
         // Report the host the app knows, so the row, the reply and the deep link all
         // address the same machine.
+        let line = String((event.body ?? event.title).prefix(80))
         return LiveSessionPick(host: machine.host, session: session, agentType: agent.agentType ?? "shell",
-                               state: state, lastLine: String((event.body ?? event.title).prefix(80)),
-                               cpuPct: agent.cpuPct, memLabel: agent.memLabel)
+                               state: state, lastLine: line,
+                               cpuPct: agent.cpuPct, memLabel: agent.memLabel,
+                               blockedSince: ISO8601DateFormatter().date(from: event.createdISO),
+                               // Classify the question, not the title: the title is
+                               // usually boilerplate ("Claude needs attention") while
+                               // the body carries the command being asked about.
+                               risk: classifyRisk(event.body ?? event.title))
     }
 }
 
@@ -407,7 +419,11 @@ func liveSessionPick(from snapshot: MeshSnapshot) -> LiveSessionPick? {
         let last = lines.last { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? ""
         return LiveSessionPick(host: host, session: name, agentType: match.agentType ?? "shell",
                                state: state, lastLine: String(last.prefix(80)),
-                               cpuPct: match.cpuPct, memLabel: match.memLabel)
+                               cpuPct: match.cpuPct, memLabel: match.memLabel,
+                               blockedSince: nil,
+                               // A watched session's own output can still be a prompt
+                               // about something destructive, so classify it too.
+                               risk: classifyRisk(last))
     }
 
     return nil

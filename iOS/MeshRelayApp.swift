@@ -43,7 +43,7 @@ struct MeshRelayApp: App {
             ContentView()
                 .environmentObject(store)
                 .onAppear {
-                    NotificationManager.shared.requestAuthorization()
+                    NotificationManager.shared.requestAuthorizationOncePaired(hasMachines: !store.machines.isEmpty)
                     UIApplication.shared.registerForRemoteNotifications()
                     store.start()
                 }

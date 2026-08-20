@@ -334,32 +334,73 @@ private struct MachineDetailView: View {
 
 /// One blocked agent, on the phone. Continue answers it in place; tapping the row
 /// opens the session for anything that needs more than Enter.
+/// One blocked agent. Same shape as the watch's row, deliberately: the two surfaces
+/// have to agree about what a destructive answer looks like, or the habit you build on
+/// one of them gets you on the other.
+///
+/// The affirmative is not inside a row-wide tap target. It sends Return into a live
+/// shell, and Return takes whichever option the agent highlighted — so it is a "yes",
+/// and a yes must be its own deliberate control.
 private struct AttentionRow: View {
     @EnvironmentObject var store: MeshStore
     let item: LiveSessionPick
+    @State private var answered = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: item.state.symbol)
-                .foregroundStyle(item.state.tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.session).font(.headline).lineLimit(1)
-                if !item.lastLine.isEmpty {
-                    Text(item.lastLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: item.state.symbol)
+                    .font(.footnote)
+                    .foregroundStyle(item.state.tint)
+                Text(item.session).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text("·").foregroundStyle(.tertiary)
+                Text(machineShortName(item.host)).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 4)
+                if let since = item.blockedSince {
+                    Text(since, style: .timer)
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
-                Text(machineShortName(item.host)).font(.caption2).foregroundStyle(.secondary)
             }
-            Spacer()
-            Button("Continue") {
-                Task { await store.respondToAgent(host: item.host, session: item.session, text: nil, key: "enter") }
+
+            if !item.lastLine.isEmpty {
+                Text(item.lastLine)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(9)
+                    .background(RoundedRectangle(cornerRadius: 9).fill(.quaternary.opacity(0.5)))
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
+
+            if item.risk.isDestructive, let why = item.risk.consequence {
+                Label(why, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.red)
+            }
+
+            HStack(spacing: 10) {
+                Button(answered ? "Sent" : item.risk.verb) {
+                    Task { await store.respondToAgent(host: item.host, session: item.session, text: nil, key: "enter") }
+                    answered = true
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(item.risk.isDestructive ? .red : .orange)
+                .controlSize(.small)
+                .disabled(answered)
+
+                Button("Open session") {
+                    store.deepLinkSession = MeshStore.SessionTarget(host: item.host, session: item.session)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Spacer()
+            }
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            store.deepLinkSession = MeshStore.SessionTarget(host: item.host, session: item.session)
-        }
+        .padding(.vertical, 4)
     }
 }
 

@@ -77,6 +77,9 @@ final class MeshStore: ObservableObject {
         guard !hosts.isEmpty else { throw MeshClient.MeshError.decode }
         machines = mergingPairedHosts(machines, hosts)
         save()
+        // The highest-intent moment in the app: they just connected a machine, so
+        // "let this thing alert you about it" now has an obvious referent.
+        NotificationManager.shared.requestAuthorizationOncePaired(hasMachines: !machines.isEmpty)
         await refresh()
         return hosts
     }

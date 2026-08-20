@@ -53,11 +53,26 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         AgentNotification.registerCategories()
     }
 
-    func requestAuthorization() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-            DispatchQueue.main.async {
-                self.authorizationDenied = !granted
+    /// Ask only once the app has a machine to alert you about.
+    ///
+    /// iOS shows this prompt exactly once, ever. Firing it on first launch asks a
+    /// stranger to accept alerts from an app that has nothing to alert them about
+    /// yet — and a denial permanently kills the one loop this product exists for,
+    /// with no second prompt and no way back except a trip through Settings. After
+    /// pairing there is a real answer to "alerts about what": that machine's agents.
+    func requestAuthorizationOncePaired(hasMachines: Bool) {
+        guard hasMachines else { return }
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else {
+                DispatchQueue.main.async {
+                    self.authorizationDenied = settings.authorizationStatus == .denied
+                }
+                return
             }
+            UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                    DispatchQueue.main.async { self.authorizationDenied = !granted }
+                }
         }
     }
 

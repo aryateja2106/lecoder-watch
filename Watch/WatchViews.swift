@@ -44,6 +44,15 @@ struct MachinesListView: View {
                     Label("Needs you", systemImage: "exclamationmark.bubble.fill")
                         .foregroundStyle(.orange)
                 }
+            } else if !store.machines.isEmpty {
+                // Say "nothing is waiting" out loud. Rendering nothing makes an all-clear
+                // look exactly like a dead poll, and on a glance surface that ambiguity
+                // is the whole failure — you cannot tell whether to trust the silence.
+                Section {
+                    Label("Nothing waiting on you", systemImage: "checkmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             if let glance = limitsGlance {
                 Section {
@@ -168,36 +177,83 @@ struct MachinesListView: View {
     }
 }
 
-/// One blocked agent. Continue is right here because it is the answer most of the
-/// time; anything else is one tap away in the session itself.
+/// One blocked agent, and the answer to it.
+///
+/// The previous version put the Continue button *inside* a `NavigationLink`'s label.
+/// A ~24pt affirmative control nested in a full-row tap target, on a watch, wired to
+/// press Return in a live shell: whichever of the two the system decided a given tap
+/// belonged to, the user could not tell by looking. Now the actions are siblings of
+/// the content and the row itself navigates nowhere — you reach the session through
+/// the chevron, deliberately.
+///
+/// The question is also promoted from `.caption2`/`.secondary` to the visual payload
+/// of the row. It was smaller and dimmer than the session name, which is the least
+/// useful string here.
 private struct AttentionRow: View {
     @EnvironmentObject var store: WatchMeshStore
     let item: LiveSessionPick
+    @State private var answered = false
 
     var body: some View {
-        NavigationLink {
-            AgentLiveView(host: item.host, agent: item.session).environmentObject(store)
-        } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
-                    Image(systemName: item.state.symbol).foregroundStyle(item.state.tint)
-                    Text(item.session).font(.headline).lineLimit(1)
-                }
-                if !item.lastLine.isEmpty {
-                    Text(item.lastLine).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-                }
-                HStack {
-                    Text(shortName(item.host)).font(.caption2).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Continue") {
-                        store.respondToAgent(host: item.host, session: item.session, text: nil, key: "enter")
-                        WKInterfaceDevice.current().play(.success)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 5) {
+                Image(systemName: item.state.symbol)
+                    .font(.caption2)
+                    .foregroundStyle(item.state.tint)
+                Text(item.session).font(.caption.weight(.semibold)).lineLimit(1)
+                Text("·").foregroundStyle(.tertiary)
+                Text(shortName(item.host)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 4)
+                if let since = item.blockedSince {
+                    // Counts up on its own — no poll, and the number that says how
+                    // long your Mac has been sitting there waiting for you.
+                    Text(since, style: .timer)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
+
+            if !item.lastLine.isEmpty {
+                Text(item.lastLine)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(6)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
+            }
+
+            if item.risk.isDestructive, let why = item.risk.consequence {
+                Label(why, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
+
+            HStack(spacing: 6) {
+                Button(answered ? "Sent" : item.risk.verb) {
+                    store.respondToAgent(host: item.host, session: item.session, text: nil, key: "enter")
+                    WKInterfaceDevice.current().play(.success)
+                    answered = true
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(item.risk.isDestructive ? .red : .orange)
+                .controlSize(.small)
+                .disabled(answered)
+                .frame(maxWidth: .infinity)
+
+                NavigationLink {
+                    AgentLiveView(host: item.host, agent: item.session).environmentObject(store)
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .fixedSize()
+            }
         }
+        .padding(.vertical, 2)
     }
 }
 

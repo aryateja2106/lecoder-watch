@@ -12,6 +12,8 @@ struct CheckLiveCard {
         checkNewestBlockedWins()
         checkWatchedSession()
         checkAttentionBeatsWatched()
+        checkBlockedSince()
+        checkRiskReachesTheRow()
         print("check-live-card: OK")
     }
 
@@ -210,6 +212,65 @@ struct CheckLiveCard {
         // rather than a card naming a machine we cannot reach.
         let dropped = snapshot([], watchedHost: "studio", watchedAgent: "api", watchedOutput: ["x"])
         assert(liveSessionPick(from: dropped) == nil)
+    }
+
+    // The row counts the wait up live from this stamp. If it does not survive the trip
+    // from the event, the timer silently renders from a nil date and the number that
+    // makes this product feel urgent never appears.
+    static func checkBlockedSince() {
+        let snap = snapshot([machine("studio", [agent("api")])],
+                            events: [event("studio", "api", level: "warning",
+                                           at: "2026-08-20T09:30:00Z")])
+        let pick = sessionsNeedingAttention(from: snap).first
+        assert(pick?.blockedSince != nil, "the block time has to reach the row")
+        let expected = ISO8601DateFormatter().date(from: "2026-08-20T09:30:00Z")
+        assert(pick?.blockedSince == expected, "and be the event's own time, not now")
+
+        // A watched-but-not-blocked session is not waiting on anyone, so it must not
+        // grow a stopwatch implying it is.
+        let watched = snapshot([machine("studio", [agent("api")])],
+                               watchedHost: "studio", watchedAgent: "api",
+                               watchedOutput: ["building…"])
+        assert(liveSessionPick(from: watched)?.blockedSince == nil)
+    }
+
+    // The verb on the button comes from this. A miss here arms a red-tinted "yes" as a
+    // calm "Continue" — which is exactly the button nobody should press by reflex.
+    static func checkRiskReachesTheRow() {
+        // Classify the body, not the title: mesh-hook's title is boilerplate.
+        let risky = snapshot(
+            [machine("studio", [agent("deploy")])],
+            events: [event("studio", "deploy", level: "warning",
+                           title: "Claude needs attention", body: "run git push --force?")],
+        )
+        let pick = sessionsNeedingAttention(from: risky).first
+        assert(pick?.risk.isDestructive == true, "a force push must reach the row as destructive")
+        assert(pick?.risk.verb == "Force push", "and name itself, got \(pick?.risk.verb ?? "nil")")
+        assert(pick?.risk.consequence != nil)
+
+        // An ordinary question keeps the plain label.
+        let calm = snapshot(
+            [machine("studio", [agent("api")])],
+            events: [event("studio", "api", level: "warning",
+                           title: "Claude needs attention", body: "Allow edit to src/auth.rs?")],
+        )
+        assert(sessionsNeedingAttention(from: calm).first?.risk.verb == "Continue")
+
+        // The session name is never evidence: a session called deploy-api asking
+        // something harmless stays calm.
+        let named = snapshot(
+            [machine("studio", [agent("deploy-api")])],
+            events: [event("studio", "deploy-api", level: "warning", title: "Ready to continue?")],
+        )
+        assert(sessionsNeedingAttention(from: named).first?.risk.isDestructive == false,
+               "the session name must not turn the button red")
+
+        // Falls back to the title when the hook sent no body.
+        let titleOnly = snapshot(
+            [machine("studio", [agent("api")])],
+            events: [event("studio", "api", level: "warning", title: "rm -rf build — ok?")],
+        )
+        assert(sessionsNeedingAttention(from: titleOnly).first?.risk.verb == "Delete files")
     }
 
     // Both reasons at once: the blocked session outranks the one being watched, because
