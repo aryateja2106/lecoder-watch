@@ -5,6 +5,7 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+command -v bun >/dev/null 2>&1 || { echo "check-mesh-auth: SKIP (bun not installed)"; exit 0; }
 cd "$ROOT/install/payload/meshd"
 
 bun -e '

@@ -73,6 +73,9 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Install bun (for the daemon self-checks)
+        uses: oven-sh/setup-bun@v2
+
       - name: Generate Xcode project
         run: xcodegen generate
 

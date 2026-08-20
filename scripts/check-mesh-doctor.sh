@@ -7,6 +7,7 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+command -v bun >/dev/null 2>&1 || { echo "check-mesh-doctor: SKIP (bun not installed)"; exit 0; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
