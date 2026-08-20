@@ -38,13 +38,37 @@ dozens of events; a process launch each would be all latency. meshd builds
 lineages have drifted (see CONTEXT). Anything bigger creates a merge conflict for
 whoever owns the other copy.
 
-**Auth is header-only off-box; loopback is exempt.** A `?token=` leaks into proxy logs
-and browser history — that hardening is deliberate, keep it. Loopback is exempt
-because a process running as this user can already read `~/.mesh/token` and execute
-anything; the exemption is judged from the socket peer address, never a header.
+**Auth is header-only, fail-closed, constant-time, off-box; loopback is exempt.**
+A `?token=` leaks into proxy logs and browser history — header-only is deliberate.
+An empty MESHD_TOKEN no longer means "open" (which would be an RCE from a misconfigured
+unit file); it means loopback-only. Loopback is exempt because a process running as
+this user can already read `~/.mesh/token` and execute anything; the exemption is
+judged from socket peer address via `server.requestIP`, never from a header. Before
+the exemption or the token can wave a request through, `server.ts` rejects browser
+attacks: any Origin header or cross-site Sec-Fetch-Site (page attacking loopback
+from another origin) and any mismatched Host header (DNS rebinding). So the loopback
+exemption is safe — it can only be reached by a process on this machine, or by a
+tool that knows the tailnet address and has the right token.
 
 **No restart/shutdown in `/system`.** They kill every running agent session and a
 wrist tap is too cheap for that. Sleep is included but needs two taps.
+
+**One buzz per question, not per event.** Push would storm the wrist if every
+transition between 10 states got a new alert. `push.ts` dedupes on
+`alertKey(title, body, {session, host})` with a 10-minute sliding window: if the same
+title + body hit the same session + host within 10 minutes, `shouldSend` returns false
+and the alert is dropped. The dedupe window is exported so `/push/test` can force
+through. This is why a stuck agent shows one buzzing alert every 10 min, not silent
+disconnects or an alert storm when it fixes itself.
+
+**`mesh doctor` is the single truth about permissions.** Accessibility and
+Screen Recording are TCC grants that fail silently (no error, just broken behavior:
+clicks vanish, screenshots show only wallpaper). `doctor.ts` does not query intentions
+or check settings — it runs the real operations (`inputStatus(prompt)` exercises input,
+`doctorReport` captures a screenshot) and reports success/failure. GET /doctor reads
+without prompting; POST /doctor/fix shows the real macOS permission dialogs. An agent
+scripting this can do `curl http://127.0.0.1:8899/doctor/fix` and the user gets a
+button to click instead of a Settings scavenger hunt.
 
 **No root helper / XPC / sudo daemon.** meshd can already run anything through a
 session, so a privileged daemon is a large new attack surface for no new capability.

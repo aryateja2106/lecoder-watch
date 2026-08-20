@@ -82,6 +82,32 @@ where driving your Mac from your phone is a real trackpad rather than a web page
 - A glance written by 0.2.0 would have failed to decode on upgrade and blanked the
   complication until the app next refreshed.
 
+### Security and infrastructure
+- **The daemon hardens against browser attacks.** A page from another origin cannot
+  request `http://127.0.0.1:8899` by sending a cross-site fetch with a spoofed Host
+  header (DNS rebinding). `meshd` now rejects any request with an Origin header or
+  cross-site Sec-Fetch-Site (checked before the auth gate), and validates the Host
+  header against known Tailscale and local addresses. The loopback exemption is safe —
+  it can only be reached by a process on this machine or by a tool with the right token
+  and tailnet address.
+- **`mesh doctor` — test what the daemon can actually do.** Accessibility and
+  Screen Recording are TCC grants that fail silently: clicks vanish, screenshots show
+  only wallpaper. `GET /doctor` tests all systems without prompting; `POST /doctor/fix`
+  shows the real macOS permission dialogs so the user gets a button instead of a
+  Settings scavenger hunt. `mesh doctor [--fix]` on the CLI does the same. Capabilities
+  are advertised on `/health` and the app gates its UI on them — Linux now says it has
+  no screen capture instead of spinning on a screenshot that is never coming.
+- **Bearer tokens are now fail-closed.** An empty `MESHD_TOKEN` used to mean "open";
+  it now means loopback-only (header-only, matched with constant-time compare). A
+  misconfigured unit file can no longer accidentally RCE. Tokens are stored mode 600
+  in `~/.mesh/token` and `~/.mesh/hosts.json` (one per machine after pairing).
+- **Push alerts dedupe on the question, not every state transition.** If the same title
+  and body hit the same session and host within a 10-minute window, `shouldSend` drops
+  the alert so a stuck agent buzzes once every 10 minutes, not an alert per state change.
+- **Permissions are verified by exercising the real path.** `mesh-input.swift` now
+  preflights Screen Recording with `CGPreflightScreenCaptureAccess()` before the daemon
+  tries to use it, so a grant denial is caught early, not on first screencap.
+
 ### Known limits
 - The Live Activity still has no buttons on the card, and can only be *started* while
   the app is in the foreground — from a cold pocket you get the notification but not

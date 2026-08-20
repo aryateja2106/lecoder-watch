@@ -41,7 +41,7 @@ Watch ──URLSession──▶ meshd ──▶ mesh-input (CGEvent/AXUIElement)
 
 | Path | What |
 |---|---|
-| `install/payload/meshd/` | **Canonical** meshd. `server.ts`, `input.ts` (Mac control), `push.ts` (APNs), `kb.ts`, `desktop.html` |
+| `install/payload/meshd/` | **Canonical** meshd. `server.ts`, `auth.ts` (fail-closed bearer, constant-time), `doctor.ts` (GET /doctor, POST /doctor/fix), `input.ts` (Mac control), `push.ts` (APNs, one-buzz dedupe), `kb.ts`, `desktop.html` |
 | `install/payload/bin/` | `mesh-input.swift`, `mesh` CLI, hooks |
 | `install/install.sh` | The one-curl installer. Detects OS/arch/multiplexer |
 | `Shared/` | `Models.swift` (wire types + pure helpers incl. pairing, attention, live-card selection), `MeshClient.swift`, `AgentNotifications.swift` (the notification-action contract), `SessionCard.swift` (SwiftUI status vocabulary), `SessionActivity.swift`, `WatchGlance.swift` (complication data + App Group) |
@@ -68,7 +68,10 @@ and `push.ts` both follow this.
 - **Accessibility trust is per-binary and per-process-launch.** A helper run from a
   terminal inherits the terminal's grant and prints `trusted:true` while the launchd
   daemon is deaf. Only `curl .../input` against `:8899` tells the truth. Recompiling
-  the helper voids the grant.
+  the helper voids the grant. **TCC grants only prompt the process that needs them** —
+  use `mesh doctor --fix` to trigger them from the daemon itself, not from a test script.
+  Screencapture fails silently without a grant (no error, just a wallpaper image) — that
+  is why `doctor.ts` exercises the real path instead of querying intentions.
 - **Swift strips `assert` under `-O`.** An optimised build of an assert-based check
   passes with a broken implementation. Always `sh scripts/check-all.sh` (`-Onone`).
 - **Absolute cursor jumps must not carry a mouse delta.** The WindowServer re-derives
@@ -89,6 +92,12 @@ and `push.ts` both follow this.
   the live card and the complication are three renderings of
   `sessionsNeedingAttention`; the notification category string is grepped across
   Swift and TypeScript by `check-mesh-push.sh` for the same reason.
+- **Browser attacks on loopback and DNS rebinding.** A page from another origin can
+  attack `http://127.0.0.1:8899/` by sending a cross-site fetch with a spoofed Host
+  header (DNS rebinding). `server.ts` rejects any request with an Origin header or a
+  cross-site Sec-Fetch-Site before the loopback exemption, and validates the Host
+  header against known Tailscale and local addresses — that gate runs before the auth
+  check, so neither the token nor the IP exemption can bypass it.
 
 ## Devices
 
