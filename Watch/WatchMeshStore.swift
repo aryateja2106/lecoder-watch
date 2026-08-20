@@ -29,6 +29,15 @@ final class WatchMeshStore: ObservableObject {
     @Published var lastPhoneReplyAt: Date?
     @Published var phoneReplyMachineCount: Int?
     @Published var phoneLinkNote: String?
+    /// The last time *any* path (phone reply or a direct poll) gave us real data. The
+    /// connection phase is judged from this, not from WCSession's reachability flag,
+    /// which flaps to false every few seconds when the phone app suspends.
+    @Published private var lastGoodContact: Date?
+
+    /// How connected we actually are. The UI keys off this instead of `phoneReachable`
+    /// so a momentary WCSession drop doesn't read as "offline" over a 6-second-old
+    /// snapshot. See `connectionPhase`.
+    var connectionState: ConnectionPhase { connectionPhase(lastContact: lastGoodContact) }
 
     struct WatchTarget: Equatable { let host: String; let agent: String; let pane: String? }
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
@@ -105,9 +114,13 @@ final class WatchMeshStore: ObservableObject {
             return "via phone"
         }
         if relayed?.machines.contains(where: { $0.host == host && $0.reachable }) == true {
-            return phoneReachable ? "phone relay" : "phone snapshot"
+            return connectionState == .offline ? "phone snapshot" : "via phone"
         }
-        return phoneReachable ? "phone ready" : "offline"
+        switch connectionState {
+        case .live, .reconnecting: return "reconnecting"
+        case .waiting: return "connecting"
+        case .offline: return "offline"
+        }
     }
 
     private var pollTask: Task<Void, Never>?
@@ -179,7 +192,18 @@ final class WatchMeshStore: ObservableObject {
             }
         }
         WatchLink.shared.onReachable = { [weak self] r in
-            Task { @MainActor in self?.phoneReachable = r }
+            Task { @MainActor in
+                guard let self else { return }
+                let regained = r && !self.phoneReachable
+                self.phoneReachable = r
+                // The phone just became reachable — don't sit out the rest of the 6s
+                // poll interval. Clear the direct backoff too: a watch that walked back
+                // into range can reach its machines directly again right now.
+                if regained {
+                    self.directBlockedUntil.removeAll()
+                    await self.refresh()
+                }
+            }
         }
         WatchLink.shared.activate()
 
@@ -213,6 +237,7 @@ final class WatchMeshStore: ObservableObject {
             return
         }
         lastPhoneReplyAt = Date()
+        lastGoodContact = Date()
         phoneReplyMachineCount = snap.machines.count
         phoneLinkNote = snap.machines.isEmpty ? "iPhone answered, but has no machines paired" : nil
         relayed = snap
@@ -229,16 +254,27 @@ final class WatchMeshStore: ObservableObject {
         if lastPhoneReplyAt != nil {
             return ("Nothing to show yet", phoneLinkNote ?? "Your iPhone answered but sent no machines.")
         }
-        if !phoneReachable {
+        // Only call it unreachable after we have actually been out of contact a while —
+        // a cold start or a momentary drop should read as "connecting", not a fault.
+        switch connectionState {
+        case .offline:
             return ("iPhone not reachable",
                     "Keep your iPhone nearby and unlocked, then open LeSearch Mesh on it once. The watch reaches your machines through the phone.")
+        default:
+            return ("Connecting…", "Reaching your iPhone. Keep it nearby and unlocked.")
         }
-        return ("Waiting for your iPhone", phoneLinkNote ?? "Asking your iPhone for your machines…")
     }
 
     /// A line the user can read out to us when it is still not working.
     var linkStatusLine: String {
-        var parts = [phoneReachable ? "iPhone reachable" : "iPhone unreachable"]
+        let phase: String
+        switch connectionState {
+        case .live: phase = "Live"
+        case .reconnecting: phase = "Reconnecting"
+        case .offline: phase = "Offline"
+        case .waiting: phase = "Connecting"
+        }
+        var parts = [phase, phoneReachable ? "iPhone reachable" : "iPhone asleep"]
         if let at = lastPhoneReplyAt {
             parts.append("replied \(Int(Date().timeIntervalSince(at)))s ago")
         } else {
@@ -294,6 +330,11 @@ final class WatchMeshStore: ObservableObject {
         }
         for snap in results {
             noteDirect(host: snap.host, ok: snap.reachable && snap.authError == nil)
+        }
+        // A direct poll that reached a machine is contact too, so a watch on the same
+        // network as a host stays "live" even when the phone is asleep.
+        if results.contains(where: { $0.reachable && $0.authError == nil }) {
+            lastGoodContact = Date()
         }
         // Hosts we skipped keep their last direct result rather than flapping to
         // "unreachable" — the relayed snapshot is what the UI shows for them anyway.

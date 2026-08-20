@@ -344,6 +344,34 @@ func parseISO(_ iso: String?) -> Date? {
     return plain.date(from: iso)
 }
 
+// MARK: - Connection phase
+
+/// How connected the watch is, judged by the age of the last good snapshot — not by
+/// the WCSession reachability flag.
+public enum ConnectionPhase: String, Hashable {
+    case waiting      // never heard back yet (cold start)
+    case live         // a fresh snapshot; treat as connected
+    case reconnecting // briefly out of contact, still showing the last data
+    case offline      // out of contact long enough to mean it
+}
+
+/// The watch has no Tailscale of its own, so it reaches the mesh through the phone —
+/// and WCSession drops `isReachable` to false the instant the phone app suspends,
+/// which is every few seconds. Surfacing that raw flag is exactly why the connection
+/// "feels unstable": a snapshot six seconds old is fine, but the flag already says
+/// offline. So the phase is judged purely by how long since a *good* snapshot last
+/// arrived, from either path. Inside the grace window we keep showing the last data
+/// and say "reconnecting", never "offline" — the poll is every 6s, so a single missed
+/// round trip never crosses `live`.
+public func connectionPhase(lastContact: Date?, now: Date = Date(),
+                            live: TimeInterval = 20, grace: TimeInterval = 75) -> ConnectionPhase {
+    guard let lastContact else { return .waiting }
+    let age = now.timeIntervalSince(lastContact)
+    if age <= live { return .live }
+    if age <= grace { return .reconnecting }
+    return .offline
+}
+
 // MARK: - Agent hooks
 
 struct AgentEvent: Codable, Hashable, Identifiable {
