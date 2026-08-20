@@ -38,6 +38,8 @@ targets:
       path: Generated/iOS-Info.plist
       properties:
         CFBundleDisplayName: MeshWatch
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
