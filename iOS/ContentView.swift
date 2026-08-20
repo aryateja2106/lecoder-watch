@@ -80,6 +80,34 @@ private struct MonitorTab: View {
     }
 }
 
+/// Shown when iOS is silently dropping our traffic. Without this the app just says
+/// every machine is offline, which sends you debugging the mesh instead of tapping a
+/// toggle. There is no API to read or request this permission once it has been
+/// answered, so the only cure is Settings.
+private struct LocalNetworkBlockedBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("iOS is blocking the connection", systemImage: "exclamationmark.shield")
+                .font(.headline)
+                .foregroundStyle(.orange)
+            Text("Your machines are on Tailscale (100.x), which iOS treats as a local "
+                 + "network. MeshWatch needs Local Network permission — every request is "
+                 + "being dropped before it leaves the phone.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Label("Open Settings › Local Network", systemImage: "arrow.up.forward.app")
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 private struct MachinesTab: View {
     @EnvironmentObject var store: MeshStore
 
@@ -93,6 +121,9 @@ private struct MachinesTab: View {
     var body: some View {
         NavigationStack {
             List {
+                if store.localNetworkBlocked {
+                    Section { LocalNetworkBlockedBanner() }
+                }
                 Section("Status") {
                     ForEach(rows) { m in
                         HStack(spacing: 10) {

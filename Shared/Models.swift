@@ -337,6 +337,32 @@ enum BuildInfo {
     }
 }
 
+/// iOS refuses local-network traffic until the user grants it, and Tailscale's
+/// 100.64.0.0/10 range counts as local network. A denied app does not get an error
+/// saying so — URLSession returns NSURLErrorTimedOut, and after the first attempt it
+/// returns it *immediately* rather than waiting out the timeout. That impossibly fast
+/// "timeout" is the only signal we get, so it is the one we detect.
+///
+/// Measured on device: first attempt 16s (a real timeout across two addresses), every
+/// attempt after 6ms.
+func looksLikeLocalNetworkDenial(error: Error, elapsed: TimeInterval) -> Bool {
+    guard elapsed < 0.5 else { return false }
+    guard let urlError = error as? URLError else { return false }
+    return urlError.code == .timedOut || urlError.code == .cannotConnectToHost
+}
+
+/// Addresses iOS gates behind the Local Network permission.
+func isLocalNetworkAddress(_ host: String) -> Bool {
+    let parts = host.split(separator: ".").compactMap { Int($0) }
+    guard parts.count == 4 else { return false }
+    if parts[0] == 10 { return true }
+    if parts[0] == 192 && parts[1] == 168 { return true }
+    if parts[0] == 172 && (16...31).contains(parts[1]) { return true }
+    // 100.64.0.0/10 — CGNAT, which is where every Tailscale address lives.
+    if parts[0] == 100 && (64...127).contains(parts[1]) { return true }
+    return false
+}
+
 // MARK: - Mac remote control (meshd 0.2.2+, macOS hosts)
 
 /// One synthetic input event for the Mac. Mirrors `bin/mesh-input`'s NDJSON shape;

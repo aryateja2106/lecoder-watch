@@ -12,6 +12,9 @@ final class MeshStore: ObservableObject {
     @Published var events: [AgentEvent] = []
     @Published var lastError: String?
     @Published var polling = false
+    /// Set when every machine fails instantly — iOS is blocking local-network traffic
+    /// and no amount of retrying will help until the user grants the permission.
+    @Published var localNetworkBlocked = false
 
     private var timer: Timer?
     private let defaultsKey = "mesh.machines.v1"
@@ -174,10 +177,17 @@ final class MeshStore: ObservableObject {
                     var tailnetError: String?
                     var errorText: String?
                     var authError: String?
+                    var deniedInstantly = false
                     do {
-                        health = try await client.healthInfo()
-                    } catch {
-                        errorText = Self.describe(error)
+                        let began = Date()
+                        do {
+                            health = try await client.healthInfo()
+                        } catch {
+                            errorText = Self.describe(error)
+                            deniedInstantly = looksLikeLocalNetworkDenial(
+                                error: error, elapsed: Date().timeIntervalSince(began))
+                                && machine.addresses.contains(where: isLocalNetworkAddress)
+                        }
                     }
                     guard health?.ok == true else {
                         return MachineSnapshot(host: machine.host,
@@ -185,7 +195,7 @@ final class MeshStore: ObservableObject {
                                                reachable: false,
                                                stats: nil,
                                                agents: [],
-                                               error: errorText ?? "unreachable")
+                                               error: deniedInstantly ? "blocked by iOS" : (errorText ?? "unreachable"))
                     }
                     do {
                         stats = try await client.stats()
@@ -249,6 +259,11 @@ final class MeshStore: ObservableObject {
                 publishPartial(results, targets: targets)
             }
         }
+        // Every host failing instantly is a permission problem, not a fleet outage.
+        let reachableCount = results.filter(\.reachable).count
+        let blockedCount = results.filter { $0.error == "blocked by iOS" }.count
+        localNetworkBlocked = reachableCount == 0 && blockedCount == results.count && !results.isEmpty
+
         // Stable order matching the machine list.
         let ordered = targets.compactMap { m in results.first { $0.host == m.host } }
             .map { holdRecentlyGood($0) }
