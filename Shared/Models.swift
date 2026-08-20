@@ -304,6 +304,34 @@ struct MachineSnapshot: Codable, Hashable, Identifiable {
     }
 }
 
+/// Version, build and the moment this binary was produced. The build date comes from
+/// the bundle itself, so it changes on every build with nothing to remember to bump —
+/// which is the whole point when you are sideloading several times an hour.
+enum BuildInfo {
+    static var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+    static var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+    }
+    static var builtAt: Date? {
+        guard let url = Bundle.main.executableURL,
+              let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+        else { return nil }
+        return values.contentModificationDate
+    }
+    /// "0.1.0 (1) · built 20 Aug 14:32"
+    static var summary: String {
+        var text = "\(version) (\(build))"
+        if let builtAt {
+            let f = DateFormatter()
+            f.dateFormat = "d MMM HH:mm"
+            text += " · built \(f.string(from: builtAt))"
+        }
+        return text
+    }
+}
+
 // MARK: - Mac remote control (meshd 0.2.2+, macOS hosts)
 
 /// One synthetic input event for the Mac. Mirrors `bin/mesh-input`'s NDJSON shape;

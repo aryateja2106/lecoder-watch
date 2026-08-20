@@ -441,9 +441,24 @@ private struct SettingsTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var newCommand = ""
 
+    /// Sideloading several times an hour makes "is this the new build?" a real
+    /// question; the timestamp answers it with nothing to remember to bump.
+    private var buildRow: some View {
+        HStack {
+            Label("Build", systemImage: "hammer")
+            Spacer()
+            Text(BuildInfo.summary)
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             List {
+                Section("App") {
+                    buildRow
+                }
                 Section("Machines") {
                     ForEach($store.machines) { $m in
                         VStack(alignment: .leading, spacing: 10) {
