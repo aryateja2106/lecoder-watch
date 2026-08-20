@@ -107,7 +107,9 @@ private struct MachinesTab: View {
                                     .foregroundStyle(.secondary)
                             }
                             Spacer()
-                            Text(m.authError != nil ? "token" : (m.reachable ? "\(m.agents.count) sess" : "offline"))
+                            Text(m.authError != nil ? "token"
+                                 : m.isStale ? m.statusLabel
+                                 : (m.reachable ? "\(m.agents.count) sess" : "offline"))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
                         }
@@ -119,7 +121,7 @@ private struct MachinesTab: View {
                         Text(m.host).font(.headline)
                     }) {
                         if m.reachable {
-                            ServiceStatusRow(label: "meshd", ok: true, detail: "active")
+                            ServiceStatusRow(label: "meshd", ok: !m.isStale, detail: m.statusLabel)
                             ServiceStatusRow(label: "auth", ok: m.authError == nil, detail: m.authError ?? "active")
                             if m.authError != nil, let machine = store.machines.first(where: { $0.host == m.host }) {
                                 copyableCommand("sh install.sh --token \(machine.token)")

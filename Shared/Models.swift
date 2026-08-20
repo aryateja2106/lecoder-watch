@@ -274,6 +274,26 @@ struct MachineSnapshot: Codable, Hashable, Identifiable {
     var capabilities: [String]? = nil
     var tailnetPeers: [TailnetPeer]? = nil
     var tailnetError: String? = nil
+    /// Seconds since this host last actually answered. Non-nil means the data shown is
+    /// remembered, not fresh — a relayed tailnet drops polls, and blanking the whole
+    /// machine on the first miss is what made the app look broken every few minutes.
+    var staleSeconds: Int? = nil
+
+    var isStale: Bool { (staleSeconds ?? 0) > 0 }
+
+    /// "offline" only once it has really stopped answering.
+    var statusLabel: String {
+        if let authError { return authError }
+        if reachable && !isStale { return "online" }
+        if let staleSeconds, reachable { return "last seen \(Self.age(staleSeconds))" }
+        return error ?? "offline"
+    }
+
+    static func age(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s ago" }
+        if seconds < 3600 { return "\(seconds / 60)m ago" }
+        return "\(seconds / 3600)h ago"
+    }
 }
 
 // MARK: - Mac remote control (meshd 0.2.2+, macOS hosts)

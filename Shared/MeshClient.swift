@@ -4,14 +4,15 @@ import Foundation
 struct MeshClient {
     let machine: Machine
 
-    /// A watch cannot afford the phone's patience: it polls three machines over two
-    /// addresses each, so a 3s timeout is up to 18s of hanging per cycle — which is
-    /// what a frozen-feeling watch app actually is.
+    /// Tailscale does not always find a direct path. When it falls back to a DERP
+    /// relay a single round trip measures ~0.5s, so 3s was declaring healthy machines
+    /// dead. The phone can afford to wait; the watch polls three machines over two
+    /// addresses each and cannot, so it keeps a tight budget and backs off instead.
     var timeout: TimeInterval = {
         #if os(watchOS)
         return 1.5
         #else
-        return 3
+        return 8
         #endif
     }()
 

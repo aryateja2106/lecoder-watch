@@ -26,6 +26,12 @@ final class MeshStore: ObservableObject {
     private var watchedPane: String?
     private var watchedScreenHost: String?
     private var watchedScreenDisplay: Int?
+    /// Last poll where a host actually answered, so a missed poll degrades to "last
+    /// seen 12s ago" instead of wiping the machine — including the buttons that let
+    /// you do anything about it, which are disabled while it reads unreachable.
+    private var lastGood: [String: (snapshot: MachineSnapshot, at: Date)] = [:]
+    private var missesByHost: [String: Int] = [:]
+    private static let missesBeforeOffline = 3
     private var lastEventISOByHost: [String: String] = [:]
     private var initializedEventHosts = Set<String>()
 
@@ -200,8 +206,14 @@ final class MeshStore: ObservableObject {
                     } catch {
                         if Self.isAuthError(error) { authError = "token rejected" }
                     }
-                    for idx in agents.indices {
-                        agents[idx].panes = try? await client.panes(agent: agents[idx].name)
+                    // Concurrently: one round trip of latency instead of one per agent.
+                    // Over a relay this was the difference between a 1s and a 6s poll.
+                    await withTaskGroup(of: (Int, [Pane]?).self) { paneGroup in
+                        for idx in agents.indices {
+                            let name = agents[idx].name
+                            paneGroup.addTask { (idx, try? await client.panes(agent: name)) }
+                        }
+                        for await (idx, panes) in paneGroup { agents[idx].panes = panes }
                     }
                     let reachable = stats != nil || health?.ok == true
                     return MachineSnapshot(host: machine.host,
@@ -225,6 +237,7 @@ final class MeshStore: ObservableObject {
         }
         // Stable order matching the machine list.
         let ordered = targets.compactMap { m in results.first { $0.host == m.host } }
+            .map { holdRecentlyGood($0) }
 
         var usage: UsageSnapshot?
         for machine in targets {
@@ -270,6 +283,25 @@ final class MeshStore: ObservableObject {
         snapshot = snap
         PhoneConnectivity.shared.push(snap)
         NotificationManager.shared.evaluate(snap, pinned: pinnedLimitSessions)
+    }
+
+    /// Keep showing a machine's last good state through a few missed polls.
+    private func holdRecentlyGood(_ snapshot: MachineSnapshot) -> MachineSnapshot {
+        let host = snapshot.host
+        if snapshot.reachable && snapshot.authError == nil {
+            lastGood[host] = (snapshot, Date())
+            missesByHost[host] = 0
+            return snapshot
+        }
+        // A rejected token is a real answer, not a miss — show it immediately.
+        if snapshot.authError != nil { return snapshot }
+
+        let misses = (missesByHost[host] ?? 0) + 1
+        missesByHost[host] = misses
+        guard misses < Self.missesBeforeOffline, let remembered = lastGood[host] else { return snapshot }
+        var held = remembered.snapshot
+        held.staleSeconds = max(1, Int(Date().timeIntervalSince(remembered.at)))
+        return held
     }
 
     private func refreshEvents(from targets: [Machine]) async {
