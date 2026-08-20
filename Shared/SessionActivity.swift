@@ -16,8 +16,20 @@ struct SessionActivityAttributes: ActivityAttributes {
         var cpuPct: Double?
         var memLabel: String?
         var lastLine: String     // freshest output or event line
+        /// Set only when the session is stopped waiting on a human, so the card can
+        /// count the wait up on the Lock Screen without an update per second.
+        var blockedSince: Date? = nil
+        /// The verb for the affirmative and one line of consequence, when answering
+        /// would do something destructive. See `classifyRisk`.
+        var riskVerb: String? = nil
+        var riskWhy: String? = nil
 
         var state: SessionState { SessionState(rawValue: stateRaw) ?? .unknown }
+
+        /// Blocked is the only state worth a Lock Screen card that shouts. "Working" is
+        /// wallpaper; this is the one that means the machine has stopped.
+        var isBlocked: Bool { state.wantsAttentionState }
+        var isRisky: Bool { riskWhy != nil }
 
         /// "38% · 1.2 GB", or nil when the daemon reported neither.
         var resourceText: String? {

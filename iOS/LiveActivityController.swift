@@ -33,6 +33,9 @@ final class LiveActivityController {
             cpuPct: pick.cpuPct,
             memLabel: pick.memLabel,
             lastLine: pick.lastLine,
+            blockedSince: pick.blockedSince,
+            riskVerb: pick.risk.isDestructive ? pick.risk.verb : nil,
+            riskWhy: pick.risk.consequence,
         )
 
         // A different session took over: end the old card rather than relabelling it,
