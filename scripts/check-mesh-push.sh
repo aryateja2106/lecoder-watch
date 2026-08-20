@@ -33,5 +33,47 @@ const again = await call("/push/register", { token: "ab".repeat(32) });
 if (again.devices !== 1) throw new Error("dedupe failed");
 // send path must not throw even if APNs is unreachable (fire-and-forget contract)
 await call("/push/test", { title: "self-check" });
+
+// Payload contract with the two Swift apps.
+const { buildPayload, isActionable } = await import("./push.ts");
+const eq = (got, want, what) => { if (JSON.stringify(got) !== JSON.stringify(want)) throw new Error(`${what}: got ${JSON.stringify(got)} want ${JSON.stringify(want)}`); };
+
+// A blocked agent: buttons, a routable target, and loud enough to pierce a Focus.
+const blocked = buildPayload("Claude needs attention", "Allow edit?", { level: "warning", session: "api", host: "studio" });
+eq(blocked.aps.category, "AGENT_ATTENTION", "category");
+eq(blocked.aps["interruption-level"], "time-sensitive", "interruption level");
+eq(blocked.aps["thread-id"], "api", "thread id");
+eq(blocked.host, "studio", "host");
+eq(blocked.session, "api", "session");
+
+// A finished turn is news, not a prompt: no buttons that would type Enter into a
+// session nobody is waiting on.
+const done = buildPayload("Claude stopped", undefined, { level: "info", session: "api", host: "studio" });
+if ("category" in done.aps) throw new Error("an info event must not offer agent buttons");
+eq(done.aps["interruption-level"], "active", "info interruption level");
+
+// No session means nothing to answer, whatever the level says.
+if ("category" in buildPayload("Disk full", undefined, { level: "error" }).aps) throw new Error("no session must mean no buttons");
+if (isActionable("warning", undefined)) throw new Error("isActionable requires a session");
+if (!isActionable("error", "api")) throw new Error("errors with a session are actionable");
+
+// Host defaults to this machine rather than going missing, or the buttons have
+// nowhere to send.
+if (!buildPayload("x", undefined, { level: "warning", session: "s" }).host) throw new Error("host must never be empty");
+
+// APNs rejects oversized payloads; the two free-text fields are the only risk.
+const huge = buildPayload("t".repeat(500), "b".repeat(5000), { level: "warning", session: "s", host: "h" });
+if (huge.aps.alert.title.length > 120 || huge.aps.alert.body.length > 500) throw new Error("alert text not clamped");
+
 console.log("check-mesh-push: OK");
 '
+
+# The category string is duplicated across two languages; if it drifts, the buttons
+# silently stop appearing and nothing else fails.
+CAT_TS="$(grep -c 'category: "AGENT_ATTENTION"' "$ROOT/install/payload/meshd/push.ts")"
+CAT_SWIFT="$(grep -c 'attentionCategory = "AGENT_ATTENTION"' "$ROOT/Shared/AgentNotifications.swift")"
+[ "$CAT_TS" -ge 1 ] && [ "$CAT_SWIFT" -ge 1 ] || {
+  echo "FAIL: AGENT_ATTENTION category is out of sync between push.ts and AgentNotifications.swift"
+  exit 1
+}
+echo "check-mesh-push: category matches Swift"

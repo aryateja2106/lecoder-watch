@@ -9,6 +9,7 @@ struct CheckPairing {
         checkCodeNormalization()
         checkAllHosts()
         checkMerge()
+        checkHostMatching()
         print("check-pairing: OK")
     }
 
@@ -49,6 +50,27 @@ struct CheckPairing {
             fleet: [host("studio", "100.1.1.1", "self-token"), host("halfdone", "100.3.3.3", "")],
         )
         assert(partial.allHosts.count == 1, "a tokenless host is dropped, not added broken")
+    }
+
+    // The name in an APNs payload is whatever `os.hostname()` says on that machine.
+    // Observed live: pairing stored "Aryas-MacBook-Pro" while its own events carry
+    // "Aryas-MacBook-Pro.local". If this match fails, the reply button does nothing.
+    static func checkHostMatching() {
+        let fleet = [
+            Machine(host: "Aryas-MacBook-Pro", ip: "100.1.1.1", port: 8899, token: "t"),
+            Machine(host: "dataflow", ip: "100.2.2.2", port: 8899, token: "t"),
+        ]
+        assert(machineMatching("Aryas-MacBook-Pro", in: fleet)?.ip == "100.1.1.1", "exact")
+        assert(machineMatching("Aryas-MacBook-Pro.local", in: fleet)?.ip == "100.1.1.1", "the .local suffix must not lose the machine")
+        assert(machineMatching("aryas-macbook-pro", in: fleet)?.ip == "100.1.1.1", "case")
+        // hosts.json key "dataflow" vs the daemon's own "dataflowagents".
+        assert(machineMatching("dataflowagents", in: fleet)?.ip == "100.2.2.2", "prefix both ways")
+        assert(machineMatching("dataflow.tailnet.ts.net", in: fleet)?.ip == "100.2.2.2")
+
+        // Never guess. An unknown machine is a no-op, not "the first one".
+        assert(machineMatching("someone-elses-box", in: fleet) == nil, "an unknown host must not match anything")
+        assert(machineMatching("", in: fleet) == nil, "an empty name must not match the first machine")
+        assert(machineMatching("studio", in: []) == nil)
     }
 
     static func checkMerge() {

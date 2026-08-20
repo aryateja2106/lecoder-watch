@@ -437,6 +437,15 @@ final class MeshStore: ObservableObject {
 
     /// Returns payload data for commands the watch is waiting on an answer for.
     @discardableResult
+    /// Answer an agent from a notification button. Errors are swallowed on purpose:
+    /// there is no UI to report into — the user has already put the phone down — and
+    /// the next poll shows whether the session moved.
+    func respondToAgent(host: String, session: String, text: String?, key: String?) async {
+        guard let machine = machineMatching(host, in: machines) else { return }
+        try? await MeshClient(machine: machine).send(agent: session, text: text, key: key)
+        await refresh()
+    }
+
     func handle(_ command: WatchCommand) async -> Data? {
         switch command.kind {
         case .refresh:

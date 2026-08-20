@@ -3,6 +3,7 @@
 // Registered device tokens live in ~/.mesh/push-tokens.json; the iOS app POSTs its
 // token to /push/register on every host it knows. Delivery uses system curl --http2
 // (APNs is HTTP/2-only; curl is everywhere meshd runs). JWT is ES256 via crypto.subtle.
+import os from "node:os";
 import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -87,17 +88,47 @@ async function sendOne(dev: DeviceToken, payload: any): Promise<{ ok: boolean; s
   return { ok: status === 200, status, reason };
 }
 
-export async function pushAlert(title: string, body?: string, opts?: { level?: string; session?: string }) {
-  const tokens = await readTokens();
-  if (!tokens.length) return { ok: false, sent: 0, reason: "no registered devices" };
-  const payload = {
+/// An alert you can act on is one where there is a live session to answer and the agent
+/// is actually stopped waiting — that is `mesh-hook`'s "warning" (Claude's Notification
+/// hook) or an outright error. A finished-turn "info" is worth a glance, not a prompt
+/// with buttons that would type Enter into a session nobody is waiting on.
+export function isActionable(level?: string, session?: string): boolean {
+  return Boolean(session) && (level === "warning" || level === "error");
+}
+
+/// The APNs body. Pure and exported so its shape can be asserted — it is a contract
+/// with two Swift apps (see `Shared/AgentNotifications.swift`) and a typo in it fails
+/// silently: the alert still arrives, just with no buttons and nowhere to send them.
+export function buildPayload(
+  title: string, body?: string, opts?: { level?: string; session?: string; host?: string },
+) {
+  const actionable = isActionable(opts?.level, opts?.session);
+  return {
     aps: {
       alert: { title: title.slice(0, 120), body: body?.slice(0, 500) },
       sound: "default",
-      "interruption-level": opts?.level === "error" ? "time-sensitive" : "active",
+      // Time-sensitive pierces a Focus, which is the whole point of an agent that is
+      // blocked: an alert seen tomorrow morning is an agent idle all night.
+      "interruption-level": actionable ? "time-sensitive" : "active",
+      // Matches the category the apps register; without it the buttons never appear.
+      ...(actionable ? { category: "AGENT_ATTENTION" } : {}),
+      // Everything from one session collapses into one thread on the wrist.
+      ...(opts?.session ? { "thread-id": opts.session } : {}),
     },
+    // The action handler needs to know which machine to answer, and the phone may hold
+    // several that each have a session by that name.
+    host: opts?.host ?? os.hostname().replace(/\.local$/i, ""),
     session: opts?.session,
+    level: opts?.level,
   };
+}
+
+export async function pushAlert(
+  title: string, body?: string, opts?: { level?: string; session?: string; host?: string },
+) {
+  const tokens = await readTokens();
+  if (!tokens.length) return { ok: false, sent: 0, reason: "no registered devices" };
+  const payload = buildPayload(title, body, opts);
   let sent = 0;
   const keep: DeviceToken[] = [];
   for (const dev of tokens) {
@@ -133,7 +164,11 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
   }
   if (url.pathname === "/push/test" && req.method === "POST") {
     const body = await req.json().catch(() => ({}));
-    return json(await pushAlert(String(body.title ?? "MeshWatch test"), body.body ? String(body.body) : undefined));
+    return json(await pushAlert(
+      String(body.title ?? "MeshWatch test"),
+      body.body ? String(body.body) : undefined,
+      { level: body.level ? String(body.level) : undefined, session: body.session ? String(body.session) : undefined },
+    ));
   }
   return null;
 }

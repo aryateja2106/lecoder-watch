@@ -35,6 +35,9 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     /// Resume handler — MeshStore wires this to send `continue` to the pinned session.
     var onLimitResume: ((String) -> Void)?
 
+    /// Answer a blocked agent straight from the notification. MeshStore wires this.
+    var onAgentAction: ((_ host: String, _ session: String, _ text: String?, _ key: String?) -> Void)?
+
     private override init() {
         super.init()
         if let saved = UserDefaults.standard.stringArray(forKey: firedKeysDefaultsKey) {
@@ -47,6 +50,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
             scheduledResetISOByKey = saved
         }
         UNUserNotificationCenter.current().delegate = self
+        AgentNotification.registerCategories()
     }
 
     func requestAuthorization() {
@@ -303,6 +307,15 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         if let providerId,
            action == "limitReset" || action == "limitAvailable" {
             onLimitResume?(providerId)
+        }
+        // A button on an agent alert. The typed text only exists for the Reply action,
+        // and an empty reply is a dismissal, not an empty message.
+        if let target = AgentNotification.target(from: info),
+           let cmd = AgentNotification.command(
+               for: response.actionIdentifier,
+               typed: (response as? UNTextInputNotificationResponse)?.userText,
+           ) {
+            onAgentAction?(target.host, target.session, cmd.text, cmd.key)
         }
         completionHandler()
     }

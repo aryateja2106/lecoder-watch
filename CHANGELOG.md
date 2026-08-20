@@ -10,6 +10,15 @@ each entry as you ship the slice, not at release time.
 ## [Unreleased]
 
 ### Added
+- **Answer a blocked agent from the notification.** When an agent stops and waits for
+  you, the alert now carries three buttons on the wrist and the phone: **Continue**
+  (Enter — accepts whatever the agent has highlighted, rather than guessing a "y"),
+  **Reply** (dictate or scribble, sent as typed input), and **Stop** (ctrl-C). No app
+  launch, no machine list, no session picker.
+- **Blocked agents are time-sensitive**, so they pierce a Focus. A finished turn stays
+  a normal alert with no buttons — typing Enter into a session nobody is waiting on is
+  worse than staying quiet.
+- Alerts from one session collapse into one thread.
 - **Pairing.** Run `mesh pair` on a machine; it prints an address and an eight-character
   code good for ten minutes and one use. Enter those two on the phone and the machine
   hands over its real token — no 64-character bearer token typed on a phone keyboard.

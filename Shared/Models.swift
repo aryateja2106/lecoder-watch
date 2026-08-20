@@ -112,6 +112,32 @@ func normalizedPairingCode(_ input: String) -> String {
     input.uppercased().filter { $0.isASCII && ($0.isNumber || ($0.isLetter && $0.isUppercase)) }
 }
 
+/// Find the machine a daemon means by `name`.
+///
+/// The name in an APNs payload comes from `os.hostname()` on that machine, which is not
+/// always what this app has it stored as: a host imported from another machine's
+/// `hosts.json` carries that file's key ("dataflow") while its own daemon says
+/// "dataflowagents", and macOS reports "Aryas-MacBook-Pro.local" where pairing stored
+/// "Aryas-MacBook-Pro". Exact, then case-insensitive, then leading-component prefix.
+///
+/// Deliberately never falls back to "the only machine with a session by that name":
+/// session names are not unique across machines and typing Enter into the wrong box is
+/// worse than doing nothing.
+func machineMatching(_ name: String, in machines: [Machine]) -> Machine? {
+    if let exact = machines.first(where: { $0.host == name }) { return exact }
+    let wanted = name.lowercased()
+    if let insensitive = machines.first(where: { $0.host.lowercased() == wanted }) { return insensitive }
+    func head(_ value: String) -> String {
+        value.lowercased().split(separator: ".").first.map(String.init) ?? value.lowercased()
+    }
+    let wantedHead = head(name)
+    guard !wantedHead.isEmpty else { return nil }
+    return machines.first {
+        let mine = head($0.host)
+        return !mine.isEmpty && (mine == wantedHead || mine.hasPrefix(wantedHead) || wantedHead.hasPrefix(mine))
+    }
+}
+
 /// Fold newly paired hosts into the saved list. Identity is the address, because that
 /// is what actually reaches the daemon; a machine renamed on the Mac must update in
 /// place rather than appear twice. An existing entry keeps its user-visible name and

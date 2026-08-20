@@ -301,6 +301,25 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Answer an agent from a notification button. The host comes from the APNs
+    /// payload, so it is the name the *daemon* uses; our stored name may be the key
+    /// from another machine's hosts.json, hence the tolerant match.
+    func respondToAgent(host: String, session: String, text: String?, key: String?) {
+        let match = machineMatching(host, in: machines)
+        if let m = match, directReachable(m.host) {
+            lastError = nil
+            Task {
+                do { try await MeshClient(machine: m).send(agent: session, text: text, key: key) }
+                catch { lastError = "reply failed" }
+                await refresh()
+            }
+        } else {
+            // Off the tailnet, or the machine is not in our list yet: the phone has both.
+            WatchLink.shared.send(WatchCommand(kind: .agentSend, host: match?.host ?? host,
+                                               agent: session, text: text, key: key))
+        }
+    }
+
     /// Send `continue` to a limit-pinned session (resume-at-reset from the wrist).
     func sendToPinned(_ pin: PinnedLimitSession) {
         if directReachable(pin.host), let m = machines.first(where: { $0.host == pin.host }) {

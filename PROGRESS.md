@@ -105,6 +105,17 @@ using daily. One slice at a time, full build gate, commit only when green.
   still 401s without a token. `check-pairing` covers the merge — negative-tested: it
   goes red when address-identity is broken.
 
+- **S16 actionable agent alerts** — `meshd` marks an event actionable when a session
+  exists and `mesh-hook` graded it warning/error, and stamps the payload with the host,
+  the `AGENT_ATTENTION` category and a per-session thread id. Both apps register the
+  same category (`Shared/AgentNotifications.swift`), and both route the answer — the
+  watch direct when it can reach the tailnet, else through the phone. The payload
+  builder is pure and asserted, the action mapping is asserted, and the category string
+  is grepped across both languages so it cannot drift silently. Host matching had to be
+  tolerant: pairing stores `Aryas-MacBook-Pro`, its own events say
+  `Aryas-MacBook-Pro.local`. Delivery to a device is still unproven — `devices:0` until
+  the phone runs the app once.
+
 ## In the morning
 
 1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →
@@ -129,8 +140,8 @@ three hardcoded machines; none of it is reachable by anyone else.
 **P1 — the watch is the product**
 3. **S15 watch widgets.** Smart Stack + watch-face complications: machines up, agents
    waiting on you. This is the reason to keep the app on the wrist.
-4. **S16 actionable notifications.** "Claude needs attention" with Approve / Deny /
-   Reply, answered from the wrist without opening anything.
+4. ~~**S16 actionable notifications.**~~ DONE — see Done. Needs a device to prove
+   delivery end to end.
 5. **S17 Live Activity** — merge `MeshWatchWidgets` from `claude/eloquent-hopper-0a653d`.
 
 **P2 — earned polish**

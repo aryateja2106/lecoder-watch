@@ -33,6 +33,9 @@ struct MeshRelayApp: App {
         NotificationManager.shared.onLimitResume = { providerId in
             Task { await store.resumePinnedLimit(providerId: providerId) }
         }
+        NotificationManager.shared.onAgentAction = { host, session, text, key in
+            Task { await store.respondToAgent(host: host, session: session, text: text, key: key) }
+        }
     }
 
     var body: some Scene {

@@ -15,7 +15,12 @@ struct WatchRootView: View {
                 .environmentObject(store)
                 .navigationTitle("Mesh")
         }
-        .onAppear { store.start() }
+        .onAppear {
+            store.start()
+            WatchNotifications.shared.onAgentAction = { [weak store] host, session, text, key in
+                store?.respondToAgent(host: host, session: session, text: text, key: key)
+            }
+        }
     }
 }
 

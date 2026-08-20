@@ -645,7 +645,7 @@ async function addEvent(input: any): Promise<AgentEvent> {
   await mkdir(join(homedir(), ".mesh"), { recursive: true });
   await appendFile(EVENTS_PATH, `${JSON.stringify(event)}\n`);
   // APNs: fire-and-forget so a slow/misconfigured push never blocks event ingestion.
-  pushAlert(event.title, event.body, { level: event.level, session: event.session }).catch(() => {});
+  pushAlert(event.title, event.body, { level: event.level, session: event.session, host: event.host }).catch(() => {});
   return event;
 }
 
