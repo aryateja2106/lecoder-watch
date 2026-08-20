@@ -6,6 +6,20 @@ using daily. One slice at a time, full build gate, commit only when green.
 
 ## Done
 
+### 0.3.0 — 2026-08-20 (second pass, after first real use)
+- **Aiming.** The remote screen draws its own pointer and sends absolute positions;
+  pinch zoom 1x-6x with the view following the cursor; landscape; a sticky modifier row.
+  `Shared/ScreenZoom.swift` + `check-screen-zoom`, mutation tested four ways. The same
+  drawn cursor and zoom on the watch preview, with `normalizedPoint(fromTap:)` as the
+  exact inverse of the draw.
+- **Watch link diagnostics.** `emptyStateReason` names which of four ways the watch is
+  empty; a Link row reports whether the phone answered and with how many machines.
+  **The underlying "watch shows no machines" report is NOT yet root-caused** — the relay
+  reads correct end to end, so the next step needs that Link line from the device.
+- Watch stopped asking for notification permission before it knew about any machine.
+- `-uiRemote` (DEBUG) opens the remote screen directly; it is reachable by no deep link
+  and the simulator cannot be tapped from an agent session.
+
 ### 0.3.0 — 2026-08-20
 - **Risk-classified answers.** `Shared/RiskClassifier.swift` + `check-risk`, mutation
   tested both ways. The affirmative names the verb and turns red for a force push,
