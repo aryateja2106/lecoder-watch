@@ -81,6 +81,15 @@ struct MeshClient {
         return try JSONDecoder().decode(Stats.self, from: data)
     }
 
+    /// Setup truth for this machine. `fix: true` POSTs /doctor/fix, which makes macOS
+    /// show the Accessibility and Screen Recording dialogs on that Mac — the only way
+    /// to prompt for them, since TCC only ever asks from the process that needs the
+    /// grant. The report comes back either way so the UI can show what still failed.
+    func doctor(fix: Bool = false) async throws -> DoctorReport {
+        let data = try await request(fix ? "/doctor/fix" : "/doctor", method: fix ? "POST" : "GET")
+        return try JSONDecoder().decode(DoctorReport.self, from: data)
+    }
+
     func agents() async throws -> [Agent] {
         let data = try await request("/agents")
         return try JSONDecoder().decode([Agent].self, from: data)

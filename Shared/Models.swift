@@ -215,6 +215,39 @@ struct HealthInfo: Codable, Hashable {
     var capabilities: [String]?
 }
 
+// MARK: - Doctor (setup truth)
+
+/// What `/doctor` reports: each capability tested by exercising it, not by listing an
+/// intention. The phone renders this so a user can see exactly what the Mac still needs
+/// and, for the two macOS grants, tap a button that pops the real system dialog there.
+struct DoctorReport: Codable, Hashable {
+    struct Check: Codable, Hashable {
+        var ok: Bool
+        var detail: String
+        var fix: String?
+    }
+    var ok: Bool
+    var host: String
+    var platform: String
+    var version: String
+    var bind: String
+    var checks: [String: Check]
+
+    /// A stable render order — JSON object key order is not guaranteed, and a setup
+    /// list that reshuffles every refresh is hard to read.
+    static let order = ["token", "input", "screen", "mux", "push"]
+    var orderedChecks: [(name: String, check: Check)] {
+        let known = Self.order.compactMap { name in checks[name].map { (name, $0) } }
+        let extra = checks.keys.filter { !Self.order.contains($0) }.sorted()
+            .compactMap { name in checks[name].map { (name, $0) } }
+        return known + extra
+    }
+    /// Whether this check's fix is a macOS permission the phone can trigger remotely
+    /// (input = Accessibility, screen = Screen Recording). Everything else is a fix the
+    /// user does at a shell, so the button would lie.
+    static func isRemotelyFixable(_ name: String) -> Bool { name == "input" || name == "screen" }
+}
+
 // MARK: - Tailnet
 
 struct TailnetPeer: Codable, Hashable, Identifiable {

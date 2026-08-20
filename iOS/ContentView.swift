@@ -216,6 +216,9 @@ private struct MachineDetailView: View {
         List {
             if let m = snapshot {
                 if m.reachable {
+                    if let machine = store.machines.first(where: { $0.host == m.host }) {
+                        MachineSetupSection(machine: machine)
+                    }
                     ServiceStatusRow(label: "meshd", ok: !m.isStale, detail: m.statusLabel)
                     ServiceStatusRow(label: "auth", ok: m.authError == nil, detail: m.authError ?? "active")
                     if m.authError != nil {
@@ -333,6 +336,73 @@ private struct MachineDetailView: View {
         .navigationTitle(machineShortName(host))
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await store.refresh() }
+    }
+}
+
+/// Setup & permissions for one machine, read from /doctor — which tests each
+/// capability by exercising it, so a green row means it actually works, not that it is
+/// configured. The two macOS grants (Accessibility, Screen Recording) fail silently and
+/// can only be prompted from the process that needs them, so this offers a button that
+/// POSTs /doctor/fix to pop the real system dialogs on the Mac itself.
+private struct MachineSetupSection: View {
+    let machine: Machine
+    @State private var report: DoctorReport?
+    @State private var loading = false
+    @State private var asking = false
+    @State private var error: String?
+
+    private var hasRemoteFix: Bool {
+        guard let report else { return false }
+        return report.orderedChecks.contains { !$0.check.ok && DoctorReport.isRemotelyFixable($0.name) }
+    }
+    private var isMac: Bool { report?.platform == "darwin" }
+
+    var body: some View {
+        Section("Setup & permissions") {
+            if let report {
+                ForEach(report.orderedChecks, id: \.name) { item in
+                    VStack(alignment: .leading, spacing: 2) {
+                        ServiceStatusRow(label: item.name, ok: item.check.ok, detail: item.check.detail)
+                        if !item.check.ok, let fix = item.check.fix,
+                           !DoctorReport.isRemotelyFixable(item.name) {
+                            Text(fix).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if hasRemoteFix && isMac {
+                    Button {
+                        Task { await run(fix: true) }
+                    } label: {
+                        Label(asking ? "Asking \(machineShortName(machine.host))…" : "Grant on \(machineShortName(machine.host))",
+                              systemImage: "hand.tap")
+                    }
+                    .disabled(asking)
+                    Text("Opens the Accessibility and Screen Recording dialogs on \(machineShortName(machine.host)). Approve them there, then pull to refresh.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            } else if loading {
+                HStack { ProgressView(); Text("Checking \(machineShortName(machine.host))…").foregroundStyle(.secondary) }
+            } else if let error {
+                Text(error).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .task { await run(fix: false) }
+    }
+
+    private func run(fix: Bool) async {
+        if fix { asking = true } else { loading = true }
+        defer { asking = false; loading = false }
+        do {
+            report = try await MeshClient(machine: machine).doctor(fix: fix)
+            error = nil
+        } catch {
+            // An older daemon has no /doctor route; say so instead of showing a raw 404.
+            if case MeshClient.MeshError.http(404) = error {
+                self.error = "This machine's daemon predates setup checks. Reinstall to update it."
+            } else {
+                self.error = "Couldn't reach \(machineShortName(machine.host))."
+            }
+        }
     }
 }
 
