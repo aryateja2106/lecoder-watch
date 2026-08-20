@@ -137,6 +137,17 @@ final class MeshStore: ObservableObject {
         save()
     }
 
+    // MARK: Push
+
+    /// Fan the APNs device token out to every configured machine; each meshd
+    /// stores it and pushes alerts directly. Failures are fine — offline hosts
+    /// get the token next launch.
+    func uploadPushToken(_ token: String) async {
+        for machine in machines {
+            try? await MeshClient(machine: machine).registerPush(deviceToken: token)
+        }
+    }
+
     // MARK: Polling
 
     func start() {

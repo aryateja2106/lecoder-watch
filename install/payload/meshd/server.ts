@@ -6,12 +6,13 @@ import { join } from "node:path";
 import { appendFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 import { handleInput } from "./input";
+import { handlePush, pushAlert } from "./push";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
 const VERSION = "0.2.2";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "push"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -641,6 +642,8 @@ async function addEvent(input: any): Promise<AgentEvent> {
   };
   await mkdir(join(homedir(), ".mesh"), { recursive: true });
   await appendFile(EVENTS_PATH, `${JSON.stringify(event)}\n`);
+  // APNs: fire-and-forget so a slow/misconfigured push never blocks event ingestion.
+  pushAlert(event.title, event.body, { level: event.level, session: event.session }).catch(() => {});
   return event;
 }
 
@@ -730,6 +733,9 @@ Bun.serve({
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
       const remote = await handleInput(req, url);
       if (remote) return remote;
+      // APNs device registration + status + test — see push.ts.
+      const pushed = await handlePush(req, url);
+      if (pushed) return pushed;
       if (path === "/stats") return json(await getStats());
       if (path === "/tailnet") return json(await getTailnet());
       if (path === "/agents") return json(await listAgents());

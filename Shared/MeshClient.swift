@@ -188,6 +188,13 @@ struct MeshClient {
         _ = try await request("/apps", method: "POST", body: body)
     }
 
+    /// Register this phone's APNs device token so meshd can push alerts directly.
+    // ponytail: env hardcoded "dev" — flip to "prod" when a distribution-signed build exists.
+    func registerPush(deviceToken: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["token": deviceToken, "env": "dev"])
+        _ = try await request("/push/register", method: "POST", body: body)
+    }
+
     /// Power/session action: displaysleep, lock, screensaver, sleep.
     func system(_ action: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["action": action])
