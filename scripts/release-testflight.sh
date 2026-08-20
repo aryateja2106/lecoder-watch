@@ -22,8 +22,10 @@ cd "$ROOT"
 KEY="$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
 [ -f "$KEY" ] || { echo "FAIL: no key at $KEY"; exit 1; }
 
-# Xcode 27 beta: the devices run iOS/watchOS 27 and 26.x cannot build for them.
-export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
+# STABLE Xcode, not the beta. App Store Connect accepts a beta-built upload and then
+# fails processing with 90534 "Unsupported SDK or Xcode version" — verified. The beta
+# is only for installing onto devices running a beta OS.
+export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
 BUILD="$(date +%Y%m%d%H%M)"        # monotonic and obvious; App Store Connect rejects reuse
 ARCHIVE="$ROOT/build/MeshWatch-$BUILD.xcarchive"

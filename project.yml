@@ -37,9 +37,10 @@ targets:
     info:
       path: Generated/iOS-Info.plist
       properties:
-        CFBundleDisplayName: MeshWatch
+        CFBundleDisplayName: LeSearch Mesh
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
@@ -55,7 +56,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: iOS/MeshWatch.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        TARGETED_DEVICE_FAMILY: "1,2"
+        TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - target: MeshWatch Watch App
         embed: true
@@ -69,7 +70,10 @@ targets:
     info:
       path: Generated/Watch-Info.plist
       properties:
-        CFBundleDisplayName: MeshWatch
+        CFBundleDisplayName: LeSearch Mesh
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.lecoder.meshwatch
         NSMicrophoneUsageDescription: "Dictate commands to your agents."

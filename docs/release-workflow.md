@@ -64,8 +64,19 @@ Keys are per **team**, not per app. One key ships every app on the team.
 
 ## Every release
 
+Either the script (needs the issuer id explicitly):
+
 ```bash
 ASC_KEY_ID=Y4MR7X24UL ASC_ISSUER_ID=<uuid> sh scripts/release-testflight.sh
+```
+
+or `asc`, which already holds the credentials in the keychain and needs no issuer id:
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+asc publish testflight --app 6803438426 --project MeshWatch.xcodeproj --scheme MeshWatch \
+  --version 0.1.0 --build-number "$(date +%Y%m%d%H%M)" --configuration Release \
+  --upload-only --wait --output json
 ```
 
 Which runs the self-checks, archives Release, and exports straight to App Store
@@ -86,10 +97,24 @@ asc testflight groups list --app <APP_ID>
   `NSAllowsArbitraryLoads`. Have an explanation ready — it talks only to daemons the
   user installs on their own machines over their own Tailscale network.
 
+## This app
+
+- App Store Connect app id **6803438426** (`LeSearch Mesh`, `com.lecoder.meshwatch`)
+- Internal TestFlight group **f0b2cc09-9776-409c-865a-4706e881bccd**
+- First build: **0.1.0 (202608201519)**, processingState VALID
+
 ## Gotchas already paid for
 
-- **Xcode 27 beta is required.** The devices run iOS/watchOS 27; Xcode 26.6 only has the
-  26.5 SDK. `export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer`.
+- **Two Xcodes, and using the wrong one wastes a build number.**
+  - *Installing to the devices* needs **Xcode 27 beta** — they run iOS/watchOS 27 and
+    26.6 only has the 26.5 SDK.
+  - *Uploading to App Store Connect* needs the **stable Xcode**. A beta-built upload is
+    accepted and then fails processing with **90534 Unsupported SDK or Xcode version**.
+    Verified both ways.
+- **iPad in `TARGETED_DEVICE_FAMILY` demands all four orientations** or processing fails
+  with **90474**. A portrait-only phone app should declare `"1"`, not `"1,2"`.
+- **Declare `ITSAppUsesNonExemptEncryption`** in the Info.plist or every build stops and
+  asks about export compliance before testers can install.
 - **`xcodebuild` must be told the API key** for automatic signing to create
   distribution certificates and profiles: `-allowProvisioningUpdates`
   `-authenticationKeyPath` `-authenticationKeyID` `-authenticationKeyIssuerID`.
