@@ -126,6 +126,14 @@ using daily. One slice at a time, full build gate, commit only when green.
   routes to the session, stubbing the Agent when the poll no longer lists it.
   Limit: ActivityKit only starts an activity in the foreground — push-to-start is S17b.
 
+- **S18 UI, first pass** — `sessionsNeedingAttention` (shared, checked) drives a
+  "Needs you" section at the top of both the watch home and the phone's Machines tab,
+  with Continue inline. The phone's duplicate machine listing is now one row per
+  machine plus a `MachineDetailView`. Three copyable `sh install.sh --token <secret>`
+  commands are gone: updating uses the public one-liner (which preserves the token) and
+  a rejected token routes to `mesh pair`. Fixed a regression from S13 — with
+  `Machine.defaults` gone, an unpaired watch sat on "Connecting…" forever.
+
 ## In the morning
 
 1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →
@@ -158,8 +166,8 @@ three hardcoded machines; none of it is reachable by anyone else.
    app is already open.
 
 **P2 — earned polish**
-6. **S18 UI rework** — machines list duplicates the status list; quick commands are a
-   fixed table.
+6. **S18b UI, second pass** — quick commands are still a fixed table; five tabs is
+   probably two too many; Settings still exposes bridge/VNC/token as raw fields.
 7. **S19 SSH onboarding** — add a machine by address + credentials, run the installer
    over SSH.
 8. **S20 Linux `/screen.jpg`** — input and files work headless; capture is Mac-only.

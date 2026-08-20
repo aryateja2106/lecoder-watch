@@ -1,4 +1,5 @@
 import SwiftUI
+import WatchKit
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -31,6 +32,19 @@ struct MachinesListView: View {
 
     var body: some View {
         List {
+            // The reason to look at your wrist. Above machines, above limits, above
+            // everything — an agent that is blocked is the only thing here that is
+            // costing you time right now.
+            if !store.needsAttention.isEmpty {
+                Section {
+                    ForEach(store.needsAttention, id: \.self) { item in
+                        AttentionRow(item: item)
+                    }
+                } header: {
+                    Label("Needs you", systemImage: "exclamationmark.bubble.fill")
+                        .foregroundStyle(.orange)
+                }
+            }
             if let glance = limitsGlance {
                 Section {
                     ForEach(glance, id: \.providerId) { row in
@@ -104,7 +118,15 @@ struct MachinesListView: View {
             }
         }
         .overlay {
-            if store.snaps.isEmpty {
+            // "Connecting…" forever is what an unpaired watch used to show, because
+            // an empty list and an unanswered poll looked the same from here.
+            if store.hasNoMachines {
+                ContentUnavailableView(
+                    "No machines",
+                    systemImage: "iphone.gen3",
+                    description: Text("Open LeSearch Mesh on your iPhone and pair a machine. It appears here on its own."),
+                )
+            } else if store.snaps.isEmpty {
                 ProgressView("Connecting…")
             }
         }
@@ -143,6 +165,39 @@ struct MachinesListView: View {
                                   blocked: blocked)
         }
         return rows.isEmpty ? nil : rows
+    }
+}
+
+/// One blocked agent. Continue is right here because it is the answer most of the
+/// time; anything else is one tap away in the session itself.
+private struct AttentionRow: View {
+    @EnvironmentObject var store: WatchMeshStore
+    let item: LiveSessionPick
+
+    var body: some View {
+        NavigationLink {
+            AgentLiveView(host: item.host, agent: item.session).environmentObject(store)
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Image(systemName: item.state.symbol).foregroundStyle(item.state.tint)
+                    Text(item.session).font(.headline).lineLimit(1)
+                }
+                if !item.lastLine.isEmpty {
+                    Text(item.lastLine).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                }
+                HStack {
+                    Text(shortName(item.host)).font(.caption2).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Continue") {
+                        store.respondToAgent(host: item.host, session: item.session, text: nil, key: "enter")
+                        WKInterfaceDevice.current().play(.success)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                }
+            }
+        }
     }
 }
 

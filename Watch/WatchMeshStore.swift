@@ -42,6 +42,18 @@ final class WatchMeshStore: ObservableObject {
 
     var events: [AgentEvent] { relayed?.events ?? [] }
 
+    /// Every agent across the mesh that is stopped waiting on a human. The one list
+    /// the watch exists to show, assembled from whichever path is live.
+    var needsAttention: [LiveSessionPick] {
+        var merged = MeshSnapshot(updatedISO: relayed?.updatedISO ?? "", machines: snaps)
+        merged.events = events
+        return sessionsNeedingAttention(from: merged)
+    }
+
+    /// True once we know there is nothing to show — as opposed to not knowing yet.
+    /// Without the distinction, a first run with no machines spins "Connecting…" forever.
+    var hasNoMachines: Bool { machines.isEmpty }
+
     var quickCommands: [String] {
         let commands = relayed?.quickCommands ?? []
         return commands.isEmpty ? Self.defaultQuickCommands : commands

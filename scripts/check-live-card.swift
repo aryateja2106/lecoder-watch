@@ -6,6 +6,7 @@ import Foundation
 @main
 struct CheckLiveCard {
     static func main() {
+        checkAttentionList()
         checkNothingToShow()
         checkAttentionWins()
         checkNewestBlockedWins()
@@ -44,6 +45,62 @@ struct CheckLiveCard {
     }
 
     // MARK: Cases
+
+    // The list the whole product is for: every agent across every machine that is
+    // stopped waiting on a human.
+    static func checkAttentionList() {
+        let snap = snapshot(
+            [machine("studio", [agent("api"), agent("web")]), machine("pi", [agent("build")])],
+            events: [
+                event("studio", "api", level: "warning", title: "asks", at: "2026-08-20T09:00:00Z"),
+                event("pi", "build", level: "error", title: "broke", at: "2026-08-20T09:30:00Z"),
+                event("studio", "web", level: "info", title: "done", at: "2026-08-20T09:45:00Z"),
+            ],
+        )
+        let list = sessionsNeedingAttention(from: snap)
+        assert(list.count == 2, "two blocked, one finished — got \(list.count)")
+        assert(list[0].session == "build", "newest first")
+        assert(list[1].session == "api")
+        assert(!list.contains { $0.session == "web" }, "a finished session is not waiting on anyone")
+
+        // A question that has since been answered must drop off. Without this the list
+        // only ever grows and every row becomes untrustworthy.
+        let answered = snapshot(
+            [machine("studio", [agent("api")])],
+            events: [
+                event("studio", "api", level: "warning", title: "asks", at: "2026-08-20T09:00:00Z"),
+                event("studio", "api", level: "info", title: "carried on", at: "2026-08-20T09:10:00Z"),
+            ],
+        )
+        assert(sessionsNeedingAttention(from: answered).isEmpty, "a superseded question must not linger")
+
+        // The reverse order too: a session that finished and then asked again is waiting.
+        let askedAgain = snapshot(
+            [machine("studio", [agent("api")])],
+            events: [
+                event("studio", "api", level: "info", title: "done", at: "2026-08-20T09:00:00Z"),
+                event("studio", "api", level: "warning", title: "asks again", at: "2026-08-20T09:10:00Z"),
+            ],
+        )
+        assert(sessionsNeedingAttention(from: askedAgain).count == 1)
+
+        // One row per session, not one per event, however many times it asked.
+        let repeated = snapshot(
+            [machine("studio", [agent("api")])],
+            events: (0..<5).map { event("studio", "api", level: "warning", title: "ask \($0)",
+                                        at: "2026-08-20T09:0\($0):00Z") },
+        )
+        let deduped = sessionsNeedingAttention(from: repeated)
+        assert(deduped.count == 1, "one row per session, got \(deduped.count)")
+        assert(deduped[0].lastLine == "ask 4", "the newest ask is the one to show")
+
+        // An event with no host or no session cannot be routed, so it cannot be a row.
+        var headless = event("studio", "api", level: "warning")
+        headless.host = nil
+        assert(sessionsNeedingAttention(from: snapshot([machine("studio", [agent("api")])], events: [headless])).isEmpty)
+
+        assert(sessionsNeedingAttention(from: snapshot([])).isEmpty)
+    }
 
     // A fleet of busy sessions is not a reason to occupy the Lock Screen. A permanent
     // "Working" card is wallpaper, and every update spends a budget ActivityKit meters.

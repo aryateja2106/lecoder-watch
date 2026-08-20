@@ -10,6 +10,10 @@ each entry as you ship the slice, not at release time.
 ## [Unreleased]
 
 ### Added
+- **"Needs you" is now the top of both apps.** Every agent across every machine that is
+  stopped waiting on you, newest first, with **Continue** on the row. This is the list
+  the product is for; it used to be buried under a machine list. A question you have
+  since answered drops off by itself.
 - **A live card for the session that needs you.** Lock Screen, Dynamic Island, and —
   on watchOS 11 and later — the watch Smart Stack, from one activity. It shows the
   agent, its state, the last line it printed, and CPU/memory; tapping it opens that
@@ -40,6 +44,16 @@ each entry as you ship the slice, not at release time.
   time you open the app. Lifting this needs push-to-start.
 
 ### Changed
+- **The Machines list no longer shows every machine twice.** It was a compact status
+  row near the top and then a full diagnostics section below it, both saying "green".
+  Now it is one row per machine; tap it for the diagnostics.
+- **The app no longer prints your bearer token as a shell command to copy.** Three
+  places did. Updating an agent uses the public installer, which keeps the existing
+  token, and a rejected token now says "run `mesh pair` again" — which fixes it in
+  place rather than asking you to paste a secret into a terminal.
+- **The watch stops saying "Connecting…" forever** when nothing is paired. It says what
+  to do instead.
+- Adding a machine by hand no longer invents a random token that could only ever 401.
 - **No machines ship with the app.** It used to seed three of the author's own tailnet
   addresses, which is a bug report for everyone else. The list starts empty and fills
   itself when you pair. (Existing installs keep everything they had saved.)

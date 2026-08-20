@@ -340,6 +340,36 @@ struct LiveSessionPick: Hashable {
     var memLabel: String?
 }
 
+/// Every session across the whole mesh that is stopped waiting on a human, newest
+/// first. This is the list the product exists to show: not "here are your machines",
+/// but "these two agents are blocked on you right now".
+///
+/// Derived from `events`, because that is the only signal that arrives without the
+/// session being open — `mesh-hook` posts one the moment an agent asks a question.
+/// A session that has since produced a newer, calmer event is dropped: the question
+/// was answered, and a stale "needs you" row is worse than none.
+func sessionsNeedingAttention(from snapshot: MeshSnapshot) -> [LiveSessionPick] {
+    var latestByKey: [String: AgentEvent] = [:]
+    for event in snapshot.events ?? [] {
+        guard let host = event.host, let session = event.session else { continue }
+        let key = "\(host)\u{1}\(session)"
+        // `events` arrives oldest first, so a later one always wins.
+        latestByKey[key] = event
+    }
+
+    return (snapshot.events ?? []).reversed().compactMap { event -> LiveSessionPick? in
+        guard let host = event.host, let session = event.session else { return nil }
+        guard latestByKey["\(host)\u{1}\(session)"]?.id == event.id else { return nil }  // superseded
+        let state = cardStateForLevel(event.level)
+        guard state.wantsAttentionState else { return nil }
+        guard let agent = snapshot.machines.first(where: { $0.host == host })?
+                .agents.first(where: { $0.name == session }) else { return nil }
+        return LiveSessionPick(host: host, session: session, agentType: agent.agentType ?? "shell",
+                               state: state, lastLine: String((event.body ?? event.title).prefix(80)),
+                               cpuPct: agent.cpuPct, memLabel: agent.memLabel)
+    }
+}
+
 /// Pick the session that deserves the live card, or nil for "show nothing".
 ///
 /// Two reasons qualify and no others. A session that is **blocked or broken** is the
@@ -347,35 +377,20 @@ struct LiveSessionPick: Hashable {
 /// user is **actively watching** qualifies because they have already said they care.
 /// A merely-busy session somewhere in the fleet does not: a permanent card that says
 /// "Working" is wallpaper, and every update spends a budget ActivityKit enforces.
-///
-/// Ties break towards the most recent event, so the newest thing to block wins.
 func liveSessionPick(from snapshot: MeshSnapshot) -> LiveSessionPick? {
-    func agent(_ host: String, _ name: String) -> Agent? {
-        snapshot.machines.first { $0.host == host }?.agents.first { $0.name == name }
-    }
-    func pick(host: String, agent: Agent, state: SessionState, lastLine: String) -> LiveSessionPick {
-        LiveSessionPick(host: host, session: agent.name, agentType: agent.agentType ?? "shell",
-                        state: state, lastLine: String(lastLine.prefix(80)),
-                        cpuPct: agent.cpuPct, memLabel: agent.memLabel)
-    }
+    if let blocked = sessionsNeedingAttention(from: snapshot).first { return blocked }
 
-    // 1. Something is blocked or broken. Newest event first — `events` arrives oldest
-    //    first, so walk it backwards.
-    for event in (snapshot.events ?? []).reversed() {
-        guard let host = event.host, let name = event.session else { continue }
-        let state = cardStateForLevel(event.level)
-        guard state.wantsAttentionState else { continue }
-        guard let match = agent(host, name) else { continue }
-        return pick(host: host, agent: match, state: state, lastLine: event.body ?? event.title)
-    }
-
-    // 2. The session the user opened. Its real output beats any event guess.
-    if let host = snapshot.watchedHost, let name = snapshot.watchedAgent, let match = agent(host, name) {
+    // The session the user opened. Its real output beats any event guess.
+    if let host = snapshot.watchedHost, let name = snapshot.watchedAgent,
+       let match = snapshot.machines.first(where: { $0.host == host })?
+           .agents.first(where: { $0.name == name }) {
         let lines = snapshot.watchedOutput ?? []
         let state = lines.isEmpty ? (match.attached ? SessionState.running : .idle)
                                   : sessionState(lines: lines, attached: match.attached)
         let last = lines.last { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? ""
-        return pick(host: host, agent: match, state: state, lastLine: last)
+        return LiveSessionPick(host: host, session: name, agentType: match.agentType ?? "shell",
+                               state: state, lastLine: String(last.prefix(80)),
+                               cpuPct: match.cpuPct, memLabel: match.memLabel)
     }
 
     return nil

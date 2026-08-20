@@ -49,10 +49,10 @@ struct TerminalTab: View {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(auth)
                                         .foregroundStyle(.orange)
-                                    Text("Update this machine's token in Settings, then refresh.")
+                                    Text("Run mesh pair on \(m.host) and pair again — that replaces the saved token in place.")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                    copyableCommand("sh install.sh --token \(m.token)")
+                                    CopyableCommand(text: "mesh pair")
                                 }
                             }
                             ForEach(snap.agents) { agent in

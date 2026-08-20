@@ -117,8 +117,11 @@ final class MeshStore: ObservableObject {
         save()
     }
 
+    /// The manual escape hatch. An empty token rather than a generated one: the
+    /// machine already has a token of its own and a random one here would just 401,
+    /// which reads as "the machine is broken" instead of "you have not paired it".
     func addMachine() {
-        machines.append(Machine(host: "new-machine", ip: "", port: 8899, token: installToken()))
+        machines.append(Machine(host: "new-machine", ip: "", port: 8899, token: ""))
         save()
     }
 

@@ -120,6 +120,10 @@ private struct MachinesTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var pairing = false
 
+    private var attention: [LiveSessionPick] {
+        store.snapshot.map { sessionsNeedingAttention(from: $0) } ?? []
+    }
+
     private var rows: [MachineSnapshot] {
         let machines = store.snapshot?.machines.isEmpty == false
             ? store.snapshot?.machines ?? []
@@ -153,140 +157,209 @@ private struct MachinesTab: View {
                 if store.localNetworkBlocked {
                     Section { LocalNetworkBlockedBanner() }
                 }
-                Section("Status") {
-                    ForEach(rows) { m in
-                        HStack(spacing: 10) {
-                            Circle()
-                                .fill(m.reachable ? .green : .secondary)
-                                .frame(width: 9, height: 9)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(machineShortName(m.host))
-                                    .font(.headline)
-                                Text(machineSummary(m))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Text(m.authError != nil ? "token"
-                                 : m.isStale ? m.statusLabel
-                                 : (m.reachable ? "\(m.agents.count) sess" : "offline"))
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
+                if !attention.isEmpty {
+                    Section {
+                        ForEach(attention, id: \.self) { item in
+                            AttentionRow(item: item)
                         }
+                    } header: {
+                        Label("Needs you", systemImage: "exclamationmark.bubble.fill")
+                            .foregroundStyle(.orange)
                     }
                 }
-                ForEach(rows) { m in
-                    Section(header: HStack {
-                        Circle().fill(m.reachable ? .green : .secondary).frame(width: 8, height: 8)
-                        Text(m.host).font(.headline)
-                    }) {
-                        if m.reachable {
-                            ServiceStatusRow(label: "meshd", ok: !m.isStale, detail: m.statusLabel)
-                            ServiceStatusRow(label: "auth", ok: m.authError == nil, detail: m.authError ?? "active")
-                            if m.authError != nil, let machine = store.machines.first(where: { $0.host == m.host }) {
-                                copyableCommand("sh install.sh --token \(machine.token)")
-                            }
-                            ServiceStatusRow(label: "bridge", ok: m.bridgeReachable, detail: m.bridgeError)
-                            ServiceStatusRow(label: "VNC", ok: m.vncReachable, detail: m.vncError)
-                            ServiceStatusRow(label: "hooks", ok: hasCap(m, "events"), detail: capDetail(m, "events"))
-                            ServiceStatusRow(label: "panes", ok: hasCap(m, "newPane"), detail: capDetail(m, "newPane"))
-                            ServiceStatusRow(label: "tailscale", ok: hasCap(m, "tailscale"), detail: capDetail(m, "tailscale"))
-                            if let version = m.meshdVersion {
-                                StatRow(label: "meshd version", value: version)
-                            }
-                            if let machine = store.machines.first(where: { $0.host == m.host }) {
-                                StatRow(label: "meshd endpoints", value: machine.baseURLs.map(\.absoluteString).joined(separator: " or "))
-                            }
-                            if let peers = m.tailnetPeers, !peers.isEmpty {
-                                SectionLabel("Tailnet peers")
-                                ForEach(peers.prefix(10)) { peer in
-                                    StatRow(label: peer.host, value: peerDetail(peer))
-                                }
-                            } else if let tailnetError = m.tailnetError, !tailnetError.isEmpty {
-                                StatRow(label: "Tailnet", value: tailnetError)
-                            }
-                            if let s = m.stats {
-                                StatRow(label: "CPU", value: String(format: "%.0f%%", s.cpuPct))
-                                StatRow(label: "Memory", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.mem.usedMB/1024, s.mem.totalMB/1024, s.mem.pct))
-                                StatRow(label: "Disk", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.disk.usedGB, s.disk.totalGB, s.disk.pct))
-                                StatRow(label: "Load", value: s.load.map { String(format: "%.2f", $0) }.joined(separator: " "))
-                                StatRow(label: "Sessions", value: "\(s.agentsCount)")
-                                if !s.topProcs.isEmpty {
-                                    SectionLabel("Top processes")
-                                    ForEach(s.topProcs.prefix(4)) { p in
-                                        StatRow(label: p.cmd, value: String(format: "%.0f%% · %.0f MB", p.cpuPct, p.memMB))
-                                    }
-                                }
-                            } else {
-                                StatRow(label: "Stats", value: "not available")
-                            }
-                        } else {
-                            ServiceStatusRow(label: "meshd", ok: false, detail: m.error ?? "unreachable")
-                            ServiceStatusRow(label: "bridge", ok: m.bridgeReachable, detail: m.bridgeError)
-                            ServiceStatusRow(label: "VNC", ok: m.vncReachable, detail: m.vncError)
-                            ServiceStatusRow(label: "hooks", ok: nil, detail: "unknown")
-                            ServiceStatusRow(label: "panes", ok: nil, detail: "unknown")
-                            ServiceStatusRow(label: "tailscale", ok: nil, detail: "unknown")
-                            Text(m.error ?? "unreachable").foregroundStyle(.secondary)
-                            if let machine = store.machines.first(where: { $0.host == m.host }) {
-                                Text(machine.baseURLs.map(\.absoluteString).joined(separator: " or "))
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        ForEach(m.agents) { a in
-                            HStack {
-                                Image(systemName: "terminal")
+                Section {
+                    ForEach(rows) { m in
+                        NavigationLink {
+                            MachineDetailView(host: m.host)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .fill(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
+                                    .frame(width: 9, height: 9)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(a.displayName)
-                                    Text(a.isCmux ? "cmux" : "\(a.windows) pane\(a.windows == 1 ? "" : "s")")
+                                    Text(machineShortName(m.host)).font(.headline)
+                                    Text(machineSummary(m))
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text(a.agentType ?? "shell").font(.caption)
-                                    Text(sessionCost(a)).font(.caption2).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        if needsUpdate(m), let machine = store.machines.first(where: { $0.host == m.host }) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Update command")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                copyableCommand("sh install.sh --token \(machine.token)")
-                                Text("Run from the Mesh installer folder on \(machineShortName(m.host)).")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        if needsBridge(m), let machine = store.machines.first(where: { $0.host == m.host }) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Terminal bridge")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                copyableCommand("sh install.sh --token \(machine.token)")
-                                Text("Starts rmux-bridge on \(machineShortName(m.host)) so phone terminals can open.")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        if needsSelfCheck(m) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Machine self-check")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                copyableCommand("~/.mesh/bin/mesh-self-check")
-                                Text("Checks meshd, sessions, Tailnet, terminal bridge, hooks, and VNC.")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                Text(m.authError != nil ? "token"
+                                     : m.isStale ? m.statusLabel
+                                     : (m.reachable ? "\(m.agents.count) sess" : "offline"))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
                             }
                         }
                     }
                 }
             }
             .refreshable { await store.refresh() }
+    }
+}
+
+/// Everything about one machine. Split out of the list because the list used to show
+/// each machine twice: a compact status row near the top and a full diagnostics
+/// section below it, both saying "green", and neither being where you wanted to go.
+private struct MachineDetailView: View {
+    @EnvironmentObject var store: MeshStore
+    let host: String
+
+    private var snapshot: MachineSnapshot? {
+        store.snapshot?.machines.first { $0.host == host }
+    }
+
+    var body: some View {
+        List {
+            if let m = snapshot {
+                if m.reachable {
+                    ServiceStatusRow(label: "meshd", ok: !m.isStale, detail: m.statusLabel)
+                    ServiceStatusRow(label: "auth", ok: m.authError == nil, detail: m.authError ?? "active")
+                    if m.authError != nil {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("This machine rotated its token. Run mesh pair on it and pair again — that replaces the saved token in place.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            CopyableCommand(text: "mesh pair")
+                        }
+                    }
+                    ServiceStatusRow(label: "bridge", ok: m.bridgeReachable, detail: m.bridgeError)
+                    ServiceStatusRow(label: "VNC", ok: m.vncReachable, detail: m.vncError)
+                    ServiceStatusRow(label: "hooks", ok: hasCap(m, "events"), detail: capDetail(m, "events"))
+                    ServiceStatusRow(label: "panes", ok: hasCap(m, "newPane"), detail: capDetail(m, "newPane"))
+                    ServiceStatusRow(label: "tailscale", ok: hasCap(m, "tailscale"), detail: capDetail(m, "tailscale"))
+                    if let version = m.meshdVersion {
+                        StatRow(label: "meshd version", value: version)
+                    }
+                    if let machine = store.machines.first(where: { $0.host == m.host }) {
+                        StatRow(label: "meshd endpoints", value: machine.baseURLs.map(\.absoluteString).joined(separator: " or "))
+                    }
+                    if let peers = m.tailnetPeers, !peers.isEmpty {
+                        SectionLabel("Tailnet peers")
+                        ForEach(peers.prefix(10)) { peer in
+                            StatRow(label: peer.host, value: peerDetail(peer))
+                        }
+                    } else if let tailnetError = m.tailnetError, !tailnetError.isEmpty {
+                        StatRow(label: "Tailnet", value: tailnetError)
+                    }
+                    if let s = m.stats {
+                        StatRow(label: "CPU", value: String(format: "%.0f%%", s.cpuPct))
+                        StatRow(label: "Memory", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.mem.usedMB/1024, s.mem.totalMB/1024, s.mem.pct))
+                        StatRow(label: "Disk", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.disk.usedGB, s.disk.totalGB, s.disk.pct))
+                        StatRow(label: "Load", value: s.load.map { String(format: "%.2f", $0) }.joined(separator: " "))
+                        StatRow(label: "Sessions", value: "\(s.agentsCount)")
+                        if !s.topProcs.isEmpty {
+                            SectionLabel("Top processes")
+                            ForEach(s.topProcs.prefix(4)) { p in
+                                StatRow(label: p.cmd, value: String(format: "%.0f%% · %.0f MB", p.cpuPct, p.memMB))
+                            }
+                        }
+                    } else {
+                        StatRow(label: "Stats", value: "not available")
+                    }
+                } else {
+                    ServiceStatusRow(label: "meshd", ok: false, detail: m.error ?? "unreachable")
+                    ServiceStatusRow(label: "bridge", ok: m.bridgeReachable, detail: m.bridgeError)
+                    ServiceStatusRow(label: "VNC", ok: m.vncReachable, detail: m.vncError)
+                    ServiceStatusRow(label: "hooks", ok: nil, detail: "unknown")
+                    ServiceStatusRow(label: "panes", ok: nil, detail: "unknown")
+                    ServiceStatusRow(label: "tailscale", ok: nil, detail: "unknown")
+                    Text(m.error ?? "unreachable").foregroundStyle(.secondary)
+                    if let machine = store.machines.first(where: { $0.host == m.host }) {
+                        Text(machine.baseURLs.map(\.absoluteString).joined(separator: " or "))
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                ForEach(m.agents) { a in
+                    HStack {
+                        Image(systemName: "terminal")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(a.displayName)
+                            Text(a.isCmux ? "cmux" : "\(a.windows) pane\(a.windows == 1 ? "" : "s")")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(a.agentType ?? "shell").font(.caption)
+                            Text(sessionCost(a)).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                // The installer keeps the machine's existing token, so neither of these
+                // needs one on the command line — and printing a live bearer token into
+                // a copyable field was a habit worth breaking.
+                if needsUpdate(m) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Update the agent")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        CopyableCommand(text: PairMachineView.installCommand)
+                        Text("Run on \(machineShortName(m.host)). It keeps the existing token.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if needsBridge(m) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Terminal bridge")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        CopyableCommand(text: PairMachineView.installCommand)
+                        Text("Starts rmux-bridge on \(machineShortName(m.host)) so phone terminals can open.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if needsSelfCheck(m) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Machine self-check")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        copyableCommand("~/.mesh/bin/mesh-self-check")
+                        Text("Checks meshd, sessions, Tailnet, terminal bridge, hooks, and VNC.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Text("No reading for this machine yet.").foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle(machineShortName(host))
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable { await store.refresh() }
+    }
+}
+
+/// One blocked agent, on the phone. Continue answers it in place; tapping the row
+/// opens the session for anything that needs more than Enter.
+private struct AttentionRow: View {
+    @EnvironmentObject var store: MeshStore
+    let item: LiveSessionPick
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: item.state.symbol)
+                .foregroundStyle(item.state.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.session).font(.headline).lineLimit(1)
+                if !item.lastLine.isEmpty {
+                    Text(item.lastLine).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Text(machineShortName(item.host)).font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Continue") {
+                Task { await store.respondToAgent(host: item.host, session: item.session, text: nil, key: "enter") }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            store.deepLinkSession = MeshStore.SessionTarget(host: item.host, session: item.session)
+        }
     }
 }
 
@@ -546,7 +619,7 @@ private struct SettingsTab: View {
                                     Label("Copy token", systemImage: "key")
                                 }
                                 Button {
-                                    UIPasteboard.general.string = "sh install.sh --token \(m.token)"
+                                    UIPasteboard.general.string = PairMachineView.installCommand
                                 } label: {
                                     Label("Copy install", systemImage: "doc.on.doc")
                                 }
