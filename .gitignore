@@ -30,3 +30,6 @@ __pycache__/
 
 .omc/
 install/dist/
+
+# asc CLI: build artifacts (IPAs) and cached Apple web-session state
+.asc/
