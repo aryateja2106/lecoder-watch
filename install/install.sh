@@ -664,6 +664,11 @@ else
   printf 'Tailscale IPv4: unavailable (run "tailscale ip -4" once Tailscale is connected)\n'
 fi
 printf 'MESHD token: %s\n' "$TOKEN_VALUE"
+# Watch pointer/keyboard control on Linux rides on xdotool + xclip (X11/Xvfb).
+# Non-fatal: /input reports exactly what is missing until they are installed.
+if [ "$OS_NAME" != "Darwin" ] && ! command -v xdotool >/dev/null 2>&1; then
+  printf 'Watch input control (optional): %s\n' "$(linux_tmux_hint | sed 's/tmux/xdotool xclip/')"
+fi
 if want_component tools; then
   printf 'Self-check: %s/bin/mesh-self-check\n' "$MESH_HOME"
   printf 'Notify test: %s/bin/mesh-event codex "Needs input" "phone/watch smoke test"\n' "$MESH_HOME"

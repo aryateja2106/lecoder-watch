@@ -21,6 +21,9 @@ import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { stat, mkdir, readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import {
+  linuxInjectEvents, linuxInputStatus, linuxClipboard, linuxVolume, linuxSystemAction,
+} from "./input-linux";
 
 const IS_MAC = process.platform === "darwin";
 const MAX_EVENTS = 200;
@@ -101,10 +104,10 @@ let trustedCache = false;
 
 // ---------- actions ----------
 export async function injectEvents(events: any[]): Promise<{ ok: boolean; count?: number; error?: string }> {
-  if (!IS_MAC) return { ok: false, error: "input injection is macOS only" };
   if (!Array.isArray(events) || events.length === 0) return { ok: false, error: "events required" };
   const batch = events.slice(0, MAX_EVENTS).filter((e) => e && typeof e.t === "string");
   if (batch.length === 0) return { ok: false, error: "no valid events" };
+  if (!IS_MAC) return linuxInjectEvents(batch);
   const proc = await stream(trustedCache);
   if (!proc) return { ok: false, error: buildError || "mesh-input unavailable" };
   proc.stdin.write(batch.map((e) => JSON.stringify(e)).join("\n") + "\n");
@@ -113,7 +116,7 @@ export async function injectEvents(events: any[]): Promise<{ ok: boolean; count?
 }
 
 export async function inputStatus(prompt = false) {
-  if (!IS_MAC) return { ok: false, trusted: false, error: "input injection is macOS only" };
+  if (!IS_MAC) return linuxInputStatus();
   const bin = await ensureHelper();
   if (!bin) return { ok: false, trusted: false, helper: HELPER_BIN, error: buildError };
   const out = await run(prompt ? [bin, "--check", "--prompt"] : [bin, "--check"]);
@@ -129,7 +132,7 @@ export async function inputStatus(prompt = false) {
 }
 
 async function volume(body: any) {
-  if (!IS_MAC) return { ok: false, error: "volume control is macOS only" };
+  if (!IS_MAC) return linuxVolume(body);
   const read = async () => ({
     level: Math.round(Number(await run(["/usr/bin/osascript", "-e", "output volume of (get volume settings)"])) || 0),
     muted: (await run(["/usr/bin/osascript", "-e", "output muted of (get volume settings)"])).trim() === "true",
@@ -161,7 +164,7 @@ const SYSTEM_ACTIONS: Record<string, string[]> = {
 };
 
 async function systemAction(action: string) {
-  if (!IS_MAC) return { ok: false, error: "system actions are macOS only" };
+  if (!IS_MAC) return linuxSystemAction(action);
   const cmd = SYSTEM_ACTIONS[action];
   if (!cmd) return { ok: false, error: `unknown action: ${action}` };
   await run(cmd);
@@ -250,13 +253,13 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     return json(result, result.ok ? 200 : 400);
   }
   if (path === "/clipboard" && req.method === "GET") {
-    if (!IS_MAC) return json({ error: "clipboard is macOS only" }, 404);
+    if (!IS_MAC) { const r = await linuxClipboard(); return json(r, r.ok ? 200 : 404); }
     return json({ text: await run(["/usr/bin/pbpaste"]) });
   }
   if (path === "/clipboard" && req.method === "POST") {
-    if (!IS_MAC) return json({ error: "clipboard is macOS only" }, 404);
     const body = await req.json().catch(() => ({}));
     if (typeof body?.text !== "string") return json({ error: "text required" }, 400);
+    if (!IS_MAC) { const r = await linuxClipboard(body.text); return json(r, r.ok ? 200 : 404); }
     await run(["/usr/bin/pbcopy"], body.text);
     return json({ ok: true });
   }
