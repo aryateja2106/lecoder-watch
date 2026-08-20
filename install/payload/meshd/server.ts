@@ -672,11 +672,20 @@ async function getTailnet() {
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
-function authed(req: Request): boolean {
-  if (!TOKEN) return true;
-  const h = req.headers.get("authorization") ?? "";
-  const q = new URL(req.url).searchParams.get("token") ?? "";
-  return h === `Bearer ${TOKEN}` || q === TOKEN;
+// Header-only for anything off-box, fail-closed, constant-time. 
+//
+// Loopback is the one exception, and it is not a relaxation: a process running as
+// this user on this machine can already read ~/.mesh/token (mode 600) and execute
+// anything, so demanding a bearer token from 127.0.0.1 protects nothing while
+// blocking this Mac's own browser from /desktop. Decided from the socket peer
+// address via server.requestIP — never from a header, which a remote client controls.
+function isLoopback(server: any, req: Request): boolean {
+  const address = server?.requestIP?.(req)?.address ?? "";
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+function authed(req: Request, server?: any): boolean {
+  if (isLoopback(server, req)) return true;
+  return !TOKEN || req.headers.get("authorization") === `Bearer ${TOKEN}`;
 }
 
 function localIPs(): Set<string> {
@@ -722,13 +731,13 @@ async function kbFederateSearch(local: any[], sp: URLSearchParams): Promise<any[
 Bun.serve({
   port: PORT,
   hostname: HOST,
-  async fetch(req) {
+  async fetch(req, server) {
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/health") {
       return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES });
     }
-    if (!authed(req)) return json({ error: "unauthorized" }, 401);
+    if (!authed(req, server)) return json({ error: "unauthorized" }, 401);
     try {
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
       const remote = await handleInput(req, url);

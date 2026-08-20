@@ -96,6 +96,18 @@ Two things the second screen exposed, both fixed:
 - **The exact corner of a display sits on the seam** with its neighbour and the event is
   dropped, so the target rect is inset by one point.
 
+## Opening the desktop
+
+From the Mac itself: **http://127.0.0.1:8899/desktop**. Loopback needs no token — a
+process running as you on this machine can already read `~/.mesh/token` and run
+anything, so demanding one from 127.0.0.1 protects nothing. Off-box requests are
+unchanged: bearer header or 401.
+
+Opening `desktop.html` as a `file://` path cannot work — its fetches have no server
+and no token. It has to be served by meshd.
+
+From the phone: the app's **Remote › Screen & control**, which sends the header.
+
 ## Watch UI
 
 - **Control &lt;mac&gt;** is the first row of the machines list for any host advertising the
@@ -122,11 +134,25 @@ now relays its own machine records (address, port, live token) in each snapshot 
 watch caches them. If the phone itself shows "token rejected", its stored token is wrong
 — the Mac's real ones live in `~/.mesh/hosts.json`.
 
+## Air mouse (the WowMouse approach)
+
+WowMouse pairs a Wear OS watch as a Bluetooth **HID** mouse. watchOS gives third-party
+apps no HID peripheral role, so that transport is closed on Apple Watch — but HID was
+only its transport. The parts that matter port directly:
+
+- **Pointing**: CoreMotion device motion at 50Hz, wrist yaw → x, pitch → y, mapped by
+  `airMouseDelta` and sent over the network path instead of over HID. Rotation *rate*,
+  not attitude, so the cursor self-centres when your arm stops.
+- **Pinch to click**: Double Tap is bound as the scene's primary action, so the same
+  index-finger-to-thumb gesture clicks. Native, Series 9 and later.
+
+Sensitivity and deadzone are calibration knobs in `airMouseDelta`, covered by
+`scripts/check-air-mouse.swift`.
+
 ## Deliberately not built
 
 - **BLE/GATT transport.** URLSession over Tailscale already works and is proven here.
 - **Privileged (`sudo`) daemon + XPC + proximity gate.** meshd can already run anything
   through a session; a root helper is a large new attack surface for no new capability.
-- **CoreMotion air-mouse.** The pad plus tap-the-preview covers pointing.
 - **Restart / shutdown.** They kill every running agent session, and a wrist tap is too
   cheap for that. Sleep is included but needs two taps.
