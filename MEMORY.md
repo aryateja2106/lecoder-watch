@@ -119,3 +119,27 @@ launch, and ask the user for on-device taps.
   missed poll now holds last-good for three polls as "last seen Xs ago".
 - App icon added (there was no asset catalog at all — hence the generic notification
   glyph); Settings shows version + build timestamp read from the bundle.
+
+## 2026-08-20 — token rotation, and two traps it exposed
+
+- **Rotated both live machines** to fresh 256-bit tokens (macbook + dataflow), updated
+  `~/.mesh/token`, `hosts.json`, the launchd plist and the systemd unit, and retired
+  `testtoken` from `Machine.defaults`. `arya-pi` is offline and still carries the old
+  shared token — rotate it when it comes back.
+- **`launchctl kickstart -k` does NOT reload the plist environment.** launchd caches
+  `EnvironmentVariables` from when the job was bootstrapped, so editing the plist and
+  kickstarting silently keeps the old token. Use `launchctl bootout gui/$(id -u)/<label>`
+  then `launchctl bootstrap gui/$(id -u) <plist>`.
+- **The loopback exemption makes local `curl` useless for auth tests.** Every request
+  from 127.0.0.1 is authorized regardless of token, so a rotation "verified" locally
+  proves nothing. Always test against the tailnet address.
+- **The systemd unit writes the token as `Environment="MESHD_TOKEN=…"` — quoted.** A
+  sed anchored on `^Environment=MESHD_TOKEN=` matches nothing and reports success.
+- **Writing the iOS app's UserDefaults must come *after* the install, not before.**
+  An install following the write clobbers it. Kill app → write → read back to verify →
+  launch.
+- **`devicectl process launch` does not keep an iOS app running.** iOS suspends it as
+  soon as it is not frontmost, so remote verification of polling behaviour is not
+  possible — the tailnet byte counters stay flat and it looks like a network fault.
+  iPhone Mirroring reports "iPhone in Use" when the owner is holding the phone.
+  Foreground checks need the owner.
