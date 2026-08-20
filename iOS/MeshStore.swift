@@ -370,7 +370,10 @@ final class MeshStore: ObservableObject {
     func handle(_ command: WatchCommand) async -> Data? {
         switch command.kind {
         case .refresh:
+            // Hand the snapshot straight back. updateApplicationContext is best-effort
+            // and rate-limited; a reply is not, and it is what the watch is waiting on.
             await refresh()
+            return snapshot.flatMap { try? JSONEncoder().encode($0) }
         case .agentSend:
             guard let host = command.host, let agent = command.agent,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }

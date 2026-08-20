@@ -83,6 +83,9 @@ final class WatchMeshStore: ObservableObject {
 
     func routeLabel(for host: String) -> String {
         if directReachable(host) { return "direct" }
+        if !shouldTryDirect(host), relayed?.machines.contains(where: { $0.host == host && $0.reachable }) == true {
+            return "via phone"
+        }
         if relayed?.machines.contains(where: { $0.host == host && $0.reachable }) == true {
             return phoneReachable ? "phone relay" : "phone snapshot"
         }
@@ -91,6 +94,23 @@ final class WatchMeshStore: ObservableObject {
 
     private var pollTask: Task<Void, Never>?
     private var outputTask: Task<Void, Never>?
+    /// A watch off the tailnet can never reach these hosts, and finding that out costs
+    /// a timeout per address per poll. Once a host fails, stop asking for a while.
+    private var directBlockedUntil: [String: Date] = [:]
+    private static let directBackoff: TimeInterval = 60
+
+    private func shouldTryDirect(_ host: String) -> Bool {
+        guard let until = directBlockedUntil[host] else { return true }
+        return Date() >= until
+    }
+
+    private func noteDirect(host: String, ok: Bool) {
+        if ok {
+            directBlockedUntil[host] = nil
+        } else {
+            directBlockedUntil[host] = Date().addingTimeInterval(Self.directBackoff)
+        }
+    }
 
     /// Adopt the phone's machine list — addresses, ports and, critically, current
     /// tokens. The watch's compiled-in defaults go stale the moment a token is
@@ -154,11 +174,34 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Ask the phone for a fresh snapshot and apply its reply.
+    ///
+    /// This is the watch's real route to the mesh: it has no Tailscale of its own, and
+    /// iOS suspends the phone app within seconds of it leaving the foreground, so
+    /// nothing arrives unless the watch asks. sendMessage relaunches the phone app in
+    /// the background, and the reply carries the snapshot — more reliable than waiting
+    /// on updateApplicationContext, which is best-effort and rate-limited.
+    private func pullFromPhone() async {
+        let command = WatchCommand(kind: .refresh, host: nil, agent: nil, text: nil, key: nil)
+        guard let data = await WatchLink.shared.request(command, timeout: 10),
+              let snap = try? JSONDecoder().decode(MeshSnapshot.self, from: data) else {
+            WatchLink.shared.send(command)   // queue it; the phone answers next time
+            return
+        }
+        relayed = snap
+        adoptConfigs(from: snap)
+    }
+
     func refresh() async {
+        // Run both routes at once so a slow phone does not delay a direct poll, and a
+        // dead direct path does not delay the phone.
+        async let phone: Void = pullFromPhone()
+
         let targets = machines
+        let skip = Set(targets.map(\.host).filter { !shouldTryDirect($0) })
         var results: [MachineSnapshot] = []
         await withTaskGroup(of: MachineSnapshot.self) { group in
-            for m in targets {
+            for m in targets where !skip.contains(m.host) {
                 group.addTask {
                     let c = MeshClient(machine: m)
                     let health = try? await c.healthInfo()
@@ -192,10 +235,18 @@ final class WatchMeshStore: ObservableObject {
             }
             for await s in group { results.append(s) }
         }
-        directSnaps = targets.compactMap { m in results.first { $0.host == m.host } }
-        if let mac = targets.first(where: { $0.host.contains("macbook") }) {
+        for snap in results {
+            noteDirect(host: snap.host, ok: snap.reachable && snap.authError == nil)
+        }
+        // Hosts we skipped keep their last direct result rather than flapping to
+        // "unreachable" — the relayed snapshot is what the UI shows for them anyway.
+        directSnaps = targets.compactMap { m in
+            results.first { $0.host == m.host } ?? directSnaps.first { $0.host == m.host }
+        }
+        if let mac = targets.first(where: { $0.host.contains("macbook") }), shouldTryDirect(mac.host) {
             usage = try? await MeshClient(machine: mac).usage()
         }
+        await phone
     }
 
     // MARK: Watch a single agent

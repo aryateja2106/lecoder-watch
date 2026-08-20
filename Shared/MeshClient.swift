@@ -4,6 +4,17 @@ import Foundation
 struct MeshClient {
     let machine: Machine
 
+    /// A watch cannot afford the phone's patience: it polls three machines over two
+    /// addresses each, so a 3s timeout is up to 18s of hanging per cycle — which is
+    /// what a frozen-feeling watch app actually is.
+    var timeout: TimeInterval = {
+        #if os(watchOS)
+        return 1.5
+        #else
+        return 3
+        #endif
+    }()
+
     enum MeshError: Error { case badURL, http(Int), decode }
 
     private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
@@ -15,7 +26,7 @@ struct MeshClient {
             guard let url = URL(string: path, relativeTo: base) else { continue }
             var req = URLRequest(url: url)
             req.httpMethod = method
-            req.timeoutInterval = 3
+            req.timeoutInterval = timeout
             req.setValue("Bearer \(machine.token)", forHTTPHeaderField: "Authorization")
             if let body {
                 req.httpBody = body
