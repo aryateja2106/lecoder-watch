@@ -14,6 +14,12 @@ struct WatchGlance: Codable, Hashable {
         var host: String
         var session: String
         var line: String
+        /// Optional, not defaulted: a default value does NOT make the synthesised
+        /// decoder tolerate a missing key, so `Bool = false` would throw on any glance
+        /// written by 0.2.0 and blank the complication until the app next refreshed.
+        var risky: Bool? = nil
+
+        var isRisky: Bool { risky == true }
     }
 
     var updatedISO: String
@@ -64,11 +70,41 @@ struct WatchGlance: Codable, Hashable {
 
     /// The second line, when there is room for one.
     func detail(now: Date = Date()) -> String {
-        if isStale(now: now) { return "Open LeSearch Mesh" }
+        if isStale(now: now) { return "Tap to reconnect" }
         if let first = waiting.first {
             return waiting.count == 1 ? first.line : first.session
         }
         return machinesTotal == 0 ? "Pair one on your iPhone" : "Nothing waiting"
+    }
+
+    /// The three bands the rectangular family renders, with no branching left in the
+    /// widget itself — so `check-glance` can assert every state headlessly.
+    ///
+    /// Exists because `headline`/`detail` drop the question the moment a second agent
+    /// blocks: the headline becomes "2 agents waiting" and the detail collapses to a
+    /// bare session name. The count is the least useful thing on the face; the question
+    /// is the only part you can act on, and it disappeared exactly when things got busy.
+    func entry(now: Date = Date()) -> (eyebrow: String, title: String, body: String) {
+        if isStale(now: now) {
+            guard let age = ageMinutes(now: now) else {
+                return ("NOT CONNECTED", "Open LeSearch Mesh", "The watch has never reached your mesh.")
+            }
+            return ("LAST SEEN \(age)M AGO", "Tap to reconnect", "This count may be out of date.")
+        }
+        if let first = waiting.first {
+            let eyebrow = waiting.count == 1 ? "WAITING ON YOU" : "\(waiting.count) WAITING"
+            let title = "\(first.session) · \(shortHost(first.host))"
+            return (eyebrow, title, first.line)
+        }
+        if machinesTotal == 0 {
+            return ("NOT PAIRED", "Pair a machine", "Open LeSearch Mesh on your iPhone.")
+        }
+        return ("ALL CLEAR", "Nothing waiting on you", "\(machinesUp) of \(machinesTotal) machines up")
+    }
+
+    /// The complication has room for a name, not a fully-qualified one.
+    private func shortHost(_ host: String) -> String {
+        host.split(separator: ".").first.map(String.init) ?? host
     }
 }
 

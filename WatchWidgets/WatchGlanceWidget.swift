@@ -92,15 +92,24 @@ struct GlanceView: View {
                 .widgetLabel(glance.headline(now: entry.date))
 
         default:
-            VStack(alignment: .leading, spacing: 2) {
-                Label(glance.headline(now: entry.date), systemImage: symbol)
-                    .font(.headline)
-                    .foregroundStyle(waiting ? .orange : .primary)
+            // Three bands: how many, which one, and what it asked. The question is the
+            // only actionable line, so it never gets dropped to make room for a count.
+            let bands = glance.entry(now: entry.date)
+            VStack(alignment: .leading, spacing: 1) {
+                Label(bands.eyebrow, systemImage: symbol)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(tint)
                     .lineLimit(1)
-                Text(glance.detail(now: entry.date))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                Text(bands.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(glance.isStale(now: entry.date) ? .secondary : .primary)
+                    .lineLimit(1)
+                if !bands.body.isEmpty {
+                    Text(bands.body)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -108,6 +117,9 @@ struct GlanceView: View {
 
     private var symbol: String {
         if glance.isStale(now: entry.date) { return "clock.badge.questionmark" }
-        return glance.waiting.isEmpty ? "checkmark.circle" : "exclamationmark.bubble.fill"
+        guard let first = glance.waiting.first else { return "checkmark.circle" }
+        // A question that would rewrite history or delete files gets the warning glyph,
+        // so the face distinguishes "answer me" from "think before you answer me".
+        return first.isRisky ? "exclamationmark.triangle.fill" : "exclamationmark.bubble.fill"
     }
 }

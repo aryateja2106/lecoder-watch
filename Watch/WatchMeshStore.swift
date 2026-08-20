@@ -269,7 +269,8 @@ final class WatchMeshStore: ObservableObject {
         let reachable = snaps.filter { $0.reachable && $0.authError == nil }
         GlanceStore.write(WatchGlance(
             updatedISO: ISO8601DateFormatter().string(from: Date()),
-            waiting: needsAttention.map { .init(host: $0.host, session: $0.session, line: $0.lastLine) },
+            waiting: needsAttention.map { .init(host: $0.host, session: $0.session, line: $0.lastLine,
+                                                risky: $0.risk.isDestructive) },
             machinesUp: reachable.count,
             machinesTotal: machines.count,
         ))
