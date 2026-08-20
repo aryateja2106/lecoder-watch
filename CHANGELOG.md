@@ -26,13 +26,25 @@ where driving your Mac from your phone is a real trackpad rather than a web page
 - **A live wait timer.** Every blocked agent shows how long it has been sitting there,
   counting up on the row, the Lock Screen card and the watch face. Six minutes of a
   machine doing nothing is the number this whole app exists to shrink.
-- **A real trackpad on the iPhone.** Remote was a web view; now it is native. One
-  finger moves the pointer with acceleration, tap clicks, two fingers scroll, two-finger
-  tap right-clicks, press-and-hold drags. The menu carries the things you reach for from
-  a phone: **Paste from iPhone** (your phone's clipboard into whatever has focus on the
-  Mac), **Copy from the machine**, **Recenter pointer**, a display picker, and window
-  snapping. The picture is four times sharper — the old one was sized for a watch.
-  meshd's web console is still there, one row down.
+- **Remote control you can actually aim.** Remote was a web view; now it is native, on
+  both the phone and the watch, and it draws **its own pointer**. You cannot aim at a
+  1512-point display rendered 390 points wide — the real cursor is two pixels — so
+  seeing where you are about to click is the whole difference between a demo and a tool.
+  - **Pinch to zoom, 1×–6×**, and the view follows the pointer, clamped at the edges, so
+    there is nothing to pan and no way to lose the cursor. Finger travel is divided by
+    zoom, so magnifying buys precision rather than just size.
+  - **Landscape**, and the tab bar gets out of the way. A Mac display is about 1.54
+    wide; a portrait phone was spending 60% of its glass on black bars.
+  - **A real modifier row** — ⇧ ⌃ ⌥ ⌘ sticky until the next key, so ⌘⇧4 is two taps and
+    a key — plus esc, tab, return, delete and arrows, explicit click and right-click,
+    and double-tap for double-click.
+  - One finger moves, two fingers scroll, two-finger tap right-clicks, press-and-hold
+    drags. **Paste from iPhone** puts your phone's clipboard into whatever has focus on
+    the Mac; **Copy from the machine** does the reverse.
+  - On the watch: the same drawn cursor and zoom in the preview, which is where the
+    aiming problem is worst. Tapping places the cursor exactly, through the zoom.
+  - The picture is four times sharper — the old one was sized for a watch. meshd's web
+    console is still there, one row down.
 - **An honest all-clear.** The watch says "Nothing waiting on you" instead of rendering
   no section at all. An empty list and a dead poll used to look identical, which on a
   glance surface is the whole failure.
@@ -50,6 +62,12 @@ where driving your Mac from your phone is a real trackpad rather than a web page
   already wearing a complication for.
 
 ### Fixed
+- **The watch said "pair a machine" to people who already had.** When the watch had
+  nothing to show it gave the one instruction guaranteed not to help, because an empty
+  list looked the same as an unanswered phone. It now names which of the four things
+  actually happened — iPhone unreachable, iPhone silent, iPhone paired to nothing, or
+  still asking — offers a Retry, and carries a Link row saying whether the phone is
+  answering and how many machines it sent.
 - **The answer button was inside the row's tap target.** On the watch, Continue was a
   24pt control nested in a full-row `NavigationLink`; on iOS the same row had a tap
   gesture over the whole thing. Whichever gesture the system resolved a tap to, you
