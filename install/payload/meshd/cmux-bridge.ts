@@ -34,6 +34,14 @@ Bun.serve({
   hostname: HOST,
   async fetch(req) {
     const url = new URL(req.url);
+    // This runs cmux commands and binds loopback, where a browser also lives. meshd
+    // calls it server-to-server with no Origin; a web page attacking it cannot help
+    // sending one (or a cross-site Sec-Fetch-Site). Reject those — no auth token
+    // needed, just the same browser guard as the daemon.
+    const site = req.headers.get("sec-fetch-site");
+    if (req.headers.get("origin") !== null || (site && site !== "same-origin" && site !== "none")) {
+      return json({ error: "forbidden" }, 403);
+    }
     if (url.pathname === "/health") return json({ ok: true, port: PORT });
 
     if (url.pathname === "/cmux" && req.method === "POST") {

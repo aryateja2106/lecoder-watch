@@ -35,10 +35,16 @@ let flags = Set(CommandLine.arguments.dropFirst())
 if flags.contains("--check") {
     let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
     let trusted = AXIsProcessTrustedWithOptions([promptKey: flags.contains("--prompt")] as CFDictionary)
+    // Screen Recording is the other grant this product needs, and it fails silently:
+    // a denied `screencapture` still exits 0 and produces a wallpaper-only image, so
+    // only the TCC preflight tells the truth. --prompt shows the real system dialog
+    // (once per process launch) and registers us in the Settings list.
+    let screen = CGPreflightScreenCaptureAccess()
+    if flags.contains("--prompt") && !screen { CGRequestScreenCaptureAccess() }
     let path = (CommandLine.arguments.first ?? "mesh-input")
         .replacingOccurrences(of: "\\", with: "\\\\")
         .replacingOccurrences(of: "\"", with: "\\\"")
-    print("{\"trusted\":\(trusted),\"path\":\"\(path)\"}")
+    print("{\"trusted\":\(trusted),\"screen\":\(screen),\"path\":\"\(path)\"}")
     exit(trusted ? 0 : 1)
 }
 

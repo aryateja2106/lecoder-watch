@@ -9,12 +9,14 @@ import { handleInput } from "./input";
 import { handleFiles } from "./files";
 import { handlePush, pushAlert } from "./push";
 import { handlePair } from "./pair";
+import { isAuthorized } from "./auth";
+import { handleDoctor } from "./doctor";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.2.2";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair"];
+const VERSION = "0.3.0";
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -642,7 +644,7 @@ async function addEvent(input: any): Promise<AgentEvent> {
     body: input.body ? String(input.body).slice(0, 500) : undefined,
     createdISO: input.createdISO ? String(input.createdISO) : now,
   };
-  await mkdir(join(homedir(), ".mesh"), { recursive: true });
+  await mkdir(join(homedir(), ".mesh"), { recursive: true, mode: 0o700 });
   await appendFile(EVENTS_PATH, `${JSON.stringify(event)}\n`);
   // APNs: fire-and-forget so a slow/misconfigured push never blocks event ingestion.
   pushAlert(event.title, event.body, { level: event.level, session: event.session, host: event.host }).catch(() => {});
@@ -674,7 +676,9 @@ async function getTailnet() {
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
-// Header-only for anything off-box, fail-closed, constant-time. 
+// Header-only for anything off-box, fail-closed, constant-time — see auth.ts.
+// An empty MESHD_TOKEN no longer means "open": it means loopback-only, because this
+// daemon executes shell commands and a misconfigured unit file must not be an RCE.
 //
 // Loopback is the one exception, and it is not a relaxation: a process running as
 // this user on this machine can already read ~/.mesh/token (mode 600) and execute
@@ -685,9 +689,29 @@ function isLoopback(server: any, req: Request): boolean {
   const address = server?.requestIP?.(req)?.address ?? "";
   return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
 }
+// A request a browser marks cross-site cannot be one of our clients: URLSession and
+// the mesh CLI send neither header, and the /desktop page fetches same-origin. So a
+// present Origin, or a cross-site Sec-Fetch-Site, is a page attacking the loopback
+// interface — rejected before the exemption or the token can wave it through.
+function isBrowserCrossSite(req: Request): boolean {
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") return true;
+  return req.headers.get("origin") !== null;
+}
 function authed(req: Request, server?: any): boolean {
+  if (isBrowserCrossSite(req)) return false;
   if (isLoopback(server, req)) return true;
-  return !TOKEN || req.headers.get("authorization") === `Bearer ${TOKEN}`;
+  return isAuthorized(TOKEN, req.headers.get("authorization") ?? "");
+}
+
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+function hostAllowed(req: Request): boolean {
+  const raw = req.headers.get("host");
+  if (!raw) return true; // no Host = not a browser; the auth gate still applies
+  const host = raw.replace(/:\d+$/, "").toLowerCase();
+  if (LOOPBACK_HOSTS.has(host)) return true;
+  if (/\.ts\.net$/.test(host)) return true;   // tailscale MagicDNS
+  return localIPs().has(host);                  // this machine's own IPs (incl. tailscale)
 }
 
 function localIPs(): Set<string> {
@@ -696,6 +720,17 @@ function localIPs(): Set<string> {
     for (const i of list ?? []) if (i.address) set.add(i.address);
   }
   return set;
+}
+
+async function peerHosts(): Promise<Map<string, { token?: string; port?: number }>> {
+  const map = new Map<string, { token?: string; port?: number }>();
+  try {
+    const cfg = JSON.parse(await readFile(join(homedir(), ".mesh", "hosts.json"), "utf8"));
+    for (const h of Object.values<any>(cfg?.hosts ?? {})) {
+      if (h?.ip) map.set(String(h.ip), { token: h.token ? String(h.token) : undefined, port: h.port ? Number(h.port) : undefined });
+    }
+  } catch {}
+  return map;
 }
 
 // Cross-machine KB search = read-federation: each machine owns its own kb.sqlite;
@@ -707,15 +742,21 @@ async function kbFederateSearch(local: any[], sp: URLSearchParams): Promise<any[
   const qs = new URLSearchParams();
   for (const k of ["q", "scope", "kind", "limit"]) { const v = sp.get(k); if (v) qs.set(k, v); }
   qs.set("federate", "0");
+  // Fan out only to hosts in ~/.mesh/hosts.json, each with its own token. Tokens are
+  // per-machine since pairing, so sending OURS to arbitrary online peers both leaked
+  // it to anything listening on :8899 and failed their auth anyway.
+  const known = await peerHosts();
   const peers = ((tn as any).peers ?? []).filter(
-    (p: any) => p.online && p.ips?.length && !p.ips.some((ip: string) => mine.has(ip)),
+    (p: any) => p.online && p.ips?.length && !p.ips.some((ip: string) => mine.has(ip))
+      && p.ips.some((ip: string) => known.has(ip)),
   );
   const settled = await Promise.allSettled(peers.map((p: any) => {
-    const ip = p.ips.find((x: string) => x.includes(".")) ?? p.ips[0];
+    const ip = p.ips.find((x: string) => known.has(x)) ?? p.ips[0];
+    const peer = known.get(ip)!;
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 2000);
-    return fetch(`http://${ip}:${PORT}/kb/search?${qs.toString()}`, {
-      headers: TOKEN ? { authorization: `Bearer ${TOKEN}` } : {},
+    return fetch(`http://${ip}:${peer.port ?? PORT}/kb/search?${qs.toString()}`, {
+      headers: peer.token ? { authorization: `Bearer ${peer.token}` } : {},
       signal: ctrl.signal,
     }).then((r) => (r.ok ? r.json() : { results: [] })).finally(() => clearTimeout(t));
   }));
@@ -736,6 +777,7 @@ Bun.serve({
   async fetch(req, server) {
     const url = new URL(req.url);
     const path = url.pathname;
+    if (!hostAllowed(req)) return json({ error: "bad host" }, 421);
     if (path === "/health") {
       return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES });
     }
@@ -745,6 +787,9 @@ Bun.serve({
     if (paired) return paired;
     if (!authed(req, server)) return json({ error: "unauthorized" }, 401);
     try {
+      // Setup truth: what this daemon can actually do right now — see doctor.ts.
+      const doc = await handleDoctor(req, url, { tokenSet: Boolean(TOKEN), bind: HOST, port: PORT, version: VERSION, mux: MUX });
+      if (doc) return doc;
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
       const remote = await handleInput(req, url);
       if (remote) return remote;

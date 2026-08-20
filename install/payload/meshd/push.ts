@@ -60,8 +60,8 @@ async function readTokens(): Promise<DeviceToken[]> {
   try { return JSON.parse(raw) as DeviceToken[]; } catch { return []; }
 }
 async function writeTokens(tokens: DeviceToken[]) {
-  await mkdir(MESH_DIR, { recursive: true });
-  await writeFile(TOKENS_PATH, JSON.stringify(tokens, null, 2));
+  await mkdir(MESH_DIR, { recursive: true, mode: 0o700 });
+  await writeFile(TOKENS_PATH, JSON.stringify(tokens, null, 2), { mode: 0o600 });
 }
 
 // ---------- delivery ----------
@@ -86,6 +86,34 @@ async function sendOne(dev: DeviceToken, payload: any): Promise<{ ok: boolean; s
   let reason: string | undefined;
   try { reason = JSON.parse(lines.slice(0, -1).join("\n") || "{}").reason; } catch {}
   return { ok: status === 200, status, reason };
+}
+
+/// What /push (GET) and /doctor both report — exported so doctor.ts never grows
+/// its own idea of "configured".
+export async function pushStatus() {
+  const k = await loadKey().catch(() => null);
+  return { configured: Boolean(k), keyId: k?.keyId ?? null, topic: TOPIC, devices: (await readTokens()).length };
+}
+
+/// One buzz per question. The same blocked prompt re-fires from hooks and pollers
+/// while an agent sits waiting; the first alert is signal, the fifth is why people
+/// turn notifications off. Keyed on what a person would call "the same alert".
+/// In-process memory only — a daemon restart may repeat one alert, which is fine.
+const recentAlerts = new Map<string, number>();
+export const DEDUPE_WINDOW_MS = 10 * 60 * 1000;
+
+export function alertKey(title: string, body?: string, opts?: { session?: string; host?: string }): string {
+  return [opts?.host ?? "", opts?.session ?? "", title, body ?? ""].join("\u0000");
+}
+
+export function shouldSend(key: string, nowMs: number, windowMs = DEDUPE_WINDOW_MS): boolean {
+  const last = recentAlerts.get(key);
+  if (last !== undefined && nowMs - last < windowMs) return false;
+  recentAlerts.set(key, nowMs);
+  if (recentAlerts.size > 512) {
+    for (const [k, t] of recentAlerts) if (nowMs - t >= windowMs) recentAlerts.delete(k);
+  }
+  return true;
 }
 
 /// An alert you can act on is one where there is a live session to answer and the agent
@@ -134,10 +162,13 @@ export function isWrongEnvironment(result: { status: number; reason?: string }):
 }
 
 export async function pushAlert(
-  title: string, body?: string, opts?: { level?: string; session?: string; host?: string },
+  title: string, body?: string, opts?: { level?: string; session?: string; host?: string; force?: boolean },
 ) {
   const tokens = await readTokens();
   if (!tokens.length) return { ok: false, sent: 0, reason: "no registered devices" };
+  if (!opts?.force && !shouldSend(alertKey(title, body, opts), Date.now())) {
+    return { ok: true, sent: 0, deduped: true };
+  }
   const payload = buildPayload(title, body, opts);
   let sent = 0;
   let changed = false;
@@ -176,9 +207,7 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
     new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
   if (url.pathname === "/push" && req.method === "GET") {
-    const k = await loadKey().catch(() => null);
-    const tokens = await readTokens();
-    return json({ ok: true, configured: Boolean(k), keyId: k?.keyId ?? null, topic: TOPIC, devices: tokens.length });
+    return json({ ok: true, ...(await pushStatus()) });
   }
   if (url.pathname === "/push/register" && req.method === "POST") {
     const body = await req.json().catch(() => ({}));
@@ -195,7 +224,8 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
     return json(await pushAlert(
       String(body.title ?? "MeshWatch test"),
       body.body ? String(body.body) : undefined,
-      { level: body.level ? String(body.level) : undefined, session: body.session ? String(body.session) : undefined },
+      // force: a person testing their setup must never have the test swallowed.
+      { level: body.level ? String(body.level) : undefined, session: body.session ? String(body.session) : undefined, force: true },
     ));
   }
   return null;

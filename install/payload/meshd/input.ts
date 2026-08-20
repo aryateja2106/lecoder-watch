@@ -121,13 +121,16 @@ export async function inputStatus(prompt = false) {
   if (!bin) return { ok: false, trusted: false, helper: HELPER_BIN, error: buildError };
   const out = await run(prompt ? [bin, "--check", "--prompt"] : [bin, "--check"]);
   const trusted = /"trusted"\s*:\s*true/.test(out);
+  const screen = /"screen"\s*:\s*true/.test(out);
   trustedCache = trusted;
   return {
     ok: true,
     trusted,
+    screen,
     helper: HELPER_BIN,
     // Quartz silently drops every event until this binary is trusted — say so plainly.
     hint: trusted ? undefined : `Add ${HELPER_BIN} to System Settings › Privacy & Security › Accessibility`,
+    screenHint: screen ? undefined : "Allow Screen Recording in System Settings › Privacy & Security, or screenshots show only the wallpaper",
   };
 }
 

@@ -243,6 +243,7 @@ service_start() {
       ss_plist=$(launchd_plist "$ss_name"); ss_label=$(launchd_label "$ss_name")
       mkdir -p "$(dirname "$ss_plist")"
       printf '%s\n' "$ss_env" | emit_launchd_plist "$ss_label" "$ss_workdir" "$BUN_BIN" "$ss_entry" "${TMPDIR:-/tmp}/${ss_name}.log" > "$ss_plist"
+      chmod 600 "$ss_plist"   # the plist embeds MESHD_TOKEN; keep it off other users
       launchctl bootout "gui/$(id -u)/$ss_label" 2>/dev/null || true
       launchctl bootstrap "gui/$(id -u)" "$ss_plist" 2>/dev/null || launchctl load "$ss_plist" 2>/dev/null || \
         warn "launchctl could not load $ss_label; check $ss_plist"
@@ -252,6 +253,7 @@ service_start() {
       ss_unit=$(systemd_unit "$ss_name")
       mkdir -p "$(dirname "$ss_unit")"
       printf '%s\n' "$ss_env" | emit_systemd_unit "mesh $ss_name" "$ss_workdir" "$BUN_BIN" "$ss_entry" > "$ss_unit"
+      chmod 600 "$ss_unit"    # the unit embeds MESHD_TOKEN; keep it off other users
       loginctl enable-linger "$(id -un)" 2>/dev/null || sudo loginctl enable-linger "$(id -un)" 2>/dev/null || \
         warn "could not enable linger; services may stop when you log out (run: sudo loginctl enable-linger $(id -un))"
       systemctl --user daemon-reload 2>/dev/null || true
@@ -434,6 +436,9 @@ resolve_payload() {
       *.tgz|*.tar.gz) url="$src";;
       *) url="${src%/}/mesh-install.tgz";;
     esac
+    # Refuse a plaintext source: whoever controls any hop then runs code as you (and,
+    # on --user, as another user via sudo). HTTPS or a local file only.
+    case "$url" in http://*) die "refusing plaintext payload source (use https): $url";; esac
     need_cmd curl
     log "Fetching payload: $url"
     curl -fsSL "$url" -o "$TMP_FETCH/payload.tgz" || die "failed to download $url"

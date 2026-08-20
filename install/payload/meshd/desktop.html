@@ -193,9 +193,13 @@ async function loadDisplays() {
     const res = await fetch("/displays", { headers: auth });
     const body = await res.json();
     const list = body.displays || [];
-    $("display").innerHTML = list
-      .map((d) => `<option value="${d.index}">${d.name || "Display " + d.index} (${d.width}×${d.height})</option>`)
-      .join("");
+    const sel = $("display");
+    sel.innerHTML = "";
+    for (const d of list) {
+      // new Option escapes text and value — never innerHTML with a daemon-supplied
+      // display name; this page carries MESH_TOKEN.
+      sel.add(new Option(`${d.name || "Display " + d.index} (${d.width}×${d.height})`, String(d.index)));
+    }
     $("display").value = String(display);
     $("display").style.display = list.length > 1 ? "" : "none";
     const current = list.find((d) => d.index === display);

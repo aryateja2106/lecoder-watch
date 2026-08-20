@@ -34,6 +34,26 @@ if (again.devices !== 1) throw new Error("dedupe failed");
 // send path must not throw even if APNs is unreachable (fire-and-forget contract)
 await call("/push/test", { title: "self-check" });
 
+// One buzz per question: the identical alert re-firing inside the window is
+// suppressed; a NEW question, another session, or the window elapsing all send.
+const { alertKey, shouldSend, DEDUPE_WINDOW_MS, pushAlert } = await import("./push.ts");
+const k = alertKey("Claude needs attention", "Allow edit?", { session: "api", host: "studio" });
+if (!shouldSend(k, 1000)) throw new Error("the first alert must send");
+if (shouldSend(k, 1000 + 5 * 60_000)) throw new Error("the identical alert 5 min later must be suppressed");
+if (!shouldSend(k, 1000 + 5 * 60_000 + DEDUPE_WINDOW_MS)) throw new Error("after the window it must send again");
+if (!shouldSend(alertKey("Claude needs attention", "Overwrite main.py?", { session: "api", host: "studio" }), 2000))
+  throw new Error("a NEW question must never be suppressed");
+if (alertKey("t", "b", { session: "s1", host: "h" }) === alertKey("t", "b", { session: "s2", host: "h" }))
+  throw new Error("different sessions must not collide");
+// Wiring: pushAlert itself dedupes (first call attempts delivery, second returns deduped),
+// and /push/test forces through so a person testing setup never has the test swallowed.
+await pushAlert("dup-check", "same body", { session: "dup" });
+const second = await pushAlert("dup-check", "same body", { session: "dup" });
+if (!second.deduped) throw new Error("pushAlert must suppress the identical alert");
+const test2 = await call("/push/test", { title: "dup-check2", body: "same" });
+const test3 = await call("/push/test", { title: "dup-check2", body: "same" });
+if (test3.deduped) throw new Error("/push/test must never be deduped");
+
 // Payload contract with the two Swift apps.
 const { buildPayload, isActionable } = await import("./push.ts");
 const eq = (got, want, what) => { if (JSON.stringify(got) !== JSON.stringify(want)) throw new Error(`${what}: got ${JSON.stringify(got)} want ${JSON.stringify(want)}`); };

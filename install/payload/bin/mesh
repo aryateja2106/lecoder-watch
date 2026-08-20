@@ -29,8 +29,10 @@ function loadConfig(): Config {
 }
 
 function saveConfig(c: Config) {
-  mkdirSync(MESH_HOME, { recursive: true });
-  writeFileSync(HOSTS_FILE, JSON.stringify(c, null, 2) + "\n");
+  // 0600: this file holds every host's plaintext token, so it must not be readable by
+  // other users — that is the only boundary the --user agent sandbox has.
+  mkdirSync(MESH_HOME, { recursive: true, mode: 0o700 });
+  writeFileSync(HOSTS_FILE, JSON.stringify(c, null, 2) + "\n", { mode: 0o600 });
 }
 
 function localToken(): string {
@@ -131,7 +133,10 @@ async function cmdHosts(cfg: Config) {
 function cmdHostAdd(pos: string[], flags: Record<string, string>, cfg: Config) {
   const [name, ip] = pos;
   if (!name || !ip) die("usage: mesh host add <name> <ip> [--port N] [--token T]");
-  cfg.hosts[name] = { ip, port: Number(flags.port) || 8899, token: flags.token || "testtoken" };
+  // No shared default token: `mesh pair` mints a real one per machine. An empty token
+  // means loopback-only (fail-closed auth off-box), never a well-known shared secret.
+  cfg.hosts[name] = { ip, port: Number(flags.port) || 8899, token: flags.token || "" };
+  if (!flags.token) console.error(`note: no --token given; ${name} works loopback-only until you run 'mesh pair' on it`);
   if (!cfg.default) cfg.default = name;
   saveConfig(cfg);
   out(() => console.log(`added ${name} → ${ip}:${cfg.hosts[name].port}${cfg.default === name ? " (default)" : ""}`), cfg.hosts[name]);
@@ -237,6 +242,24 @@ async function cmdHealth(flags: Record<string, string>, cfg: Config) {
   const h = resolveHost(hostOf(flags), cfg);
   const r = await api(h, "GET", "/health");
   out(() => console.log(`${h.name}: ${r?.ok ? "up" : "down"}${r?.meshdVersion ? ` · meshd ${r.meshdVersion}` : ""}${r?.platform ? ` · ${r.platform}` : ""}`), r);
+}
+
+// Reads /doctor, which tests each capability by exercising it. --fix POSTs
+// /doctor/fix, which makes macOS show the real Accessibility and Screen Recording
+// dialogs on that machine — the honest version of "a proper permission dialog",
+// since TCC only ever prompts from the process that needs the grant.
+async function cmdDoctor(flags: Record<string, string>, cfg: Config) {
+  const h = resolveHost(hostOf(flags), cfg);
+  const fix = "fix" in flags;
+  const r = await api(h, fix ? "POST" : "GET", fix ? "/doctor/fix" : "/doctor");
+  out(() => {
+    console.log(`${h.name}: meshd ${r.version} on ${r.bind} (${r.platform})${r.ok ? " — all good" : ""}`);
+    for (const [name, c] of Object.entries<any>(r.checks || {})) {
+      console.log(`  ${c.ok ? "ok " : "!! "} ${name.padEnd(6)} ${c.detail}`);
+      if (!c.ok && c.fix) console.log(`             fix: ${c.fix}`);
+    }
+    if (fix && !r.ok) console.log(`\nIf a dialog appeared on ${h.name}, approve it there, then run mesh doctor again.`);
+  }, r);
 }
 
 async function cmdEvents(flags: Record<string, string>, cfg: Config) {
@@ -402,6 +425,7 @@ SESSIONS  (default host, or -H <name>)
 STATUS
   usage                       usage/limits per provider     (alias: limits)
   health                      is meshd up?
+  doctor                      what actually works on a machine  [--fix shows the permission dialogs]
   events                      recent agent events           [--since ISO]
 
 GLOBAL
@@ -431,11 +455,20 @@ Send a single key. Supported: enter, ctrl-c, ctrl-d, up, down, left, right,
 tab, escape, backspace, delete, home, end, page-up, page-down.
   mesh key fix-bug enter        # approve a prompt
   mesh key fix-bug ctrl-c       # interrupt`,
-  "host": `mesh host add <name> <ip> [--port N] [--token T]   (default port 8899, token testtoken)
+  "host": `mesh host add <name> <ip> [--port N] [--token T]   (default port 8899; token via 'mesh pair')
 mesh host rm <name>
 mesh host default <name>
 
 Hosts are stored in ${HOSTS_FILE}. The first host added becomes the default.`,
+  doctor: `mesh doctor [-H host] [--fix]
+
+Tests what the daemon can actually do — token, input injection, screen capture,
+multiplexer, push — by doing it, and prints the fix for anything broken.
+--fix additionally makes macOS show the Accessibility and Screen Recording
+permission dialogs on that machine (approve them at the machine, then re-run).
+
+  mesh doctor                 # this machine
+  mesh doctor -H studio --fix # pop the permission dialogs on studio`,
 };
 
 function help(topic?: string) {
@@ -480,6 +513,7 @@ async function main() {
     case "kill": return cmdKill(pos, flags, cfg);
     case "usage": case "limits": return cmdUsage(flags, cfg);
     case "health": return cmdHealth(flags, cfg);
+    case "doctor": return cmdDoctor(flags, cfg);
     case "events": return cmdEvents(flags, cfg);
     default: die(`unknown command: ${cmd}  (try: mesh help)`);
   }
