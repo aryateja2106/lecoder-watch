@@ -35,6 +35,10 @@ Bluetooth **HID** mouse. watchOS gives third-party apps no HID peripheral role. 
 port is CoreMotion → `airMouseDelta` → the network path, plus Double Tap bound as the
 scene's primary action for the pinch-click. Same result, different transport.
 
+**Opening `desktop.html` as a `file://` path.** It has no server for its fetches and
+no token, so it shows a broken image and "screen unavailable". It must be served by
+meshd: `http://127.0.0.1:8899/desktop` locally, or the app's Remote tab off-box.
+
 **noVNC/websockify is not the way to see a Mac screen here.** It needs a brew install
 *plus* a Screen Sharing toggle behind the user's password. meshd already captures any
 display and injects input, so `/desktop` is a page that polls one and posts the other
@@ -91,3 +95,27 @@ launch, and ask the user for on-device taps.
   the iPhone app (rebuilt from this branch) launches once and uploads its token.
 - ff-merged `claude/mesh-watch-mac-remote-a62154` → local `main`; work continues on
   `feat/apns-push`. Not pushed (policy: never push main).
+
+## 2026-08-20 — remote desktop, file browser, air mouse
+
+- **`/desktop`** — remote desktop assembled from `/screen.jpg` + `/input`. Verified:
+  a click at normalized (0.5,0.5) put the real cursor at 756,491 on a 1512x982 screen.
+- **Loopback exempt from bearer auth**, judged from `server.requestIP`, never a header.
+  A local process can already read the token and exec anything. Verified the tailnet
+  path still 401s without a token.
+- **`/fs` + `/files`** — filesystem only, so it is the surface that works on a headless
+  box. Verified on dataflowagents: listed `/home/arya`, descended, read `/etc/hostname`.
+- **Air mouse + Double Tap** — the WowMouse idea minus its BT HID transport, which
+  watchOS does not permit. CoreMotion rotation *rate* (self-centring), `airMouseDelta`
+  holds the tuning knobs, `check-air-mouse` covers the curve.
+- **Push was blocked by signing, not the key.** `configured:true` all along, but the
+  app carried the XC Wildcard profile, which cannot hold `aps-environment`. A `clean
+  build -allowProvisioningUpdates` created the explicit App ID and the entitlement is
+  now in the signed app. `devices:0` persists only because the phone was locked, so
+  the app could not launch to register.
+- **"Every machine offline"** was Tailscale on a DERP relay (~0.5s/round trip) against
+  a 3s timeout with 6+ sequential requests per machine — and it disabled every button,
+  which is why sessions "could not be created". Timeout 8s, panes concurrent, and a
+  missed poll now holds last-good for three polls as "last seen Xs ago".
+- App icon added (there was no asset catalog at all — hence the generic notification
+  glyph); Settings shows version + build timestamp read from the bundle.
