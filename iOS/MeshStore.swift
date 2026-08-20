@@ -21,7 +21,6 @@ final class MeshStore: ObservableObject {
     private let installTokenKey = "mesh.installToken.v1"
     private let quickCommandsKey = "mesh.quickCommands.v1"
     private let pinnedLimitsKey = "mesh.pinnedLimits.v1"
-    private let tombstonesKey = "mesh.deletedDefaults.v1"
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
@@ -48,20 +47,12 @@ final class MeshStore: ObservableObject {
     // MARK: Persistence
 
     func load() {
-        var changed = false
-        let tombstoned = Set(UserDefaults.standard.stringArray(forKey: tombstonesKey) ?? [])
+        // No seeded machines and so no tombstones to suppress them: an empty list means
+        // "nothing paired yet", which the Machines tab turns into the pairing flow.
         if let data = UserDefaults.standard.data(forKey: defaultsKey),
-           let decoded = try? JSONDecoder().decode([Machine].self, from: data),
-           !decoded.isEmpty {
-            machines = Self.mergedDefaultMachines(decoded, tombstoned: tombstoned)
-            changed = machines != decoded
-        } else {
-            machines = Machine.defaults.filter { !tombstoned.contains($0.host) }
+           let decoded = try? JSONDecoder().decode([Machine].self, from: data) {
+            machines = decoded
         }
-        // (Removed: the old code reset the three default hosts back to the shared
-        // "testtoken" whenever their token matched the generated install token. That
-        // shared secret is retired — resurrecting it would undo a rotation.)
-        if changed { save() }
         if let decoded = UserDefaults.standard.stringArray(forKey: quickCommandsKey), !decoded.isEmpty {
             quickCommands = Self.mergedQuickCommands(decoded)
             UserDefaults.standard.set(quickCommands, forKey: quickCommandsKey)
@@ -72,27 +63,22 @@ final class MeshStore: ObservableObject {
         }
     }
 
-    private static func mergedDefaultMachines(_ saved: [Machine], tombstoned: Set<String>) -> [Machine] {
-        var machines = Machine.defaults
-            .filter { !tombstoned.contains($0.host) }
-            .map { fallback in saved.first { $0.host == fallback.host } ?? fallback }
-        for machine in saved where !machines.contains(where: { $0.host == machine.host }) {
-            machines.append(machine)
-        }
-        return machines
-    }
-
-    /// Delete machines and, for dogfood defaults, tombstone the host so the merge on the
-    /// next launch does not resurrect it.
     func deleteMachines(atOffsets offsets: IndexSet) {
-        let defaultHosts = Set(Machine.defaults.map { $0.host })
-        var tombstoned = Set(UserDefaults.standard.stringArray(forKey: tombstonesKey) ?? [])
-        for idx in offsets where defaultHosts.contains(machines[idx].host) {
-            tombstoned.insert(machines[idx].host)
-        }
-        UserDefaults.standard.set(Array(tombstoned), forKey: tombstonesKey)
         machines.remove(atOffsets: offsets)
         save()
+    }
+
+    /// Redeem a pairing code and adopt everything the paired machine knows about.
+    /// Returns the hosts that were added or refreshed, so the UI can say what happened.
+    @discardableResult
+    func pair(address: String, port: Int, code: String) async throws -> [PairedHost] {
+        let result = try await MeshClient.claimPair(address: address, port: port, code: code)
+        let hosts = result.allHosts
+        guard !hosts.isEmpty else { throw MeshClient.MeshError.decode }
+        machines = mergingPairedHosts(machines, hosts)
+        save()
+        await refresh()
+        return hosts
     }
 
     func installToken() -> String {

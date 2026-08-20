@@ -46,6 +46,26 @@ struct MeshClient {
         throw lastError ?? MeshError.badURL
     }
 
+    /// Redeem a one-time pairing code (`mesh pair` on the machine) for its real
+    /// token. This is the only call that runs without one, so it is deliberately
+    /// static — there is no configured `Machine` yet, which is the point.
+    static func claimPair(address: String, port: Int, code: String) async throws -> PairResult {
+        let host = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty, let url = URL(string: "http://\(host):\(port)/pair/claim") else {
+            throw MeshError.badURL
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 10
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["code": normalizedPairingCode(code)])
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        if let http = resp as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw MeshError.http(http.statusCode)
+        }
+        return try JSONDecoder().decode(PairResult.self, from: data)
+    }
+
     func health() async throws -> Bool {
         _ = try await request("/health")
         return true

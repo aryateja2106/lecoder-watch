@@ -8,12 +8,13 @@ import { kbPut, kbGet, kbSearch } from "./kb";
 import { handleInput } from "./input";
 import { handleFiles } from "./files";
 import { handlePush, pushAlert } from "./push";
+import { handlePair } from "./pair";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
 const VERSION = "0.2.2";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -738,6 +739,10 @@ Bun.serve({
     if (path === "/health") {
       return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES });
     }
+    // Pairing is the one route that must answer without a token — it is how the
+    // phone gets one. See pair.ts for why that is safe.
+    const paired = await handlePair(req, url, server, { port: PORT, token: TOKEN });
+    if (paired) return paired;
     if (!authed(req, server)) return json({ error: "unauthorized" }, 401);
     try {
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.

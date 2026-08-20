@@ -10,7 +10,7 @@ import Combine
 /// The UI reads merged state, so it just works whichever path is live.
 @MainActor
 final class WatchMeshStore: ObservableObject {
-    @Published var machines: [Machine] = Machine.defaults
+    @Published var machines: [Machine] = []   // filled from the phone, or the cache
     @Published private var directSnaps: [MachineSnapshot] = []
     @Published private var relayed: MeshSnapshot?
     @Published var usage: UsageSnapshot?

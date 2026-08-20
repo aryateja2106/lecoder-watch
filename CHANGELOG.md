@@ -9,6 +9,24 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Added
+- **Pairing.** Run `mesh pair` on a machine; it prints an address and an eight-character
+  code good for ten minutes and one use. Enter those two on the phone and the machine
+  hands over its real token — no 64-character bearer token typed on a phone keyboard.
+- **Pairing one machine adopts the fleet.** The machine you paired already knows the
+  rest from its `hosts.json`, so four boxes take one code. Loopback addresses in there
+  are rewritten to the address your phone actually reached, because `127.0.0.1` is true
+  for the daemon and useless for the phone.
+- A first-run screen that explains the two steps instead of showing an empty list.
+
+### Changed
+- **No machines ship with the app.** It used to seed three of the author's own tailnet
+  addresses, which is a bug report for everyone else. The list starts empty and fills
+  itself when you pair. (Existing installs keep everything they had saved.)
+- Machine names are shown as-is; the old code stripped one particular person's naming
+  prefix and mangled everyone else's.
+- Pull to refresh on Machines.
+
 ## [0.1.0] — 2026-08-20 · build 202608201519
 
 First TestFlight build. Installable by anyone on the team; the watch app ships inside it.

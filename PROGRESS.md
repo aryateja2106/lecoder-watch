@@ -95,6 +95,16 @@ using daily. One slice at a time, full build gate, commit only when green.
   in `TARGETED_DEVICE_FAMILY` demands all four orientations (90474), and
   `ITSAppUsesNonExemptEncryption` must be declared. See `docs/release-workflow.md`.
 
+- **S13 pairing** — `mesh pair` mints a one-time code over loopback; the phone redeems
+  it at `/pair/claim`, the one unauthenticated route, and gets the real token plus every
+  host in that machine's `hosts.json`. `Machine.defaults` is gone, and with it the
+  tombstone machinery that existed only to suppress it. Verified against a live daemon:
+  minting is refused from the tailnet (403), a wrong code is refused, the right code
+  works lowercase-with-a-dash and returns 3 hosts with 127.0.0.1 rewritten to the
+  reachable address, replay is refused, five wrong guesses burn the code, and `/stats`
+  still 401s without a token. `check-pairing` covers the merge — negative-tested: it
+  goes red when address-identity is broken.
+
 ## In the morning
 
 1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →
@@ -112,11 +122,9 @@ Ordered by what stops a stranger using this. Everything above shipped for *one* 
 three hardcoded machines; none of it is reachable by anyone else.
 
 **P0 — anyone can onboard**
-1. **S13 pairing.** Kill `Machine.defaults`. `mesh pair` mints a short-lived code; the
-   phone enters address + code and gets the real token back over `/pair/claim`. Pairing
-   one machine imports the rest of the fleet from its `hosts.json`.
-2. **S14 first-run.** An empty machine list must teach, not look broken: the install
-   one-liner, then the pairing screen.
+1. ~~**S13 pairing.**~~ DONE — see Done.
+2. **S14 QR pairing.** The code is typeable, but a camera scan of the `mesh://pair` URL
+   `mesh pair` already emits is one step instead of two.
 
 **P1 — the watch is the product**
 3. **S15 watch widgets.** Smart Stack + watch-face complications: machines up, agents

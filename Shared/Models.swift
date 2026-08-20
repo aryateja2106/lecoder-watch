@@ -66,17 +66,71 @@ struct Machine: Codable, Identifiable, Hashable {
         return URL(string: s)
     }
 
-    /// Addresses only — never a token. A shipped shared secret is a shared secret, and
-    /// this one now grants keystroke injection and arbitrary shell on every host that
-    /// still honours it. A machine with an empty token is inert until it is given one
-    /// in Settings, which is the correct failure.
-    static let defaults: [Machine] = [
-        Machine(host: "arya-macbook-pro", ip: "100.94.221.115", port: 8899, token: ""),
-        Machine(host: "arya-pi", ip: "100.94.168.17", port: 8899, token: ""),
-        Machine(host: "dataflowagents", ip: "100.80.10.95", port: 8899, token: "")
-    ]
-
+    /// No built-in machines. Three of someone else's tailnet addresses is not a
+    /// starting point, it is a bug report from every user who is not that someone —
+    /// and a shipped token would be a shared secret granting keystroke injection and
+    /// arbitrary shell. An empty list is the honest state: pair a machine (see
+    /// `PairResult`) and the list fills itself.
     var isConfigured: Bool { !token.isEmpty }
+}
+
+// MARK: - Pairing
+
+/// One machine as `meshd` hands it over during pairing.
+struct PairedHost: Codable, Hashable {
+    var host: String
+    var ip: String
+    var port: Int
+    var token: String
+}
+
+/// The answer to `POST /pair/claim`. Pairing one machine adopts the whole fleet,
+/// because the machine you paired already knows the rest from its `hosts.json`.
+struct PairResult: Codable, Hashable {
+    var ok: Bool
+    var host: String
+    var port: Int
+    var token: String
+    var platform: String?
+    var fleet: [PairedHost]?
+
+    /// The paired machine itself, plus its fleet, deduped — `fleet` already contains
+    /// the self entry when meshd is current, but an older daemon may omit it.
+    var allHosts: [PairedHost] {
+        var out = [PairedHost(host: host, ip: "", port: port, token: token)]
+        var seen = Set<String>()
+        for entry in fleet ?? [] where !entry.ip.isEmpty && seen.insert(entry.ip).inserted {
+            if entry.host == host { out[0] = entry } else { out.append(entry) }
+        }
+        return out.filter { !$0.ip.isEmpty && !$0.token.isEmpty }
+    }
+}
+
+/// A pairing code as the user typed it: case and grouping do not matter, and neither
+/// does a stray space. Mirrors `normalizeCode` in `meshd/pair.ts`.
+func normalizedPairingCode(_ input: String) -> String {
+    input.uppercased().filter { $0.isASCII && ($0.isNumber || ($0.isLetter && $0.isUppercase)) }
+}
+
+/// Fold newly paired hosts into the saved list. Identity is the address, because that
+/// is what actually reaches the daemon; a machine renamed on the Mac must update in
+/// place rather than appear twice. An existing entry keeps its user-visible name and
+/// takes the fresh token, so re-pairing is also how you recover from a rotation.
+func mergingPairedHosts(_ existing: [Machine], _ paired: [PairedHost]) -> [Machine] {
+    var out = existing
+    for entry in paired where !entry.ip.isEmpty && !entry.token.isEmpty {
+        if let i = out.firstIndex(where: { $0.ip == entry.ip }) {
+            out[i].token = entry.token
+            out[i].port = entry.port
+        } else if let i = out.firstIndex(where: { $0.host == entry.host }) {
+            out[i].ip = entry.ip
+            out[i].token = entry.token
+            out[i].port = entry.port
+        } else {
+            out.append(Machine(host: entry.host, ip: entry.ip, port: entry.port, token: entry.token))
+        }
+    }
+    return out
 }
 
 // MARK: - Stats (htop-style)

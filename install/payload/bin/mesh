@@ -3,7 +3,7 @@
 // Dependency-free (bun's built-in fetch). Config: ~/.mesh/hosts.json.
 // Human output by default; --json for agents/scripts. `mesh help <cmd>` for details.
 
-import { homedir } from "os";
+import { homedir, networkInterfaces } from "os";
 import { join } from "path";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 
@@ -249,6 +249,56 @@ async function cmdEvents(flags: Record<string, string>, cfg: Config) {
   }, ev);
 }
 
+// ---------- pairing ----------
+
+function run(cmd: string[]): string {
+  try {
+    const p = Bun.spawnSync(cmd, { stdout: "pipe", stderr: "ignore" });
+    return p.success ? new TextDecoder().decode(p.stdout).trim() : "";
+  } catch { return ""; }
+}
+
+/** The address a phone can actually reach: tailnet first, then a LAN interface. */
+function reachableAddress(): string {
+  const ts = run(["tailscale", "ip", "-4"]).split("\n")[0].trim();
+  if (ts) return ts;
+  for (const list of Object.values(networkInterfaces())) {
+    for (const i of list ?? []) {
+      if (i.family === "IPv4" && !i.internal) return i.address;
+    }
+  }
+  return "";
+}
+
+async function cmdPair(flags: Record<string, string>, cfg: Config) {
+  // Minted over loopback so no token is needed here — that is the whole point.
+  const port = Number(flags.port) || Number(process.env.MESHD_PORT) || 8899;
+  let r: any;
+  try {
+    r = await api({ name: "local", ip: "127.0.0.1", port, token: localToken() }, "GET", "/pair/new");
+  } catch (e: any) {
+    die(`meshd is not answering on 127.0.0.1:${port} — is it running?  (${String(e?.message ?? e)})`);
+  }
+  const address = flags.address || reachableAddress();
+  const url = `mesh://pair?h=${encodeURIComponent(address)}&p=${port}&c=${r.code}`;
+
+  out(() => {
+    console.log("");
+    console.log(`  Pair ${r.host} with your phone`);
+    console.log("");
+    console.log(`    Address   ${address || "<no tailscale or LAN address found>"}`);
+    console.log(`    Code      ${r.pretty}`);
+    console.log("");
+    // qrencode is not a dependency — if it happens to be installed, save the typing.
+    const qr = run(["qrencode", "-t", "ANSIUTF8", "-m", "2", url]);
+    if (qr) console.log(qr);
+    console.log(`  Open LeSearch Mesh on your iPhone -> Machines -> Add machine,`);
+    console.log(`  and enter those two. Expires in ${Math.round(r.ttlSec / 60)} minutes, one use.`);
+    console.log("");
+    if (!address) console.log("  No address found. Pass one: mesh pair --address <ip>");
+  }, { ...r, address, url });
+}
+
 // ---------- help ----------
 
 const HELP = `mesh ${VERSION} — control a MeshWatch mesh from the command line
@@ -257,6 +307,7 @@ USAGE
   mesh <command> [args] [-H host] [--json]
 
 HOSTS
+  pair                        show a one-time code to add this machine to the phone app
   hosts                       list configured hosts + reachability
   host add <name> <ip>        add a host   [--port N] [--token T]
   host rm <name>              remove a host
@@ -333,6 +384,7 @@ async function main() {
   }
 
   switch (cmd) {
+    case "pair": return cmdPair(flags, cfg);
     case "hosts": return cmdHosts(cfg);
     case "host": {
       const sub = pos.shift();

@@ -110,6 +110,7 @@ private struct LocalNetworkBlockedBanner: View {
 
 private struct MachinesTab: View {
     @EnvironmentObject var store: MeshStore
+    @State private var pairing = false
 
     private var rows: [MachineSnapshot] {
         let machines = store.snapshot?.machines.isEmpty == false
@@ -120,6 +121,26 @@ private struct MachinesTab: View {
 
     var body: some View {
         NavigationStack {
+            Group {
+                if store.machines.isEmpty {
+                    NoMachinesView { pairing = true }
+                } else {
+                    machineList
+                }
+            }
+            .navigationTitle("Machines")
+            .toolbar {
+                Button { Task { await store.refresh() } } label: {
+                    Image(systemName: store.polling ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                }
+                .disabled(store.machines.isEmpty)
+                Button { pairing = true } label: { Label("Pair a machine", systemImage: "plus.circle") }
+            }
+            .sheet(isPresented: $pairing) { PairMachineView().environmentObject(store) }
+        }
+    }
+
+    private var machineList: some View {
             List {
                 if store.localNetworkBlocked {
                     Section { LocalNetworkBlockedBanner() }
@@ -257,18 +278,7 @@ private struct MachinesTab: View {
                     }
                 }
             }
-            .navigationTitle("Mesh")
-            .overlay {
-                if rows.isEmpty {
-                    ContentUnavailableView("No machines", systemImage: "server.rack", description: Text("Add one in Settings."))
-                }
-            }
-            .toolbar {
-                Button { Task { await store.refresh() } } label: {
-                    Image(systemName: store.polling ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-                }
-            }
-        }
+            .refreshable { await store.refresh() }
     }
 }
 
@@ -310,7 +320,9 @@ private func activeFirst(_ snaps: [MachineSnapshot]) -> [MachineSnapshot] {
 }
 
 private func machineShortName(_ host: String) -> String {
-    host.replacingOccurrences(of: "arya-", with: "").replacingOccurrences(of: "agents", with: "")
+    // Just the hostname. The old version stripped "arya-" and "agents", which flattered
+    // exactly one person's naming scheme and mangled everyone else's.
+    host.split(separator: ".").first.map(String.init) ?? host
 }
 
 private func machineSummary(_ machine: MachineSnapshot) -> String {
@@ -471,6 +483,7 @@ private struct LimitRow: View {
 private struct SettingsTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var newCommand = ""
+    @State private var pairing = false
 
     /// Sideloading several times an hour makes "is this the new build?" a real
     /// question; the timestamp answers it with nothing to remember to bump.
@@ -535,9 +548,13 @@ private struct SettingsTab: View {
                         }
                     }
                     .onDelete { store.deleteMachines(atOffsets: $0) }
-                    Button { store.addMachine() } label: {
-                        Label("Add machine", systemImage: "plus.circle")
+                    Button { pairing = true } label: {
+                        Label("Pair a machine", systemImage: "qrcode.viewfinder")
                     }
+                    Button { store.addMachine() } label: {
+                        Label("Add manually", systemImage: "plus.circle")
+                    }
+                    .font(.caption)
                 }
 
                 Section("Quick send") {
@@ -577,6 +594,7 @@ private struct SettingsTab: View {
             }
             .navigationTitle("Settings")
             .toolbar { Button("Save") { store.save(); Task { await store.refresh() } } }
+            .sheet(isPresented: $pairing) { PairMachineView().environmentObject(store) }
         }
     }
 }
