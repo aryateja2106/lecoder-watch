@@ -23,6 +23,12 @@ final class WatchMeshStore: ObservableObject {
     @Published var screenJPEGData: Data?
     @Published var screenUpdatedISO: String?
     @Published var screenError: String?
+    /// Why the watch has nothing to show. Without this the empty state told a user who
+    /// had already paired three machines to go and pair a machine — the one instruction
+    /// guaranteed not to help.
+    @Published var lastPhoneReplyAt: Date?
+    @Published var phoneReplyMachineCount: Int?
+    @Published var phoneLinkNote: String?
 
     struct WatchTarget: Equatable { let host: String; let agent: String; let pane: String? }
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
@@ -195,13 +201,52 @@ final class WatchMeshStore: ObservableObject {
     /// on updateApplicationContext, which is best-effort and rate-limited.
     private func pullFromPhone() async {
         let command = WatchCommand(kind: .refresh, host: nil, agent: nil, text: nil, key: nil)
-        guard let data = await WatchLink.shared.request(command, timeout: 10),
-              let snap = try? JSONDecoder().decode(MeshSnapshot.self, from: data) else {
+        guard let data = await WatchLink.shared.request(command, timeout: 10) else {
+            phoneLinkNote = phoneReachable ? "iPhone did not answer" : "iPhone not reachable"
             WatchLink.shared.send(command)   // queue it; the phone answers next time
             return
         }
+        guard let snap = try? JSONDecoder().decode(MeshSnapshot.self, from: data) else {
+            // A reply we cannot read is a version skew between the two apps, and it
+            // looks identical to no reply at all unless it is named.
+            phoneLinkNote = "iPhone sent something this watch could not read"
+            return
+        }
+        lastPhoneReplyAt = Date()
+        phoneReplyMachineCount = snap.machines.count
+        phoneLinkNote = snap.machines.isEmpty ? "iPhone answered, but has no machines paired" : nil
         relayed = snap
         adoptConfigs(from: snap)
+    }
+
+    /// What to tell someone staring at an empty watch. Every branch names the next
+    /// useful action, and none of them says "pair a machine" to someone who already has.
+    var emptyStateReason: (title: String, detail: String) {
+        if let count = phoneReplyMachineCount, count == 0 {
+            return ("No machines paired",
+                    "Your iPhone answered but has nothing paired yet. Open LeSearch Mesh on your iPhone and pair a machine.")
+        }
+        if lastPhoneReplyAt != nil {
+            return ("Nothing to show yet", phoneLinkNote ?? "Your iPhone answered but sent no machines.")
+        }
+        if !phoneReachable {
+            return ("iPhone not reachable",
+                    "Keep your iPhone nearby and unlocked, then open LeSearch Mesh on it once. The watch reaches your machines through the phone.")
+        }
+        return ("Waiting for your iPhone", phoneLinkNote ?? "Asking your iPhone for your machines…")
+    }
+
+    /// A line the user can read out to us when it is still not working.
+    var linkStatusLine: String {
+        var parts = [phoneReachable ? "iPhone reachable" : "iPhone unreachable"]
+        if let at = lastPhoneReplyAt {
+            parts.append("replied \(Int(Date().timeIntervalSince(at)))s ago")
+        } else {
+            parts.append("no reply yet")
+        }
+        if let n = phoneReplyMachineCount { parts.append("\(n) machine\(n == 1 ? "" : "s") from phone") }
+        parts.append("\(machines.count) known here")
+        return parts.joined(separator: " · ")
     }
 
     func refresh() async {

@@ -11,7 +11,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 # Dependency-free Foundation sources the checks compile against.
-DEPS="$ROOT/Shared/Models.swift $ROOT/Shared/LimitHelpers.swift $ROOT/Shared/AgentNotifications.swift $ROOT/Shared/WatchGlance.swift $ROOT/Shared/APNsEnvironment.swift $ROOT/Shared/RiskClassifier.swift"
+DEPS="$ROOT/Shared/Models.swift $ROOT/Shared/LimitHelpers.swift $ROOT/Shared/AgentNotifications.swift $ROOT/Shared/WatchGlance.swift $ROOT/Shared/APNsEnvironment.swift $ROOT/Shared/RiskClassifier.swift $ROOT/Shared/ScreenZoom.swift"
 
 fail=0
 

@@ -43,7 +43,15 @@ struct MeshRelayApp: App {
             ContentView()
                 .environmentObject(store)
                 .onAppear {
+                    #if DEBUG
+                    // -uiRemote exists to make the remote screen inspectable; a system
+                    // alert sitting over the middle of it defeats the point.
+                    if !ProcessInfo.processInfo.arguments.contains("-uiRemote") {
+                        NotificationManager.shared.requestAuthorizationOncePaired(hasMachines: !store.machines.isEmpty)
+                    }
+                    #else
                     NotificationManager.shared.requestAuthorizationOncePaired(hasMachines: !store.machines.isEmpty)
+                    #endif
                     UIApplication.shared.registerForRemoteNotifications()
                     store.start()
                 }

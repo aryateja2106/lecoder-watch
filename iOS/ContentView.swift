@@ -4,7 +4,11 @@ import WebKit
 
 struct ContentView: View {
     @EnvironmentObject var store: MeshStore
+    #if DEBUG
+    @State private var tab = ProcessInfo.processInfo.arguments.contains("-uiRemote") ? Tab.remote : Tab.machines
+    #else
     @State private var tab = Tab.machines
+    #endif
 
     enum Tab: Hashable { case machines, terminal, remote, monitor, settings }
 
@@ -789,6 +793,23 @@ private struct RemoteControlTab: View {
 
     var body: some View {
         NavigationStack {
+            #if DEBUG
+            // `-uiRemote` opens this screen directly. The remote surface cannot be
+            // reached by any deep link and the simulator cannot be tapped from CI or
+            // from an agent, so without this the one screen whose whole job is aiming
+            // accuracy is the one screen nobody can look at.
+            if ProcessInfo.processInfo.arguments.contains("-uiRemote"), let first = machines.first {
+                RemoteScreenView(machine: first)
+            } else {
+                machineList
+            }
+            #else
+            machineList
+            #endif
+        }
+    }
+
+    private var machineList: some View {
             List {
                 ForEach(machines) { machine in
                     Section(machine.host) {
@@ -830,10 +851,10 @@ private struct RemoteControlTab: View {
             .navigationTitle("Remote")
             .overlay {
                 if machines.isEmpty {
-                    ContentUnavailableView("No machines", systemImage: "display", description: Text("Add a VNC URL in Settings."))
+                    ContentUnavailableView("No machines", systemImage: "display",
+                                           description: Text("Pair a machine on the Machines tab. No VNC server needed — meshd captures the screen itself."))
                 }
             }
-        }
     }
 }
 

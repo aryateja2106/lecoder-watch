@@ -44,8 +44,13 @@ targets:
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # Landscape earns its place on exactly one screen: a Mac display is ~1.54
+        # wide, so fitting it into a portrait phone spends 60% of the glass on black
+        # bars. Every other screen here is a list and rotates fine.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private Tailscale network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSSupportsLiveActivities: true

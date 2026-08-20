@@ -125,16 +125,32 @@ struct MachinesListView: View {
             } label: {
                 Label("Events", systemImage: "bell")
             }
+            // The watch reaches the mesh through the phone, so when something is wrong
+            // the first question is always "is the phone answering". Answer it in place
+            // rather than making someone guess from an absence.
+            Section {
+                Text(store.linkStatusLine)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Link")
+            }
         }
         .overlay {
             // "Connecting…" forever is what an unpaired watch used to show, because
             // an empty list and an unanswered poll looked the same from here.
             if store.hasNoMachines {
-                ContentUnavailableView(
-                    "No machines",
-                    systemImage: "iphone.gen3",
-                    description: Text("Open LeSearch Mesh on your iPhone and pair a machine. It appears here on its own."),
-                )
+                // Say which of the four ways this can be empty actually happened. The
+                // old copy told someone with three paired machines to pair a machine.
+                let reason = store.emptyStateReason
+                ContentUnavailableView {
+                    Label(reason.title, systemImage: "iphone.gen3")
+                } description: {
+                    Text(reason.detail)
+                } actions: {
+                    Button("Retry") { Task { await store.refresh() } }
+                        .buttonStyle(.borderedProminent)
+                }
             } else if store.snaps.isEmpty {
                 ProgressView("Connecting…")
             }
