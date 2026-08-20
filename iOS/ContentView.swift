@@ -751,13 +751,22 @@ private struct RemoteControlTab: View {
             List {
                 ForEach(machines) { machine in
                     Section(machine.host) {
+                        NavigationLink {
+                            RemoteScreenView(machine: machine)
+                        } label: {
+                            Label("Screen & control", systemImage: "display")
+                        }
+                        .disabled(snap(for: machine)?.reachable != true)
+                        // meshd's own web console, kept because it is the only surface
+                        // that works when the native one hits something unexpected —
+                        // and because it is the same page on any browser.
                         if let desktop = machine.desktopURL() {
                             NavigationLink {
                                 RemoteWebScreen(title: machine.host,
                                                 urlString: desktop.absoluteString,
                                                 bearer: machine.token)
                             } label: {
-                                Label("Screen & control", systemImage: "display")
+                                Label("Web console", systemImage: "safari")
                             }
                             .disabled(snap(for: machine)?.reachable != true)
                         }

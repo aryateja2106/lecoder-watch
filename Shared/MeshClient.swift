@@ -92,8 +92,14 @@ struct MeshClient {
     }
 
     /// Whole main screen, or one display when `display` is given (1-based).
-    func screenImage(display: Int? = nil) async throws -> Data {
-        try await request(display.map { "/screen.jpg?display=\($0)" } ?? "/screen.jpg")
+    /// `width` is honoured only on the `?display=` path — meshd clamps it to 240…2000
+    /// and defaults to 480, which is right for a watch and far too soft for a phone.
+    /// Asking for a width therefore means naming a display, so callers that want a
+    /// sharp picture have to know which screen they are looking at.
+    func screenImage(display: Int? = nil, width: Int? = nil) async throws -> Data {
+        guard let display else { return try await request("/screen.jpg") }
+        let size = width.map { "&width=\(min(2000, max(240, $0)))" } ?? ""
+        return try await request("/screen.jpg?display=\(display)\(size)")
     }
 
     func displays() async throws -> DisplayList {
