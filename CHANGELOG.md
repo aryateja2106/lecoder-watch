@@ -9,6 +9,8 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-21
+
 The stability release: the app stops crying wolf, and the fleet stops running last
 month's daemon.
 
