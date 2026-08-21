@@ -146,6 +146,6 @@ if (import.meta.main && process.argv.includes("--check")) {
   assert(normalizeCode(" k7m4 qp2x ") === "K7M4QP2X", "spaces and case tolerated");
   assert(new Set(Array.from({ length: 200 }, mintCode)).size === 200, "codes are not repeating");
   assert(!sameCode("ABCD", "ABCE") && sameCode("ABCD", "ABCD"), "compare");
-  assert(loopbackish("127.0.0.1") && loopbackish("127.1.2.3") && !loopbackish("100.94.221.115"), "loopback detection");
+  assert(loopbackish("127.0.0.1") && loopbackish("127.1.2.3") && !loopbackish("100.100.1.99"), "loopback detection");
   console.log("check-mesh-pair: OK");
 }

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Archive MeshWatch (iOS + embedded watch app) and upload it to TestFlight.
 #
-#   ASC_KEY_ID=Y4MR7X24UL ASC_ISSUER_ID=<uuid> sh scripts/release-testflight.sh
+#   ASC_KEY_ID=ABC123DEFG ASC_ISSUER_ID=<uuid> sh scripts/release-testflight.sh
 #
 # The key must be at ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8 —
 # xcodebuild and altool both look there by convention. The issuer id is the UUID on
@@ -17,7 +17,7 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-: "${ASC_KEY_ID:?set ASC_KEY_ID (e.g. Y4MR7X24UL)}"
+: "${ASC_KEY_ID:?set ASC_KEY_ID (e.g. ABC123DEFG)}"
 : "${ASC_ISSUER_ID:?set ASC_ISSUER_ID (uuid from App Store Connect > Integrations)}"
 KEY="$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
 [ -f "$KEY" ] || { echo "FAIL: no key at $KEY"; exit 1; }

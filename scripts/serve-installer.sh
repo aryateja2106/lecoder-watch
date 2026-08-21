@@ -6,7 +6,7 @@
 #   sh scripts/serve-installer.sh [PORT]        # default port 8890
 #
 # On a new tailnet machine:
-#   curl -fsSL http://<mac-tailscale-ip>:PORT/install.sh | sh -s -- --token testtoken
+#   curl -fsSL http://<mac-tailscale-ip>:PORT/install.sh | sh -s -- --token YOURTOKEN
 # Later:  ... | sh -s -- --upgrade      Remove:  ... | sh -s -- --uninstall --purge
 set -eu
 
@@ -24,9 +24,9 @@ sh "$ROOT/scripts/package-mesh-install.sh" "$DIST/mesh-install.tgz" "$URL" >/dev
 echo "Serving latest mesh installer at $URL  (from $ROOT)"
 echo
 echo "Install on any tailnet machine:"
-echo "  curl -fsSL $URL/install.sh | sh -s -- --token testtoken"
+echo "  curl -fsSL $URL/install.sh | sh -s -- --token YOURTOKEN"
 echo "Or over SSH in one shot:"
-echo "  ssh <user>@<host> 'curl -fsSL $URL/install.sh | sh -s -- --token testtoken'"
+echo "  ssh <user>@<host> 'curl -fsSL $URL/install.sh | sh -s -- --token YOURTOKEN'"
 echo "Upgrade:   curl -fsSL $URL/install.sh | sh -s -- --upgrade"
 echo "Uninstall: curl -fsSL $URL/install.sh | sh -s -- --uninstall --purge"
 echo

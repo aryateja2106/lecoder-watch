@@ -9,7 +9,9 @@
       "permanent": false
     },
     { "source": "/beta",   "destination": "https://testflight.apple.com/join/pVYPTxc7", "permanent": false },
-    { "source": "/github", "destination": "https://github.com/LeSearch-AI/mesh-install", "permanent": false }
+    { "source": "/github", "destination": "https://github.com/LeSearch-AI/mesh", "permanent": false },
+    { "source": "/changelog", "destination": "https://github.com/LeSearch-AI/mesh/blob/main/CHANGELOG.md", "permanent": false },
+    { "source": "/roadmap", "destination": "https://github.com/LeSearch-AI/mesh/blob/main/ROADMAP.md", "permanent": false }
   ],
   "headers": [
     {

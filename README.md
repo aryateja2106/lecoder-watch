@@ -8,11 +8,14 @@ No account, no cloud relay, no server of ours in the path. The phone talks strai
 daemon on a machine you own.
 
 - **iOS + watchOS app** (SwiftUI) — this repo
+- **Mac menu bar app** (SwiftUI) — [`MeshDesktop/`](MeshDesktop/): daemon status, permissions, pairing QR
 - **`meshd`** — the per-machine daemon (Bun + TypeScript), in [`install/payload/`](install/payload/)
+- **`mesh` CLI** — pair, doctor, upgrade, status, hooks, in [`install/payload/bin/`](install/payload/bin/)
 - **Installer** — public at [LeSearch-AI/mesh-install](https://github.com/LeSearch-AI/mesh-install)
 
-TestFlight: <https://testflight.apple.com/join/pVYPTxc7> · Landing page:
-[`web/`](web/)
+Website: <https://mesh.lesearch.ai> · TestFlight:
+<https://testflight.apple.com/join/pVYPTxc7> · [Changelog](CHANGELOG.md) ·
+[Roadmap](ROADMAP.md)
 
 ## Setup
 
@@ -49,9 +52,9 @@ warning.
 ## Architecture
 
 ```
-Apple Watch ──WatchConnectivity── iPhone ──HTTP over your tailnet/LAN──┬─ Mac:      meshd
-  needs-you · sessions · terminal   (polls every machine)              ├─ dataflow: meshd
-  trackpad · complication                                              └─ …:        meshd
+Apple Watch ──WatchConnectivity── iPhone ──HTTP over your tailnet/LAN──┬─ mac:    meshd
+  needs-you · sessions · terminal   (polls every machine)              ├─ linux:  meshd
+  trackpad · complication                                              └─ …:      meshd
                                                                             │
    agent blocks ─> mesh-hook ─> POST /events ─> meshd signs APNs ─> your phone + watch
 ```
@@ -99,6 +102,7 @@ iOS/        app, store, pairing, terminal, native remote screen
 Watch/      watch app, store, views, remote control
 WatchWidgets/      watch complication
 MeshWatchWidgets/  iOS Live Activity + Dynamic Island
+MeshDesktop/       Mac menu bar app — status, permissions, pairing QR
 install/    the installer and the meshd payload it ships
 scripts/    self-checks, packaging, release
 web/        landing page (Vercel)
@@ -107,4 +111,9 @@ docs/       runbooks and design notes
 
 Release process: [`docs/release-workflow.md`](docs/release-workflow.md). Changes:
 [`CHANGELOG.md`](CHANGELOG.md) — the `[Unreleased]` block is the source for TestFlight's
-"What to Test".
+"What to Test". Where it goes next: [`ROADMAP.md`](ROADMAP.md).
+
+## License
+
+[MIT](LICENSE). The daemon, the CLI, the installer and the apps — all of it. The part
+that runs on your machine is meant to be read before it is run.

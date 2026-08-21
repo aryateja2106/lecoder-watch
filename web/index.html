@@ -6,140 +6,166 @@
 <title>LeSearch Mesh — answer your coding agents from your wrist</title>
 <meta name="description" content="Your machines and the AI coding agents running on them, on your iPhone and Apple Watch. An agent stops to ask permission, your wrist buzzes, you tap Continue. Local-first: no cloud, no account.">
 <link rel="icon" href="/appicon.png">
+<meta name="theme-color" content="#191919">
 <meta property="og:title" content="LeSearch Mesh — answer your coding agents from your wrist">
 <meta property="og:description" content="Install one daemon on your Mac. Pair with an 8-character code. Then run your machines and your agents from your iPhone and Apple Watch. No cloud, no account.">
 <meta property="og:image" content="https://mesh.lesearch.ai/appicon.png">
 <meta property="og:url" content="https://mesh.lesearch.ai/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+/* LeSearch monochrome terminal system — #191919 / #e9e9e7 / JetBrains Mono.
+   Accent color is reserved for actions: green = affirmative, red = destructive. */
 :root{
-  --bg:#08090c; --panel:#101218; --panel-2:#161923; --line:#22262f;
-  --ink:#f2f4f8; --ink-2:#a4acbd; --ink-3:#6b7385;
-  --accent:#ff8a3d; --accent-dim:#3a2415; --ok:#3ddc84; --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
-  --wrap:1080px;
+  --bg:#191919; --bg-2:#202020; --panel:#1f1f1f; --elev:#252525; --hover:#2a2a2a;
+  --line:#2a2a2a; --line-2:#373737; --line-h:#525252;
+  --ink:#e9e9e7; --ink-2:#9b9b9b; --ink-3:#6b6b6b;
+  --ok:#4ade80; --danger:#ef4444;
+  --mono:'JetBrains Mono','Fira Code','SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  --radius:8px; --wrap:1040px;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
-  font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+html{scroll-behavior:smooth;color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);
+  font-size:15.5px;line-height:1.65;-webkit-font-smoothing:antialiased}
+::selection{background:var(--ink);color:var(--bg)}
 a{color:inherit}
 .wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
-.mono{font-family:var(--mono)}
 
 /* ---- nav ---- */
 header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
-  background:rgba(8,9,12,.78);border-bottom:1px solid var(--line)}
+  background:rgba(25,25,25,.85);border-bottom:1px solid var(--line)}
 .nav{display:flex;align-items:center;gap:16px;height:60px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:640;letter-spacing:-.01em;text-decoration:none}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;text-decoration:none;font-size:15px}
 .brand img{width:26px;height:26px;border-radius:6px;background:#fff;padding:2px}
 .nav .spacer{flex:1}
-.nav a.link{color:var(--ink-2);text-decoration:none;font-size:15px}
+.nav a.link{color:var(--ink-2);text-decoration:none;font-size:13.5px}
 .nav a.link:hover{color:var(--ink)}
-@media(max-width:720px){.nav a.link.hide-sm{display:none}}
+@media(max-width:760px){.nav a.link.hide-sm{display:none}}
 
 /* ---- buttons ---- */
-.btn{display:inline-flex;align-items:center;gap:8px;border-radius:10px;padding:11px 18px;
-  font-size:15px;font-weight:600;text-decoration:none;border:1px solid transparent;white-space:nowrap}
-.btn-primary{background:var(--accent);color:#160c04}
-.btn-primary:hover{filter:brightness(1.08)}
-.btn-ghost{border-color:var(--line);color:var(--ink-2);background:var(--panel)}
-.btn-ghost:hover{color:var(--ink);border-color:#333a47}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:var(--radius);padding:11px 18px;
+  font-size:14px;font-weight:600;text-decoration:none;border:1px solid transparent;white-space:nowrap;font-family:var(--mono)}
+.btn-primary{background:var(--ink);color:var(--bg)}
+.btn-primary:hover{background:#fff}
+.btn-ghost{border-color:var(--line-2);color:var(--ink-2);background:var(--panel)}
+.btn-ghost:hover{color:var(--ink);border-color:var(--line-h)}
 
 /* ---- hero ---- */
 .hero{padding:88px 0 64px}
-.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;
-  color:var(--accent);background:var(--accent-dim);border:1px solid #4a2e19;
-  padding:5px 12px;border-radius:999px;letter-spacing:.01em}
-h1{font-size:clamp(38px,6.4vw,64px);line-height:1.04;letter-spacing:-.035em;
-  margin:22px 0 0;font-weight:700;max-width:15ch}
-.lede{font-size:clamp(17px,2.2vw,20px);color:var(--ink-2);max-width:60ch;margin:22px 0 0}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;
+  color:var(--ink-2);border:1px solid var(--line-2);background:var(--panel);
+  padding:5px 12px;border-radius:999px;letter-spacing:.04em;text-transform:uppercase}
+.eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+h1{font-size:clamp(30px,5.4vw,52px);line-height:1.12;letter-spacing:-.03em;
+  margin:24px 0 0;font-weight:800;max-width:19ch}
+.lede{font-size:clamp(15px,1.9vw,17px);color:var(--ink-2);max-width:62ch;margin:22px 0 0}
+.lede strong{color:var(--ink)}
 .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px;align-items:center}
-.cta-note{font-size:13.5px;color:var(--ink-3)}
+.cta-note{font-size:12.5px;color:var(--ink-3)}
 
-/* ---- code ---- */
-.cmd{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);
-  border-radius:12px;padding:14px 14px 14px 16px;margin-top:26px;max-width:min(760px,100%);overflow:hidden}
-.cmd code{font-family:var(--mono);font-size:13.5px;color:var(--ink);white-space:nowrap;
-  overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}
+/* ---- terminal window ---- */
+.term{background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);
+  overflow:hidden;margin-top:30px;max-width:min(760px,100%)}
+.term-head{background:var(--bg-2);border-bottom:1px solid var(--line);padding:10px 14px;
+  display:flex;align-items:center;gap:8px}
+.term-dot{width:11px;height:11px;border-radius:50%;background:var(--line-2)}
+.term-title{margin-left:6px;font-size:12px;color:var(--ink-3)}
+.term-body{padding:16px;font-size:13px;line-height:1.7}
+.term-line{display:flex;gap:10px;align-items:baseline}
+.term-line .dollar{color:var(--ink-3);user-select:none}
+.term-line code{color:var(--ink);white-space:nowrap;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}
+.term-line code::-webkit-scrollbar{display:none}
+.term-out{color:var(--ink-3);margin-top:6px}
+.term-out .ok{color:var(--ok)}
+
+/* ---- inline command rows ---- */
+.cmd{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--line-2);
+  border-radius:var(--radius);padding:13px 13px 13px 15px;margin-top:14px;max-width:min(720px,100%);overflow:hidden}
+.cmd code{font-size:13px;color:var(--ink);white-space:nowrap;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}
 .cmd code::-webkit-scrollbar{display:none}
-.cmd .dollar{color:var(--ink-3);user-select:none;font-family:var(--mono);font-size:13.5px}
-.copy{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-2);border-radius:8px;
-  padding:6px 11px;font-size:12.5px;cursor:pointer;font-weight:600;font-family:var(--sans)}
-.copy:hover{color:var(--ink)}
+.cmd .dollar{color:var(--ink-3);user-select:none;font-size:13px}
+.copy{border:1px solid var(--line-2);background:var(--elev);color:var(--ink-2);border-radius:6px;
+  padding:6px 11px;font-size:12px;cursor:pointer;font-weight:600;font-family:var(--mono)}
+.copy:hover{color:var(--ink);border-color:var(--line-h)}
 .copy.done{color:var(--ok);border-color:#1d3b2a}
 
 /* ---- sections ---- */
 section{padding:72px 0;border-top:1px solid var(--line)}
-.kicker{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
-h2{font-size:clamp(27px,3.6vw,38px);line-height:1.15;letter-spacing:-.028em;margin:12px 0 0;font-weight:680}
-.sub{color:var(--ink-2);margin-top:14px;max-width:62ch}
+.kicker{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+h2{font-size:clamp(23px,3.2vw,33px);line-height:1.2;letter-spacing:-.025em;margin:12px 0 0;font-weight:700}
+.sub{color:var(--ink-2);margin-top:14px;max-width:64ch}
 
 /* ---- the moment ---- */
-.beats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+.beats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:40px}
 @media(max-width:820px){.beats{grid-template-columns:1fr}}
-.beat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;position:relative}
-.beat .n{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
-.beat h3{margin:10px 0 8px;font-size:17px;font-weight:640;letter-spacing:-.01em}
-.beat p{margin:0;color:var(--ink-2);font-size:15px}
-.beat .wristline{margin-top:16px;background:#000;border:1px solid #262b36;border-radius:10px;
-  padding:12px 13px;font-family:var(--mono);font-size:12.5px;line-height:1.5}
-.wristline .who{color:var(--accent);font-weight:600}
+.beat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+.beat:hover{border-color:var(--line-2)}
+.beat .n{font-size:12px;color:var(--ink-3)}
+.beat h3{margin:10px 0 8px;font-size:15.5px;font-weight:700;letter-spacing:-.01em}
+.beat p{margin:0;color:var(--ink-2);font-size:13.5px}
+.wristline{margin-top:16px;background:#141414;border:1px solid var(--line-2);border-radius:var(--radius);
+  padding:12px 13px;font-size:12px;line-height:1.5}
+.wristline .who{color:var(--ink-2);font-weight:600}
 .wristline .ask{color:var(--ink);display:block;margin-top:4px}
-.wristline .acts{display:flex;gap:6px;margin-top:10px}
-.wristline .acts span{border:1px solid #333a47;border-radius:999px;padding:3px 10px;color:var(--ink-2);font-size:11px}
-.wristline .acts span.go{background:var(--accent);color:#160c04;border-color:var(--accent);font-weight:700}
+.wristline .acts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.wristline .acts span{border:1px solid var(--line-2);border-radius:999px;padding:3px 10px;color:var(--ink-2);font-size:11px}
+.wristline .acts span.stop{background:var(--danger);color:#fff;border-color:var(--danger);font-weight:700}
+.wristline .acts span.go{background:var(--ok);color:#12210f;border-color:var(--ok);font-weight:700}
 
 /* ---- steps ---- */
 .steps{margin-top:40px;display:grid;gap:14px}
 .step{display:grid;grid-template-columns:34px minmax(0,1fr);gap:18px;background:var(--panel);
-  border:1px solid var(--line);border-radius:14px;padding:22px}
-.step .num{width:34px;height:34px;border-radius:9px;background:var(--panel-2);border:1px solid var(--line);
-  display:grid;place-items:center;font-family:var(--mono);font-size:14px;color:var(--accent);font-weight:700}
-.step h3{margin:4px 0 6px;font-size:17px;font-weight:640;letter-spacing:-.01em}
-.step p{margin:0;color:var(--ink-2);font-size:15px}
-.step .cmd{margin-top:14px}
+  border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+.step .num{width:34px;height:34px;border-radius:var(--radius);background:var(--elev);border:1px solid var(--line-2);
+  display:grid;place-items:center;font-size:14px;color:var(--ink);font-weight:700}
+.step h3{margin:4px 0 6px;font-size:15.5px;font-weight:700;letter-spacing:-.01em}
+.step p{margin:0;color:var(--ink-2);font-size:13.5px}
 
 /* ---- features ---- */
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:40px}
 @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:620px){.grid{grid-template-columns:1fr}}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
-.card h3{margin:0 0 8px;font-size:16px;font-weight:640;letter-spacing:-.01em}
-.card p{margin:0;color:var(--ink-2);font-size:14.5px}
-.card .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-  color:var(--ink-3);border:1px solid var(--line);border-radius:5px;padding:2px 7px;margin-bottom:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+.card:hover{border-color:var(--line-2)}
+.card h3{margin:0 0 8px;font-size:14.5px;font-weight:700;letter-spacing:-.01em}
+.card p{margin:0;color:var(--ink-2);font-size:13px}
+.card .tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink-3);border:1px solid var(--line-2);border-radius:5px;padding:2px 7px;margin-bottom:12px}
 
 /* ---- comparison ---- */
-.claims{margin-top:36px;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.claims{margin-top:36px;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
 .claim{display:grid;grid-template-columns:1fr 1.35fr;gap:0;background:var(--bg)}
 @media(max-width:720px){.claim{grid-template-columns:1fr}}
 .claim>div{padding:18px 22px}
-.claim .k{font-weight:640;font-size:15px}
-.claim .v{color:var(--ink-2);font-size:15px;border-left:1px solid var(--line)}
+.claim .k{font-weight:700;font-size:14px}
+.claim .v{color:var(--ink-2);font-size:13.5px;border-left:1px solid var(--line)}
 @media(max-width:720px){.claim .v{border-left:0;padding-top:0}}
 
 /* ---- faq ---- */
 details{border-bottom:1px solid var(--line);padding:18px 0}
 details:first-of-type{border-top:1px solid var(--line);margin-top:36px}
-summary{cursor:pointer;font-weight:600;font-size:16.5px;list-style:none;display:flex;justify-content:space-between;gap:16px}
+summary{cursor:pointer;font-weight:600;font-size:14.5px;list-style:none;display:flex;justify-content:space-between;gap:16px}
 summary::-webkit-details-marker{display:none}
-summary::after{content:"+";color:var(--ink-3);font-weight:400;font-size:20px;line-height:1}
+summary::after{content:"+";color:var(--ink-3);font-weight:400;font-size:19px;line-height:1}
 details[open] summary::after{content:"–"}
-details p{color:var(--ink-2);margin:12px 0 0;font-size:15.5px;max-width:70ch}
-details code{font-family:var(--mono);font-size:13.5px;background:var(--panel);border:1px solid var(--line);
+details p{color:var(--ink-2);margin:12px 0 0;font-size:13.5px;max-width:72ch}
+details a{color:var(--ink)}
+details code{font-size:12.5px;background:var(--panel);border:1px solid var(--line-2);
   border-radius:5px;padding:1px 6px}
 
 /* ---- final cta ---- */
 .final{text-align:center;padding:88px 0}
-.final h2{margin-inline:auto;max-width:20ch}
+.final h2{margin-inline:auto;max-width:24ch}
 .final .sub{margin-inline:auto}
 .final .cta{justify-content:center}
 .reqs{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:28px}
-.req{font-size:13px;color:var(--ink-3);border:1px solid var(--line);border-radius:999px;padding:5px 13px}
+.req{font-size:12px;color:var(--ink-3);border:1px solid var(--line-2);border-radius:999px;padding:5px 13px}
 
-footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);font-size:14px}
+footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);font-size:13px}
 .foot{display:flex;gap:20px;flex-wrap:wrap;align-items:center}
 .foot a{color:var(--ink-3);text-decoration:none}
 .foot a:hover{color:var(--ink-2)}
@@ -155,12 +181,13 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     <a class="link hide-sm" href="#how">How it works</a>
     <a class="link hide-sm" href="#wrist">On your wrist</a>
     <a class="link hide-sm" href="#faq">FAQ</a>
+    <a class="link" href="https://github.com/LeSearch-AI/mesh">GitHub</a>
     <a class="btn btn-primary" href="https://testflight.apple.com/join/pVYPTxc7">Join the beta</a>
   </div>
 </header>
 
 <div class="wrap hero">
-  <span class="eyebrow">Free TestFlight beta · iPhone + Apple Watch</span>
+  <span class="eyebrow"><span class="dot"></span>Free TestFlight beta · iPhone + Apple Watch</span>
   <h1>Your agents stop and ask. You answer from your wrist.</h1>
   <p class="lede">
     Coding agents run for hours and then freeze on one question — <em>can I force-push?</em>,
@@ -172,14 +199,25 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 
   <div class="cta">
     <a class="btn btn-primary" href="https://testflight.apple.com/join/pVYPTxc7">Join the TestFlight →</a>
-    <a class="btn btn-ghost" href="https://github.com/LeSearch-AI/mesh-install">Read the installer</a>
+    <a class="btn btn-ghost" href="https://github.com/LeSearch-AI/mesh">Read the source</a>
     <span class="cta-note">Free · no account · nothing leaves your network</span>
   </div>
 
-  <div class="cmd">
-    <span class="dollar">$</span>
-    <code id="cmd-install">curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh</code>
-    <button class="copy" data-copy="#cmd-install">Copy</button>
+  <div class="term">
+    <div class="term-head">
+      <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+      <span class="term-title">you@your-mac</span>
+      <span style="flex:1"></span>
+      <button class="copy" data-copy="#cmd-install">Copy</button>
+    </div>
+    <div class="term-body">
+      <div class="term-line">
+        <span class="dollar">$</span>
+        <code id="cmd-install">curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh</code>
+      </div>
+      <div class="term-out"><span class="ok">✓</span> meshd installed · launchd · survives reboot</div>
+      <div class="term-out"><span class="ok">✓</span> run <span style="color:var(--ink)">mesh pair</span> to put it on your phone</div>
+    </div>
   </div>
 </div>
 
@@ -199,12 +237,13 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       <div class="beat">
         <span class="n">02</span>
         <h3>Your wrist buzzes</h3>
-        <p>Not "something happened". The machine, the session, and the actual question,
-           on the watch face and in a notification you can act on.</p>
+        <p>The machine, the session, and the actual question, in a notification you can
+           act on. A question that would force-push or delete gets a red button naming
+           the verb — everything else is a calm Continue.</p>
         <div class="wristline">
           <span class="who">studio · deploy-api</span>
           <span class="ask">run git push --force?</span>
-          <div class="acts"><span class="go">Continue</span><span>Reply</span><span>Stop</span></div>
+          <div class="acts"><span class="stop">Force push</span><span>Reply</span><span>Stop</span></div>
         </div>
       </div>
       <div class="beat">
@@ -212,6 +251,11 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
         <h3>You answer</h3>
         <p>Tap Continue and Enter lands in the real session. Or dictate a reply and it
            gets typed in. The agent picks up where it stopped — you never got up.</p>
+        <div class="wristline">
+          <span class="who">studio · docs-site</span>
+          <span class="ask">edit vite.config.ts?</span>
+          <div class="acts"><span class="go">Continue</span><span>Reply</span><span>Stop</span></div>
+        </div>
       </div>
     </div>
   </div>
@@ -245,9 +289,10 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
         <div class="num">2</div>
         <div>
           <h3>Pair your phone</h3>
-          <p>Prints an address and an eight-character code that is good for ten minutes and
-             one use. Type it into the app. The Mac hands back its own access token and
-             every other machine it already knows about — a fleet of four takes one code.</p>
+          <p>Prints a QR code and an eight-character code that is good for ten minutes and
+             one use. Scan it with your iPhone's camera. The Mac hands back its own access
+             token and every other machine it already knows about — a fleet of four takes
+             one code.</p>
           <div class="cmd">
             <span class="dollar">$</span>
             <code id="cmd-2">mesh pair</code>
@@ -295,14 +340,15 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
         <span class="tag">Notifications</span>
         <h3>Answerable, not just readable</h3>
         <p>Continue, Stop, or dictate a Reply straight from the notification. The reply is
-           typed into the real session on the real machine.</p>
+           typed into the real session on the real machine — and once the task is done,
+           the banner takes itself down.</p>
       </div>
       <div class="card">
         <span class="tag">Live Activity</span>
         <h3>Lock Screen and Dynamic Island</h3>
         <p>The one session that actually needs you, live on the Lock Screen and in the
-           Smart Stack. Blocked always outranks merely busy — a permanent "working" card is
-           wallpaper.</p>
+           Smart Stack — with how much of your fleet is online next to it. Blocked always
+           outranks merely busy.</p>
       </div>
       <div class="card">
         <span class="tag">Terminal</span>
@@ -313,14 +359,16 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       <div class="card">
         <span class="tag">Mac control</span>
         <h3>Mouse, keyboard, screen</h3>
-        <p>Drive the Mac itself across multiple displays — trackpad-style pointer,
-           keyboard, and a live screen view — when answering a question is not enough.</p>
+        <p>Drive the Mac itself across multiple displays — trackpad-style pointer with
+           pinch-to-zoom, sticky modifiers so ⌘⇧4 works, paste both ways, and a live
+           screen view — when answering a question is not enough.</p>
       </div>
       <div class="card">
         <span class="tag">Machines</span>
         <h3>htop for everything you own</h3>
-        <p>CPU, memory, disk, load and top processes for every paired machine, plus which
-           ones dropped off the network.</p>
+        <p>CPU, memory, disk, load and top processes for every paired machine. Wake a
+           sleeping box over LAN from its neighbour. <code style="font-size:12px">mesh status</code>
+           shows the whole fleet in one screen.</p>
       </div>
     </div>
   </div>
@@ -355,7 +403,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       </div>
       <div class="claim">
         <div class="k">If this project disappears</div>
-        <div class="v">The daemon keeps running and the installer stays public. It is your
+        <div class="v">The daemon keeps running and the source stays public. It is your
           machine, your token, and a plain HTTP API you can curl.</div>
       </div>
     </div>
@@ -399,17 +447,21 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 
     <details>
       <summary>Is it open source?</summary>
-      <p>The installer and the daemon are public and readable at
-         <a href="https://github.com/LeSearch-AI/mesh-install">LeSearch-AI/mesh-install</a>
-         — that is the part that runs on your machine, and it is the part you should be
-         able to audit. The iOS and watchOS app is not open yet.</p>
+      <p>Yes — all of it. The daemon, the <code>mesh</code> CLI, and the iOS + watchOS app
+         live at <a href="https://github.com/LeSearch-AI/mesh">LeSearch-AI/mesh</a>, and the
+         one-line installer at
+         <a href="https://github.com/LeSearch-AI/mesh-install">LeSearch-AI/mesh-install</a>.
+         The part that runs on your machine is one readable TypeScript file — audit it
+         before you run it.</p>
     </details>
 
     <details>
       <summary>How finished is this?</summary>
       <p>It is a beta that its author uses daily, and it will have rough edges you find
          before we do. Send them through TestFlight's feedback — screenshots come straight
-         to us.</p>
+         to us. The <a href="https://github.com/LeSearch-AI/mesh/blob/main/CHANGELOG.md">changelog</a>
+         and <a href="https://github.com/LeSearch-AI/mesh/blob/main/ROADMAP.md">roadmap</a>
+         say exactly where it stands.</p>
     </details>
   </div>
 </section>
@@ -432,7 +484,9 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
   <div class="wrap foot">
     <span>LeSearch AI</span>
     <div class="spacer"></div>
-    <a href="https://github.com/LeSearch-AI/mesh-install">GitHub</a>
+    <a href="https://github.com/LeSearch-AI/mesh">GitHub</a>
+    <a href="https://github.com/LeSearch-AI/mesh/blob/main/CHANGELOG.md">Changelog</a>
+    <a href="https://github.com/LeSearch-AI/mesh/blob/main/ROADMAP.md">Roadmap</a>
     <a href="/install.sh">install.sh</a>
     <a href="/privacy">Privacy</a>
     <a href="https://lesearch.ai">lesearch.ai</a>

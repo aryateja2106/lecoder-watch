@@ -216,27 +216,12 @@ async function cmuxJson(args: string[]): Promise<any | null> {
     if (r.ok) {
       const body = await r.json() as { data?: any; error?: string };
       if (body.error || body.data == null) {
-        // #region agent log
-        appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
-          `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H6", location: "meshd/server.ts:cmuxJson", message: "bridge cmux error", data: { args: args.join(" "), error: body.error }, timestamp: Date.now() })}\n`,
-        ).catch(() => {});
-        // #endregion
         return null;
       }
-      // #region agent log
-      appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
-        `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H3", location: "meshd/server.ts:cmuxJson", message: "cmux bridge ok", data: { args: args.join(" "), via: "bridge" }, timestamp: Date.now() })}\n`,
-      ).catch(() => {});
-      // #endregion
       return body.data ?? null;
     }
   } catch { /* bridge unreachable */ }
 
-  // #region agent log
-  appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
-    `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H5", location: "meshd/server.ts:cmuxJson", message: "bridge down", data: { args: args.join(" ") }, timestamp: Date.now() })}\n`,
-  ).catch(() => {});
-  // #endregion
   return null;
 }
 
@@ -283,11 +268,6 @@ async function cmuxBridgeReady(): Promise<boolean> {
 async function ensureCmuxBridge(): Promise<void> {
   if (!IS_MAC) return;
   const ready = await cmuxBridgeReady();
-  // #region agent log
-  appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
-    `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H5", location: "meshd/server.ts:ensureCmuxBridge", message: "bridge check", data: { ready, hint: ready ? null : "run ~/.mesh/bin/start-cmux-bridge from a terminal" }, timestamp: Date.now() })}\n`,
-  ).catch(() => {});
-  // #endregion
 }
 
 async function cmuxSessions(): Promise<any[]> {
@@ -295,11 +275,6 @@ async function cmuxSessions(): Promise<any[]> {
   await ensureCmuxBridge();
   const tree = await cmuxJson(["tree", "--all", "--json"]);
   const listed = await cmuxJson(["workspace", "list", "--json"]);
-  // #region agent log
-  appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
-    `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H2", location: "meshd/server.ts:cmuxSessions", message: "tree parsed", data: { hasTree: Boolean(tree), windows: tree?.windows?.length ?? 0, listedWs: listed?.workspaces?.length ?? 0 }, timestamp: Date.now() })}\n`,
-  ).catch(() => {});
-  // #endregion
   if (!tree?.windows) return [];
 
   const meta = new Map<string, { title?: string; cwd?: string; updated?: string }>();
@@ -349,11 +324,6 @@ async function cmuxSessions(): Promise<any[]> {
 
 async function listAgents() {
   const [rmux, cmux] = await Promise.all([rmuxSessions(), cmuxSessions()]);
-  // #region agent log
-  appendFile("/Users/aryateja/Projects/.cursor/debug-71ac4d.log",
-    `${JSON.stringify({ sessionId: "71ac4d", hypothesisId: "H4", location: "meshd/server.ts:listAgents", message: "agent merge", data: { rmux: rmux.length, cmux: cmux.length, cmuxNames: cmux.map((a) => a.name).join(",") }, timestamp: Date.now() })}\n`,
-  ).catch(() => {});
-  // #endregion
   return [...rmux, ...cmux];
 }
 
