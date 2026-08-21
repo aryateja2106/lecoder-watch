@@ -24,8 +24,19 @@ month's daemon.
   offline/online pair per host per ten minutes, recovery only announced if the outage
   was, and identical agent alerts deduped for ten minutes — with a self-check that
   simulates the exact reported flap and demands exactly two banners.
+- **Once the task is done, the notification vanishes.** An "agent waiting" banner used
+  to sit on the Lock Screen long after the agent had finished, with the next alert for
+  the same session stacking underneath it. Now each session owns exactly one banner —
+  a later "Claude stopped" replaces "Claude needs attention" instead of piling on —
+  and the moment the phone sees that nobody is waiting on that session any more, the
+  banner is pulled down. Pushed and locally raised alerts share one identifier, so the
+  sweep clears both, and an alert queued a second before the work ended never lands.
 
 ### Added
+- **Know which machines are active and live, at a glance.** The Lock Screen card now
+  carries the fleet count alongside the session that needs you — "2/3 machines online"
+  — so the other half of the question ("is everything still up?") stops costing an app
+  launch. It shows in the Dynamic Island's expanded view too.
 - **A real trackpad mode.** A chip on the pad swaps the screen preview out for a
   full-height trackpad: tap to click, **tap-tap for right click** — built for
   approving something one-handed while the other hand holds lunch.
