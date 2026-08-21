@@ -22,6 +22,7 @@ Read [context.md](context.md) first (the map and the shape), then [memory.md](me
 | `install/payload/meshd/kb.ts` | Knowledge base (SQLite FTS5); `/kb/*` endpoints |
 | `install/payload/bin/mesh-input.swift` | CGEvent helper; recompiled on demand, long-lived on stdin |
 | `install/payload/bin/mesh` | CLI: `setup` (first run), `shellenv` (PATH), `pair` (QR), `hooks install`, `doctor [--fix]`, `upgrade`, `token rotate`, `status` |
+| `MeshDesktop/` | Mac menu bar app: daemon status, one Permissions window over `/doctor`, native pairing QR. Self-contained — links no `Shared/` |
 | `Shared/Models.swift` | Wire types, `sessionsNeedingAttention`, pairing logic |
 | `Shared/AlertGating.swift` | Pure notification gates: reachability throttle + event dedupe |
 | `docs/VOICE-INPUT-SPEC.md` | Local-first ASR plan (three lanes); addendum: watchOS has NO Speech.framework |

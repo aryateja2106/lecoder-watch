@@ -1001,6 +1001,17 @@ function cmdTokenRotate(flags: Record<string, string>, bools: Set<string>, cfg: 
 // Homebrew's shape, for the same reason: one line, safe to `eval`, so a shell rc can
 // pick up ~/.mesh/bin without anyone editing a PATH by hand. Never --json: the only
 // consumer is `eval "$(mesh shellenv)"`.
+/** Open the menu bar app — the GUI for permissions, fleet status and the pairing QR. */
+function cmdDesktop() {
+  if (process.platform !== "darwin") die("mesh desktop is the Mac menu bar app; this machine is " + process.platform);
+  // By bundle id, so it works wherever the .app lives (/Applications, ~/Applications,
+  // or still sitting in Xcode's DerivedData during development).
+  if (runOk(["open", "-b", "com.lecoder.meshdesktop"])) return;
+  die("MeshDesktop is not installed on this Mac.\n"
+    + "  From the repo: xcodegen generate && xcodebuild -project MeshWatch.xcodeproj -scheme MeshDesktop -destination 'platform=macOS' build\n"
+    + "  then copy the built LeSearch Mesh.app into /Applications and re-run 'mesh desktop'.");
+}
+
 function cmdShellenv() {
   console.log(`export PATH="${join(MESH_HOME, "bin")}:$PATH"`);
 }
@@ -1154,6 +1165,7 @@ USAGE
 
 GETTING STARTED
   setup                       first-run wizard: daemon → doctor → pair → status
+  desktop                     open the Mac menu bar app (permissions, status, pairing QR)
   shellenv                    print the PATH line;  eval "$(~/.mesh/bin/mesh shellenv)"
 
 HOSTS
@@ -1325,6 +1337,7 @@ async function main() {
 
   switch (cmd) {
     case "setup": return cmdSetup(cfg);
+    case "desktop": return cmdDesktop();
     case "shellenv": return cmdShellenv();
     case "pair": return cmdPair(flags, cfg);
     case "token": {

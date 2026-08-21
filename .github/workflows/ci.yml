@@ -110,5 +110,13 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Build MeshDesktop (macOS menu bar app)
+        run: |
+          xcodebuild -project MeshWatch.xcodeproj -scheme "MeshDesktop" \
+            -destination "generic/platform=macOS" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
       - name: Run self-checks
         run: sh scripts/check-all.sh

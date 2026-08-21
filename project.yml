@@ -26,6 +26,12 @@ schemes:
         MeshWatch Watch App: all
     run:
       config: Debug
+  MeshDesktop:
+    build:
+      targets:
+        MeshDesktop: all
+    run:
+      config: Debug
 targets:
   MeshWatch:
     type: application
@@ -72,6 +78,34 @@ targets:
         embed: true
       - target: MeshWatchWidgets
         embed: true
+  # The Mac menu bar app: permissions, daemon status, pairing QR. Its sources are
+  # MeshDesktop/ and nothing else — deliberately. Shared/ is written for the phone and
+  # the watch (ActivityKit, WidgetKit, the phone's client), so pulling it in here would
+  # drag half of iOS into a menu bar app to reuse two Codable structs. Those two are
+  # duplicated in MeshDesktop/LocalDaemon.swift instead, with a comment saying why.
+  MeshDesktop:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: MeshDesktop
+    info:
+      path: Generated/Desktop-Info.plist
+      properties:
+        # No Dock icon, no main window: the menu bar item is the whole app.
+        LSUIElement: true
+        CFBundleDisplayName: LeSearch Mesh
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshdesktop
+        # `mesh desktop` opens it by bundle id, but the name on disk is the one the CLI
+        # tells you to drag into /Applications, so it has to match.
+        PRODUCT_NAME: LeSearch Mesh
+        # No sandbox entitlement on purpose: this app talks to 127.0.0.1:8899 and hands
+        # System Settings deep links to NSWorkspace. A sandbox would block both to
+        # protect the user from an app that only ever calls their own machine.
   MeshWatchWidgets:
     type: app-extension
     platform: iOS

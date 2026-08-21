@@ -9,6 +9,17 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Added
+- **A Mac menu bar app: every permission in one window.** LeSearch Mesh now sits in the
+  menu bar — a filled dot while this machine's daemon is answering, hollow when it
+  isn't, and the version and setup score right there in the menu. "Permissions…" opens
+  one window listing what actually works on this Mac (tested, not assumed) with a single
+  **Grant everything** button that makes macOS show the real Accessibility and Screen
+  Recording dialogs, plus a direct link to the right System Settings page for each. It
+  also prints the pairing QR natively, so putting a new phone on the mesh no longer
+  means finding a terminal. Start it at login from the same menu. `mesh desktop` opens
+  it from the command line.
+
 ## [0.4.0] — 2026-08-21
 
 The stability release: the app stops crying wolf, and the fleet stops running last
