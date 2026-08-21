@@ -83,7 +83,7 @@ struct PairMachineView: View {
             }
             StepRow(number: 2, title: "Ask it for a code") {
                 CopyableCommand(text: "mesh pair")
-                Text("It prints an address and an eight-character code, good for ten minutes.")
+                Text("It prints a QR code — scan it with the Camera app and this form fills itself. There's also an eight-character code, good for ten minutes. If the terminal says command not found, open a new terminal or run ~/.mesh/bin/mesh pair.")
             }
         } header: {
             Text("On the machine")

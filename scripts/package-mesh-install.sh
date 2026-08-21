@@ -16,12 +16,17 @@ python3 - "$ROOT" "$OUT" <<'PY'
 import pathlib, sys, tarfile
 root = pathlib.Path(sys.argv[1]); out = pathlib.Path(sys.argv[2])
 keep = ["install/README.md", "install/install.sh", "install/hooks", "install/payload"]
+# Dev droppings that must never ship: node_modules is 6MB of typecheck-only deps
+# (meshd has zero runtime dependencies), and .omc/lockfiles are session state.
+skip = ("node_modules", ".omc", "bun.lock", "bun.lockb", ".DS_Store")
+def clean(ti):
+    return None if any(part in skip for part in pathlib.PurePosixPath(ti.name).parts) else ti
 out.parent.mkdir(parents=True, exist_ok=True)
 with tarfile.open(out, "w:gz") as tar:
     for rel in keep:
         p = root / rel
         if p.exists():
-            tar.add(p, arcname=rel)
+            tar.add(p, arcname=rel, filter=clean)
 print(out)
 PY
 

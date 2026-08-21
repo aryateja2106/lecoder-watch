@@ -466,7 +466,9 @@ resolve_payload() {
     case "$url" in http://*) die "refusing plaintext payload source (use https): $url";; esac
     need_cmd curl
     log "Fetching payload: $url"
-    curl -fsSL "$url" -o "$TMP_FETCH/payload.tgz" || die "failed to download $url"
+    # --progress-bar, not -s: with the script itself piped through `curl | sh`, this
+    # download is the one silent stretch, and people reasonably assume a hung install.
+    curl -fL --progress-bar "$url" -o "$TMP_FETCH/payload.tgz" || die "failed to download $url"
   fi
   ( cd "$TMP_FETCH" && tar -xzf payload.tgz ) || die "failed to extract payload"
   if [ -d "$TMP_FETCH/install/payload" ]; then SCRIPT_DIR="$TMP_FETCH/install"
@@ -775,6 +777,7 @@ printf 'Uninstall: sh install.sh --uninstall   (add --purge to remove the token 
 # Last, because it is the one instruction the user has to act on themselves.
 setup_path
 report_path
+printf '\nThen let the wizard finish the job (permissions, QR pairing, fleet check):\n    mesh setup\n'
 
 if [ "$NO_START" != "1" ]; then
   want_component meshd  && [ "$MESHD_STATUS" != "up" ] && exit 1
