@@ -32,8 +32,13 @@ final class MeshStore: ObservableObject {
     /// seen 12s ago" instead of wiping the machine — including the buttons that let
     /// you do anything about it, which are disabled while it reads unreachable.
     private var lastGood: [String: (snapshot: MachineSnapshot, at: Date)] = [:]
-    private var missesByHost: [String: Int] = [:]
-    private static let missesBeforeOffline = 3
+    /// How long a host may go unanswered before we stop holding its last good state
+    /// and admit "offline". Time-based, not a miss counter: partial publishes and
+    /// overlapping refreshes each ran the old counter, so one timed-out poll could
+    /// burn all three strikes inside a single refresh and flash offline instantly.
+    /// ~45s is five clean 8s polls, or three worst-case 16s failures (8s timeout x
+    /// two addresses) — sustained silence, not a blip.
+    private static let offlineGraceSeconds: TimeInterval = 45
     private var lastEventISOByHost: [String: String] = [:]
     private var initializedEventHosts = Set<String>()
 
@@ -155,6 +160,11 @@ final class MeshStore: ObservableObject {
     }
 
     func refresh() async {
+        // Single flight. A dead host takes up to 16s just to fail /health while the
+        // timer fires every 8s, so unguarded overlap was the steady state — and an
+        // old timed-out pass finishing late would overwrite the newer green snapshot
+        // with "offline". That race was most of the visible online/offline flapping.
+        guard !polling else { return }
         polling = true
         defer { polling = false }
         let targets = machines
@@ -332,20 +342,22 @@ final class MeshStore: ObservableObject {
         PhoneConnectivity.shared.push(snapshot!)
     }
 
-    /// Keep showing a machine's last good state through a few missed polls.
+    /// Keep showing a machine's last good state until it has been silent for the
+    /// whole grace window. Judged purely by the clock, so it is idempotent — the
+    /// partial publish and the final ordering pass can both run it for the same host
+    /// without changing the verdict.
     private func holdRecentlyGood(_ snapshot: MachineSnapshot) -> MachineSnapshot {
         let host = snapshot.host
         if snapshot.reachable && snapshot.authError == nil {
             lastGood[host] = (snapshot, Date())
-            missesByHost[host] = 0
             return snapshot
         }
         // A rejected token is a real answer, not a miss — show it immediately.
         if snapshot.authError != nil { return snapshot }
 
-        let misses = (missesByHost[host] ?? 0) + 1
-        missesByHost[host] = misses
-        guard misses < Self.missesBeforeOffline, let remembered = lastGood[host] else { return snapshot }
+        guard let remembered = lastGood[host],
+              connectionPhase(lastContact: remembered.at,
+                              grace: Self.offlineGraceSeconds) != .offline else { return snapshot }
         var held = remembered.snapshot
         held.staleSeconds = max(1, Int(Date().timeIntervalSince(remembered.at)))
         return held

@@ -21,6 +21,7 @@ final class PushDelegate: NSObject, UIApplicationDelegate {
 struct MeshRelayApp: App {
     @UIApplicationDelegateAdaptor(PushDelegate.self) private var pushDelegate
     @StateObject private var store: MeshStore
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let store = MeshStore()
@@ -54,6 +55,15 @@ struct MeshRelayApp: App {
                     #endif
                     UIApplication.shared.registerForRemoteNotifications()
                     store.start()
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    // The 8s timer does not fire while suspended, so without this the
+                    // first thing a returning user sees is however stale the world was
+                    // when iOS parked the app — and the first natural tick after a long
+                    // suspend often fails once while the radio wakes, which used to
+                    // read as "offline". Poll immediately instead.
+                    guard phase == .active else { return }
+                    Task { await store.refresh() }
                 }
         }
     }

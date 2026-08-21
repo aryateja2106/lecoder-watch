@@ -21,7 +21,11 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     private var firedKeys: Set<String> = [] {
         didSet { UserDefaults.standard.set(Array(firedKeys.filter { !$0.hasPrefix("event-") }), forKey: firedKeysDefaultsKey) }
     }
-    private var lastReachable: [String: Bool] = [:]
+    // Gated, not raw: an ungated version of this path once produced 30+ banners in
+    // five minutes of connection flapping. The pure gates live in Shared/AlertGating
+    // so check-alert-gating.swift can prove the flood stays impossible.
+    private var reachabilityGate = ReachabilityAlertGate()
+    private var eventDeduper = EventAlertDeduper()
     private var lastBlockedByLimitKey: [String: Bool] = [:] {
         didSet { UserDefaults.standard.set(lastBlockedByLimitKey, forKey: lastBlockedDefaultsKey) }
     }
@@ -86,6 +90,10 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
             let key = "event-\(event.id)"
             guard !firedKeys.contains(key) else { continue }
             firedKeys.insert(key)
+            // Same text, same session, inside the window = the user already knows.
+            // A multi-subagent turn fires SubagentStop per subagent; one banner is plenty.
+            guard eventDeduper.shouldAlert(host: event.host, session: event.session,
+                                           title: event.title, body: event.body) else { continue }
             notifyNow(id: key,
                       title: eventNotificationTitle(event),
                       body: eventNotificationBody(event))
@@ -96,12 +104,14 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
 
     private func evaluateReachability(_ machines: [MachineSnapshot]) {
         for m in machines {
-            if let prev = lastReachable[m.host], prev != m.reachable {
-                notifyNow(id: "reach-\(m.host)-\(m.reachable)",
-                          title: m.host,
-                          body: m.reachable ? "back online" : "went offline")
+            switch reachabilityGate.evaluate(host: m.host, reachable: m.reachable) {
+            case .wentOffline:
+                notifyNow(id: "reach-\(m.host)-false", title: m.host, body: "went offline")
+            case .backOnline:
+                notifyNow(id: "reach-\(m.host)-true", title: m.host, body: "back online")
+            case nil:
+                break
             }
-            lastReachable[m.host] = m.reachable
         }
     }
 
