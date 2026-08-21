@@ -23,7 +23,12 @@ struct ContentView: View {
         // meshwatch://session/<host>/<name> — from the live card, and anywhere else we
         // want to land someone on the session rather than on the app in general.
         .onOpenURL { url in
-            if store.open(url: url) { tab = .terminal }
+            if store.open(url: url), store.deepLinkPair == nil { tab = .terminal }
+        }
+        // A scanned pairing QR (system Camera → banner → here) opens the pair sheet
+        // pre-filled over whatever tab is up; the user confirms the code and taps Pair.
+        .sheet(item: $store.deepLinkPair) { target in
+            PairMachineView(prefill: target).environmentObject(store)
         }
     }
 }

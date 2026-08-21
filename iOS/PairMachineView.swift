@@ -18,6 +18,16 @@ struct PairMachineView: View {
     @State private var failure: String?
     @State private var added: [PairedHost] = []
 
+    /// A scanned `meshwatch://pair` QR arrives with all three fields known. They land
+    /// as editable prefills, not an automatic claim — reading the code before tapping
+    /// Pair is the human check that the QR came from the machine on the desk.
+    init(prefill: MeshStore.PairTarget? = nil) {
+        guard let prefill else { return }
+        _address = State(initialValue: prefill.address)
+        _port = State(initialValue: String(prefill.port))
+        _code = State(initialValue: prefill.code)
+    }
+
     static let installCommand =
         "curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh"
 

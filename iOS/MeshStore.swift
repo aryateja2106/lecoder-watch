@@ -477,10 +477,36 @@ final class MeshStore: ObservableObject {
         var id: String { "\(host)/\(session)" }
     }
 
-    /// `meshwatch://session/<host>/<session>`. Anything else is ignored rather than
-    /// guessed at.
+    /// Set by a `meshwatch://pair?h=<addr>&p=<port>&c=<code>` link — the QR that
+    /// `mesh pair` prints. Scanning it with the system Camera lands here with every
+    /// field filled; no in-app scanner, no camera permission. The user still sees
+    /// the code and taps Pair themselves — that confirmation against what the
+    /// terminal printed is the verification step, so the claim is never automatic.
+    @Published var deepLinkPair: PairTarget?
+
+    struct PairTarget: Identifiable, Hashable {
+        var address: String
+        var port: Int
+        var code: String
+        var id: String { "\(address):\(port)/\(code)" }
+    }
+
+    /// `meshwatch://session/<host>/<session>` or `meshwatch://pair?h=&p=&c=`.
+    /// Anything else is ignored rather than guessed at.
     func open(url: URL) -> Bool {
-        guard url.scheme == "meshwatch", url.host == "session" else { return false }
+        guard url.scheme == "meshwatch" else { return false }
+        if url.host == "pair" {
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+            guard let address = value("h")?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !address.isEmpty,
+                  let code = value("c"), normalizedPairingCode(code).count >= 6 else { return false }
+            deepLinkPair = PairTarget(address: address,
+                                      port: Int(value("p") ?? "") ?? 8899,
+                                      code: code)
+            return true
+        }
+        guard url.host == "session" else { return false }
         let parts = url.path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return false }
         deepLinkSession = SessionTarget(host: parts[0], session: parts[1])
