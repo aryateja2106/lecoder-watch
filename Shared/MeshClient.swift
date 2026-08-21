@@ -233,6 +233,14 @@ struct MeshClient {
         _ = try await request("/push/register", method: "POST", body: body)
     }
 
+    /// Ask THIS machine to broadcast a Wake-on-LAN magic packet for a sleeping
+    /// peer. The phone can't send one itself from across the tailnet — WoL is a
+    /// LAN broadcast — so any awake machine on the same network does it instead.
+    func wake(mac: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["mac": mac])
+        _ = try await request("/wake", method: "POST", body: body)
+    }
+
     /// Power/session action: displaysleep, lock, screensaver, sleep.
     func system(_ action: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["action": action])

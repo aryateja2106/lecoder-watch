@@ -249,7 +249,8 @@ final class MeshStore: ObservableObject {
                                            meshdVersion: health?.meshdVersion,
                                            capabilities: health?.capabilities,
                                            tailnetPeers: tailnetPeers,
-                                           tailnetError: tailnetError)
+                                           tailnetError: tailnetError,
+                                           mac: health?.mac)
                 }
             }
             // Publish each machine the moment it answers. Waiting for the whole group
@@ -269,6 +270,18 @@ final class MeshStore: ObservableObject {
         // Stable order matching the machine list.
         let ordered = targets.compactMap { m in results.first { $0.host == m.host } }
             .map { holdRecentlyGood($0) }
+
+        // Remember each machine's hardware MAC while it's awake — that's exactly the
+        // information you no longer have once it's asleep and you want to wake it.
+        var machinesChanged = false
+        for snap in ordered {
+            guard let mac = snap.mac, !mac.isEmpty,
+                  let idx = machines.firstIndex(where: { $0.host == snap.host }),
+                  machines[idx].macAddress != mac else { continue }
+            machines[idx].macAddress = mac
+            machinesChanged = true
+        }
+        if machinesChanged { save() }
 
         var usage: UsageSnapshot?
         for machine in targets {

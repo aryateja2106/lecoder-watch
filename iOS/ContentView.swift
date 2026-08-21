@@ -212,9 +212,21 @@ private struct MachinesTab: View {
 private struct MachineDetailView: View {
     @EnvironmentObject var store: MeshStore
     let host: String
+    @State private var wokeVia: String?
 
     private var snapshot: MachineSnapshot? {
         store.snapshot?.machines.first { $0.host == host }
+    }
+
+    /// An awake peer that can broadcast the magic packet for this machine. WoL is a
+    /// LAN broadcast — the phone can't send it across the tailnet itself.
+    private var wakePeer: Machine? {
+        guard let peers = store.snapshot?.machines else { return nil }
+        for p in peers where p.host != host && p.reachable && !p.isStale
+            && (p.capabilities?.contains("wake") ?? false) {
+            if let m = store.machines.first(where: { $0.host == p.host }) { return m }
+        }
+        return nil
     }
 
     var body: some View {
@@ -280,6 +292,21 @@ private struct MachineDetailView: View {
                         Text(machine.baseURLs.map(\.absoluteString).joined(separator: " or "))
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
+                        // Turn the machine on from the couch: any awake peer on its LAN
+                        // broadcasts the magic packet. The MAC was cached while it was up.
+                        if let mac = machine.macAddress, let peer = wakePeer {
+                            Button {
+                                Task {
+                                    try? await MeshClient(machine: peer).wake(mac: mac)
+                                    wokeVia = peer.host
+                                }
+                            } label: {
+                                Label(wokeVia == nil ? "Wake via \(peer.host)"
+                                                     : "Magic packet sent — waking takes ~30s",
+                                      systemImage: "power")
+                            }
+                            .disabled(wokeVia != nil)
+                        }
                     }
                 }
                 ForEach(m.agents) { a in

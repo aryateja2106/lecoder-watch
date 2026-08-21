@@ -11,6 +11,10 @@ struct Machine: Codable, Identifiable, Hashable {
     var token: String         // bearer token
     var bridgeURL: String?    // rmux-bridge base (tailscale-serve https); nil = not deployed
     var vncURL: String?       // noVNC/web VNC URL; nil = http://ip:6080/vnc.html
+    /// Hardware MAC learned from /health, cached so a peer daemon on the same LAN
+    /// can Wake-on-LAN this machine after it goes dark. Optional: old daemons
+    /// don't report one, and the field decodes as nil from pre-existing saves.
+    var macAddress: String?
 
     var addresses: [String] {
         var seen = Set<String>()
@@ -213,6 +217,8 @@ struct HealthInfo: Codable, Hashable {
     var uptimeSec: Int?
     var meshdVersion: String?
     var capabilities: [String]?
+    /// Primary physical interface MAC (meshd 0.4.0+) — cached for Wake-on-LAN.
+    var mac: String?
 }
 
 // MARK: - Doctor (setup truth)
@@ -567,6 +573,8 @@ struct MachineSnapshot: Codable, Hashable, Identifiable {
     var capabilities: [String]? = nil
     var tailnetPeers: [TailnetPeer]? = nil
     var tailnetError: String? = nil
+    /// Hardware MAC from /health, so the "Wake via <peer>" button knows what to wake.
+    var mac: String? = nil
     /// Seconds since this host last actually answered. Non-nil means the data shown is
     /// remembered, not fresh — a relayed tailnet drops polls, and blanking the whole
     /// machine on the first miss is what made the app look broken every few minutes.
