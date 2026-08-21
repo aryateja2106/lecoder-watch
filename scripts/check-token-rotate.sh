@@ -51,7 +51,10 @@ PREFIX=meshrotatecheck
 SESSION="$PREFIX-meshd"
 
 fail() { echo "FAIL: $*"; exit 1; }
-mode_of() { stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"; }
+# GNU first: on Linux `stat -f` SUCCEEDS as a filesystem stat and prints a page of
+# garbage, so BSD-first never falls through. macOS rejects `-c` cleanly, so this
+# ordering works on both (caught by the ubuntu CI job, 2026-08-21).
+mode_of() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
 
 # Same env on every invocation of the CLI under test. MESHD_TOKEN is deliberately NOT
 # exported: localToken() prefers it, and a rotation that reads the environment instead of
