@@ -4,6 +4,28 @@ import WatchKit
 import UIKit
 #endif
 
+// MARK: - Voice input
+
+/// One-tap dictation into a draft. TextFieldLink opens the system input sheet
+/// directly (dictation is a primary mode there — the only programmatic ASR the
+/// watch has: Speech.framework does not exist in the watchOS SDK, see
+/// docs/VOICE-INPUT-SPEC.md). Spoken text APPENDS to the draft so a second
+/// thought never wipes the first, and the TextField beside this stays the
+/// editable preview — nothing dispatches until the user confirms. Spec Phase 1.
+struct DictateLink: View {
+    @Binding var draft: String
+
+    var body: some View {
+        TextFieldLink(prompt: Text("Dictate")) {
+            Label("Dictate", systemImage: "mic.fill")
+        } onSubmit: { spoken in
+            let trimmed = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            draft = draft.isEmpty ? trimmed : draft + " " + trimmed
+        }
+    }
+}
+
 // MARK: - Root
 
 struct WatchRootView: View {
@@ -471,6 +493,7 @@ struct SessionsView: View {
                     .font(.headline)
                 TextField("Build/fix/check…", text: $taskText)
                     .autocorrectionDisabled()
+                DictateLink(draft: $taskText)
                 Button("Start") {
                     if let name = store.newTask(host: host, agent: taskAgent, task: taskText) {
                         openAgent = SessionRoute(host: host, agent: name)
@@ -696,6 +719,7 @@ struct AgentLiveView: View {
                     .lineLimit(1)
                 TextField("Say, scribble, or type…", text: $reply)
                     .autocorrectionDisabled()
+                DictateLink(draft: $reply)
                 Button("Send") {
                     if !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         store.send(text: reply + "\n")

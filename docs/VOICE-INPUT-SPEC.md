@@ -1,5 +1,16 @@
 # Project: Voice-First Input for Watch-Controlled Mac
 
+> **Implementation addendum (2026-08-21, verified on this machine):** the watchOS SDK
+> ships **no Speech.framework** — `WatchOS26.sdk/System/Library/Frameworks` contains
+> AVFAudio/AVFoundation but neither SFSpeechRecognizer nor SpeechAnalyzer, at any
+> deployment target. The watch lane's "Apple Speech framework + contextualStrings"
+> plan below is therefore not implementable as written. What shipped for Phase 1:
+> system dictation via `TextFieldLink` (`DictateLink` in Watch/WatchViews.swift) with
+> the draft TextField as the editable preview, dispatching through the existing
+> remote-control channel — review-before-dispatch holds. Contextual biasing moves
+> entirely to the Mac lane (Phase 2/3); the watch can still stream AVAudioEngine
+> audio to it later, since AVFAudio *is* linkable.
+
 You are building the voice-input subsystem for an existing watchOS + macOS product. The watch app already renders a zoomable remote view of the Mac's screen and provides a trackpad-style mouse. Typing on this surface is impractical — voice is the keyboard. Users dictate to control agents, terminals, and apps on their Mac, and they must be able to **review and edit the transcript before anything is sent**.
 
 ## Product principles (non-negotiable)

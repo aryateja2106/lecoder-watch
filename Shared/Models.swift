@@ -774,6 +774,20 @@ func pointerGain(step: Double, base: Double = 2.2, softening: Double = 6, ceilin
     return base * min(ceiling, 1 + step / softening)
 }
 
+/// The window inside which a second trackpad tap means "right click" in full-pad
+/// mode. 350ms sits between a deliberate tap-tap (~250ms apart) and two separate
+/// approval taps (people pause noticeably between distinct clicks).
+let trackpadDoubleTapWindow: TimeInterval = 0.35
+
+/// Second-tap test for the full-pad trackpad. Pure so check-trackpad-clicks.swift
+/// can pin the window; clock weirdness (a "previous" tap in the future) reads as
+/// not-a-double-tap rather than something clever.
+func isDoubleTap(previous: Date?, now: Date, window: TimeInterval = trackpadDoubleTapWindow) -> Bool {
+    guard let previous else { return false }
+    let gap = now.timeIntervalSince(previous)
+    return gap >= 0 && gap <= window
+}
+
 /// Where a tap on the watch's screen preview lands, as 0…1 of the actual screenshot.
 ///
 /// The preview is scaled to fit, so it is letterboxed whenever its aspect ratio differs

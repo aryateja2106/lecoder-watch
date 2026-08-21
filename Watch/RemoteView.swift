@@ -298,6 +298,11 @@ struct RemoteView: View {
     @State private var crown: Double = 0
     @State private var moved = false
     @State private var typing = false
+    /// Full-pad mode: the preview gives way to a full-height trackpad where a second
+    /// tap inside the window right-clicks — built for one-handed approvals (fork in
+    /// the right hand, watch on the left wrist).
+    @State private var padOnly = false
+    @State private var lastTapAt: Date?
 
     init(machine: Machine) {
         _remote = StateObject(wrappedValue: RemoteControl(machine: machine))
@@ -305,8 +310,10 @@ struct RemoteView: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            if remote.displays.count > 1 { displayPicker }
-            preview
+            if !padOnly {
+                if remote.displays.count > 1 { displayPicker }
+                preview
+            }
             trackpad
             controls
         }
@@ -457,8 +464,11 @@ struct RemoteView: View {
                     Text("drag held").font(.caption2).foregroundStyle(.orange)
                 } else if remote.airMouse {
                     Text("air mouse — point your arm").font(.caption2).foregroundStyle(.blue)
+                } else if padOnly {
+                    Text("tap · tap-tap right-clicks").font(.caption2).foregroundStyle(.secondary)
                 }
             }
+            .overlay(alignment: .topTrailing) { padModeChip }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
             .gesture(
@@ -475,7 +485,22 @@ struct RemoteView: View {
                     }
                     .onEnded { value in
                         let distance = hypot(value.translation.width, value.translation.height)
-                        if !moved || distance < 5 { remote.perform([.click()]) }
+                        if !moved || distance < 5 {
+                            // Full-pad mode: a second tap inside the window right-clicks.
+                            // The first tap's left click already went out — deferring
+                            // every tap by the window would tax the quick approvals this
+                            // mode exists for, and click-then-right-click is how people
+                            // use a real mouse anyway (focus it, then open the menu).
+                            // ponytail: eager double-tap; a deferred-click toggle only if
+                            // right-clicking links at the wrist ever matters.
+                            if padOnly, isDoubleTap(previous: lastTapAt, now: Date()) {
+                                remote.perform([.click("right")])
+                                lastTapAt = nil
+                            } else {
+                                remote.perform([.click()])
+                                lastTapAt = Date()
+                            }
+                        }
                         lastTranslation = .zero
                         moved = false
                     }
@@ -523,6 +548,21 @@ struct RemoteView: View {
         } else {
             button
         }
+    }
+
+    /// Lives on the pad itself (like the preview's zoom chips) because the controls
+    /// row is already full on a 40mm screen.
+    private var padModeChip: some View {
+        Button { padOnly.toggle() } label: {
+            Image(systemName: padOnly
+                  ? "arrow.down.right.and.arrow.up.left"
+                  : "arrow.up.left.and.arrow.down.right")
+        }
+        .font(.system(size: 9, weight: .bold))
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .padding(2)
+        .accessibilityLabel(padOnly ? "Show screen preview" : "Full trackpad")
     }
 
     private func padButton(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
@@ -966,6 +1006,7 @@ private struct TypeSheet: View {
             VStack(spacing: 10) {
                 TextField("Type or dictate…", text: $text)
                     .autocorrectionDisabled()
+                DictateLink(draft: $text)
                 HStack(spacing: 6) {
                     Button("Type") { send(withReturn: false) }
                         .buttonStyle(.bordered)
