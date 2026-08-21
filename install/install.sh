@@ -471,8 +471,13 @@ install_components() {
     if [ -d "$SCRIPT_DIR/hooks" ]; then rm -rf "$MESH_HOME/hooks"; cp -R "$SCRIPT_DIR/hooks" "$MESH_HOME/"; fi
   fi
   if want_component meshd && [ "$OS_NAME" = "Darwin" ] && [ -f "$PAYLOAD_DIR/hooks/cmux-bridge.zsh" ]; then
-    mkdir -p "$MESH_HOME/hooks"
+    mkdir -p "$MESH_HOME/hooks" "$MESH_HOME/bin"
     cp "$PAYLOAD_DIR/hooks/cmux-bridge.zsh" "$MESH_HOME/hooks/cmux-bridge.zsh"
+    for f in cmux-bridge-run start-cmux-bridge; do
+      [ -f "$PAYLOAD_DIR/bin/$f" ] || continue
+      cp "$PAYLOAD_DIR/bin/$f" "$MESH_HOME/bin/$f"
+      chmod +x "$MESH_HOME/bin/$f"
+    done
     _hook='[ -f "$HOME/.mesh/hooks/cmux-bridge.zsh" ] && source "$HOME/.mesh/hooks/cmux-bridge.zsh"'
     if [ -f "$HOME/.zshrc" ] && ! grep -Fq 'cmux-bridge.zsh' "$HOME/.zshrc" 2>/dev/null; then
       printf '\n# MeshWatch cmux bridge (auto-start in interactive shells)\n%s\n' "$_hook" >> "$HOME/.zshrc"
@@ -655,7 +660,7 @@ if want_component tools; then
   printf 'Notify test: %s/bin/mesh-event codex "Needs input" "phone/watch smoke test"\n' "$MESH_HOME"
 fi
 if [ "$OS_NAME" = "Darwin" ] && command -v cmux >/dev/null 2>&1 && want_component meshd; then
-  printf 'cmux-bridge: source ~/.mesh/hooks/cmux-bridge.zsh (auto via ~/.zshrc in new terminals)\n'
+  printf 'cmux-bridge: open Terminal.app once, or run ~/.mesh/bin/start-cmux-bridge\n'
 fi
 printf 'Uninstall: sh install.sh --uninstall   (add --purge to remove the token + %s)\n' "$MESH_HOME"
 

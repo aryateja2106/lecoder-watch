@@ -1,0 +1,63 @@
+#!/bin/zsh
+# Start cmux-bridge. Never kill an existing listener — concurrent restarts were killing healthy bridges.
+set -euo pipefail
+
+MESH_HOME="${MESH_HOME:-$HOME/.mesh}"
+CMUX_PORT="${CMUX_PORT:-9160}"
+BUN="${BUN_BIN:-/opt/homebrew/bin/bun}"
+LOG="/tmp/cmux-bridge.log"
+PORT="${CMUX_BRIDGE_PORT:-8901}"
+LOCK="${TMPDIR:-/tmp}/cmux-bridge.start.lock"
+PIDFILE="${TMPDIR:-/tmp}/cmux-bridge.pid"
+
+_cmux_probe() {
+  curl -sf --max-time 3 -X POST "http://127.0.0.1:${PORT}/cmux" \
+    -H 'content-type: application/json' \
+    -d '{"args":["tree","--all","--json"]}' \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if len(d.get('data',{}).get('windows',[]))>0 else 1)" 2>/dev/null
+}
+
+if [ "${1:-}" = "--force-reset" ]; then
+  lsof -ti ":${PORT}" | xargs kill -9 2>/dev/null || true
+  rm -f "$PIDFILE"
+  shift
+fi
+
+if _cmux_probe; then
+  exit 0
+fi
+
+local_wait=0
+while ! mkdir "$LOCK" 2>/dev/null; do
+  _cmux_probe && exit 0
+  local_wait=$((local_wait + 1))
+  [ "$local_wait" -ge 40 ] && exit 1
+  sleep 0.25
+done
+trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+
+if _cmux_probe; then
+  exit 0
+fi
+
+if lsof -ti ":${PORT}" >/dev/null 2>&1; then
+  for _ in {1..20}; do
+    _cmux_probe && exit 0
+    sleep 0.5
+  done
+  exit 1
+fi
+
+cd "$MESH_HOME/meshd"
+nohup env PATH='/Applications/cmux.app/Contents/Resources/bin:/opt/homebrew/bin:/usr/bin:/bin' \
+  CMUX_PORT="$CMUX_PORT" \
+  "$BUN" run cmux-bridge.ts >>"$LOG" 2>&1 &
+newpid=$!
+echo "$newpid" >"$PIDFILE"
+disown -h "$newpid" 2>/dev/null || disown "$newpid" 2>/dev/null || true
+
+for _ in {1..24}; do
+  _cmux_probe && exit 0
+  sleep 0.25
+done
+exit 1
