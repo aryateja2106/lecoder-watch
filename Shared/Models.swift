@@ -6,7 +6,7 @@ import Foundation
 struct Machine: Codable, Identifiable, Hashable {
     var id: String { host }
     var host: String          // display name, e.g. "arya-macbook-pro"
-    var ip: String            // tailscale IP, e.g. "100.94.221.115"
+    var ip: String            // tailscale IP, e.g. "100.100.1.99"
     var port: Int             // meshd port, default 8899
     var token: String         // bearer token
     var bridgeURL: String?    // rmux-bridge base (tailscale-serve https); nil = not deployed
