@@ -64,14 +64,27 @@ cat > "$ROOT/build/ExportOptions-$BUILD.plist" <<PLIST
 PLIST
 
 echo "==> exporting and uploading to TestFlight"
-xcodebuild -exportArchive \
+# Two credential paths, tried in order. The API key can archive but NOT mint the
+# Apple Distribution certificate unless its App Store Connect role has certificate
+# access ("Cloud signing permission error" + "No signing certificate iOS
+# Distribution" — hit for real on 2026-08-21). Xcode's logged-in account session
+# holds account-holder power, so it succeeds where the key is refused. Fix the key's
+# role in ASC > Users and Access > Integrations to make the first path self-contained.
+if ! xcodebuild -exportArchive \
   -archivePath "$ARCHIVE" \
   -exportPath "$EXPORT" \
   -exportOptionsPlist "$ROOT/build/ExportOptions-$BUILD.plist" \
   -allowProvisioningUpdates \
   -authenticationKeyPath "$KEY" \
   -authenticationKeyID "$ASC_KEY_ID" \
-  -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+  -authenticationKeyIssuerID "$ASC_ISSUER_ID"; then
+  echo "==> API-key export refused (cloud signing) — retrying with Xcode's account session"
+  xcodebuild -exportArchive \
+    -archivePath "$ARCHIVE" \
+    -exportPath "$EXPORT" \
+    -exportOptionsPlist "$ROOT/build/ExportOptions-$BUILD.plist" \
+    -allowProvisioningUpdates
+fi
 
 echo
 echo "Uploaded build $BUILD."
