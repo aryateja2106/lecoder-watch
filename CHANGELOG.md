@@ -9,6 +9,48 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+The stability release: the app stops crying wolf, and the fleet stops running last
+month's daemon.
+
+### Fixed
+- **"Online… offline… online" is over.** The flapping was manufactured on the phone —
+  overlapping polls racing each other (a stale timed-out poll could overwrite a fresh
+  green one with "offline") and a miss counter that could burn all three strikes in one
+  refresh. Polls are single-flight now and a machine only reads offline after 45
+  seconds of real silence. Opening the app polls immediately instead of showing
+  whatever was true when iOS parked it.
+- **The notification flood is capped by proof, not hope.** Thirty "went offline"/"back
+  online" banners in five minutes is now arithmetically impossible: at most one
+  offline/online pair per host per ten minutes, recovery only announced if the outage
+  was, and identical agent alerts deduped for ten minutes — with a self-check that
+  simulates the exact reported flap and demands exactly two banners.
+
+### Added
+- **A real trackpad mode.** A chip on the pad swaps the screen preview out for a
+  full-height trackpad: tap to click, **tap-tap for right click** — built for
+  approving something one-handed while the other hand holds lunch.
+- **Dictate anywhere you could type.** One tap opens dictation in the Type sheet,
+  agent replies and new tasks; the words land in an editable draft and nothing is sent
+  until you confirm. (The full local-ASR plan lives in docs/VOICE-INPUT-SPEC.md — the
+  watch lane turned out to have no Speech framework at all, so the system input is the
+  on-watch path and the heavy models move to the Mac.)
+- **Pair by QR.** `mesh pair` prints a scannable QR (vendored encoder — works even
+  where qrencode isn't installed). Scan it with the iPhone's own Camera app: the pair
+  sheet opens pre-filled, you confirm the code against the terminal and tap Pair. No
+  in-app scanner, no camera permission.
+- **Wake a machine that's gone dark.** Machines report their hardware MAC while awake;
+  when one sleeps, its detail screen grows "Wake via <peer>" — any awake machine on
+  the same LAN broadcasts the magic packet for it. Leave the house while it boots.
+- **`mesh upgrade`** — the missing deployment path. Stages the new daemon, proves it
+  runs on a throwaway port, swaps by rename, restarts the service, verifies the
+  version, rolls back by rename if it doesn't answer. Your token, hosts, push
+  registrations and KB are never touched; unchanged binaries keep their macOS
+  Accessibility grant. `mesh upgrade -H host` upgrades a remote machine through a tmux
+  session that survives the daemon restarting.
+- **`mesh status`** — the whole fleet in one screen: version, uptime, doctor summary
+  per host. Its first real run is why this release exists: every box was quietly two
+  versions behind.
+
 ## [0.3.0] — 2026-08-20
 
 The release about what happens when you actually press the button — and the first one

@@ -16,11 +16,16 @@ Read [context.md](context.md) first (the map and the shape), then [memory.md](me
 | `install/payload/meshd/input.ts` | `/input` endpoint; injects CGEvent/xdotool, also `/screen.jpg` |
 | `install/payload/meshd/push.ts` | APNs push; dedupe on alertKey, 10-min window |
 | `install/payload/meshd/pair.ts` | `/pair/claim` endpoint; the one unauthenticated route |
+| `install/payload/meshd/qr.ts` | Vendored QR encoder (no deps); `mesh pair` renders it; `--check` decodes itself |
+| `install/payload/meshd/wol.ts` | Wake-on-LAN: magic packet, `POST /wake`, `primaryMac()` for /health |
 | `install/payload/meshd/files.ts` | `/files` and `/fs` endpoints; filesystem browser |
 | `install/payload/meshd/kb.ts` | Knowledge base (SQLite FTS5); `/kb/*` endpoints |
 | `install/payload/bin/mesh-input.swift` | CGEvent helper; recompiled on demand, long-lived on stdin |
-| `install/payload/bin/mesh` | CLI: `pair`, `hooks install`, `doctor [--fix]` |
+| `install/payload/bin/mesh` | CLI: `pair` (QR), `hooks install`, `doctor [--fix]`, `upgrade`, `status` |
 | `Shared/Models.swift` | Wire types, `sessionsNeedingAttention`, pairing logic |
+| `Shared/AlertGating.swift` | Pure notification gates: reachability throttle + event dedupe |
+| `docs/VOICE-INPUT-SPEC.md` | Local-first ASR plan (three lanes); addendum: watchOS has NO Speech.framework |
+| `docs/CLI-FIRST-ROADMAP.md` | CLI-first stance, command surface, the user scenarios as TDD anchors |
 | `Shared/RiskClassifier.swift` | Grades a question safe vs destructive; names the verb ("Force push") |
 | `Shared/MeshClient.swift` | HTTP client; bearer auth, URLSession, timeout/retry |
 | `iOS/RemoteScreenView.swift`, `Watch/RemoteView.swift` | Native remote: pointer, zoom, keyboard, screen |
@@ -46,6 +51,7 @@ Read [context.md](context.md) first (the map and the shape), then [memory.md](me
 - `GET  /screen.jpg?display=N&width=W` → capture one display
 - `GET  /input` → input status (trusted, screen grant, hint)
 - `POST /input` → inject CGEvent/xdotool + scroll + clipboard + volume
+- `POST /wake` → broadcast a Wake-on-LAN magic packet for a sleeping LAN peer ({mac})
 - `GET  /kb/search?q=...` → cross-machine KB search
 - `POST /kb` or `PUT /kb` → save to KB
 - `GET  /files`, `/fs` → filesystem browser

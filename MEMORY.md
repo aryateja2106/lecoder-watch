@@ -26,6 +26,49 @@ Anything else is answering a question we cannot see, on someone's real machine.
 app's last reading and shows a dash past fifteen minutes. "2 agents waiting" from three
 hours ago sends someone to their desk for nothing.
 
+**There is no Speech.framework on watchOS — at all.** Verified against the WatchOS 26
+SDK's Frameworks directory: no SFSpeechRecognizer, no SpeechAnalyzer, at any deployment
+target. Any plan that says "run ASR on the watch with contextualStrings" is dead on
+arrival; the system text input (TextFieldLink / TextField dictation) is the only
+on-watch speech path, and vocabulary biasing has to live on the Mac lane
+(docs/VOICE-INPUT-SPEC.md addendum). AVFAudio *is* present, so streaming raw audio to a
+Mac-side recognizer remains open.
+
+**Connection state is judged by the clock, never by counters or raw flags.** Both flap
+bugs had the same shape: a boolean or counter that multiple code paths could touch
+(WCSession.isReachable on the watch; missesByHost incremented by partial publish AND
+final pass AND overlapping refreshes on the phone). `connectionPhase(lastContact:)` is
+the one idempotent answer; anything that shows online/offline reads it. Polls are
+single-flight (`guard !polling`) because a dead host fails slower (16s) than the timer
+fires (8s) — overlap is the default, not the edge case.
+
+**User-visible alerts go through pure gates with checks that simulate the failure.**
+ReachabilityAlertGate/EventAlertDeduper (Shared/AlertGating.swift) exist because the
+un-gated path produced 30 banners in five minutes. The check replays that exact flap
+and asserts two banners. New alert sources get a gate first, banner second.
+
+**The pairing QR is transport, not a secret channel.** It carries the same
+address/port/code that `mesh pair` prints, deep-linked as `meshwatch://pair` so the
+system Camera opens the pair sheet pre-filled — no in-app scanner, no camera
+permission. The verification layer is the human comparing the pre-filled code against
+the terminal before tapping Pair; auto-claiming on scan would delete that layer.
+
+**Upgrades move code by rename and never touch state.** `mesh upgrade` proves the
+staged daemon by running it on a throwaway port, renames the old tree aside (that IS
+the rollback), renames the new one in, restarts, and verifies /health's version.
+token/hosts.json/push-tokens.json/kb.sqlite*/apns are never in the blast radius, and
+byte-identical bin files are skipped because macOS TCC grants are per-binary —
+overwriting an unchanged mesh-input silently kills remote input until re-approval.
+Remote upgrades run inside tmux because the tmux server is not meshd's child: anything
+spawned BY the daemon dies mid-swap when the service restarts.
+
+**Wake-on-LAN goes through a peer, and the MAC comes from ifconfig on macOS.** WoL is
+a LAN broadcast, so the phone asks any awake machine on that LAN (`POST /wake`) to
+send the packet, using a MAC it cached from /health while the target was still up.
+macOS redacts MACs from getifaddrs() for unentitled processes (you get
+02:00:00:00:00:00), so primaryMac() falls back to `ifconfig`'s ether line —
+check-wol.sh fails on the placeholder specifically so that regression can't ship.
+
 **Transport is `URLSession` to meshd, not BLE.** watchOS blocks low-level networking
 for normal apps (TN3135): no `NWConnection`, no WebSocket, no Bonjour. HTTP over
 Tailscale is the one channel that works, and it already carried the rest of the app.
