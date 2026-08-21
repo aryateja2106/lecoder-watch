@@ -311,6 +311,7 @@ async function cmdDoctor(flags: Record<string, string>, cfg: Config) {
     }
     if (fix && !r.ok) console.log(`\nIf a dialog appeared on ${h.name}, approve it there, then run mesh doctor again.`);
   }, r);
+  return r;   // `mesh setup` sequences on this; printing already happened above.
 }
 
 async function cmdEvents(flags: Record<string, string>, cfg: Config) {
@@ -581,8 +582,31 @@ function syncBin(payload: string): { updated: string[]; unchanged: number } {
   return { updated, unchanged };
 }
 
-// Restart through whatever install.sh registered on this machine.
-function restartDaemon(): string {
+const shq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
+
+/**
+ * The daemon's environment for the tmux fallback, as a 0600 file instead of an argv.
+ *
+ * `env MESHD_TOKEN=<secret> bun run server.ts` in a command line is readable by every
+ * other user on the box (`ps aux`), and that token is shell on this machine. launchd
+ * plists and systemd units already keep their env out of `ps`; the tmux fallback was
+ * the one path that did not. server.ts needs no change — it still reads process.env.
+ */
+function writeDaemonEnv(token: string, port: number): string {
+  const file = join(MESH_HOME, "meshd.env");
+  // Values here are hex/numeric/an IP, so bare KEY=VALUE lines are safe to `.` source.
+  const lines = [`MESHD_TOKEN=${token}`, `MESHD_PORT=${port}`];
+  if (process.env.MESHD_HOST) lines.push(`MESHD_HOST=${process.env.MESHD_HOST}`);
+  mkdirSync(MESH_HOME, { recursive: true, mode: 0o700 });
+  writeFileSync(file, lines.join("\n") + "\n", { mode: 0o600 });
+  chmodSync(file, 0o600);   // writeFileSync does not re-mode a file that already exists
+  return file;
+}
+
+// Restart through whatever install.sh registered on this machine. `token` is what the
+// restarted daemon should come up with — it defaults to the installed one, and rotation
+// passes the new value explicitly (process.env.MESHD_TOKEN would still be the old one).
+function restartDaemon(token: string = localToken()): string {
   const uid = typeof process.getuid === "function" ? process.getuid() : 0;
   if (process.platform === "darwin" && runOk(["launchctl", "kickstart", "-k", `gui/${uid}/${SERVICE_LABEL}`])) return "launchd";
   if (process.platform === "linux" && runOk(["systemctl", "--user", "restart", SERVICE_UNIT])) return "systemd";
@@ -590,9 +614,11 @@ function restartDaemon(): string {
   // a detached tmux session under the same label.
   runOk(["tmux", "kill-session", "-t", SERVICE_TMUX]);
   const port = Number(process.env.MESHD_PORT) || 8899;
-  // Same env install.sh writes into its tmux fallback (values are space-free).
-  const host = process.env.MESHD_HOST ? `MESHD_HOST=${process.env.MESHD_HOST} ` : "";
-  const cmd = `env MESHD_TOKEN=${localToken()} MESHD_PORT=${port} ${host}bun run server.ts`;
+  const envFile = writeDaemonEnv(token, port);
+  // `sh -c` explicitly: tmux runs commands through default-shell, which may be fish or
+  // csh, and neither speaks `set -a`. The env file arrives as $0 so a path with spaces
+  // survives, and `exec` leaves `bun run server.ts` — no secret — as the process argv.
+  const cmd = `sh -c 'set -a; . "$0"; set +a; exec bun run server.ts' ${shq(envFile)}`;
   if (runOk(["tmux", "new-session", "-d", "-s", SERVICE_TMUX, "-c", join(MESH_HOME, "meshd"), cmd])) return "tmux";
   return "";
 }
@@ -714,6 +740,313 @@ function cmdUpgrade(flags: Record<string, string>, bools: Set<string>, cfg: Conf
   return hostOf(flags) ? cmdUpgradeRemote(flags, cfg) : cmdUpgradeLocal(flags, bools, cfg);
 }
 
+// ---------- token rotation ----------
+//
+// The remediation path for a leaked bearer token — and it has leaked twice, into local
+// AI-session transcripts. A rotation is four things, and skipping any one of them leaves
+// the machine either still compromised or locked out:
+//
+//   1. a new 64-hex secret in $MESH_HOME/token, written atomically at 0600;
+//   2. the OLD one kept as token.bak-<UTC>: a rotation you cannot undo is a lockout;
+//   3. the SUPERVISOR's copy updated — launchd plists and systemd units embed the token
+//      (that is how they keep it out of `ps`), so restarting without rewriting them
+//      brings the daemon back on the old secret and the whole command is cosmetic;
+//   4. proof, from the running daemon, that it now serves the new one.
+//
+// The new token is never printed, not even under --json. That is not caution theatre:
+// printing it is exactly how the previous two ended up in a transcript. It is in
+// $MESH_HOME/token at 0600, and `mesh pair` hands it to a phone without anyone reading it.
+
+const TOKEN_BYTES = 32;   // 64 hex characters
+
+function mintToken(): string {
+  const b = new Uint8Array(TOKEN_BYTES);
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+/** 20260821-134502 — matches the token.bak-* files already on these machines. */
+function utcStamp(d = new Date()): string {
+  return d.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+}
+
+/** Write + rename: a half-written token file is a machine nobody can reach. */
+function writeTokenFile(token: string) {
+  mkdirSync(MESH_HOME, { recursive: true, mode: 0o700 });
+  const tmp = join(MESH_HOME, `.token.new-${process.pid}`);
+  writeFileSync(tmp, token + "\n", { mode: 0o600 });
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, TOKEN_FILE);
+  chmodSync(TOKEN_FILE, 0o600);
+}
+
+/**
+ * Rewrite MESHD_TOKEN inside the service definition launchd/systemd will replay on the
+ * next start. Without this the restart is a no-op on the secret and `mesh doctor` still
+ * says "token set" — a green light on the old, leaked one.
+ */
+function setSupervisorToken(token: string): string[] {
+  const patched: string[] = [];
+  const plist = join(homedir(), "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
+  if (existsSync(plist)) {
+    const before = readFileSync(plist, "utf8");
+    const after = before.replace(/(<key>MESHD_TOKEN<\/key>\s*<string>)[^<]*(<\/string>)/, `$1${token}$2`);
+    if (after !== before) { writeFileSync(plist, after); chmodSync(plist, 0o600); patched.push("launchd"); }
+  }
+  const unit = join(homedir(), ".config", "systemd", "user", SERVICE_UNIT);
+  if (existsSync(unit)) {
+    const before = readFileSync(unit, "utf8");
+    const after = before.replace(/^Environment="MESHD_TOKEN=.*"$/m, `Environment="MESHD_TOKEN=${token}"`);
+    if (after !== before) {
+      writeFileSync(unit, after); chmodSync(unit, 0o600);
+      runOk(["systemctl", "--user", "daemon-reload"]);   // `restart` alone re-reads nothing
+      patched.push("systemd");
+    }
+  }
+  return patched;
+}
+
+/** Raw status code — the poll below needs to tell 401 (success) from unreachable (wait). */
+async function apiStatus(host: ReturnType<typeof resolveHost>, method: string, path: string): Promise<number> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(`http://${host.ip}:${host.port}${path}`, {
+      method, headers: host.token ? { Authorization: `Bearer ${host.token}` } : {}, signal: ctrl.signal,
+    });
+    return res.status;
+  } catch { return 0; } finally { clearTimeout(t); }
+}
+
+function confirmOrDie(lines: string[], yes: boolean) {
+  if (yes) return;
+  for (const l of lines) console.log(l);
+  if (!process.stdin.isTTY) die("not a terminal — re-run with --yes if you mean it");
+  const a = prompt("  Type 'rotate' to continue:");
+  if ((a ?? "").trim().toLowerCase() !== "rotate") die("aborted — nothing was changed");
+}
+
+// The cost of the command, in the words the user needs both before (to decide) and
+// after (to act). There is no endpoint that pushes a token to peers and there will not
+// be one — that would be a fleet-wide remote credential write.
+const REPAIR_NOTICE = [
+  "  Every phone/watch and every peer's hosts.json entry for this machine goes STALE.",
+  "    · phone + watch:  run 'mesh pair' here and scan the code again",
+  "    · other machines: 'mesh host add <name> <ip> --token <new>' on each of them, or re-pair them",
+  "  Nothing pushes the new token to peers for you — that step is manual, by design.",
+];
+
+async function cmdTokenRotateLocal(bools: Set<string>, cfg: Config) {
+  const local = resolveHost("local", cfg);
+  const old = existsSync(TOKEN_FILE) ? readFileSync(TOKEN_FILE, "utf8").trim() : "";
+
+  confirmOrDie([
+    "",
+    `  Rotate the meshd bearer token on this machine (${MESH_HOME}).`,
+    "",
+    "  This mints a new 64-character secret, keeps the old one as a token.bak-* file,",
+    "  updates the service definition, and restarts meshd. Afterwards:",
+    ...REPAIR_NOTICE,
+    "",
+  ], bools.has("yes"));
+
+  const backup = old ? join(MESH_HOME, `token.bak-${utcStamp()}`) : "";
+  if (backup) { writeFileSync(backup, old + "\n", { mode: 0o600 }); chmodSync(backup, 0o600); }
+  const token = mintToken();
+  writeTokenFile(token);
+  say(`  new token written to ${TOKEN_FILE} (0600)`);
+  say(backup ? `  previous token kept at ${backup} (0600)` : "  no previous token to back up");
+
+  const supervisors = setSupervisorToken(token);
+  if (supervisors.length) say(`  rewrote the ${supervisors.join(" + ")} service definition`);
+
+  const restarted = restartDaemon(token);
+  if (!restarted) {
+    die(`the token file is rotated but meshd could NOT be restarted (no launchd/systemd service and tmux failed).\n`
+      + `  The daemon is still serving the OLD token. Start it yourself, then re-run 'mesh doctor'.`);
+  }
+  say(`  restarted via ${restarted}`);
+  const live = await pollVersion(local, (v) => Boolean(v), 20000);
+  if (!live) {
+    die(`the token file is rotated and meshd was restarted, but nothing answers ${local.ip}:${local.port}/health.\n`
+      + `  Check the daemon before assuming this machine is reachable again.`);
+  }
+
+  // Proof, not a shape check. /pair/claim hands a phone the token the DAEMON is running
+  // with, so mint a code over loopback and claim it: if it comes back equal to the file
+  // we just wrote, the restart really took. The code is single-use and consumed here —
+  // the restart had already invalidated any pending one.
+  let served = "unknown";
+  try {
+    const p = await api(local, "GET", "/pair/new");
+    const c = await api(local, "POST", "/pair/claim", { code: p.code });
+    served = c?.token === token ? "new" : c?.token === old ? "old" : "unknown";
+  } catch { /* a daemon that predates pairing — /doctor below is all we get */ }
+  if (served === "old") {
+    die(`meshd restarted but is STILL serving the previous token.\n`
+      + `  Something outside ${MESH_HOME} is supplying MESHD_TOKEN (a shell export, or a service\n`
+      + `  definition this command does not know about). The leaked token is still live — fix that first.`);
+  }
+  let tokenCheck: any = null;
+  try { tokenCheck = (await api(local, "GET", "/doctor"))?.checks?.token ?? null; } catch { /* older daemon */ }
+  if (readFileSync(TOKEN_FILE, "utf8").trim() === old) die("the token file still holds the previous value — rotation failed");
+
+  out(() => {
+    console.log("");
+    console.log(`mesh token rotate: ${local.name}`);
+    console.log(`  token    ${TOKEN_FILE} · 64 hex · 0600`);
+    console.log(`  backup   ${backup || "(none — there was no previous token)"}`);
+    console.log(`  restart  ${restarted}${supervisors.length ? ` (${supervisors.join("+")} definition updated)` : ""}`);
+    console.log(`  meshd    ${live} up on ${local.ip}:${local.port}`);
+    console.log(`  verified ${served === "new"
+      ? "the running daemon serves the new token (pair round-trip)"
+      : `daemon token check: ${tokenCheck?.ok ? "set" : "NOT set"} — this daemon is too old to prove which one`}`);
+    console.log("");
+    for (const l of REPAIR_NOTICE) console.log(l);
+    console.log(`  The new token is in ${TOKEN_FILE} (0600) and is deliberately not printed —`);
+    console.log("  reading it out loud is how the last two leaked. 'mesh pair' hands it over for you.");
+    console.log("");
+  }, {
+    ok: true, host: local.name, tokenFile: TOKEN_FILE, backup: backup || null,
+    restarted, supervisors, running: live, servesNewToken: served === "new",
+    doctorToken: tokenCheck?.ok ?? null, repairRequired: REPAIR_NOTICE,
+  });
+}
+
+/**
+ * Rotate on another machine. Driven exactly like `mesh upgrade -H`: the work runs in a
+ * tmux session on the target (NOT a child of meshd, so it survives the restart it
+ * causes), and the success signal is negative — our stored token must START FAILING.
+ * That is the only evidence available from here, and it is the right one: a 401 means
+ * the secret we hold no longer opens that machine.
+ */
+async function cmdTokenRotateRemote(flags: Record<string, string>, bools: Set<string>, cfg: Config) {
+  const h = resolveHost(hostOf(flags), cfg);
+  if (/^(127\.|::1$|localhost$)/.test(h.ip)) die(`${h.name} is ${h.ip} — that is this machine; run 'mesh token rotate' without -H`);
+  if (!h.token) die(`no token stored for ${h.name} in ${HOSTS_FILE}, so there is nothing here to rotate away from.\n  Run 'mesh token rotate' on ${h.name} itself, then re-pair.`);
+
+  confirmOrDie([
+    "",
+    `  Rotate the meshd bearer token on ${h.name} (${h.ip}:${h.port}).`,
+    "",
+    `  Your own ${HOSTS_FILE} entry for ${h.name} will STOP WORKING — that is the success`,
+    "  signal this command waits for. The new token stays on that machine; nothing can",
+    "  read it from here. Afterwards you re-pair, or copy it off that machine by hand.",
+    "",
+  ], bools.has("yes"));
+
+  const before = await apiStatus(h, "GET", "/stats");
+  if (before === 401) die(`${h.name} already rejects the token in ${HOSTS_FILE} — it is stale already. Re-pair that machine instead.`);
+  if (before !== 200) die(`${h.name} did not answer an authenticated /stats (${before ? `HTTP ${before}` : "no response"}) — fix reachability before rotating.`);
+
+  const name = `mesh-rotate-${Math.floor(Date.now() / 1000)}`;
+  await api(h, "POST", "/agents/new", { name, cmd: `sh -c '$HOME/.mesh/bin/mesh token rotate --yes'` });
+  say(`started ${name} on ${h.name}`);
+  say(`waiting up to 3 minutes for ${h.name} to start rejecting the token we hold…`);
+
+  const deadline = Date.now() + 180000;
+  let dead = false, last = before;
+  while (Date.now() < deadline) {
+    await sleep(3000);
+    last = await apiStatus(h, "GET", "/stats");
+    if (last === 401) { dead = true; break; }
+  }
+
+  out(() => {
+    if (dead) {
+      console.log("");
+      console.log(`mesh token rotate: ${h.name} rotated — the token in ${HOSTS_FILE} is now rejected (401).`);
+      console.log("");
+      console.log(`  Nothing here can read the new one. Either:`);
+      console.log(`    · run 'mesh pair' on ${h.name} and scan it with the phone (it re-adopts the fleet), or`);
+      console.log(`    · read ${h.name}:~/.mesh/token there and run: mesh host add ${h.name} ${h.ip} --port ${h.port} --token <new>`);
+      console.log(`  Every phone/watch and every other peer holding ${h.name}'s old token is stale too.`);
+      console.log("");
+    } else {
+      console.log(`${h.name}: still accepting the old token after 3 minutes (last HTTP ${last || "no response"}).`);
+      console.log(`  Inspect it: mesh peek ${name} -H ${h.name}`);
+      console.log(`  A host whose 'mesh' predates 'token rotate' will have printed an unknown-command error there.`);
+    }
+  }, { ok: dead, host: h.name, session: name, lastStatus: last, oldTokenRejected: dead });
+  if (!dead) process.exit(1);
+}
+
+function cmdTokenRotate(flags: Record<string, string>, bools: Set<string>, cfg: Config) {
+  return hostOf(flags) ? cmdTokenRotateRemote(flags, bools, cfg) : cmdTokenRotateLocal(bools, cfg);
+}
+
+// ---------- onboarding ----------
+
+// Homebrew's shape, for the same reason: one line, safe to `eval`, so a shell rc can
+// pick up ~/.mesh/bin without anyone editing a PATH by hand. Never --json: the only
+// consumer is `eval "$(mesh shellenv)"`.
+function cmdShellenv() {
+  console.log(`export PATH="${join(MESH_HOME, "bin")}:$PATH"`);
+}
+
+const INSTALL_CMD = "curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh";
+
+// First run, for someone who does not know what a daemon is. Pure sequencing over the
+// commands that already exist — the value is the order and the wording, not new
+// machinery. A non-interactive shell gets the checklist instead of a prompt it cannot
+// answer (this runs under CI and in `mesh new` sessions, which have no TTY).
+async function cmdSetup(cfg: Config) {
+  const local = resolveHost("local", cfg);
+  const tty = Boolean(process.stdin.isTTY);
+  if (!tty) {
+    console.log(`mesh setup — not a terminal, so here is the checklist instead:
+
+  1. Install the daemon (skip if it is already running):
+       ${INSTALL_CMD}
+  2. Check what works on this machine:  mesh doctor
+     Fix anything red:                  mesh doctor --fix     (approve the macOS dialogs)
+  3. Pair your phone:                   mesh pair             (scan the QR with the Camera app)
+  4. Confirm the fleet:                 mesh status
+
+  Run 'mesh setup' in a real terminal to be walked through it.`);
+    return;
+  }
+
+  console.log(`\n  Setting up this machine. Four steps, about a minute.\n`);
+
+  // 1 — is there a daemon at all?
+  let health: any = null;
+  try { health = await api(local, "GET", "/health"); } catch { /* not running */ }
+  if (!health?.ok) {
+    console.log(`  1/4  The mesh daemon is not answering on ${local.ip}:${local.port}.`);
+    console.log(`\n       Install it with one command, then run 'mesh setup' again:\n`);
+    console.log(`         ${INSTALL_CMD}\n`);
+    return;
+  }
+  console.log(`  1/4  Daemon: meshd ${health.meshdVersion ?? "?"} running on ${local.ip}:${local.port}.\n`);
+
+  // 2 — what actually works, in the daemon's own words.
+  console.log(`  2/4  Checking what this machine can actually do…\n`);
+  const rep = await cmdDoctor({}, cfg);
+  if (!rep?.ok) {
+    console.log(`\n       The lines marked !! are things the watch will not be able to do.`);
+    console.log(`       On macOS these are permission grants: the system shows a dialog and you click Allow.`);
+    if ((prompt("       Show those dialogs now? [Y/n]") ?? "").trim().toLowerCase() !== "n") {
+      console.log("");
+      // cmdDoctor --fix already says "approve it there, then run mesh doctor again".
+      await cmdDoctor({ fix: "" }, cfg);
+    }
+  }
+  console.log("");
+
+  // 3 — the one step that makes the phone useful.
+  console.log(`  3/4  Pairing your phone.`);
+  await cmdPair({}, cfg);
+  console.log(`       Open the Camera app on your iPhone, point it at the square above, tap the banner.`);
+  console.log(`       (No QR? Type the code into LeSearch Mesh → Machines → Add machine.)`);
+  if (tty) prompt("       Press Enter once the phone shows this machine…");
+
+  // 4 — the fleet, so the last thing on screen is the truth.
+  console.log(`\n  4/4  Your fleet:\n`);
+  await cmdStatus(cfg);
+  console.log(`\n  Done. The app takes it from here — this machine will show up on the watch.\n`);
+}
+
 // ---------- agent hooks ----------
 //
 // Everything downstream -- the wrist notification with its buttons, the live card, the
@@ -798,6 +1131,10 @@ const HELP = `mesh ${VERSION} — control a MeshWatch mesh from the command line
 USAGE
   mesh <command> [args] [-H host] [--json]
 
+GETTING STARTED
+  setup                       first-run wizard: daemon → doctor → pair → status
+  shellenv                    print the PATH line;  eval "$(~/.mesh/bin/mesh shellenv)"
+
 HOSTS
   pair                        show a one-time code to add this machine to the phone app
   hooks [status|install|remove]  wire agent alerts into Claude Code on this machine
@@ -824,6 +1161,8 @@ STATUS
 MAINTENANCE
   upgrade                     install the latest meshd + tools and restart the daemon
                               [-H host] [--src URL|DIR|TGZ] [--no-restart]
+  token rotate                mint a new bearer token and restart meshd (re-pairing
+                              required afterwards)          [-H host] [--yes]
 
 GLOBAL
   -H, --host <name>           target host (default: config default, else localhost)
@@ -887,6 +1226,48 @@ capability checks pass. Hosts are probed concurrently with a 5s timeout each, so
 dead machine costs the whole command 5 seconds, not 5 seconds per host.
 
   mesh status          # is the fleet healthy, and is anything left on an old build?`,
+  token: `mesh token rotate [-H host] [--yes] [--json]
+
+Replace this machine's meshd bearer token. Use it the moment a token is exposed — in a
+log, a screenshot, a pasted config, or an AI session transcript.
+
+Locally: mints 64 hex characters, keeps the old value as ${MESH_HOME}/token.bak-<UTC>,
+rewrites the launchd plist / systemd unit (they embed the token, so a restart alone
+would bring the daemon back on the OLD one), restarts meshd, and then proves the running
+daemon serves the new token by pairing against itself over loopback.
+
+The new token is NEVER printed — not even with --json. Read it from ${TOKEN_FILE}
+if you must; better, run 'mesh pair' and let the phone take it.
+
+Afterwards every phone, watch and peer holding the old token is locked out. Re-pair the
+phone with 'mesh pair'; update each peer with
+  mesh host add <name> <ip> --token <new>
+run ON that peer, or re-pair it. There is no endpoint that pushes a token to peers and
+there will not be one: that would be a fleet-wide remote-credential-write.
+
+With -H it runs the rotation on that host in its own tmux session and waits for YOUR
+stored token to start being rejected (401) — the only proof available from here. The new
+token stays on that machine; nothing can read it remotely.
+
+  mesh token rotate --yes            # this machine, no confirmation
+  mesh token rotate -H dataflow      # rotate a peer, then re-pair it`,
+  setup: `mesh setup
+
+The first-run walk-through: confirms meshd is running (and prints the install command if
+it is not), runs 'mesh doctor' and offers to pop the macOS permission dialogs, shows the
+pairing QR with instructions for the Camera app, and ends on 'mesh status'.
+
+Everything it does is available as a separate command; this is the order to do them in.
+Without a TTY it prints that order as a checklist instead of prompting.`,
+  shellenv: `mesh shellenv
+
+Print one line that puts ${join(MESH_HOME, "bin")} on PATH. Add it to your shell rc:
+
+  echo 'eval "$(~/.mesh/bin/mesh shellenv)"' >> ~/.zshrc   # or ~/.bashrc
+  source ~/.zshrc
+
+The installer does this for you; this command is the manual version and what the
+installer's line calls.`,
   doctor: `mesh doctor [-H host] [--fix]
 
 Tests what the daemon can actually do — token, input injection, screen capture,
@@ -922,7 +1303,14 @@ async function main() {
   }
 
   switch (cmd) {
+    case "setup": return cmdSetup(cfg);
+    case "shellenv": return cmdShellenv();
     case "pair": return cmdPair(flags, cfg);
+    case "token": {
+      const sub = pos.shift();
+      if (sub === "rotate") return cmdTokenRotate(flags, bools, cfg);
+      return die("usage: mesh token rotate [-H host] [--yes]   (mesh help token)");
+    }
     case "hooks": return cmdHooks(pos, flags, cfg);
     case "hosts": return cmdHosts(cfg);
     case "host": {

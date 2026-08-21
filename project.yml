@@ -7,7 +7,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "0.3.0"
+    MARKETING_VERSION: "0.4.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     GENERATE_INFOPLIST_FILE: NO
@@ -82,6 +82,10 @@ targets:
       path: MeshWatchWidgets/Info.plist
       properties:
         CFBundleDisplayName: LeSearch Mesh Sessions
+        # Extensions must match the parent app's version or App Store Connect
+        # rejects the upload — xcodegen defaults them to 1.0 unless told.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
@@ -133,6 +137,10 @@ targets:
       path: WatchWidgets/Info.plist
       properties:
         CFBundleDisplayName: Agents waiting
+        # Extensions must match the parent app's version or App Store Connect
+        # rejects the upload — xcodegen defaults them to 1.0 unless told.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:

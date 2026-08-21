@@ -61,8 +61,11 @@ Components: $ALL_COMPONENTS
   bridge = rmux-bridge live terminal stream (:$BRIDGE_DEFAULT_PORT)
   tools  = mesh CLI + mesh-event/mesh-hook/mesh-agent-run/mesh-self-check + hooks
 
-After install, drive the mesh from the shell:
-  ~/.mesh/bin/mesh --help      (add ~/.mesh/bin to PATH; man: mesh man)
+After install:
+  ~/.mesh/bin/mesh setup       first run: permissions + pair your phone
+  ~/.mesh/bin/mesh --help      every command (man: mesh man)
+PATH is wired into ~/.zshrc or ~/.bashrc automatically; the manual line is
+  eval "\$(~/.mesh/bin/mesh shellenv)"
 EOF
 }
 
@@ -266,8 +269,24 @@ service_start() {
         warn "systemctl --user could not restart $(systemd_name "$ss_name"); it may still be running the previous build"
       ;;
     *)  # tmux fallback (does NOT survive reboot)
-      ss_flat=$(printf '%s' "$ss_env" | tr '\n' ' ')   # env values are space-free
-      start_session "$(mux_session "$ss_name")" "$ss_workdir" "env $ss_flat $BUN_BIN run $ss_entry"
+      # The environment goes into a 0600 file and is sourced, never passed as argv:
+      # `env MESHD_TOKEN=<secret> bun run server.ts` in a command line is readable by
+      # every other local user through `ps`, and that token is a shell on this machine.
+      # The launchd and systemd paths above already keep their env out of `ps`; this
+      # fallback was the one that did not. server.ts is unchanged — still process.env.
+      ss_envfile="$MESH_HOME/$ss_name.env"
+      mkdir -p "$MESH_HOME"
+      ( umask 077
+        printf '%s\n' "$ss_env" | while IFS= read -r kv; do
+          [ -n "$kv" ] || continue
+          printf '%s=%s\n' "${kv%%=*}" "$(shell_quote "${kv#*=}")"
+        done > "$ss_envfile" )
+      chmod 600 "$ss_envfile" 2>/dev/null || true
+      # sh -c explicitly: tmux runs commands through default-shell, which may be fish or
+      # csh, and neither speaks `set -a`. Paths arrive as $0/$1/$2 so spaces survive, and
+      # `exec` leaves a process whose argv holds no secret.
+      start_session "$(mux_session "$ss_name")" "$ss_workdir" \
+        "sh -c 'set -a; . \"\$0\"; set +a; exec \"\$1\" run \"\$2\"' $(shell_quote "$ss_envfile") $(shell_quote "$BUN_BIN") $(shell_quote "$ss_entry")"
       ;;
   esac
 }
@@ -291,6 +310,7 @@ service_stop() {
     fi
   fi
   kill_session "$(mux_session "$st_name")" >/dev/null 2>&1 && st_removed=0 || true
+  rm -f "$MESH_HOME/$st_name.env"   # holds MESHD_TOKEN; nothing should outlive the service
   return $st_removed
 }
 
@@ -516,6 +536,47 @@ install_agent_hooks() {
 
 install_deps() { ( cd "$1" && bun install ); }
 
+# ---------- PATH onboarding ----------
+#
+# An install nobody can invoke is not an install: every previous run ended by printing
+# "~/.mesh/bin/mesh pair" and left the user to work out the PATH themselves, so `mesh`
+# did not exist in their next terminal. Add ONE homebrew-shaped eval line to the right
+# rc file, exactly once. A child process cannot change the parent shell, so the last
+# thing this installer prints is how to pick it up in the shell they are standing in.
+PATH_RC=""; PATH_LINE=""; PATH_STATE="ok"   # ok | added | present | manual
+
+setup_path() {
+  want_component tools || return 0
+  case ":${PATH}:" in *":$MESH_HOME/bin:"*) return 0;; esac   # already usable
+  PATH_LINE="eval \"\$($MESH_HOME/bin/mesh shellenv)\""
+  case "${SHELL##*/}" in
+    zsh)  PATH_RC="$HOME/.zshrc";;
+    bash) PATH_RC="$HOME/.bashrc";;
+    *)    PATH_STATE="manual"; return 0;;      # fish/csh/unknown: tell, don't guess
+  esac
+  if [ -f "$PATH_RC" ] && grep -Fq 'mesh shellenv' "$PATH_RC" 2>/dev/null; then
+    PATH_STATE="present"; return 0
+  fi
+  if printf '\n# MeshWatch CLI on PATH\n%s\n' "$PATH_LINE" >> "$PATH_RC" 2>/dev/null; then
+    PATH_STATE="added"
+  else
+    PATH_STATE="manual"
+  fi
+}
+
+report_path() {
+  case "$PATH_STATE" in
+    added)
+      printf '\nAdded to %s:\n    %s\n' "$PATH_RC" "$PATH_LINE"
+      printf 'Run this now so "mesh" works in THIS terminal (new terminals get it automatically):\n    source %s\n' "$PATH_RC";;
+    present)
+      printf '\n"mesh" is already wired into %s. Pick it up in THIS terminal with:\n    source %s\n' "$PATH_RC" "$PATH_RC";;
+    manual)
+      printf '\nPut "mesh" on your PATH by adding this line to your shell startup file:\n    %s\n' "$PATH_LINE";;
+    *)  printf '\nNext: mesh setup\n';;
+  esac
+}
+
 # ---------- actions ----------
 
 service_state() {  # prints launchd|systemd|tmux supervisor state for a service name
@@ -691,7 +752,10 @@ if [ -n "$TAILSCALE_IP" ]; then
 else
   printf 'Tailscale IPv4: unavailable (run "tailscale ip -4" once Tailscale is connected)\n'
 fi
-printf 'MESHD token: %s\n' "$TOKEN_VALUE"
+# Never print the token: terminals get screenshotted, scrolled back, and pasted
+# into AI sessions — which is exactly how two of these leaked. Pairing hands it
+# to the phone; nothing else ever needs to see it.
+printf 'MESHD token: minted at ~/.mesh/token (never printed — "mesh pair" hands it to your phone)\n'
 # Watch pointer/keyboard control on Linux rides on xdotool + xclip (X11/Xvfb).
 # Non-fatal: /input reports exactly what is missing until they are installed.
 if [ "$OS_NAME" != "Darwin" ] && ! command -v xdotool >/dev/null 2>&1; then
@@ -701,12 +765,16 @@ if want_component tools; then
   printf 'Self-check: %s/bin/mesh-self-check\n' "$MESH_HOME"
   printf 'Notify test: %s/bin/mesh-event codex "Needs input" "phone/watch smoke test"\n' "$MESH_HOME"
   printf 'Agent alerts: %s/bin/mesh hooks status\n' "$MESH_HOME"
-  printf '\nPair this machine with your phone:\n  %s/bin/mesh pair\n' "$MESH_HOME"
+  printf '\nFirst time? One command walks you through the rest (permissions + pairing):\n  %s/bin/mesh setup\n' "$MESH_HOME"
 fi
 if [ "$OS_NAME" = "Darwin" ] && command -v cmux >/dev/null 2>&1 && want_component meshd; then
   printf 'cmux-bridge: source ~/.mesh/hooks/cmux-bridge.zsh (auto via ~/.zshrc in new terminals)\n'
 fi
 printf 'Uninstall: sh install.sh --uninstall   (add --purge to remove the token + %s)\n' "$MESH_HOME"
+
+# Last, because it is the one instruction the user has to act on themselves.
+setup_path
+report_path
 
 if [ "$NO_START" != "1" ]; then
   want_component meshd  && [ "$MESHD_STATUS" != "up" ] && exit 1

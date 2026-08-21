@@ -13,6 +13,8 @@ request. Same-ref runs cancel superseded ones.
 - Runs the subset of `scripts/check-*` that need nothing macOS-only, no rmux/cmux,
   and no running daemon: `check-mesh-self-check.sh`, `check-mesh-input-linux.sh`,
   `check-mesh-pair.sh`, `check-mesh-push.sh`, `check-mesh-hooks.sh`,
+  `check-mesh-upgrade.sh`, `check-token-rotate.sh`, `check-mesh-onboarding.sh`,
+  `check-pair-qr.sh`, `check-wol.sh`,
   `check-package-mesh-install.sh`, `check-mesh-hook.py`. The rest of
   `scripts/check-*` (Swift, `check-mesh-input.sh`, anything touching a live
   daemon) only runs in `apps`, where the real toolchain exists.

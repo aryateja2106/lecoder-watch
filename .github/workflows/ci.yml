@@ -60,6 +60,12 @@ jobs:
       - name: check-mesh-upgrade.sh
         run: sh scripts/check-mesh-upgrade.sh
 
+      - name: check-token-rotate.sh
+        run: sh scripts/check-token-rotate.sh
+
+      - name: check-mesh-onboarding.sh
+        run: sh scripts/check-mesh-onboarding.sh
+
       - name: check-pair-qr.sh
         run: sh scripts/check-pair-qr.sh
 
