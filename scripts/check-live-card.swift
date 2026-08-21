@@ -14,6 +14,7 @@ struct CheckLiveCard {
         checkAttentionBeatsWatched()
         checkBlockedSince()
         checkRiskReachesTheRow()
+        checkFleetLine()
         print("check-live-card: OK")
     }
 
@@ -290,6 +291,23 @@ struct CheckLiveCard {
             events: [event("studio", "api", level: "warning", title: "rm -rf build — ok?")],
         )
         assert(sessionsNeedingAttention(from: titleOnly).first?.risk.verb == "Delete files")
+    }
+
+    // "know at a given point in time what machines are active and live" — the line the
+    // card carries so that question does not cost an app launch.
+    static func checkFleetLine() {
+        assert(fleetLine(online: 2, total: 3) == "2/3 machines online")
+        assert(fleetLine(online: 3, total: 3) == "all 3 machines online")
+        assert(fleetLine(online: 1, total: 1) == "1 machine online", "one machine is not a fleet")
+        assert(fleetLine(online: 0, total: 2) == "0/2 machines online",
+               "everything down is exactly when the line matters most")
+        // No machines is a sentence about nothing, and the card must not draw an
+        // empty row for it.
+        assert(fleetLine(online: 0, total: 0) == nil)
+        // Nonsense in, nothing broken out: the counts come from a snapshot that can be
+        // mid-refresh, and "4/3 machines" would read as a bug in the product.
+        assert(fleetLine(online: 5, total: 3) == "all 3 machines online")
+        assert(fleetLine(online: -1, total: 3) == "0/3 machines online")
     }
 
     // Both reasons at once: the blocked session outranks the one being watched, because

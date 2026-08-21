@@ -61,6 +61,15 @@ struct SessionLockScreenView: View {
                     .lineLimit(1)
             }
 
+            // Its own line rather than crowding the row below: the bottom row is the
+            // tap affordance and the fleet count is context, not an action.
+            if let fleet = state.fleetText {
+                Text(fleet)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
             HStack(spacing: 6) {
                 AgentBadge(type: state.agentType)
                 Text("\(attributes.session) · \(attributes.host)")
@@ -104,6 +113,9 @@ struct SessionLockScreenView: View {
                 Text(attributes.host).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 if let resource = state.resourceText {
                     Text(resource).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                }
+                if let fleet = state.fleetText {
+                    Text(fleet).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
         }

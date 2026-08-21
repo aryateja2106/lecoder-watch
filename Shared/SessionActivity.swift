@@ -23,6 +23,12 @@ struct SessionActivityAttributes: ActivityAttributes {
         /// would do something destructive. See `classifyRisk`.
         var riskVerb: String? = nil
         var riskWhy: String? = nil
+        /// Fleet liveness, so the card also answers "what is up right now" and not only
+        /// "what is waiting". Optional and defaulted on purpose: an activity started by
+        /// an older build is still in flight with these keys absent from its encoded
+        /// state, and a non-optional field would fail its decode mid-life.
+        var machinesOnline: Int? = nil
+        var machinesTotal: Int? = nil
 
         var state: SessionState { SessionState(rawValue: stateRaw) ?? .unknown }
 
@@ -30,6 +36,12 @@ struct SessionActivityAttributes: ActivityAttributes {
         /// wallpaper; this is the one that means the machine has stopped.
         var isBlocked: Bool { state.wantsAttentionState }
         var isRisky: Bool { riskWhy != nil }
+
+        /// "2/3 machines online", or nil for a card from a build that did not send it.
+        var fleetText: String? {
+            guard let machinesOnline, let machinesTotal else { return nil }
+            return fleetLine(online: machinesOnline, total: machinesTotal)
+        }
 
         /// "38% · 1.2 GB", or nil when the daemon reported neither.
         var resourceText: String? {
