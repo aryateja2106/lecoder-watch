@@ -11,12 +11,13 @@ import { handlePush, pushAlert } from "./push";
 import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
 import { handleDoctor } from "./doctor";
+import { sendWake, primaryMac, magicPacket } from "./wol";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.3.0";
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor"];
+const VERSION = "0.4.0";
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -779,7 +780,10 @@ Bun.serve({
     const path = url.pathname;
     if (!hostAllowed(req)) return json({ error: "bad host" }, 421);
     if (path === "/health") {
-      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES });
+      // mac is here so a phone can cache it while this machine is up: once it sleeps,
+      // nothing can be asked of it, and a peer needs the address to wake it. It is not
+      // a secret — every frame on the LAN already carries it.
+      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES, mac: primaryMac() });
     }
     // Pairing is the one route that must answer without a token — it is how the
     // phone gets one. See pair.ts for why that is safe.
@@ -798,6 +802,18 @@ Bun.serve({
       // APNs device registration + status + test — see push.ts.
       const pushed = await handlePush(req, url);
       if (pushed) return pushed;
+      // Wake a sleeping machine on this LAN — this daemon is the phone's only way to
+      // put a magic packet on the wire. See wol.ts.
+      if (path === "/wake" && req.method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as any;
+        const mac = String(body?.mac ?? "");
+        // Two catches so the phone can tell "fix the request" from "retry later": a
+        // malformed MAC is 400, a packet that could not leave this machine is 502.
+        try { magicPacket(mac); } catch (e: any) { return json({ error: String(e?.message ?? e) }, 400); }
+        try { await sendWake(mac, body?.broadcast ? String(body.broadcast) : undefined); }
+        catch (e: any) { return json({ error: String(e?.message ?? e) }, 502); }
+        return json({ ok: true });
+      }
       if (path === "/stats") return json(await getStats());
       if (path === "/tailnet") return json(await getTailnet());
       if (path === "/agents") return json(await listAgents());
