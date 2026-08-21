@@ -95,6 +95,25 @@ if (!isWrongEnvironment({ status: 400 })) throw new Error("a bare 400 must trigg
 if (isWrongEnvironment({ status: 410, reason: "Unregistered" })) throw new Error("410 Unregistered is a real removal, not an environment mismatch");
 if (isWrongEnvironment({ status: 200 })) throw new Error("success is not a mismatch");
 
+// One banner per session, newest wins. The collapse id is also the identifier the
+// phone schedules local alerts under and sweeps when the wait is over, so these
+// literals are pinned identically in scripts/check-alert-gating.swift. A drift and the
+// phone silently stops clearing pushed banners — the exact complaint this answers.
+const { collapseId, COLLAPSE_ID_MAX_BYTES } = await import("./push.ts");
+eq(collapseId("studio", "api"), "mesh-studio-api", "collapse id");
+eq(collapseId("Aryas-MacBook-Pro", "deploy-api"), "mesh-Aryas-MacBook-Pro-deploy-api", "collapse id");
+eq(collapseId("my host", "weird/session name"), "mesh-my_host-weird_session_name", "header-safe collapse id");
+// Oversized is not "uncollapsed", it is a 400 and a lost alert.
+const longA = collapseId("a".repeat(40), "b".repeat(40));
+const longB = collapseId("a".repeat(40), "b".repeat(41));
+if (longA.length > COLLAPSE_ID_MAX_BYTES || longB.length > COLLAPSE_ID_MAX_BYTES) throw new Error("collapse id not clamped");
+if (longA === longB) throw new Error("clamping must not collapse two different sessions into one banner");
+eq(longA, "mesh-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbb-5a32c2e2", "hashed collapse id");
+// No session means nothing to supersede; one id per host would make "disk full" eat
+// "build failed", and the phone would sweep a host alert it can never match.
+if (collapseId("studio", undefined) !== null) throw new Error("a host-level alert must not collapse");
+if (collapseId(undefined, "api") !== null) throw new Error("a collapse id needs both halves");
+
 // The two languages grade the same events; if they drift, the wrist shows buttons the
 // push never carries, or carries buttons the wrist will not draw.
 const { BLOCKED_LEVELS } = await import("./push.ts");
@@ -119,3 +138,17 @@ CAT_SWIFT="$(grep -c 'attentionCategory = "AGENT_ATTENTION"' "$ROOT/Shared/Agent
   exit 1
 }
 echo "check-mesh-push: category matches Swift"
+
+# The header itself. The id can be perfect and still collapse nothing if the send stops
+# carrying it, and no assertion above reaches into the curl invocation.
+grep -q 'apns-collapse-id' "$ROOT/install/payload/meshd/push.ts" || {
+  echo "FAIL: pushes no longer carry apns-collapse-id, so every alert stacks again"
+  exit 1
+}
+# And the Swift half of the same identifier. Greps rather than a run: this check is the
+# one that runs on Linux CI, where there is no swiftc.
+grep -q '"\\(meshNotificationPrefix)\\(meshIdSafe(host))-\\(meshIdSafe(session))"' "$ROOT/Shared/AlertGating.swift" || {
+  echo "FAIL: meshNotificationId no longer builds mesh-<host>-<session>; the phone will not clear pushed banners"
+  exit 1
+}
+echo "check-mesh-push: collapse id matches Swift"
