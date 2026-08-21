@@ -606,8 +606,28 @@ function writeDaemonEnv(token: string, port: number): string {
 // Restart through whatever install.sh registered on this machine. `token` is what the
 // restarted daemon should come up with — it defaults to the installed one, and rotation
 // passes the new value explicitly (process.env.MESHD_TOKEN would still be the old one).
-function restartDaemon(token: string = localToken()): string {
+//
+// `reloadDefinition` matters exactly when the plist changed: `launchctl kickstart -k`
+// restarts from launchd's IN-MEMORY copy of the service and never re-reads the file,
+// so a rotation that only kickstarts comes back up on the leaked token — caught live
+// by the pair-round-trip verification on 2026-08-21. bootout + bootstrap is the only
+// way to make launchd re-read a plist. (systemd has the same trap; setSupervisorToken
+// already runs daemon-reload there.)
+function restartDaemon(token: string = localToken(), reloadDefinition = false): string {
   const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+  if (process.platform === "darwin" && reloadDefinition) {
+    const plist = join(homedir(), "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
+    if (existsSync(plist)) {
+      runOk(["launchctl", "bootout", `gui/${uid}/${SERVICE_LABEL}`]);   // fails harmlessly if not loaded
+      // bootstrap right after bootout flakes with EIO while the old process drains —
+      // seen live during the first real rotation, which then fell through to the tmux
+      // fallback and left the daemon unsupervised. A beat and one retry settles it.
+      for (const waitMs of [500, 2000]) {
+        Bun.sleepSync(waitMs);
+        if (runOk(["launchctl", "bootstrap", `gui/${uid}`, plist])) return "launchd (reloaded)";
+      }
+    }
+  }
   if (process.platform === "darwin" && runOk(["launchctl", "kickstart", "-k", `gui/${uid}/${SERVICE_LABEL}`])) return "launchd";
   if (process.platform === "linux" && runOk(["systemctl", "--user", "restart", SERVICE_UNIT])) return "systemd";
   // Neither supervisor knows the service — fall back to install.sh's own last resort,
@@ -860,7 +880,8 @@ async function cmdTokenRotateLocal(bools: Set<string>, cfg: Config) {
   const supervisors = setSupervisorToken(token);
   if (supervisors.length) say(`  rewrote the ${supervisors.join(" + ")} service definition`);
 
-  const restarted = restartDaemon(token);
+  // A patched plist must be RE-READ, not kickstarted — see restartDaemon.
+  const restarted = restartDaemon(token, supervisors.includes("launchd"));
   if (!restarted) {
     die(`the token file is rotated but meshd could NOT be restarted (no launchd/systemd service and tmux failed).\n`
       + `  The daemon is still serving the OLD token. Start it yourself, then re-run 'mesh doctor'.`);
