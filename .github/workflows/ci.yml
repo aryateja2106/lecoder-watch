@@ -57,6 +57,15 @@ jobs:
       - name: check-mesh-hooks.sh
         run: sh scripts/check-mesh-hooks.sh
 
+      - name: check-mesh-upgrade.sh
+        run: sh scripts/check-mesh-upgrade.sh
+
+      - name: check-pair-qr.sh
+        run: sh scripts/check-pair-qr.sh
+
+      - name: check-wol.sh
+        run: sh scripts/check-wol.sh
+
       - name: check-package-mesh-install.sh
         run: sh scripts/check-package-mesh-install.sh
 

@@ -5,7 +5,10 @@
 
 import { homedir, networkInterfaces } from "os";
 import { join } from "path";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import {
+  existsSync, readFileSync, writeFileSync, mkdirSync,
+  statSync, readdirSync, renameSync, rmSync, copyFileSync, chmodSync,
+} from "fs";
 
 const VERSION = "0.1.0";
 const MESH_HOME = process.env.MESH_HOME || join(homedir(), ".mesh");
@@ -92,6 +95,9 @@ function out(human: () => void, data: unknown) {
   if (JSON_OUT) console.log(JSON.stringify(data, null, 2));
   else human();
 }
+// Progress for the long commands (upgrade). Silent under --json so the only thing on
+// stdout stays the one parseable object out() prints at the end.
+function say(msg: string) { if (!JSON_OUT) console.log(msg); }
 function die(msg: string): never {
   console.error(`mesh: ${msg}`);
   process.exit(1);
@@ -100,7 +106,7 @@ function die(msg: string): never {
 // ---------- arg parsing ----------
 
 // Split argv into positionals + a flag map. Known value-flags consume the next token.
-const VALUE_FLAGS = new Set(["-H", "--host", "-n", "--lines", "--pane", "--cmd", "--cwd", "--task", "--port", "--token", "--since"]);
+const VALUE_FLAGS = new Set(["-H", "--host", "-n", "--lines", "--pane", "--cmd", "--cwd", "--task", "--port", "--token", "--since", "--address", "--src"]);
 function parse(argv: string[]): { pos: string[]; flags: Record<string, string>; bools: Set<string> } {
   const pos: string[] = [], bools = new Set<string>(), flags: Record<string, string> = {};
   for (let i = 0; i < argv.length; i++) {
@@ -244,6 +250,51 @@ async function cmdHealth(flags: Record<string, string>, cfg: Config) {
   out(() => console.log(`${h.name}: ${r?.ok ? "up" : "down"}${r?.meshdVersion ? ` · meshd ${r.meshdVersion}` : ""}${r?.platform ? ` · ${r.platform}` : ""}`), r);
 }
 
+function humanUptime(sec: unknown): string {
+  const s = Number(sec);
+  if (!Number.isFinite(s) || s <= 0) return "";
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+// One line per machine — the "is my mesh healthy" view `hosts` never gave (it only says
+// up/down). Local first because that is the machine you are standing on. Probed
+// concurrently: a dead host must cost one 5s timeout for the whole run, not one each.
+async function cmdStatus(cfg: Config) {
+  const targets = [resolveHost("local", cfg), ...Object.keys(cfg.hosts).map((n) => resolveHost(n, cfg))];
+  const rows = await Promise.all(targets.map(async (h) => {
+    const row: Record<string, unknown> = { name: h.name, address: `${h.ip}:${h.port}`, ok: false };
+    try {
+      const r = await api(h, "GET", "/health");
+      row.ok = Boolean(r?.ok);
+      row.meshdVersion = r?.meshdVersion ?? "";
+      row.uptimeSec = r?.uptimeSec ?? null;
+      row.platform = r?.platform ?? "";
+    } catch (e: any) {
+      row.error = String(e?.message ?? e);
+      return row;
+    }
+    // /doctor needs the token and only newer daemons have it, so a miss is not a failure
+    // — it just means this line has nothing to say about capabilities.
+    try {
+      const d = await api(h, "GET", "/doctor");
+      const checks = Object.values<any>(d?.checks ?? {});
+      if (checks.length) row.doctor = { ok: checks.filter((c) => c?.ok).length, total: checks.length };
+    } catch { /* older daemon, or no token for this host */ }
+    return row;
+  }));
+  out(() => {
+    for (const r of rows as any[]) {
+      if (!r.ok) { console.log(`${String(r.name).padEnd(16)} ${String(r.address).padEnd(22)} unreachable  (${r.error})`); continue; }
+      const up = humanUptime(r.uptimeSec);
+      const doc = r.doctor ? `  doctor: ${r.doctor.ok}/${r.doctor.total} ok` : "";
+      console.log(`${String(r.name).padEnd(16)} ${String(r.address).padEnd(22)} meshd ${String(r.meshdVersion || "?").padEnd(8)} ${up ? `up ${up}` : ""}${doc}`);
+    }
+  }, rows);
+}
+
 // Reads /doctor, which tests each capability by exercising it. --fix POSTs
 // /doctor/fix, which makes macOS show the real Accessibility and Screen Recording
 // dialogs on that machine — the honest version of "a proper permission dialog",
@@ -293,6 +344,37 @@ function reachableAddress(): string {
   return "";
 }
 
+/**
+ * The pairing URL as an ANSI QR, or "" if we cannot draw one.
+ *
+ * Two matrix rows per terminal line via Unicode half-blocks, so the code stays square
+ * in a normal cell grid, plus the 2-module quiet zone the spec requires (a QR with no
+ * margin is one most cameras refuse to see).
+ *
+ * The import is dynamic and swallowed on purpose: pairing is the one command that must
+ * never fail, and a missing or broken qr.ts must cost the user a QR, not the pairing.
+ */
+async function pairQR(text: string): Promise<string> {
+  try {
+    const { qrMatrix } = await import("../meshd/qr.ts");
+    const m = qrMatrix(text);
+    if (!Array.isArray(m) || !m.length) return "";
+    const q = 2, w = m[0].length + q * 2;
+    const blank = new Array(w).fill(false);
+    const rows = [...Array(q).fill(blank), ...m.map((r) => [...Array(q).fill(false), ...r, ...Array(q).fill(false)]), ...Array(q).fill(blank)];
+    const lines: string[] = [];
+    for (let y = 0; y < rows.length; y += 2) {
+      let line = "";
+      for (let x = 0; x < w; x++) {
+        const top = rows[y][x], bot = rows[y + 1]?.[x] ?? false;
+        line += top && bot ? "█" : top ? "▀" : bot ? "▄" : " ";
+      }
+      lines.push("  " + line);
+    }
+    return lines.join("\n");
+  } catch { return ""; }
+}
+
 async function cmdPair(flags: Record<string, string>, cfg: Config) {
   // Minted over loopback so no token is needed here — that is the whole point.
   const port = Number(flags.port) || Number(process.env.MESHD_PORT) || 8899;
@@ -303,23 +385,333 @@ async function cmdPair(flags: Record<string, string>, cfg: Config) {
     die(`meshd is not answering on 127.0.0.1:${port} — is it running?  (${String(e?.message ?? e)})`);
   }
   const address = flags.address || reachableAddress();
-  const url = `mesh://pair?h=${encodeURIComponent(address)}&p=${port}&c=${r.code}`;
+  // meshwatch://, not mesh:// — `meshwatch` is the only scheme the iOS app registers
+  // (project.yml CFBundleURLSchemes), so a mesh:// QR scanned into iOS opens nothing.
+  const url = `meshwatch://pair?h=${encodeURIComponent(address)}&p=${port}&c=${r.code}`;
+  const qr = JSON_OUT ? "" : await pairQR(url);
 
   out(() => {
     console.log("");
     console.log(`  Pair ${r.host} with your phone`);
     console.log("");
     console.log(`    Address   ${address || "<no tailscale or LAN address found>"}`);
+    // The code stays printed even with a QR: it is what the user reads off this screen
+    // and matches against the phone before claiming. That visual match IS the
+    // verification layer — nothing else proves the code came from this machine.
     console.log(`    Code      ${r.pretty}`);
     console.log("");
-    // qrencode is not a dependency — if it happens to be installed, save the typing.
-    const qr = run(["qrencode", "-t", "ANSIUTF8", "-m", "2", url]);
     if (qr) console.log(qr);
+    // No QR on this install (no qr.ts) — the deep link itself is still the fallback.
+    else { console.log(`    Link      ${url}`); console.log(""); }
     console.log(`  Open LeSearch Mesh on your iPhone -> Machines -> Add machine,`);
     console.log(`  and enter those two. Expires in ${Math.round(r.ttlSec / 60)} minutes, one use.`);
     console.log("");
     if (!address) console.log("  No address found. Pass one: mesh pair --address <ip>");
   }, { ...r, address, url });
+}
+
+// ---------- upgrade ----------
+//
+// The deployment path the fleet never had. `install.sh --upgrade` copies files, but a
+// systemd unit that is already active ignores `enable --now`, so hosts kept serving the
+// old build out of memory and the fleet froze on 0.2.x with no error anywhere.
+//
+// So this command refuses to be cosmetic: it boots the new daemon on a scratch port and
+// makes it report its own version BEFORE anything under $MESH_HOME moves, swaps by
+// rename (never rm), restarts through the real supervisor, and puts the old tree back
+// if the restarted daemon does not come up as the new version.
+
+const DEFAULT_SRC = "https://github.com/LeSearch-AI/mesh-install/releases/latest/download/mesh-install.tgz";
+const BACKUPS_DIR = join(MESH_HOME, "backups");
+// Must match install.sh's service naming exactly, or we restart nothing. Same
+// MESH_LABEL_PREFIX override it honours, so a test install can drive the restart path
+// without kicking the real daemon.
+const LABEL_PREFIX = process.env.MESH_LABEL_PREFIX || "ai.lesearch";
+const SERVICE_LABEL = `${LABEL_PREFIX}.meshd`;         // launchd (macOS)
+const SERVICE_UNIT = `${LABEL_PREFIX}-meshd.service`;  // systemd --user (Linux)
+const SERVICE_TMUX = `${LABEL_PREFIX}-meshd`;          // tmux fallback session
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function runOk(cmd: string[]): boolean {
+  try { return Bun.spawnSync(cmd, { stdout: "ignore", stderr: "ignore" }).success; }
+  catch { return false; }
+}
+
+/** The version a meshd tree will report once it runs, read out of its own source. */
+function treeVersion(serverTs: string): string {
+  try { return /^\s*const VERSION\s*=\s*"([^"]+)"/m.exec(readFileSync(serverTs, "utf8"))?.[1] ?? ""; }
+  catch { return ""; }
+}
+
+async function download(url: string, dest: string) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`download failed: ${url} → HTTP ${res.status}`);
+  await Bun.write(dest, res);
+}
+
+// A published release carries <url>.sha256. An ad-hoc one may not — say so out loud,
+// because silence here reads exactly like "verified".
+async function verifyDigest(url: string, file: string) {
+  const res = await fetch(`${url}.sha256`).catch(() => null);
+  if (!res || !res.ok) { say(`  warning: no ${url}.sha256 — this download was NOT integrity-checked`); return; }
+  const want = (await res.text()).trim().split(/\s+/)[0].toLowerCase();
+  const got = new Bun.CryptoHasher("sha256").update(new Uint8Array(await Bun.file(file).arrayBuffer())).digest("hex");
+  if (want !== got) throw new Error(`sha256 mismatch for ${url}\n  expected ${want}\n  got      ${got}`);
+  say(`  sha256 ok (${got.slice(0, 12)}…)`);
+}
+
+/**
+ * Materialise a payload inside `staging` and return the directory holding meshd/ + bin/.
+ * Three accepted sources: an https .tgz (the release), a local .tgz, or a checkout
+ * directory. Everything lands under `staging` — which lives inside $MESH_HOME — so the
+ * final move is a same-filesystem rename and cannot half-finish.
+ */
+async function stagePayload(src: string, staging: string): Promise<string> {
+  const isUrl = /^https?:\/\//.test(src);
+  if (!isUrl && existsSync(src) && statSync(src).isDirectory()) {
+    // How we deploy from a worktree today: point --src at a checkout (or its install/).
+    const from = [join(src, "install", "payload"), join(src, "payload"), src].find((p) => existsSync(join(p, "meshd")));
+    if (!from) throw new Error(`--src ${src} is a directory with no install/payload, payload/ or meshd/ inside it`);
+    say(`  staging from checkout: ${from}`);
+    if (!runOk(["cp", "-R", from, join(staging, "payload")])) throw new Error(`failed to copy ${from}`);
+    return join(staging, "payload");
+  }
+
+  const fetchDir = join(staging, "fetch");
+  mkdirSync(fetchDir, { recursive: true });
+  const tgz = join(fetchDir, "mesh-install.tgz");
+  if (!isUrl) {
+    if (!existsSync(src)) throw new Error(`--src ${src} is neither a URL, a tarball, nor a directory`);
+    say(`  staging from tarball: ${src}`);
+    copyFileSync(src, tgz);
+  } else {
+    // Same rule install.sh enforces: whoever controls a plaintext hop runs code as you.
+    if (src.startsWith("http://")) throw new Error(`refusing plaintext payload source (use https): ${src}`);
+    say(`  downloading ${src}`);
+    await download(src, tgz);
+    await verifyDigest(src, tgz);
+  }
+  if (!runOk(["tar", "-xzf", tgz, "-C", fetchDir])) throw new Error("failed to extract the payload tarball");
+  const from = [join(fetchDir, "install", "payload"), join(fetchDir, "payload")].find((p) => existsSync(join(p, "meshd")));
+  if (!from) throw new Error("downloaded payload has unexpected layout (no install/payload or payload/)");
+  return from;
+}
+
+// Racy by nature — but this is a ten-second trial run on loopback, not a registration.
+function freePort(from: number, to: number): number {
+  for (let p = from; p <= to; p++) {
+    try { Bun.serve({ port: p, hostname: "127.0.0.1", fetch: () => new Response("") }).stop(true); return p; }
+    catch { /* in use */ }
+  }
+  throw new Error(`no free port in ${from}-${to} for the trial run`);
+}
+
+/**
+ * Prove the staged tree runs before the installed one is touched: boot it on a scratch
+ * port with a throwaway token and its own HOME, and require the daemon itself to report
+ * the version we staged. A payload that cannot start is a payload we never install —
+ * "the files copied" was never evidence that the machine still works.
+ */
+async function smokeTest(payload: string, version: string, staging: string) {
+  if (!Bun.which("bun")) throw new Error("bun is not on PATH — cannot verify the staged daemon");
+  const port = freePort(8901, 8999);
+  const home = join(staging, "smoke-home");
+  mkdirSync(home, { recursive: true });
+  const proc = Bun.spawn(["bun", "run", "server.ts"], {
+    cwd: join(payload, "meshd"),
+    env: {
+      ...process.env,
+      HOME: home,                        // keeps the trial's sqlite/keys out of the real ~/.mesh
+      MESHD_HOST: "127.0.0.1",           // never expose a throwaway token off-box
+      MESHD_PORT: String(port),
+      MESHD_TOKEN: crypto.randomUUID(),
+      MESHD_EVENTS_PATH: join(home, "events.jsonl"),
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  say(`  trial run: meshd on 127.0.0.1:${port}`);
+  let ok = false;
+  for (let i = 0; i < 50 && proc.exitCode === null; i++) {
+    try {
+      const j: any = await (await fetch(`http://127.0.0.1:${port}/health`)).json();
+      if (j?.ok && j.meshdVersion === version) { ok = true; break; }
+    } catch { /* not listening yet */ }
+    await sleep(200);
+  }
+  proc.kill();
+  const err = (await new Response(proc.stderr).text().catch(() => "")).trim();
+  await proc.exited;
+  if (!ok) throw new Error(`staged meshd ${version} did not come up — nothing was changed.\n${err.split("\n").slice(-6).join("\n")}`);
+  say(`  trial run ok: it reports meshd ${version}`);
+}
+
+// Only meshd/ moves. token, hosts.json, push-tokens.json, kb.sqlite*, agent-events.jsonl,
+// apns/ and backups/ are state nobody can regenerate — losing the token silently unpairs
+// every phone and watch on the mesh. The old tree is renamed, never deleted: it is the
+// rollback.
+function swapInMeshd(payload: string, oldVersion: string, epoch: number): string {
+  const meshd = join(MESH_HOME, "meshd");
+  const backup = join(BACKUPS_DIR, `meshd-${oldVersion || "unknown"}-${epoch}`);
+  mkdirSync(BACKUPS_DIR, { recursive: true });
+  if (existsSync(meshd)) renameSync(meshd, backup);
+  renameSync(join(payload, "meshd"), meshd);
+  return backup;
+}
+
+// bin/ is copied file by file and a byte-identical file is left ALONE: macOS grants
+// Accessibility (TCC) per binary, so overwriting an unchanged mesh-input costs the user
+// that grant and every click and key silently stops working until they re-approve.
+// Extra files already in bin/ (like the compiled mesh-input) are never removed.
+function syncBin(payload: string): { updated: string[]; unchanged: number } {
+  const from = join(payload, "bin"), to = join(MESH_HOME, "bin");
+  const updated: string[] = [];
+  let unchanged = 0;
+  if (!existsSync(from)) return { updated, unchanged };
+  mkdirSync(to, { recursive: true });
+  for (const e of readdirSync(from, { withFileTypes: true })) {
+    if (!e.isFile()) continue;
+    const a = join(from, e.name), b = join(to, e.name);
+    if (existsSync(b) && Buffer.compare(readFileSync(a), readFileSync(b)) === 0) { unchanged++; continue; }
+    copyFileSync(a, b);
+    chmodSync(b, 0o755);
+    updated.push(e.name);
+  }
+  return { updated, unchanged };
+}
+
+// Restart through whatever install.sh registered on this machine.
+function restartDaemon(): string {
+  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+  if (process.platform === "darwin" && runOk(["launchctl", "kickstart", "-k", `gui/${uid}/${SERVICE_LABEL}`])) return "launchd";
+  if (process.platform === "linux" && runOk(["systemctl", "--user", "restart", SERVICE_UNIT])) return "systemd";
+  // Neither supervisor knows the service — fall back to install.sh's own last resort,
+  // a detached tmux session under the same label.
+  runOk(["tmux", "kill-session", "-t", SERVICE_TMUX]);
+  const port = Number(process.env.MESHD_PORT) || 8899;
+  // Same env install.sh writes into its tmux fallback (values are space-free).
+  const host = process.env.MESHD_HOST ? `MESHD_HOST=${process.env.MESHD_HOST} ` : "";
+  const cmd = `env MESHD_TOKEN=${localToken()} MESHD_PORT=${port} ${host}bun run server.ts`;
+  if (runOk(["tmux", "new-session", "-d", "-s", SERVICE_TMUX, "-c", join(MESH_HOME, "meshd"), cmd])) return "tmux";
+  return "";
+}
+
+/** Poll /health until `want` accepts the reported version, or the budget runs out. */
+async function pollVersion(host: ReturnType<typeof resolveHost>, want: (v: string) => boolean, ms: number, everyMs = 500): Promise<string> {
+  const deadline = Date.now() + ms;
+  let last = "";
+  while (Date.now() < deadline) {
+    try {
+      last = (await api(host, "GET", "/health"))?.meshdVersion ?? "";
+      if (want(last)) return last;
+    } catch { /* mid-restart */ }
+    await sleep(everyMs);
+  }
+  return last;
+}
+
+async function cmdUpgradeLocal(flags: Record<string, string>, bools: Set<string>, cfg: Config) {
+  const local = resolveHost("local", cfg);
+  const epoch = Math.floor(Date.now() / 1000);
+  const noRestart = bools.has("no-restart");
+
+  // Two different "old versions": what is on disk (the tree being replaced) and what the
+  // running daemon reports. They disagree exactly when a previous upgrade copied files
+  // and never restarted — the bug this command exists to end, so both get reported.
+  const oldDisk = treeVersion(join(MESH_HOME, "meshd", "server.ts"));
+  let oldRunning = "";
+  try { oldRunning = (await api(local, "GET", "/health"))?.meshdVersion ?? ""; }
+  catch { say(`note: meshd is not answering on ${local.ip}:${local.port} — upgrading the files anyway`); }
+  if (oldRunning && oldDisk && oldRunning !== oldDisk) say(`note: running meshd ${oldRunning} but ${MESH_HOME}/meshd is ${oldDisk} (a past upgrade never restarted)`);
+
+  const src = flags.src || process.env.MESH_SRC || DEFAULT_SRC;
+  const staging = join(MESH_HOME, `.staging-${epoch}`);
+  mkdirSync(staging, { recursive: true, mode: 0o700 });
+
+  let payload = "", newVersion = "";
+  try {
+    payload = await stagePayload(src, staging);
+    if (!existsSync(join(payload, "meshd", "server.ts"))) throw new Error("staged payload has no meshd/server.ts");
+    if (!existsSync(join(payload, "bin", "mesh"))) throw new Error("staged payload has no bin/mesh");
+    newVersion = treeVersion(join(payload, "meshd", "server.ts"));
+    if (!newVersion) throw new Error("could not read VERSION out of the staged meshd/server.ts");
+    await smokeTest(payload, newVersion, staging);
+  } catch (e) {
+    // Nothing has moved yet, and staging is a directory we created seconds ago.
+    rmSync(staging, { recursive: true, force: true });
+    throw e;
+  }
+
+  let backup = "", restarted = "", live = "", rolledBack = "";
+  try {
+    backup = swapInMeshd(payload, oldDisk, epoch);
+    const bin = syncBin(payload);
+    say(`  installed meshd ${newVersion}  (bin: ${bin.updated.length ? bin.updated.join(", ") : "no changes"}${bin.unchanged ? `, ${bin.unchanged} unchanged` : ""})`);
+
+    if (noRestart) {
+      say(`  --no-restart: ${MESH_HOME}/meshd is ${newVersion}, the running daemon is still ${oldRunning || "whatever it was"}`);
+    } else {
+      restarted = restartDaemon();
+      if (!restarted) throw new Error("could not restart meshd (no launchd/systemd service and tmux failed)");
+      say(`  restarted via ${restarted}`);
+      live = await pollVersion(local, (v) => v === newVersion, 15000);
+      if (live !== newVersion) {
+        // The new build installed but the machine is not serving it. Put the old tree
+        // back and restart again — a mesh host that answers is worth more than a new one.
+        rolledBack = join(BACKUPS_DIR, `meshd-${newVersion}-failed-${epoch}`);
+        renameSync(join(MESH_HOME, "meshd"), rolledBack);
+        renameSync(backup, join(MESH_HOME, "meshd"));
+        restartDaemon();
+        throw new Error(`ROLLED BACK: after restart meshd reported ${live || "nothing (unreachable)"}, not ${newVersion}.\n`
+          + `  ${MESH_HOME}/meshd is the previous ${oldDisk || "install"} again; the failed tree is kept at ${rolledBack}`);
+      }
+    }
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+
+  out(() => {
+    console.log(`mesh upgrade: ${oldDisk || "unknown"} → ${newVersion} on ${local.name}`);
+    console.log(`  backup   ${backup}`);
+    console.log(`  restart  ${restarted || "skipped (--no-restart)"}`);
+    if (live) console.log(`  meshd    ${live} up on ${local.ip}:${local.port}`);
+  }, { ok: true, host: local.name, from: oldDisk, fromRunning: oldRunning, to: newVersion, backup, restarted: restarted || null, running: live || null, src });
+}
+
+// Remote upgrades deliberately add no daemon endpoint: /agents/new already exists and is
+// authenticated, and the tmux server it talks to is NOT a child of meshd — so the
+// installer survives the daemon restart it causes. A child process would not.
+async function cmdUpgradeRemote(flags: Record<string, string>, cfg: Config) {
+  const h = resolveHost(hostOf(flags), cfg);
+  const src = flags.src || process.env.MESH_SRC || DEFAULT_SRC;
+  if (!/^https?:\/\//.test(src) && existsSync(src) && statSync(src).isDirectory()) {
+    die(`--src ${src} is a local directory and ${h.name} cannot see this disk — publish a release and pass --src <url>`);
+  }
+  const base = src.replace(/\/[^/]+\.(tgz|tar\.gz)$/, "").replace(/\/+$/, "");
+  const epoch = Math.floor(Date.now() / 1000);
+  const name = `mesh-upgrade-${epoch}`;
+
+  let before = "";
+  try { before = (await api(h, "GET", "/health"))?.meshdVersion ?? ""; }
+  catch { say(`note: ${h.name} is not answering /health yet — starting the installer anyway`); }
+
+  await api(h, "POST", "/agents/new", { name, cmd: `sh -c 'curl -fsSL ${base}/install.sh | sh -s -- --upgrade'` });
+  say(`started ${name} on ${h.name} — installing from ${base}/install.sh`);
+  say(`waiting up to 3 minutes for ${h.name} to report a new meshd version…`);
+
+  // A version CHANGE, not a specific one: only the release knows what it ships.
+  const after = await pollVersion(h, (v) => Boolean(v) && v !== before, 180000, 3000);
+  const ok = Boolean(after) && after !== before;
+  out(() => {
+    if (ok) console.log(`${h.name}: meshd ${before || "?"} → ${after}`);
+    else console.log(`${h.name}: still ${after || before || "unreachable"} after 3 minutes — inspect it with: mesh peek ${name} -H ${h.name}`);
+  }, { ok, host: h.name, from: before, to: ok ? after : null, session: name, src: `${base}/install.sh` });
+  if (!ok) process.exit(1);
+}
+
+function cmdUpgrade(flags: Record<string, string>, bools: Set<string>, cfg: Config) {
+  return hostOf(flags) ? cmdUpgradeRemote(flags, cfg) : cmdUpgradeLocal(flags, bools, cfg);
 }
 
 // ---------- agent hooks ----------
@@ -423,10 +815,15 @@ SESSIONS  (default host, or -H <name>)
   kill <session>              kill a session
 
 STATUS
+  status                      every machine on one line: version, uptime, doctor score
   usage                       usage/limits per provider     (alias: limits)
   health                      is meshd up?
   doctor                      what actually works on a machine  [--fix shows the permission dialogs]
   events                      recent agent events           [--since ISO]
+
+MAINTENANCE
+  upgrade                     install the latest meshd + tools and restart the daemon
+                              [-H host] [--src URL|DIR|TGZ] [--no-restart]
 
 GLOBAL
   -H, --host <name>           target host (default: config default, else localhost)
@@ -460,6 +857,36 @@ mesh host rm <name>
 mesh host default <name>
 
 Hosts are stored in ${HOSTS_FILE}. The first host added becomes the default.`,
+  upgrade: `mesh upgrade [-H host] [--src URL|DIR|TGZ] [--no-restart] [--json]
+
+Install the latest meshd + tools and restart the daemon.
+
+Without -H it upgrades THIS machine: the new payload is staged inside ${MESH_HOME},
+booted on a scratch port and made to report its own version before anything moves,
+then swapped in by rename. The previous meshd is kept under ${MESH_HOME}/backups
+and put back automatically if the restarted daemon does not come up as the new
+version. Your token, hosts.json, push tokens, KB and event log are never touched.
+
+--src accepts an https .tgz (verified against <url>.sha256 when the release has one),
+a local .tgz, or a checkout directory — how you deploy an unreleased build. Default:
+\$MESH_SRC, else the latest GitHub release.
+
+With -H it starts the installer on that host in its own tmux session (so it survives
+the daemon restart) and waits up to 3 minutes for the host to report a new version.
+A local directory --src is refused there: the remote machine cannot see your disk.
+
+  mesh upgrade                          # this machine, from the latest release
+  mesh upgrade --src ~/Projects/lecoder-watch/install   # from a checkout
+  mesh upgrade --no-restart             # install the files, restart later yourself
+  mesh upgrade -H dataflow              # upgrade a remote host and watch it flip`,
+  status: `mesh status [--json]
+
+One line per machine — this one first, then every host in ${HOSTS_FILE}:
+address, meshd version, uptime, and (when the daemon answers /doctor) how many
+capability checks pass. Hosts are probed concurrently with a 5s timeout each, so one
+dead machine costs the whole command 5 seconds, not 5 seconds per host.
+
+  mesh status          # is the fleet healthy, and is anything left on an old build?`,
   doctor: `mesh doctor [-H host] [--fix]
 
 Tests what the daemon can actually do — token, input injection, screen capture,
@@ -513,6 +940,8 @@ async function main() {
     case "kill": return cmdKill(pos, flags, cfg);
     case "usage": case "limits": return cmdUsage(flags, cfg);
     case "health": return cmdHealth(flags, cfg);
+    case "status": return cmdStatus(cfg);
+    case "upgrade": case "update": return cmdUpgrade(flags, bools, cfg);
     case "doctor": return cmdDoctor(flags, cfg);
     case "events": return cmdEvents(flags, cfg);
     default: die(`unknown command: ${cmd}  (try: mesh help)`);

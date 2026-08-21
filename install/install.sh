@@ -259,6 +259,11 @@ service_start() {
       systemctl --user daemon-reload 2>/dev/null || true
       systemctl --user enable --now "$(systemd_name "$ss_name")" 2>/dev/null || \
         warn "systemctl --user could not start $(systemd_name "$ss_name"); check: systemctl --user status $(systemd_name "$ss_name")"
+      # `enable --now` is a no-op on an already-active unit, so an upgrade left the OLD
+      # daemon running out of memory with the new files on disk and no error anywhere —
+      # that is how the fleet stayed on 0.2.x. Restart explicitly to load the new code.
+      systemctl --user restart "$(systemd_name "$ss_name")" 2>/dev/null || \
+        warn "systemctl --user could not restart $(systemd_name "$ss_name"); it may still be running the previous build"
       ;;
     *)  # tmux fallback (does NOT survive reboot)
       ss_flat=$(printf '%s' "$ss_env" | tr '\n' ' ')   # env values are space-free
