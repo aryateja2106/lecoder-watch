@@ -330,6 +330,19 @@ final class MeshStore: ObservableObject {
         // Only off the full snapshot: a partial one is missing hosts, and a card that
         // flickers to another session mid-poll is worse than one that lands a beat late.
         LiveActivityController.shared.sync(snapshot: snap)
+        // A banner that outlives the wait it announced is the complaint this answers.
+        // `refreshEvents` ran just above, so the poll that first sees "Claude stopped"
+        // is the same poll that pulls the "needs attention" banner down — no separate
+        // lane watching for stop-shaped events, which would only ever be a guess about
+        // one producer's wording.
+        //
+        // Guarded on having seen any event at all: a cold launch knows nothing yet, and
+        // sweeping on no evidence would clear a live "needs you" banner that the first
+        // poll simply has not caught up with.
+        if !(snap.events ?? []).isEmpty {
+            NotificationManager.shared.clearResolvedAlerts(
+                attention: sessionsNeedingAttention(from: snap).map { ($0.host, $0.session) })
+        }
     }
 
     /// Emit a snapshot containing the hosts that have answered so far, with the rest

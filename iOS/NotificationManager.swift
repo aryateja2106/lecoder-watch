@@ -94,9 +94,59 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
             // A multi-subagent turn fires SubagentStop per subagent; one banner is plenty.
             guard eventDeduper.shouldAlert(host: event.host, session: event.session,
                                            title: event.title, body: event.body) else { continue }
-            notifyNow(id: key,
+            // One banner per session, newest wins. Reusing the identifier makes the OS
+            // replace this session's last alert instead of stacking another under it —
+            // and it is the same string meshd stamps as `apns-collapse-id`, so the
+            // pushed and the local lane share one identifier space and one sweep
+            // (`clearResolvedAlerts`) clears both. The per-event-id dedupe above is a
+            // different job and still runs: collapsing is about what is on screen,
+            // firedKeys is about never re-firing an event we already handled.
+            //
+            // An event with neither a host nor a session has nothing to collapse
+            // against, so it keeps its own id — which also keeps it out of the sweep.
+            var id = key
+            var info: [String: String] = [:]
+            var category: String?
+            if let host = event.host, !host.isEmpty, let session = event.session, !session.isEmpty {
+                id = meshNotificationId(host: host, session: session)
+                info = AgentNotification.userInfo(host: host, session: session)
+                // Same grading as `isActionable` in push.ts: buttons only where there is
+                // a stopped agent to answer. Without the category they never draw, and
+                // userInfo alone would be a routing target with nothing to route.
+                if cardStateForLevel(event.level).wantsAttentionState {
+                    category = AgentNotification.attentionCategory
+                }
+            }
+            notifyNow(id: id,
                       title: eventNotificationTitle(event),
-                      body: eventNotificationBody(event))
+                      body: eventNotificationBody(event),
+                      userInfo: info,
+                      category: category)
+        }
+    }
+
+    /// Once the agent stops waiting, the banner about it should stop existing.
+    ///
+    /// Driven off the poll loop rather than off any single "it finished" event, because
+    /// the finish arrives by too many routes to enumerate — a Stop hook, a calmer event
+    /// superseding the question, the session being answered from another device, or the
+    /// session simply going away. `sessionsNeedingAttention` already collapses all of
+    /// those into one answer: who is still waiting. Everything else goes.
+    func clearResolvedAlerts(attention: [(host: String, session: String)]) {
+        let center = UNUserNotificationCenter.current()
+        center.getDeliveredNotifications { delivered in
+            center.getPendingNotificationRequests { pending in
+                // Pending as well as delivered: local event alerts are scheduled a
+                // second out, so a session that finishes between two polls can have a
+                // banner queued that has not landed yet. Letting that one through is
+                // the exact "it buzzed after I was done" this feature exists to stop.
+                let ids = notificationIdsToClear(
+                    delivered: delivered.map(\.request.identifier) + pending.map(\.identifier),
+                    attention: attention)
+                guard !ids.isEmpty else { return }
+                center.removeDeliveredNotifications(withIdentifiers: ids)
+                center.removePendingNotificationRequests(withIdentifiers: ids)
+            }
         }
     }
 
@@ -269,8 +319,10 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                            title: String,
                            body: String,
                            userInfo: [String: String] = [:],
-                           loud: Bool = false) {
-        schedule(id: id, title: title, body: body, interval: 1, userInfo: userInfo, loud: loud)
+                           loud: Bool = false,
+                           category: String? = nil) {
+        schedule(id: id, title: title, body: body, interval: 1,
+                 userInfo: userInfo, loud: loud, category: category)
     }
 
     private func schedule(id: String,
@@ -278,12 +330,14 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                           body: String,
                           interval: TimeInterval,
                           userInfo: [String: String] = [:],
-                          loud: Bool = false) {
+                          loud: Bool = false,
+                          category: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         if loud { content.interruptionLevel = .timeSensitive }
+        if let category { content.categoryIdentifier = category }
         content.userInfo = userInfo
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, interval), repeats: false)
         let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
