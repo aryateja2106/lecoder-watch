@@ -516,6 +516,17 @@ func liveSessionPick(from snapshot: MeshSnapshot) -> LiveSessionPick? {
     return nil
 }
 
+/// "2/3 machines online" — the other half of what a glance is for. The card already
+/// answers "who is waiting on me"; this answers "and is the fleet even up", which is
+/// the question that otherwise costs an app launch. Nil when there are no machines at
+/// all, because "0/0" is a sentence about nothing.
+func fleetLine(online: Int, total: Int) -> String? {
+    guard total > 0 else { return nil }
+    let up = max(0, min(online, total))
+    guard up < total else { return total == 1 ? "1 machine online" : "all \(total) machines online" }
+    return "\(up)/\(total) machines online"
+}
+
 /// Level-to-state, free of SwiftUI so the selection above stays testable with bare
 /// swiftc. `cardState(forLevel:attached:)` in SessionCard.swift wraps it.
 ///

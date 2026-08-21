@@ -36,6 +36,11 @@ final class LiveActivityController {
             blockedSince: pick.blockedSince,
             riskVerb: pick.risk.isDestructive ? pick.risk.verb : nil,
             riskWhy: pick.risk.consequence,
+            // Whole-fleet, not just this session's machine: the card is the one place
+            // you look without unlocking, so it may as well say whether the rest of the
+            // mesh is still answering.
+            machinesOnline: snapshot.machines.filter(\.reachable).count,
+            machinesTotal: snapshot.machines.count,
         )
 
         // A different session took over: end the old card rather than relabelling it,

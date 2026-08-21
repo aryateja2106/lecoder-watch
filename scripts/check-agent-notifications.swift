@@ -38,6 +38,13 @@ struct CheckAgentNotifications {
         assert(AgentNotification.target(from: ["host": "studio", "session": ""]) == nil)
         assert(AgentNotification.target(from: [:]) == nil)
 
+        // A locally raised alert has to stamp the same two keys the push carries, or its
+        // buttons are drawn and route nowhere. Round-trip, so the pair cannot drift.
+        let stamped = AgentNotification.userInfo(host: "studio", session: "api")
+        let round = AgentNotification.target(from: stamped)
+        assert(round?.host == "studio" && round?.session == "api",
+               "a locally stamped alert must route like a pushed one")
+
         // The category has to carry all three buttons, and Reply has to be the text one
         // or dictation never appears on the wrist.
         guard let category = AgentNotification.categories.first(where: { $0.identifier == AgentNotification.attentionCategory }) else {

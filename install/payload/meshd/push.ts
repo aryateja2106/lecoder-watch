@@ -64,8 +64,45 @@ async function writeTokens(tokens: DeviceToken[]) {
   await writeFile(TOKENS_PATH, JSON.stringify(tokens, null, 2), { mode: 0o600 });
 }
 
+// ---------- one banner per session ----------
+/// APNs replaces a notification whose collapse id it has already delivered, so a later
+/// "Claude stopped" overwrites the "Claude needs attention" banner instead of stacking
+/// under it. The phone reuses the identical string as its local notification
+/// identifier, which is what lets one sweep clear pushed and local alerts together —
+/// the Swift half is `meshNotificationId` in `Shared/AlertGating.swift` and the two
+/// must produce the same bytes.
+///
+/// Host-level alerts get no collapse id on purpose: with no session there is nothing to
+/// supersede, and one id per host would make "disk full" eat "build failed".
+export const COLLAPSE_ID_MAX_BYTES = 64;
+
+/// Names are user-chosen; reduce them to characters that are safe in an HTTP header
+/// value and one byte wide, which also makes the length clamp plain arithmetic.
+function idSafe(value: string): string {
+  return value.replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+/// FNV-1a/32. Not security, just a short stable fingerprint that is six lines in both
+/// languages and needs no crypto import on either side.
+function idHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(value)) {
+    hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+export function collapseId(host?: string, session?: string): string | null {
+  if (!host || !session) return null;
+  const raw = `mesh-${idSafe(host)}-${idSafe(session)}`;
+  if (raw.length <= COLLAPSE_ID_MAX_BYTES) return raw;
+  // Oversized is not "uncollapsed", it is rejected: APNs 400s the whole push and the
+  // alert is lost. Keep a readable head, pin uniqueness with a hash of the whole thing.
+  return `${raw.slice(0, COLLAPSE_ID_MAX_BYTES - 9)}-${idHash(raw)}`;
+}
+
 // ---------- delivery ----------
-async function sendOne(dev: DeviceToken, payload: any): Promise<{ ok: boolean; status: number; reason?: string }> {
+async function sendOne(dev: DeviceToken, payload: any, collapse?: string | null): Promise<{ ok: boolean; status: number; reason?: string }> {
   const bearer = await jwt();
   if (!bearer) return { ok: false, status: 0, reason: "no APNs key installed" };
   const host = dev.env === "prod" ? "api.push.apple.com" : "api.sandbox.push.apple.com";
@@ -76,6 +113,7 @@ async function sendOne(dev: DeviceToken, payload: any): Promise<{ ok: boolean; s
     "-H", `apns-topic: ${TOPIC}`,
     "-H", "apns-push-type: alert",
     "-H", "apns-priority: 10",
+    ...(collapse ? ["-H", `apns-collapse-id: ${collapse}`] : []),
     "-d", "@-",
     `https://${host}/3/device/${dev.token}`,
   ], { stdin: new TextEncoder().encode(JSON.stringify(payload)), stdout: "pipe", stderr: "ignore" });
@@ -170,18 +208,21 @@ export async function pushAlert(
     return { ok: true, sent: 0, deduped: true };
   }
   const payload = buildPayload(title, body, opts);
+  // Off the payload, not the options: the phone routes buttons by the host in the
+  // payload, so the banner it clears has to be keyed by that same name.
+  const collapse = collapseId(payload.host, payload.session);
   let sent = 0;
   let changed = false;
   const keep: DeviceToken[] = [];
   for (const dev of tokens) {
-    let r = await sendOne(dev, payload);
+    let r = await sendOne(dev, payload, collapse);
     // BadDeviceToken usually means the token is dead — but it says exactly the same
     // thing when the token is alive and we simply asked the wrong gateway. A build
     // that moves from sideloaded to TestFlight flips environments, so try the other
     // side once before writing the device off, and remember the answer.
     if (!r.ok && isWrongEnvironment(r)) {
       const flipped: DeviceToken = { ...dev, env: dev.env === "prod" ? "dev" : "prod" };
-      const retry = await sendOne(flipped, payload);
+      const retry = await sendOne(flipped, payload, collapse);
       if (retry.ok) {
         sent++;
         keep.push(flipped);

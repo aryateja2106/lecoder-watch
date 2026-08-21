@@ -19,8 +19,16 @@ struct SessionLiveActivity: Widget {
                     AgentBadge(type: context.state.agentType)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    if let resource = context.state.resourceText {
-                        Text(resource).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                    // Expanded, not compact trailing: compact is eight points of status
+                    // dot, and squeezing "2/3 machines online" in there would cost the
+                    // one glanceable thing that region already does well.
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if let resource = context.state.resourceText {
+                            Text(resource).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                        if let fleet = context.state.fleetText {
+                            Text(fleet).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        }
                     }
                 }
                 DynamicIslandExpandedRegion(.center) {

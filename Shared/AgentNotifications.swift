@@ -54,6 +54,13 @@ enum AgentNotification {
         return (host, session)
     }
 
+    /// The inverse, for alerts the phone raises itself rather than receives. The two
+    /// key strings live in one place so a locally scheduled banner cannot grow buttons
+    /// that route nowhere — which is what a silent typo here looks like.
+    static func userInfo(host: String, session: String) -> [String: String] {
+        ["host": host, "session": session]
+    }
+
     static var categories: Set<UNNotificationCategory> {
         let reply = UNTextInputNotificationAction(
             identifier: Action.reply.rawValue,
