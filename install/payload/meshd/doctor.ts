@@ -17,7 +17,27 @@ import { pushStatus } from "./push";
 const IS_MAC = process.platform === "darwin";
 
 type Check = { ok: boolean; detail: string; fix?: string };
-export type DoctorInfo = { tokenSet: boolean; bind: string; port: number; version: string; mux: string };
+/// `tokenWeak` is the REASON a token is weak, or undefined when it is fine. The token
+/// itself deliberately never reaches this module: the caller judges it and passes a
+/// verdict, so a doctor report can never leak the thing it is reporting on.
+export type DoctorInfo = { tokenSet: boolean; tokenWeak?: string; bind: string; port: number; version: string; mux: string };
+
+/// Placeholder tokens that have actually been found in a live fleet, plus the obvious
+/// neighbours. `testtoken` was a hardcoded fallback that got copied into a doc and from
+/// there back into running daemons, where nothing ever complained about it.
+const PLACEHOLDER_TOKENS = new Set(["testtoken", "token", "changeme", "secret", "password", "mesh", "meshd"]);
+
+/// Why this token is not good enough, or null.
+///
+/// A guessable bearer token on a daemon that can move the mouse and read the screen is a
+/// full compromise of the machine, and until now `doctor` called any non-empty string a
+/// pass — which is exactly how one stayed in a live fleet for months.
+export function tokenWeakness(token: string): string | null {
+  if (PLACEHOLDER_TOKENS.has(token.toLowerCase())) return "it is a well-known placeholder";
+  if (token.length < 32) return `it is only ${token.length} characters (want 32 or more)`;
+  if (new Set(token).size < 8) return "it repeats too few distinct characters";
+  return null;
+}
 
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -29,13 +49,20 @@ export async function doctorReport(prompt: boolean, info: DoctorInfo) {
   const muxPath = Bun.which(info.mux);
 
   const checks: Record<string, Check> = {
-    token: info.tokenSet
-      ? { ok: true, detail: "bearer token set; off-box requests must present it" }
-      : {
+    token: !info.tokenSet
+      ? {
           ok: false,
           detail: "no token configured — the daemon answers loopback only",
           fix: "reinstall (the installer mints one): curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh",
-        },
+        }
+      : info.tokenWeak
+        ? {
+            ok: false,
+            // Anyone who can guess this can move the mouse and read the screen.
+            detail: `bearer token is guessable — ${info.tokenWeak}`,
+            fix: "mesh token rotate   (then re-pair the phone)",
+          }
+        : { ok: true, detail: "bearer token set; off-box requests must present it" },
     input: input?.trusted
       ? { ok: true, detail: "input trusted; clicks and keys reach the OS" }
       : {

@@ -10,7 +10,7 @@ import { handleFiles } from "./files";
 import { handlePush, pushAlert } from "./push";
 import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
-import { handleDoctor } from "./doctor";
+import { handleDoctor, tokenWeakness } from "./doctor";
 import { sendWake, primaryMac, magicPacket } from "./wol";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
@@ -770,7 +770,13 @@ Bun.serve({
     if (!authed(req, server)) return json({ error: "unauthorized" }, 401);
     try {
       // Setup truth: what this daemon can actually do right now — see doctor.ts.
-      const doc = await handleDoctor(req, url, { tokenSet: Boolean(TOKEN), bind: HOST, port: PORT, version: VERSION, mux: MUX });
+      // The token is judged here and only a verdict travels on, so a doctor report can
+      // never leak the thing it is reporting on.
+      const doc = await handleDoctor(req, url, {
+        tokenSet: Boolean(TOKEN),
+        tokenWeak: TOKEN ? (tokenWeakness(TOKEN) ?? undefined) : undefined,
+        bind: HOST, port: PORT, version: VERSION, mux: MUX,
+      });
       if (doc) return doc;
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
       const remote = await handleInput(req, url);
