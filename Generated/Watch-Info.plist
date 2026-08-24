@@ -27,6 +27,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>MeshWatch connects to your machines over your private network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Dictate commands to your agents.</string>
 	<key>WKApplication</key>
