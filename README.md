@@ -17,6 +17,14 @@ Website: <https://mesh.lesearch.ai> · TestFlight:
 <https://testflight.apple.com/join/pVYPTxc7> · [Changelog](CHANGELOG.md) ·
 [Roadmap](ROADMAP.md)
 
+<p align="center">
+  <img src="docs/screenshots/iphone-69_01-machines.png" width="180" alt="Machines list: two machines online with live stats, one honestly offline">
+  <img src="docs/screenshots/iphone-69_03-terminal-live.png" width="180" alt="A live terminal session streaming build output on the phone">
+  <img src="docs/screenshots/iphone-69_07-remote.png" width="180" alt="Remote control: screen and input for each machine">
+  <img src="docs/screenshots/watch-ultra_04-terminal.png" width="130" alt="The crown-scrollable terminal on the watch">
+  <img src="docs/screenshots/watch-ultra_02-machines.png" width="130" alt="Machines on the watch, reached directly">
+</p>
+
 ---
 
 ## Who this is for
@@ -32,6 +40,9 @@ So the deal here is: **you paste one command, and one command removes it.** If a
 needs you to understand networking, it is not finished.
 
 ## Install
+
+Never used Terminal? On a Mac: press **⌘ Space**, type `Terminal`, press Return. Paste the
+command below into the window that opens and press Return again. That is the whole skill.
 
 On each Mac or Linux box you want to reach:
 
