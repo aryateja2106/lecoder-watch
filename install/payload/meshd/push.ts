@@ -163,7 +163,12 @@ export function shouldSend(key: string, nowMs: number, windowMs = DEDUPE_WINDOW_
 /// through. Must stay in step with `cardStateForLevel` in `Shared/Models.swift`.
 export const BLOCKED_LEVELS = ["warning", "needs-input", "needs_input", "needsinput", "error", "failed", "failure"];
 
-export function isActionable(level?: string, session?: string): boolean {
+/// `replyable` is the event's own word on whether /agents/<session>/send can reach
+/// its sender (mesh-hook sets it false outside any multiplexer). Only an explicit
+/// false withholds the buttons: events from producers that never say remain exactly
+/// as actionable as they were before the field existed.
+export function isActionable(level?: string, session?: string, replyable?: boolean): boolean {
+  if (replyable === false) return false;
   return Boolean(session) && BLOCKED_LEVELS.includes(String(level ?? "").toLowerCase());
 }
 
@@ -171,9 +176,9 @@ export function isActionable(level?: string, session?: string): boolean {
 /// with two Swift apps (see `Shared/AgentNotifications.swift`) and a typo in it fails
 /// silently: the alert still arrives, just with no buttons and nowhere to send them.
 export function buildPayload(
-  title: string, body?: string, opts?: { level?: string; session?: string; host?: string },
+  title: string, body?: string, opts?: { level?: string; session?: string; host?: string; replyable?: boolean },
 ) {
-  const actionable = isActionable(opts?.level, opts?.session);
+  const actionable = isActionable(opts?.level, opts?.session, opts?.replyable);
   return {
     aps: {
       alert: { title: title.slice(0, 120), body: body?.slice(0, 500) },
@@ -191,6 +196,9 @@ export function buildPayload(
     host: opts?.host ?? os.hostname().replace(/\.local$/i, ""),
     session: opts?.session,
     level: opts?.level,
+    // Present only when the event said either way, so old payload shapes are
+    // byte-identical and clients can distinguish "no" from "never said".
+    ...(typeof opts?.replyable === "boolean" ? { replyable: opts.replyable } : {}),
   };
 }
 
@@ -200,7 +208,7 @@ export function isWrongEnvironment(result: { status: number; reason?: string }):
 }
 
 export async function pushAlert(
-  title: string, body?: string, opts?: { level?: string; session?: string; host?: string; force?: boolean },
+  title: string, body?: string, opts?: { level?: string; session?: string; host?: string; replyable?: boolean; force?: boolean },
 ) {
   const tokens = await readTokens();
   if (!tokens.length) return { ok: false, sent: 0, reason: "no registered devices" };
