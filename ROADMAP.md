@@ -10,8 +10,12 @@ sequence is the commitment.
 all happen there. The watch, phone and menu bar apps are *clients* of the same daemon
 API, and anything else (a TUI, other platforms) can be too.
 
-**Local-first, forever.** No relay, no account, no telemetry. Anything on this roadmap
-that would require our server in the path gets redesigned until it doesn't.
+**Local-first, forever.** No relay, no account, and nothing of yours leaves your
+machines. The daemon may send one anonymized heartbeat a day — version, platform,
+coarse numeric counters, a random install id, nothing else — and
+`MESHD_TELEMETRY=off` silences even that (see the Telemetry section of the README).
+Anything on this roadmap that would require our server in the *data* path gets
+redesigned until it doesn't.
 
 **Reviewable in one sitting.** The daemon stays dependency-light Bun + TypeScript;
 every capability is one module and a small `server.ts` patch; every claim gets a

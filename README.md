@@ -155,6 +155,21 @@ completely dead — one because no hook was ever registered, one because event h
 matched what pairing stored, one because every fixture used a timestamp shape the daemon
 does not emit. Run it against a real daemon before believing it. See [MEMORY.md](MEMORY.md).
 
+## Telemetry
+
+The daemon sends one anonymized heartbeat per day: its version, its platform, its
+uptime in hours, coarse feature counters (how many hook events landed this week, by
+level, as numbers), and a random install id generated once on first send. That is the
+whole list — no commands, no keystrokes, no terminal or screen content, no hostnames,
+no paths, and nothing that identifies you. The apps never send anything at all; their
+App Store label is "Data Not Collected" and stays that way.
+
+Turn it off with `MESHD_TELEMETRY=off` in the daemon's environment (set it when you
+run the installer and it is carried into the service). The daemon works identically
+either way. The sending code is one small file you can read:
+[`install/payload/meshd/telemetry.ts`](install/payload/meshd/telemetry.ts) — and the
+full promise lives at [the privacy page](web/privacy.html).
+
 ## Requirements
 
 - **iPhone** on iOS 26 or later, **Apple Watch** on watchOS 10 or later
