@@ -2,7 +2,7 @@
 // bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind <MESHD_HOST>:<MESHD_PORT>.
 import os from "node:os";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { appendFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 import { handleInput } from "./input";
@@ -493,6 +493,13 @@ async function agentSend(name: string, text?: string, key?: string, pane?: strin
   const sendKey = hasKey ? KEY_SEND_KEYS[key] : undefined;
   if (hasKey && !sendKey) return { ok: false, error: `unsupported key: ${key}` };
 
+  // send-keys to a name the mux cannot resolve fails on stderr we discard, so
+  // without this check the route answered ok:true for a reply that went nowhere —
+  // the silent half of the dead-reply-button defect.
+  if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
+    return { ok: false, error: "session not addressable" };
+  }
+
   const target = pane ? shq(pane) : shq(name);
   if (hasText) {
     const hex = Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")).join(" ");
@@ -597,6 +604,13 @@ type AgentEvent = {
   title: string;
   body?: string;
   createdISO: string;
+  // Whether /agents/<session>/send can reach this event's sender. Absent on events
+  // from producers that never said — treated as "unknown", not as false, so nothing
+  // that exists today changes behavior.
+  replyable?: boolean;
+  // Exact mux pane (#S:#I.#P) the event came from; a reply sent with this as the
+  // pane target lands in the agent's pane even when another pane is active.
+  pane?: string;
 };
 
 async function readEvents(since?: string | null): Promise<AgentEvent[]> {
@@ -622,11 +636,16 @@ async function addEvent(input: any): Promise<AgentEvent> {
     title: String(input.title ?? "Agent event").slice(0, 120),
     body: input.body ? String(input.body).slice(0, 500) : undefined,
     createdISO: input.createdISO ? String(input.createdISO) : now,
+    replyable: typeof input.replyable === "boolean" ? input.replyable : undefined,
+    pane: input.pane ? String(input.pane) : undefined,
   };
-  await mkdir(join(homedir(), ".mesh"), { recursive: true, mode: 0o700 });
+  // The directory the events actually live in — not ~/.mesh unconditionally, which
+  // both touched the real home under a redirected MESHD_EVENTS_PATH and failed to
+  // create the directory the append below needs.
+  await mkdir(dirname(EVENTS_PATH), { recursive: true, mode: 0o700 });
   await appendFile(EVENTS_PATH, `${JSON.stringify(event)}\n`);
   // APNs: fire-and-forget so a slow/misconfigured push never blocks event ingestion.
-  pushAlert(event.title, event.body, { level: event.level, session: event.session, host: event.host }).catch(() => {});
+  pushAlert(event.title, event.body, { level: event.level, session: event.session, host: event.host, replyable: event.replyable }).catch(() => {});
   return event;
 }
 
@@ -844,7 +863,7 @@ Bun.serve({
       if (sendM && req.method === "POST") {
         const body = (await req.json().catch(() => ({}))) as any;
         const res = await agentSend(decodeURIComponent(sendM[1]), body.text, body.key, body.pane);
-        return json(res, res.ok ? 200 : 400);
+        return json(res, res.ok ? 200 : (res.error === "session not addressable" ? 404 : 400));
       }
       const killPaneM = path.match(/^\/agents\/([^/]+)\/panes\/([^/]+)$/);
       if (killPaneM && req.method === "DELETE") {
