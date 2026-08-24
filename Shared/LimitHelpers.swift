@@ -19,6 +19,24 @@ enum LimitHelpers {
     static let warningThreshold = 85.0
     static let clearedThreshold = 90.0
 
+    /// Remaining-budget levels worth interrupting someone for, richest first.
+    /// These are about *deciding where to spend* across several subscriptions, so
+    /// they fire early — a warning at 15% left arrives after the decision is made.
+    static let remainingAlertTiers: [Int] = [50, 25]
+
+    /// The tier a limit has dropped into, or nil while it is still above all of them.
+    /// Returns the *lowest* tier crossed so a jump from 60% to 20% left reports 25,
+    /// not both — one alert per crossing, not one per tier passed.
+    static func crossedTier(remainingPct: Int) -> Int? {
+        remainingAlertTiers.filter { remainingPct <= $0 }.min()
+    }
+
+    /// Every tier at or above the one crossed. Marking these as already-fired stops
+    /// a later poll from re-announcing a level the user has now passed.
+    static func tiersAtOrAbove(_ tier: Int) -> [Int] {
+        remainingAlertTiers.filter { $0 >= tier }
+    }
+
     static func status(usedPct: Double?) -> LimitStatus {
         guard let pct = usedPct else { return .available }
         if pct >= blockedThreshold { return .blocked }
