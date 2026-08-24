@@ -633,6 +633,64 @@ final class MeshStore: ObservableObject {
         return nil
     }
 
+    // MARK: Connection diagnosis
+
+    /// Per-address result of a connection attempt. "timed out" on the machine row
+    /// only reports whichever address failed last, which hides whether the address
+    /// was unreachable, unresolvable, or answering with the wrong token.
+    struct AddressDiagnosis: Identifiable {
+        var id: String { address }
+        var address: String
+        var outcome: String
+        var ok: Bool
+    }
+
+    /// Try every address a machine would use, separately, and report each result.
+    /// `/health` needs no token, so a green address next to a red auth row isolates
+    /// the fault to the token rather than the network — and vice versa. That is
+    /// exactly the distinction the machine row's single error string cannot make.
+    nonisolated static func diagnose(_ machine: Machine) async -> [AddressDiagnosis] {
+        var results: [AddressDiagnosis] = []
+        for address in machine.addresses {
+            guard let url = URL(string: "http://\(address):\(machine.port)/health") else {
+                results.append(.init(address: address, outcome: "bad URL", ok: false))
+                continue
+            }
+            var req = URLRequest(url: url)
+            req.timeoutInterval = MeshClient(machine: machine).timeout
+            let started = Date()
+            do {
+                let (_, resp) = try await URLSession.shared.data(for: req)
+                let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                let ms = Int(Date().timeIntervalSince(started) * 1000)
+                results.append(.init(address: address,
+                                     outcome: "HTTP \(code) in \(ms)ms",
+                                     ok: (200...299).contains(code)))
+            } catch {
+                results.append(.init(address: address, outcome: describe(error), ok: false))
+            }
+        }
+        // A reachable machine still fails everything if the token is wrong, so
+        // check an authenticated endpoint too — that separates network from auth.
+        do {
+            let agents = try await MeshClient(machine: machine).agents()
+            results.append(.init(address: "auth",
+                                 outcome: "token OK · \(agents.count) session\(agents.count == 1 ? "" : "s")",
+                                 ok: true))
+        } catch {
+            if isAuthError(error) {
+                results.append(.init(address: "auth",
+                                     outcome: "token REJECTED — re-pair this machine",
+                                     ok: false))
+            } else {
+                results.append(.init(address: "auth",
+                                     outcome: "unreachable: \(describe(error))",
+                                     ok: false))
+            }
+        }
+        return results
+    }
+
     private nonisolated static func describe(_ error: Error) -> String {
         if let urlError = error as? URLError {
             switch urlError.code {
