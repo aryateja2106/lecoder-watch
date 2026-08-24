@@ -4,36 +4,63 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy — LeSearch Mesh</title>
-<meta name="description" content="What LeSearch Mesh collects (nothing), where your data goes (your own machines), and the one place it touches Apple's servers.">
+<meta name="description" content="What LeSearch Mesh collects (nothing), where your data goes (your own machines), the daemon's optional heartbeat, and the one place alerts touch Apple's servers.">
 <link rel="icon" href="/appicon.png">
+<meta name="theme-color" content="#191919">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#08090c;--panel:#101218;--line:#22262f;--ink:#f2f4f8;--ink-2:#a4acbd;--ink-3:#6b7385;
-  --accent:#ff8a3d;--mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif}
+/* LeSearch monochrome terminal system — #191919 / #e9e9e7 / JetBrains Mono.
+   Same tokens as index.html; prose page, so the wrap narrows to 720px. */
+:root{
+  --bg:#191919; --bg-2:#202020; --panel:#1f1f1f; --elev:#252525; --hover:#2a2a2a;
+  --line:#2a2a2a; --line-2:#373737; --line-h:#525252;
+  --ink:#e9e9e7; --ink-2:#9b9b9b; --ink-3:#6b6b6b;
+  --ok:#4ade80; --danger:#ef4444;
+  --mono:'JetBrains Mono','Fira Code','SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  --radius:8px; --wrap:720px;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.65}
-.wrap{max-width:720px;margin:0 auto;padding:0 24px}
-header{border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(8,9,12,.8);backdrop-filter:blur(14px)}
-.nav{display:flex;align-items:center;gap:10px;height:60px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:640;text-decoration:none;color:inherit}
+html{scroll-behavior:smooth;color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);
+  font-size:15.5px;line-height:1.7;-webkit-font-smoothing:antialiased}
+::selection{background:var(--ink);color:var(--bg)}
+a{color:inherit}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+
+header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
+  background:rgba(25,25,25,.85);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;gap:16px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;text-decoration:none;font-size:15px}
 .brand img{width:26px;height:26px;border-radius:6px;background:#fff;padding:2px}
 .nav .spacer{flex:1}
-.nav a.link{color:var(--ink-2);text-decoration:none;font-size:15px}
-main{padding:56px 0 90px}
-h1{font-size:clamp(30px,5vw,42px);letter-spacing:-.03em;line-height:1.1;margin:0}
-.updated{color:var(--ink-3);font-size:14px;margin-top:12px;font-family:var(--mono)}
-.tldr{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
-  border-radius:10px;padding:20px 22px;margin:34px 0 8px;color:var(--ink-2)}
+.nav a.link{color:var(--ink-2);text-decoration:none;font-size:13.5px}
+.nav a.link:hover{color:var(--ink)}
+
+main{padding:64px 0 90px}
+h1{font-size:clamp(30px,5vw,40px);letter-spacing:-.03em;line-height:1.1;margin:0;font-weight:800}
+.updated{color:var(--ink-3);font-size:13px;margin-top:12px}
+.tldr{background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);
+  padding:20px 22px;margin:36px 0 8px;color:var(--ink-2)}
 .tldr strong{color:var(--ink)}
-h2{font-size:21px;letter-spacing:-.015em;margin:44px 0 0;font-weight:640}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;
+  color:var(--ok);border:1px solid var(--line-2);background:var(--bg-2);
+  border-radius:999px;padding:5px 12px;margin-bottom:14px}
+h2{font-size:19px;letter-spacing:-.015em;margin:46px 0 0;font-weight:700}
 p{color:var(--ink-2);margin:14px 0 0}
 ul{color:var(--ink-2);padding-left:22px;margin:14px 0 0}
 li{margin:8px 0}
-a{color:var(--accent)}
-code{font-family:var(--mono);font-size:14px;background:var(--panel);border:1px solid var(--line);
-  border-radius:5px;padding:1px 6px}
-footer{border-top:1px solid var(--line);padding:30px 0 60px;color:var(--ink-3);font-size:14px}
-footer a{color:var(--ink-3);text-decoration:none;margin-right:18px}
+p a,li a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line-h)}
+p a:hover,li a:hover{text-decoration-color:var(--ink)}
+code{font-family:var(--mono);font-size:13.5px;background:var(--bg-2);border:1px solid var(--line-2);
+  border-radius:5px;padding:1px 6px;color:var(--ink)}
+
+footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);font-size:13px}
+.foot{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.foot .spacer{flex:1}
+footer a{color:var(--ink-3);text-decoration:none}
+footer a:hover{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -48,26 +75,27 @@ footer a{color:var(--ink-3);text-decoration:none;margin-right:18px}
 
 <main class="wrap">
   <h1>Privacy</h1>
-  <div class="updated">Last updated 20 August 2026</div>
+  <div class="updated">Last updated 24 August 2026</div>
 
   <div class="tldr">
-    <strong>We collect nothing.</strong> LeSearch Mesh has no accounts, no analytics, no
-    telemetry and no servers of ours in the data path. Your phone talks straight to
-    machines you own, over a network you already control. The one exception is push
-    notifications, which necessarily pass through Apple — that is explained in full below.
+    <div class="badge">Data Not Collected</div><br>
+    <strong>The apps collect nothing and send nothing to us.</strong> LeSearch Mesh has no
+    accounts, no analytics and no servers of ours in the data path. Your phone and watch
+    talk straight to machines you own, over a network you already control. The two
+    exceptions worth knowing about — the daemon's optional heartbeat and push
+    notifications passing through Apple — are each explained in full below.
   </div>
 
   <h2>Who this is</h2>
   <p>
-    LeSearch Mesh is made by LeSearch AI (Arya Teja Rudraraju), and is currently
-    distributed only as a TestFlight beta. Questions:
-    <a href="mailto:aryateja2106@gmail.com">aryateja2106@gmail.com</a>.
+    LeSearch Mesh is made by LeSearch AI (Arya Teja Rudraraju). Questions about any of
+    this: <a href="mailto:aryayt55@gmail.com">aryayt55@gmail.com</a>.
   </p>
 
-  <h2>What the app sends, and to whom</h2>
+  <h2>What the apps send, and to whom</h2>
   <p>
     When you pair a machine, the app stores that machine's address and the access token
-    that machine itself minted. From then on the app makes HTTP requests directly to that
+    the machine itself minted. From then on the app makes HTTP requests directly to that
     machine — its stats, its agent sessions, its terminal output, and the commands you
     send back. Those requests go to your machine and nowhere else. They do not pass
     through any server we operate, because we do not operate one.
@@ -75,26 +103,44 @@ footer a{color:var(--ink-3);text-decoration:none;margin-right:18px}
   <p>
     Nothing is uploaded to us: not your prompts, not your terminal output, not your
     hostnames, not your source code, not usage statistics, not crash counts, not an
-    identifier for you or your device.
+    identifier for you or your device. In App&nbsp;Store terms, the label is
+    &ldquo;Data&nbsp;Not&nbsp;Collected&rdquo; — and it is accurate.
   </p>
 
-  <h2>The one exception: push notifications</h2>
+  <h2>The daemon's heartbeat</h2>
+  <p>
+    The <code>meshd</code> daemon you install separately on your machines may send one
+    anonymized heartbeat per day: its version, its platform, coarse feature counters
+    (how many times a class of feature was used, as a number), and a random install id.
+    That is the whole list. It carries no commands, no keystrokes, no terminal or screen
+    content, no hostnames, and no identifier tied to you as a person — the install id is
+    a random string that tells us a daemon exists, not whose it is.
+  </p>
+  <p>
+    It exists so we can tell which versions and platforms are actually alive out there.
+    If you would rather it sent nothing at all, turn it off with
+    <code>MESHD_TELEMETRY=off</code> in the daemon's environment — the daemon works
+    identically either way. The apps themselves never send a heartbeat.
+  </p>
+
+  <h2>The other exception: push notifications</h2>
   <p>
     If you turn on notifications, your device registers with Apple Push Notification
-    service and gives that push token to <em>your own machine</em>, which stores it locally
-    in <code>~/.mesh/</code>. When an agent on that machine needs you, the machine signs a
-    request to Apple's servers and Apple delivers the alert to your phone and watch.
+    service and gives that push token to <em>your own machine</em>, which stores it
+    locally in <code>~/.mesh/</code>. When an agent on that machine needs you, the
+    machine signs a request to Apple's servers and Apple delivers the alert to your
+    phone and watch.
   </p>
   <p>
-    This means the alert text — typically the machine name, the agent session name, and the
-    line the agent is asking about — transits Apple's infrastructure, the same way every
-    iOS push notification does. It is encrypted in transit and we never see it, but it is
-    not end-to-end private from Apple. If that matters for what your agents work on, leave
-    notifications off: the app still shows every waiting agent when you open it, and the
-    watch complication still keeps its count.
+    This means the alert text — typically the machine name, the agent session name, and
+    the line the agent is asking about — transits Apple's infrastructure, the same way
+    every iOS push notification does. It is encrypted in transit and we never see it,
+    but it is not end-to-end private from Apple. If that matters for what your agents
+    work on, leave notifications off: the app still shows every waiting agent when you
+    open it, and the watch complication still keeps its count.
   </p>
 
-  <h2>What stays on your device</h2>
+  <h2>What stays on your devices</h2>
   <ul>
     <li>Paired machine names, addresses and access tokens.</li>
     <li>Your preferences, and the last snapshot of your mesh so the watch face has
@@ -105,10 +151,17 @@ footer a{color:var(--ink-3);text-decoration:none;margin-right:18px}
     rotate the token on the machine — the app is then locked out immediately.
   </p>
 
-  <h2>What Apple collects because this is a beta</h2>
+  <h2>No accounts</h2>
   <p>
-    TestFlight is Apple's, not ours. Apple gives us aggregate installation counts, crash
-    reports, and any feedback or screenshots you deliberately send through TestFlight.
+    There is nothing to sign up for, nothing to log into, and no password to forget.
+    Pairing is a code your own machine shows you; the trust lives between your devices
+    and goes no further.
+  </p>
+
+  <h2>What Apple collects on its own</h2>
+  <p>
+    App Store and TestFlight distribution is Apple's, not ours. Apple gives us aggregate
+    installation counts, opt-in crash reports, and any feedback you deliberately send.
     We use crash reports to fix crashes and feedback to fix the thing you told us about.
     Apple's handling of that data is covered by
     <a href="https://www.apple.com/legal/privacy/">Apple's privacy policy</a>.
@@ -119,16 +172,18 @@ footer a{color:var(--ink-3);text-decoration:none;margin-right:18px}
 
   <h2>Changes</h2>
   <p>
-    If this ever changes — in particular if a hosted relay is ever added, which would be a
-    real change to everything above — the change will be described here and called out in
-    the app's release notes before it ships, not after.
+    If any of this ever changes — in particular if a hosted relay is ever added, which
+    would be a real change to everything above — the change will be described here and
+    called out in the app's release notes before it ships, not after.
   </p>
 </main>
 
 <footer>
-  <div class="wrap">
+  <div class="wrap foot">
+    <span>LeSearch AI</span>
+    <div class="spacer"></div>
     <a href="/">Home</a>
-    <a href="https://github.com/LeSearch-AI/mesh-install">GitHub</a>
+    <a href="https://github.com/LeSearch-AI/mesh">GitHub</a>
     <a href="https://lesearch.ai">lesearch.ai</a>
   </div>
 </footer>
