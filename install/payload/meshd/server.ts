@@ -12,6 +12,7 @@ import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
 import { handleDoctor, tokenWeakness } from "./doctor";
 import { sendWake, primaryMac, magicPacket } from "./wol";
+import { initTelemetry } from "./telemetry";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
@@ -894,3 +895,4 @@ Bun.serve({
   },
 });
 console.log(`meshd ${VERSION} on http://${HOST}:${PORT}  (host=${os.hostname()} platform=${process.platform})`);
+initTelemetry(VERSION);
