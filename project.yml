@@ -57,7 +57,11 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private Tailscale network."
+        # Names no vendor, because the product requires none — and because this prompt only
+        # ever appears when the LAN is the path. Per Apple's TN3179 a VPN interface is not a
+        # "local network", so a tailnet address never raises this at all; the old wording
+        # named Tailscale exactly when Tailscale was not being used.
+        NSLocalNetworkUsageDescription: "LeSearch Mesh uses your local network to find and connect to your own computers."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSSupportsLiveActivities: true
         CFBundleURLTypes:
