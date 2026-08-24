@@ -422,6 +422,12 @@ struct AgentEvent: Codable, Hashable, Identifiable {
     var title: String
     var body: String?
     var createdISO: String
+    /// meshd 0.4.2+: false when the hook could not resolve a mux target, so no
+    /// reply can route. Absent (old daemons) means "assume replyable" — the
+    /// pre-existing behavior.
+    var replyable: Bool?
+    /// meshd 0.4.2+: the exact `session:window.pane` for pane-precise replies.
+    var pane: String?
 }
 
 // MARK: - The live card

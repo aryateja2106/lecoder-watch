@@ -113,7 +113,9 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                 // Same grading as `isActionable` in push.ts: buttons only where there is
                 // a stopped agent to answer. Without the category they never draw, and
                 // userInfo alone would be a routing target with nothing to route.
-                if cardStateForLevel(event.level).wantsAttentionState {
+                // replyable == false means the hook already knows no reply can route
+                // (agent outside any mux) — banner it, but never offer dead buttons.
+                if cardStateForLevel(event.level).wantsAttentionState, event.replyable != false {
                     category = AgentNotification.attentionCategory
                 }
             }
