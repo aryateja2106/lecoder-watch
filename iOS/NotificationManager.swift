@@ -1,9 +1,10 @@
 import Foundation
 import UserNotifications
 
-/// Usage limit lifecycle notifications: warn at 85%, hit at 95%, schedule reset alert,
-/// ping when a blocked limit clears. Tap a reset/available alert to send `continue`
-/// to the pinned session for that provider.
+/// Usage limit lifecycle notifications: budget tiers at 50% and 25% left, hit at
+/// 95% used, session-window-open, scheduled reset alert, ping when a blocked limit
+/// clears. Tap a reset/available alert to send `continue` to the pinned session
+/// for that provider.
 final class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
 
@@ -33,7 +34,6 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         didSet { UserDefaults.standard.set(scheduledResetISOByKey, forKey: scheduledResetsDefaultsKey) }
     }
 
-    private let usageThreshold = LimitHelpers.warningThreshold
     private let blockedThreshold = LimitHelpers.blockedThreshold
 
     /// Resume handler — MeshStore wires this to send `continue` to the pinned session.
@@ -156,9 +156,17 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         for m in machines {
             switch reachabilityGate.evaluate(host: m.host, reachable: m.reachable) {
             case .wentOffline:
-                notifyNow(id: "reach-\(m.host)-false", title: m.host, body: "went offline")
+                // Retract the opposite claim: "back online" is wrong once it is
+                // down again, and two contradictory alerts side by side is noise.
+                UNUserNotificationCenter.current().removeDeliveredNotifications(
+                    withIdentifiers: ["reach-\(m.host)-true"])
+                notifyNow(id: "reach-\(m.host)-false", title: m.host, body: "went offline",
+                          thread: "reach-\(m.host)")
             case .backOnline:
-                notifyNow(id: "reach-\(m.host)-true", title: m.host, body: "back online")
+                UNUserNotificationCenter.current().removeDeliveredNotifications(
+                    withIdentifiers: ["reach-\(m.host)-false"])
+                notifyNow(id: "reach-\(m.host)-true", title: m.host, body: "back online",
+                          thread: "reach-\(m.host)")
             case nil:
                 break
             }
@@ -188,16 +196,45 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                 let blocked = pct >= blockedThreshold
                 let wasBlocked = lastBlockedByLimitKey[limitKey] ?? false
 
-                if pct >= usageThreshold {
-                    let warnKey = "usage-warn-\(limitKey)-\(limit.resetsAtISO ?? "none")"
-                    if !firedKeys.contains(warnKey) {
-                        firedKeys.insert(warnKey)
-                        notifyNow(id: warnKey,
-                                  title: "\(provider.displayName) \(limit.label)",
-                                  body: warningBody(provider: provider, limit: limit, pct: pct))
+                let window = limit.resetsAtISO ?? "none"
+                let remaining = LimitHelpers.remainingPct(usedPct: pct) ?? 100
+
+                // Anything delivered for an earlier window is describing a budget
+                // that no longer exists — clear it before adding to the pile.
+                pruneDeliveredAlerts(limitKey: limitKey, currentWindow: window)
+
+                // A session window opening is itself worth knowing: it starts the
+                // clock you are budgeting against.
+                if LimitHelpers.isSessionLimit(label: limit.label), pct > 0 {
+                    let startKey = "usage-start-\(limitKey)-\(window)"
+                    if !firedKeys.contains(startKey) {
+                        firedKeys.insert(startKey)
+                        notifyNow(id: startKey,
+                                  title: "\(provider.displayName) session started",
+                                  body: sessionStartedBody(limit: limit),
+                                  thread: "limit-\(limitKey)")
                     }
-                    // Pre-arm the OS-persisted reset alert from the warning band so it
-                    // still fires if the app is backgrounded or killed before the limit hits.
+                }
+
+                // Budget tiers: 50% then 25% left. Firing the lowest crossed tier and
+                // suppressing the ones above it means a fast burn produces one alert,
+                // not a burst.
+                if let tier = LimitHelpers.crossedTier(remainingPct: remaining) {
+                    let tierKey = "usage-tier\(tier)-\(limitKey)-\(window)"
+                    if !firedKeys.contains(tierKey) {
+                        for passed in LimitHelpers.tiersAtOrAbove(tier) {
+                            firedKeys.insert("usage-tier\(passed)-\(limitKey)-\(window)")
+                        }
+                        notifyNow(id: tierKey,
+                                  title: "\(provider.displayName) \(limit.label) — \(tier)% left",
+                                  body: warningBody(provider: provider, limit: limit, pct: pct),
+                                  thread: "limit-\(limitKey)")
+                    }
+                }
+
+                if remaining <= LimitHelpers.remainingAlertTiers.max() ?? 50 {
+                    // Pre-arm the OS-persisted reset alert as soon as the budget starts
+                    // mattering, so it still fires if the app is backgrounded or killed.
                     if let resetId = scheduleResetNotification(provider: provider,
                                                                limit: limit,
                                                                pinned: pinned) {
@@ -212,17 +249,23 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                         notifyNow(id: hitKey,
                                   title: "\(provider.displayName) limit reached",
                                   body: blockedBody(provider: provider, limit: limit, pinned: pinned),
-                                  userInfo: limitUserInfo(providerId: provider.id, action: "limitHit"))
+                                  userInfo: limitUserInfo(providerId: provider.id, action: "limitHit"),
+                                  thread: "limit-\(limitKey)")
                     }
                 } else if wasBlocked && pct < LimitHelpers.clearedThreshold {
                     let availKey = "usage-available-\(limitKey)-\(limit.resetsAtISO ?? "none")"
                     if !firedKeys.contains(availKey) {
                         firedKeys.insert(availKey)
+                        // The budget warnings and the "limit reached" alert are all
+                        // false now — retract them rather than leaving them stacked
+                        // above the good news.
+                        pruneDeliveredAlerts(limitKey: limitKey, currentWindow: window, clearAll: true)
                         notifyNow(id: availKey,
                                   title: "\(provider.displayName) limit reset",
                                   body: availableBody(provider: provider, limit: limit, pinned: pinned),
                                   userInfo: limitUserInfo(providerId: provider.id, action: "limitAvailable"),
-                                  loud: true)
+                                  loud: true,
+                                  thread: "limit-\(limitKey)")
                     }
                 }
 
@@ -266,9 +309,32 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                  body: body,
                  interval: seconds,
                  userInfo: info,
-                 loud: true)
+                 loud: true,
+                 thread: "limit-\(limitKey)")
 
         return id
+    }
+
+    /// Alert identifiers that describe a *state*, so a delivered one stops being
+    /// true the moment that state changes. `usage-available-` is excluded: it
+    /// reports an event you may still want to act on.
+    private static let statefulAlertPrefixes = ["usage-start-", "usage-tier", "usage-hit-", "usage-warn-"]
+
+    /// Drop delivered alerts for a limit that no longer apply — either they belong
+    /// to an earlier reset window, or the limit has since cleared. Without this
+    /// every window leaves its alerts stacked in Notification Center and the list
+    /// only ever grows, which is exactly what makes them stop being read.
+    private func pruneDeliveredAlerts(limitKey: String, currentWindow: String, clearAll: Bool = false) {
+        let center = UNUserNotificationCenter.current()
+        center.getDeliveredNotifications { delivered in
+            let stale = delivered.map(\.request.identifier).filter { id in
+                guard Self.statefulAlertPrefixes.contains(where: { id.hasPrefix($0) }),
+                      id.contains("-\(limitKey)-") else { return false }
+                return clearAll || !id.hasSuffix("-\(currentWindow)")
+            }
+            guard !stale.isEmpty else { return }
+            center.removeDeliveredNotifications(withIdentifiers: stale)
+        }
     }
 
     private func cancelStaleResetNotifications(keeping desired: Set<String>) {
@@ -283,6 +349,12 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     }
 
     // MARK: - Copy helpers
+
+    private func sessionStartedBody(limit: UsageLimit) -> String {
+        LimitHelpers.resetCountdown(from: limit.resetsAtISO)
+            .map { "Your window is open · \($0)" }
+            ?? "Your session window is open."
+    }
 
     private func warningBody(provider: UsageProvider, limit: UsageLimit, pct: Double) -> String {
         let left = LimitHelpers.remainingPct(usedPct: pct).map { "\($0)% left" } ?? String(format: "%.0f%% used", pct)
@@ -320,9 +392,10 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                            body: String,
                            userInfo: [String: String] = [:],
                            loud: Bool = false,
-                           category: String? = nil) {
+                           category: String? = nil,
+                           thread: String? = nil) {
         schedule(id: id, title: title, body: body, interval: 1,
-                 userInfo: userInfo, loud: loud, category: category)
+                 userInfo: userInfo, loud: loud, category: category, thread: thread)
     }
 
     private func schedule(id: String,
@@ -331,13 +404,17 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                           interval: TimeInterval,
                           userInfo: [String: String] = [:],
                           loud: Bool = false,
-                          category: String? = nil) {
+                          category: String? = nil,
+                          thread: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         if loud { content.interruptionLevel = .timeSensitive }
         if let category { content.categoryIdentifier = category }
+        // Group per limit/machine so Notification Center collapses a run of
+        // alerts into one stack instead of a wall of separate rows.
+        if let thread { content.threadIdentifier = thread }
         content.userInfo = userInfo
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, interval), repeats: false)
         let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
