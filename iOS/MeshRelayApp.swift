@@ -38,6 +38,8 @@ struct MeshRelayApp: App {
         NotificationManager.shared.onAgentAction = { host, session, text, key in
             Task { await store.respondToAgent(host: host, session: session, text: text, key: key) }
         }
+        // Must happen before launch completes, so it cannot move to onAppear.
+        BackgroundRefresh.register(store: store)
     }
 
     var body: some Scene {
@@ -70,6 +72,9 @@ struct MeshRelayApp: App {
                 switch phase {
                 case .background:
                     lock.didEnterBackground()
+                    // Queue a usage check for while the app is closed — this is what
+                    // notices you crossed a limit when you aren't looking.
+                    BackgroundRefresh.schedule()
                 case .active:
                     lock.willEnterForeground()
                     // The 8s timer does not fire while suspended, so without this the

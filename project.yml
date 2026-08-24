@@ -60,6 +60,10 @@ targets:
         NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private Tailscale network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSFaceIDUsageDescription: "Unlock LeSearch Mesh so only you can reach your machines."
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.lecoder.meshwatch.refresh
         NSSupportsLiveActivities: true
         CFBundleURLTypes:
           - CFBundleURLName: com.lecoder.meshwatch
