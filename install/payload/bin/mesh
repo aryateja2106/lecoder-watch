@@ -1158,6 +1158,130 @@ function cmdHooks(pos: string[], flags: Record<string, string>, cfg: Config) {
 
 // ---------- help ----------
 
+// ---------- uninstall ----------
+
+/// Everything the installer puts anywhere except under $MESH_HOME.
+///
+/// Trust is the whole product here: someone non-technical pastes a curl command onto a
+/// machine they care about, and the only honest way to ask that is to be able to undo it
+/// completely. So this list has to stay exactly in step with install.sh — if the
+/// installer learns to write somewhere new, it belongs here the same day.
+function externalFootprint(): { path: string; what: string }[] {
+  const home = homedir();
+  const items: { path: string; what: string }[] = [];
+  if (process.platform === "darwin") {
+    items.push({ path: join(home, "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`), what: "launchd job" });
+  } else {
+    items.push({ path: join(home, ".config", "systemd", "user", SERVICE_UNIT), what: "systemd user unit" });
+  }
+  return items.filter((i) => existsSync(i.path));
+}
+
+/// Lines the installer appended to a shell rc file, found by the same fixed substrings it
+/// used to decide whether it had already added them.
+const RC_MARKERS = ["mesh shellenv", "cmux-bridge.zsh"];
+
+function rcFilesWithMeshLines(): { path: string; lines: number }[] {
+  const found: { path: string; lines: number }[] = [];
+  for (const rc of [join(homedir(), ".zshrc"), join(homedir(), ".bashrc")]) {
+    if (!existsSync(rc)) continue;
+    try {
+      const n = readFileSync(rc, "utf8").split("\n")
+        .filter((l) => RC_MARKERS.some((m) => l.includes(m))).length;
+      if (n) found.push({ path: rc, lines: n });
+    } catch { /* unreadable rc is not worth failing an uninstall over */ }
+  }
+  return found;
+}
+
+/// Drop our lines from an rc file, and the comment header immediately above them, keeping
+/// a .bak alongside. Never rewrites a line that is not ours.
+function stripRcLines(rc: string): number {
+  const original = readFileSync(rc, "utf8");
+  const lines = original.split("\n");
+  const drop = new Set<number>();
+  lines.forEach((line, i) => {
+    if (!RC_MARKERS.some((m) => line.includes(m))) return;
+    drop.add(i);
+    // The installer writes "# MeshWatch ..." directly above its line; take it too, or
+    // uninstalling leaves a comment pointing at nothing.
+    if (i > 0 && /^\s*#.*(MeshWatch|mesh)/i.test(lines[i - 1])) drop.add(i - 1);
+  });
+  if (!drop.size) return 0;
+  writeFileSync(`${rc}.bak`, original);
+  // Removing a commented block leaves the blank lines that framed it. Collapse runs of
+  // three or more into one: a dotfile someone has to live in afterwards should not carry
+  // a visible hole where we used to be.
+  const kept = lines.filter((_, i) => !drop.has(i)).join("\n").replace(/\n{3,}/g, "\n\n");
+  writeFileSync(rc, kept);
+  return drop.size;
+}
+
+function stopService(): string[] {
+  const stopped: string[] = [];
+  if (process.platform === "darwin") {
+    const plist = join(homedir(), "Library", "LaunchAgents", `${SERVICE_LABEL}.plist`);
+    // bootout by path so it works whether or not the job is currently loaded.
+    if (runOk(["launchctl", "bootout", `gui/${process.getuid?.() ?? 501}`, plist])) stopped.push("launchd");
+    else if (runOk(["launchctl", "unload", "-w", plist])) stopped.push("launchd (legacy unload)");
+  } else {
+    if (runOk(["systemctl", "--user", "disable", "--now", SERVICE_UNIT])) stopped.push("systemd");
+  }
+  if (runOk(["tmux", "kill-session", "-t", SERVICE_TMUX])) stopped.push("tmux fallback");
+  return stopped;
+}
+
+function cmdUninstall(bools: Set<string>, cfg: Config) {
+  const external = externalFootprint();
+  const rcs = rcFilesWithMeshLines();
+  const hostCount = Object.keys(cfg.hosts).length;
+
+  if (!bools.has("yes")) {
+    console.log("mesh uninstall — this will remove, from THIS machine only:\n");
+    console.log(`  ${MESH_HOME}`);
+    console.log("      the daemon, the CLI, your bearer token, the paired-host list,");
+    console.log(`      the knowledge-base database and every backup${hostCount ? `  (${hostCount} paired host(s))` : ""}`);
+    for (const e of external) console.log(`  ${e.path}\n      ${e.what}`);
+    for (const r of rcs) console.log(`  ${r.path}\n      ${r.lines} line(s) the installer added (a .bak is kept)`);
+    console.log("  Claude Code hooks in ~/.claude/settings.json that call mesh-hook");
+    console.log("\nIt does NOT touch: bun, tmux, your projects, or any other tool's settings.");
+    console.log("\nThe phone and watch apps keep their pairing entry for this machine —");
+    console.log("delete it in the app, or it will simply show as unreachable.");
+    console.log("\nRe-run with --yes to proceed:  mesh uninstall --yes");
+    return;
+  }
+
+  const removed: string[] = [];
+
+  const stopped = stopService();
+  if (stopped.length) { say(`stopped  ${stopped.join(", ")}`); removed.push(...stopped.map((s) => `service:${s}`)); }
+
+  for (const e of external) {
+    try { rmSync(e.path, { force: true }); say(`removed  ${e.path}`); removed.push(e.path); }
+    catch (err: any) { console.error(`mesh: could not remove ${e.path}: ${err?.message ?? err}`); }
+  }
+  // A removed unit file is still known to systemd until it is told to look again.
+  if (process.platform !== "darwin" && external.length) runOk(["systemctl", "--user", "daemon-reload"]);
+
+  try { cmdHooks(["remove"], {}, cfg); removed.push("claude-hooks"); } catch { /* no settings file: nothing to undo */ }
+
+  for (const r of rcs) {
+    try {
+      const n = stripRcLines(r.path);
+      if (n) { say(`cleaned  ${r.path}  (${n} line(s), backup at ${r.path}.bak)`); removed.push(r.path); }
+    } catch (err: any) { console.error(`mesh: could not edit ${r.path}: ${err?.message ?? err}`); }
+  }
+
+  // Last, because everything above reads paths out of it — including this program.
+  try { rmSync(MESH_HOME, { recursive: true, force: true }); say(`removed  ${MESH_HOME}`); removed.push(MESH_HOME); }
+  catch (err: any) { die(`removed everything else but could not delete ${MESH_HOME}: ${err?.message ?? err}`); }
+
+  out(() => {
+    console.log("\nmesh is gone from this machine.");
+    console.log("Open a new shell so the old PATH entry stops being remembered.");
+  }, { ok: true, removed });
+}
+
 const HELP = `mesh ${VERSION} — control a MeshWatch mesh from the command line
 
 USAGE
@@ -1196,6 +1320,9 @@ MAINTENANCE
                               [-H host] [--src URL|DIR|TGZ] [--no-restart]
   token rotate                mint a new bearer token and restart meshd (re-pairing
                               required afterwards)          [-H host] [--yes]
+  uninstall                   remove mesh completely from THIS machine: daemon,
+                              service, tokens, hosts, hooks and PATH lines. Prints
+                              exactly what it will delete; --yes to do it.
 
 GLOBAL
   -H, --host <name>           target host (default: config default, else localhost)
@@ -1366,6 +1493,7 @@ async function main() {
     case "upgrade": case "update": return cmdUpgrade(flags, bools, cfg);
     case "doctor": return cmdDoctor(flags, cfg);
     case "events": return cmdEvents(flags, cfg);
+    case "uninstall": return cmdUninstall(bools, cfg);
     default: die(`unknown command: ${cmd}  (try: mesh help)`);
   }
 }
