@@ -40,6 +40,51 @@ user to bring Tailscale.
 - Storing user data, screens, keystrokes or terminal output on any server we run.
 - Solving this before the reported wrist bugs are confirmed fixed on a real device.
 
+## Verified platform constraints that shrink the option space
+
+Researched August 2026. These are not preferences; they eliminate designs.
+
+- **The watch can only speak HTTP(S) via `URLSessionDataTask`.** Apple's TN3135 documents
+  that watchOS blocks low-level networking outright — Network framework, BSD sockets,
+  `URLSessionStreamTask`, `URLSessionWebSocketTask` and every Bonjour API — outside
+  audio-streaming, CallKit VoIP and a tvOS app-service case. **This rules out WireGuard,
+  Noise, QUIC and WebRTC running natively on the wrist**, and with them any ICE/TURN design,
+  which Bun cannot speak either. A plain TCP relay is therefore both cheaper and the only
+  thing that works.
+- **There is no Apple back door.** `includePeerToPeer` enables link technologies (AWDL,
+  peer-to-peer Wi-Fi, Bluetooth) only; Multipeer Connectivity is Wi-Fi and Bluetooth PAN;
+  `.local` is link-local by RFC 6762. None crosses a NAT. There is no public API by which
+  two devices on one iCloud account find each other off-LAN — Apple killed Back to My Mac in
+  Mojave and shut it off entirely on 2019-07-01.
+- **ATS on iOS 17+ / macOS 14+ no longer permits connections to raw IP addresses by
+  default.** That is why the app currently carries a blanket `NSAllowsArbitraryLoads`, which
+  is itself an App Review risk and indefensible for a daemon that executes shell commands.
+- **VPN and cellular interfaces are not "local networks"** (TN3179), so a tailnet address
+  never triggers the local-network prompt while a LAN IP does. Also: macOS 15's auto-allow
+  covers launchd **daemons** and root, but explicitly **not** launchd **agents** — which is
+  exactly what `install/install.sh` creates in `~/Library/LaunchAgents`.
+- **Do not build the default on Tailscale.** Its free Personal plan is explicitly
+  non-commercial, so users would be in violation the day this charges money.
+
+## The honest security verdict on what ships today
+
+`meshd` is a Bun server on `0.0.0.0:8899` with a bearer token, no TLS, exposing endpoints
+that execute shell commands. Stated plainly: **a remote-code-execution box with a password
+sent in the clear.**
+
+On WPA2-PSK home Wi-Fi, anyone who knows the network password can decrypt a captured session
+and lift the token. On *any* network including WPA3, ARP or DNS spoofing yields the token
+without sniffing at all, because there is no server authentication whatsoever — the client
+has no way to tell the real daemon from an impostor.
+
+**The minimum defensible fix is not Noise or WireGuard.** It is per-install **self-signed TLS
+with the SPKI fingerprint carried in the pairing payload and pinned** in the app's
+`URLSession` trust delegate. That buys confidentiality, server authentication and replay
+protection; it works on watchOS because data tasks are supported; it lets the blanket
+`NSAllowsArbitraryLoads` be narrowed to `NSAllowsLocalNetworking`; and it keeps us inside
+Apple's *exempt* encryption category, so `ITSAppUsesNonExemptEncryption` stays `false` and no
+annual self-classification report is triggered — which rolling our own cipher would.
+
 ## Options
 
 ### A. Stay local-only, and say so clearly
@@ -73,10 +118,27 @@ being treated as an option, and it would not help Linux hosts at all.
 
 ## Recommendation
 
-**B, with A shipped first.** A is a documentation change that can land today and stops the
-product overstating itself. B is the real answer and should be designed only after the
-security work below, because exposing a daemon that speaks plaintext HTTP to a relay would
-be indefensible.
+**Ship A immediately, then B — and do the TLS work before either is exposed off-LAN.**
+
+Concretely, the shape the evidence points at:
+
+- **Default:** LAN-direct over **pinned TLS**, discovered by Bonjour.
+- **Off-LAN:** one small **SniTun-style plain TCP relay** that routes by device key and
+  forwards opaque bytes it cannot decrypt. This is precisely the Nabu Casa architecture,
+  whose ~$6.50/month retail price is a useful anchor for what this is worth. For 10–15 users
+  the hosting is a rounding error — on the order of $4–6/month on a small VPS.
+  A plain TCP relay, not TURN: neither watchOS nor Bun can speak WebRTC/ICE.
+- **Fallback:** **bring your own network.** If the user already runs Tailscale, NetBird,
+  ZeroTier, WireGuard or a port-forward, the app just takes the address and no relay is
+  involved. That honours the no-forced-vendor constraint without asking a non-technical user
+  to decide anything.
+
+Every incumbent does a version of this: Screens Connect adds UPnP/NAT-PMP with a broker
+holding name→public IP:port; Jump Desktop, Chrome Remote Desktop, TeamViewer, AnyDesk and
+RustDesk all use a broker for device-ID→endpoint plus a relay fallback that cannot decrypt.
+Syncthing's documentation is refreshingly blunt that its discovery server "can deduce which
+devices are connected to each other" — that is the privacy cost, and it should be stated in
+those terms rather than buried.
 
 ## Blocking prerequisite: the transport
 
