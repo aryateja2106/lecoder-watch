@@ -33,3 +33,6 @@ install/dist/
 
 # asc CLI: build artifacts (IPAs) and cached Apple web-session state
 .asc/
+
+# gajae-code: per-machine tmux session state, never shared
+.gjc/

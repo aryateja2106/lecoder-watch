@@ -1,0 +1,113 @@
+schema: spec-driven
+
+context: |
+  # LeSearch Mesh
+
+  Use your Mac from your wrist. A small daemon (`meshd`) runs on each machine you own;
+  an iPhone and Apple Watch app talk to it directly over your own network. You watch and
+  answer your AI coding agents, drive a real terminal session, and control the Mac's
+  screen and pointer, without opening the laptop.
+
+  ## Who this is for (this decides most arguments)
+
+  Non-technical people who are excited about AI agents and want to use them daily. They
+  do NOT configure SSH keys, port forwarding, or VPNs. Every competitor (Blink, Termius,
+  Prompt, Teletype) assumes a developer who can. Our wedge is that setup is one pasted
+  command and removal is one pasted command. If a feature needs the user to understand
+  networking, it is not done.
+
+  Apple-first: iPhone + MacBook + Apple Watch. Linux machines are supported as daemon
+  hosts, not as clients.
+
+  ## Architecture
+
+      Apple Watch  ──┐
+                     ├──> HTTP + Bearer token ──> meshd on each machine
+      iPhone       ──┘        (direct, or relayed via the phone)
+
+      Watch/      watchOS app (SwiftUI)
+      iOS/        iPhone app (SwiftUI)
+      Shared/     models + MeshClient, shared by both apps
+      MeshDesktop/  Mac menu-bar app (status, permissions, pairing QR)
+      install/payload/meshd/    the daemon (Bun + TypeScript). THE shipping copy.
+      install/payload/bin/mesh  the CLI (install, pair, rotate, upgrade, doctor)
+      install/install.sh        the curl one-liner installer
+      web/        landing page
+
+  There is no company server. The only third party in the path is APNs for push.
+
+  ## The daemon API (meshd, default :8899, Bearer token)
+
+  Sessions are real, persistent multiplexer sessions - not one-shot commands. State
+  persists between calls: `cd /etc` then `pwd` prints /etc.
+
+      GET    /health                        no auth; identity + capabilities
+      GET    /doctor                        setup truth: token, input, screen, mux, push
+      GET    /stats /agents /usage /tailnet /displays /events
+      POST   /agents/new                    {name,cwd,cmd,initialText} -> detached session
+      GET    /agents/:n/panes               panes, each with currentPath + command
+      GET    /agents/:n/output?lines&pane   the pane's screen as TEXT
+      POST   /agents/:n/send                {text,key,pane} - keystrokes
+      POST   /agents/:n/panes               split
+      DELETE /agents/:n  |  /agents/:n/panes/:id
+      GET    /screen.jpg?display&width      capture; width is the longest edge, 240-2000
+      POST   /input                         pointer, keys, scroll
+      GET/POST /clipboard  /files  /push  /wake  /pair
+
+      send keys: enter ctrl-c ctrl-d up down left right tab escape backspace delete
+                 home end page-up page-down
+
+  ## Principles
+
+  1. Multiplexer-agnostic. tmux, rmux, herdr, zellij, mosh - the user's choice, never
+     ours. `MESH_MUX` selects it; the code must not assume one. Anything tmux-specific
+     belongs behind an adapter, not sprinkled through handlers.
+  2. Local-first. No cloud STT, no relay servers, no telemetry. Audio and screens never
+     leave the user's machines.
+  3. Text beats pixels on a watch. A 480px JPEG of a 1512-point display is unreadable;
+     `capture-pane` text is legible at any size. Prefer reading the terminal as text and
+     reserve screen capture for what is genuinely graphical.
+  4. Review before dispatch. Dictated or typed text lands in an editable preview; nothing
+     reaches an agent or a shell until the user confirms.
+  5. One clean install, one clean uninstall. Anything the installer writes, the
+     uninstaller removes. Never leave launchd jobs, PATH edits, or rc-file lines behind.
+  6. Discoverability is a feature. Every screen answers "what can I do here?" A wrist
+     UI with no help is unusable no matter how correct it is.
+
+  ## Conventions
+
+  - Conventional commits, lowercase subject, a body that says WHY. Co-Authored-By trailer.
+  - Swift: SwiftUI, no third-party dependencies. Daemon: Bun + TypeScript, no deps beyond
+    what is already vendored.
+  - Comments explain constraints and decisions, never narrate the next line.
+  - Never commit real IPs, tokens, or absolute /Users paths.
+
+  ## Hard-won rules (violating these has already cost real days)
+
+  - VERIFY BY RUNNING, NOT BUILDING. Two features shipped correct-but-dead - a hook that
+    was never registered, and host names that never matched - and both compiled green.
+    A green build is not evidence. Run the thing and show the output.
+  - CHECK YOUR WORKTREE IS CURRENT. This repo has many worktrees and branches, several
+    six weeks stale. A session was wasted editing one. Run `git log -1 --date=short` and
+    confirm you are on the newest tip before editing.
+  - The daemon has ONE shipping copy: install/payload/meshd/. A per-display capture
+    feature was once written into a second root-level copy and lost when that copy was
+    deleted. Do not create a second copy.
+  - GREP CAN LIE. The Grep tool and shell grep skip binary-classified files SILENTLY, so
+    zero matches can mean "skipped", not "absent". Confirm with `grep -c . <file>` before
+    concluding something is not in the code.
+  - Never restart the user's running services (meshd, LM Studio, CRM, cmux) to test a
+    change. Boot a second instance on a spare port instead.
+
+rules:
+  proposal:
+    - State which user complaint, in the owner's own words, this closes.
+    - Include a "Non-goals" section.
+    - Name the target user's skill level assumption explicitly.
+  tasks:
+    - Every task must end in something runnable, not something compiled.
+    - Give the exact command or device action that proves the task is done.
+    - Mark tasks that need Arya's physical iPhone or Watch, since agents cannot drive them.
+  spec:
+    - Write requirements as observable behaviour, not implementation.
+    - Say what happens on failure, not only on success.

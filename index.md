@@ -1,14 +1,14 @@
 # INDEX — Start here
 
-Read [context.md](context.md) first (the map and the shape), then [memory.md](memory.md)
+Read [CONTEXT.md](CONTEXT.md) first (the map and the shape), then [MEMORY.md](MEMORY.md)
 (the reasoning). `CHANGELOG.md` tells you what shipped. `git log` traces the path.
 
 ## Top files
 
 | Path | Purpose |
 |---|---|
-| `context.md` | Overall shape, where things live, things that cost hours |
-| `memory.md` | Why things are the way they are; settled decisions and dead ends |
+| `CONTEXT.md` | Overall shape, where things live, things that cost hours |
+| `MEMORY.md` | Why things are the way they are; settled decisions and dead ends |
 | `CHANGELOG.md` | What shipped, in user words; 0.3.0 section is the current state |
 | `install/payload/meshd/server.ts` | The daemon; routes, auth, Host/browser defenses |
 | `install/payload/meshd/auth.ts` | Fail-closed bearer auth; header-only, constant-time |

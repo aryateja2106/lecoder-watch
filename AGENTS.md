@@ -1,48 +1,195 @@
-# MeshWatch Agent Notes
+# AGENTS.md — read this before you touch anything
 
-## Source Of Truth
+You are working on **LeSearch Mesh**: use your Mac from your wrist. A small daemon
+(`meshd`) runs on each machine you own; an iPhone and Apple Watch app talk to it over your
+own network. You watch and answer your AI coding agents, drive a real terminal session,
+and control the Mac's screen and pointer, without opening the laptop.
 
-- `project.yml` is the canonical Xcode project definition.
-- Run `xcodegen generate` when `project.yml` changes or `MeshWatch.xcodeproj` drifts.
-- Do not preserve stale `MeshWatchWidgets` or UI-test targets unless their sources are added back to `project.yml`.
-- Keep the Watch deployment target low enough for the physical paired Watch; `watchOS: "10.0"` is the current compatibility floor for the current SwiftUI navigation/toolbars.
+**Who it is for decides most arguments:** non-technical people who are excited about AI
+agents and want to use them daily. They will not configure SSH keys, port forwarding, or a
+VPN. If a feature needs the user to understand networking, it is not done.
 
-## Build Checks
+New here? This file, then [README.md](README.md). [index.md](index.md) is the file map,
+[CONTEXT.md](CONTEXT.md) the shape, [MEMORY.md](MEMORY.md) the reasoning behind settled
+decisions. Specs live in [openspec/](openspec/) — `openspec/config.yaml` carries the
+project context every spec is written against.
+
+---
+
+## The five rules that have actually cost days
+
+**1. Verify by running, not by building.** Three features have shipped correct and
+completely dead: one because no hook was ever registered, one because event hostnames never
+matched what pairing stored, one because every fixture used a timestamp shape the daemon
+does not emit. All three compiled green. A green build is not evidence. Run it against a
+real daemon and paste the output.
+
+**2. Check your worktree is current before you edit.** This repo has many worktrees and
+branches, several of them weeks stale. A whole session was once spent editing a
+six-week-old tree. Always:
+
+```sh
+git log -1 --date=short --format='%h %cd %s'
+```
+
+If that date is not close to today, you are probably in the wrong tree. Stop and ask.
+
+**3. Grep can lie.** The Grep tool and shell `grep` skip binary-classified files
+**silently**, so zero matches is indistinguishable from "not in the code". `server.ts` once
+carried two raw NUL bytes, which hid all 861 lines of the daemon from every search. Before
+concluding something is absent:
+
+```sh
+grep -c . path/to/file      # 0 means the file is being SKIPPED, not that it is empty
+```
+
+For anything load-bearing, read the file instead of trusting a grep.
+
+**4. The daemon has exactly one shipping copy: `install/payload/meshd/`.** A per-display
+capture feature was once written into a second root-level `meshd/` copy and lost when that
+copy was deleted. Do not create a second copy.
+
+**5. Never restart the user's running services to test a change.** `meshd`, LM Studio, the
+CRM, `cmux` are all live. Boot a second instance on a spare port instead:
+
+```sh
+MESHD_PORT=8898 MESHD_HOST=127.0.0.1 MESHD_TOKEN=throwaway \
+  bun run install/payload/meshd/server.ts
+```
+
+Secrets: real tokens live in `~/.mesh/hosts.json` and `~/.mesh/token`. Read them into a
+shell variable; never print one, never paste one into a file, and never write a literal
+token into code or docs. **There is no such thing as `testtoken`** — it was a real
+hardcoded fallback that broke every host, and it kept coming back because it was written
+down in this file. It is not written down any more.
+
+---
+
+## Where things are
+
+| Path | What it is |
+|---|---|
+| `Watch/` | watchOS app. Views, store, remote control. |
+| `iOS/` | iPhone app. Views, store, terminal, native remote screen. |
+| `Shared/` | Models + `MeshClient` + risk classifier, used by both apps. |
+| `MeshDesktop/` | Mac menu-bar app: daemon status, permissions, pairing QR. |
+| `WatchWidgets/`, `MeshWatchWidgets/` | Complication; iOS Live Activity. |
+| `install/payload/meshd/` | **The daemon.** Bun + TypeScript. The only copy. |
+| `install/payload/bin/mesh` | The CLI: setup, pair, doctor, upgrade, uninstall. |
+| `install/install.sh` | The `curl \| sh` installer. |
+| `scripts/check-*.{swift,sh}` | Self-checks. `check-all.sh` runs every one. |
+| `project.yml` | Canonical Xcode project. Run `xcodegen generate` after editing. |
+| `openspec/` | Specs and change proposals. |
+| `web/` | Landing page (Vercel). |
+
+## Build and verify
 
 ```sh
 xcodegen generate
-xcodebuild -project MeshWatch.xcodeproj -scheme MeshWatch -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData build
-xcodebuild -project MeshWatch.xcodeproj -scheme 'MeshWatch Watch App' -destination 'generic/platform=watchOS Simulator' -derivedDataPath build/DerivedData build
+xcodebuild -project MeshWatch.xcodeproj -scheme 'MeshWatch Watch App' \
+  -destination 'generic/platform=watchOS Simulator' -derivedDataPath build/DerivedData \
+  CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project MeshWatch.xcodeproj -scheme MeshWatch \
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData \
+  CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project MeshWatch.xcodeproj -scheme MeshDesktop \
+  -destination 'generic/platform=macOS' -derivedDataPath build/DerivedData \
+  CODE_SIGNING_ALLOWED=NO build
+sh scripts/check-all.sh
+cd install/payload/meshd && bun add -D --no-save bun-types typescript@~5.7.0 && bun x tsc --noEmit -p tsconfig.json
 ```
 
-## Physical Device Checks
+Swift checks must compile with `-Onone`: **`assert` is a no-op under `-O`**, so an
+optimised check passes even when the code under test is wrong.
 
-```sh
-xcrun devicectl list devices
-xcodebuild -project MeshWatch.xcodeproj -scheme MeshWatch -showdestinations
-xcodebuild -project MeshWatch.xcodeproj -scheme MeshWatch -destination 'id=00008130-000C78E20EC0001C' -derivedDataPath build/DeviceDerivedData build
-xcrun devicectl device install app --device AA729359-402F-563A-918F-F3867D85D8F7 build/DeviceDerivedData/Build/Products/Debug-iphoneos/MeshWatch.app
-xcrun devicectl device process launch --device AA729359-402F-563A-918F-F3867D85D8F7 com.lecoder.meshwatch
+## The daemon API, in one place
+
+Sessions are real, persistent multiplexer sessions. State survives between calls — `cd
+/etc` then `pwd` prints `/etc`.
+
+```
+GET    /health                       no auth; identity + capabilities
+GET    /doctor                       setup truth: token, input, screen, mux, push
+GET    /stats /agents /usage /tailnet /displays /events
+POST   /agents/new                   {name,cwd,cmd,initialText}
+GET    /agents/:n/panes              panes, each with currentPath
+GET    /agents/:n/output?lines&pane  the pane's screen as TEXT
+POST   /agents/:n/send               {text,key,pane}
+POST   /agents/:n/panes              split
+DELETE /agents/:n | /agents/:n/panes/:id
+GET    /screen.jpg?display&width     width = longest edge, clamped 240-2000
+POST   /input                        pointer, keys, scroll
+       /clipboard /files /push /wake /pair
 ```
 
-Physical launch requires the iPhone to be unlocked. Direct Watch install may fail if the paired Watch rejects the debug/pairing channel; install through the companion iPhone first.
+`send` keys: `enter ctrl-c ctrl-d up down left right tab escape backspace delete home end
+page-up page-down`. **If you add a key here, wire it into both clients** — the watch once
+exposed 6 of 14 and the terminal was unusable as a result. `scripts/check-watch-terminal-wiring.sh`
+now fails when the daemon and the watch disagree.
 
-If `xcodebuild -showdestinations` reports the physical Watch with a blank watchOS version or `RemotePairingError 1035`, lowering the deployment target is not enough. Unlock the iPhone, connect the companion phone directly to the Mac, and re-pair/re-trust the Watch debug channel in Xcode/devicectl.
+## Design principles
 
-## Runtime Checks
+1. **Multiplexer-agnostic.** tmux, rmux, herdr, zellij, mosh — the user's choice, never
+   ours. `MESH_MUX` selects it. Anything tmux-specific belongs behind an adapter.
+2. **Local-first.** No cloud STT, no relay, no telemetry. Nothing leaves the user's
+   machines except APNs pushes.
+3. **Text beats pixels on a watch.** `capture-pane` text is legible at any size; a JPEG of
+   a Mac display is not. Reserve screen capture for what is genuinely graphical.
+4. **Review before dispatch.** Dictated or typed text lands in an editable preview.
+   Nothing reaches a shell until the user confirms.
+5. **One clean install, one clean uninstall.** Whatever `install.sh` writes,
+   `mesh uninstall` removes. Keep those two in step; a check enforces it.
+6. **Discoverability is a feature.** Every screen answers "what can I do here?"
 
-```sh
-curl -fsS -H 'Authorization: Bearer testtoken' http://100.94.221.115:8899/health
-curl -fsS -H 'Authorization: Bearer testtoken' http://100.94.221.115:8899/agents
-curl -fsS -H 'Authorization: Bearer testtoken' http://100.94.221.115:8899/usage
-curl -fsS -H 'Authorization: Bearer testtoken' http://100.94.221.115:8899/screen.jpg --output /tmp/mesh-screen.jpg
-curl -fsS http://100.94.221.115:7820/ >/dev/null
-```
+Commits: conventional, lowercase subject, a body that says *why*, `Co-Authored-By` trailer.
 
-The macOS LaunchAgent for `meshd` must run as `ProcessType=Interactive`; `screen.jpg` can fail from a background agent even when the same code works in a terminal.
+---
 
-## Product Shape
+## Working alongside other agents
 
-- Watch is a glance-and-intervene surface: status, output preview, command deck, dictation, and separated danger controls.
-- iPhone remains the full terminal/VNC surface.
-- Keep telemetry local-first: OpenUsage local API first, old cache fallback second.
+Several agents (Claude Code, Codex/ChatGPT, Cursor) work on this repo, sometimes at once.
+OpenSpec is installed for all three: `openspec/config.yaml` is the shared brief, and each
+has the same `propose / apply / archive` commands, so a change proposed by one is legible to
+the others.
+
+**Safe to hand out and run in parallel** — self-contained, hard to break the protocol:
+
+- SwiftUI view work inside one file (`Watch/WatchViews.swift`, `iOS/ContentView.swift`)
+- A single `scripts/check-*.sh` self-check
+- Docs, the landing page in `web/`, CHANGELOG entries
+- One `install/payload/meshd/*.ts` module that owns its own routes (`wol.ts`, `files.ts`)
+
+**Must be serialized, one agent at a time** — these are the shared contracts, and two
+agents editing them produces a mesh where the phone and the daemon disagree:
+
+- `Shared/Models.swift` (every wire type, including `WatchCommand`)
+- `Shared/MeshClient.swift` (every endpoint call)
+- `install/payload/meshd/server.ts` (the route table)
+- `project.yml`, and anything about pairing, auth, or tokens
+
+**A good task for an external agent** names the file, the observable behaviour, and the
+command that proves it:
+
+> In `Watch/WatchViews.swift`, the terminal key bar is missing Page-up and Page-down.
+> `meshd` already accepts `page-up`/`page-down` (see `KEY_SEND_KEYS` in
+> `install/payload/meshd/server.ts`) and `store.send(key:)` already sends them. Add two
+> chips following the existing `keyChip` pattern. Do not touch any other file. Prove it
+> with: `xcodebuild -scheme 'MeshWatch Watch App' -destination 'generic/platform=watchOS
+> Simulator' build` and `sh scripts/check-watch-terminal-wiring.sh`.
+
+**Reviewing what another agent produced** — in this order, because this is the order things
+have actually gone wrong:
+
+1. `git diff` — did it touch a serialized file it was not asked to touch?
+2. Does anything new hardcode a host name, an IP, a token, or an absolute `/Users` path?
+3. `sh scripts/check-all.sh` and the three builds.
+4. **Is the new thing wired to anything?** Search for a caller. A new function nobody calls
+   and a new key nobody sends both compile perfectly.
+5. Run it against a real daemon and read the response. Not the fixture — the daemon.
+
+## What an agent cannot verify
+
+Agents can build, run the daemon, drive the simulator, and curl. Agents **cannot** drive
+Arya's physical iPhone or Apple Watch. Anything whose proof is "the mic opens", "the banner
+appears on the wrist", or "the crown zoom looks sharp" must be handed back for a human
+check — say so plainly instead of claiming it works.
