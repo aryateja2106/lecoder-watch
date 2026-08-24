@@ -565,13 +565,21 @@ async function getUsage() {
   return normalizeUsage(await file.json());
 }
 
-async function screenImage(): Promise<Response> {
+/// `width` is the longest edge, clamped exactly as the per-display path in input.ts
+/// clamps it, so the two capture routes cannot disagree about what a width means.
+///
+/// It used to be hard-wired to 480. 480 is fine for "did my click land" at fit-to-screen
+/// and useless for reading: a 1512-point display arrives as 480x311, and zooming then
+/// magnifies detail the frame never carried. A single-display Mac takes THIS route (the
+/// client only names a display when there are several), so that cap made the screen
+/// unreadable on exactly the setup most people have.
+async function screenImage(width = 480): Promise<Response> {
   if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
   const path = join(os.tmpdir(), `meshd-screen-${process.pid}-${Date.now()}.jpg`);
   try {
     const shot = Bun.spawn(["screencapture", "-x", "-t", "jpg", path], { stdout: "ignore", stderr: "ignore" });
     if (await shot.exited !== 0) return json({ error: "screenshot unavailable" }, 503);
-    const scale = Bun.spawn(["sips", "-Z", "480", path], { stdout: "ignore", stderr: "ignore" });
+    const scale = Bun.spawn(["sips", "-Z", String(width), path], { stdout: "ignore", stderr: "ignore" });
     await scale.exited;
     return new Response(await readFile(path), { headers: { "content-type": "image/jpeg", "cache-control": "no-store" } });
   } finally {
@@ -736,7 +744,7 @@ async function kbFederateSearch(local: any[], sp: URLSearchParams): Promise<any[
   const seen = new Set<string>();
   const out: any[] = [];
   for (const e of merged) {
-    const k = `${e.host} ${e.scope} ${e.key}`;
+    const k = `${e.host}\u0000${e.scope}\u0000${e.key}`;
     if (!seen.has(k)) { seen.add(k); out.push(e); }
   }
   return out;
@@ -788,7 +796,9 @@ Bun.serve({
       if (path === "/tailnet") return json(await getTailnet());
       if (path === "/agents") return json(await listAgents());
       if (path === "/usage") return json(await getUsage());
-      if (path === "/screen.jpg" && req.method === "GET") return await screenImage();
+      if (path === "/screen.jpg" && req.method === "GET") {
+        return await screenImage(Math.min(2000, Math.max(240, Number(url.searchParams.get("width") ?? "480") || 480)));
+      }
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));
       if (path === "/events" && req.method === "POST") return json(await addEvent((await req.json().catch(() => ({}))) as any), 201);
       if (path === "/kb" && (req.method === "PUT" || req.method === "POST")) {
