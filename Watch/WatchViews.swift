@@ -6,23 +6,57 @@ import UIKit
 
 // MARK: - Voice input
 
-/// One-tap dictation into a draft. TextFieldLink opens the system input sheet
-/// directly (dictation is a primary mode there — the only programmatic ASR the
-/// watch has: Speech.framework does not exist in the watchOS SDK, see
-/// docs/VOICE-INPUT-SPEC.md). Spoken text APPENDS to the draft so a second
-/// thought never wipes the first, and the TextField beside this stays the
-/// editable preview — nothing dispatches until the user confirms. Spec Phase 1.
+/// One tap to the microphone.
+///
+/// This used to be a bare `TextFieldLink`, which does NOT open dictation — it opens the
+/// system text-input sheet, which is a *picker* (scribble, keyboard, emoji, dictation),
+/// and watchOS reopens whichever mode you used last. So a button labelled "Dictate"
+/// reliably landed on Scribble instead: "even when we type dictate its still expecting
+/// me to scribble or type".
+///
+/// `presentTextInputController(withSuggestions:allowedInputMode:)` is the only API that
+/// goes straight to the mic, and it does so precisely when the suggestions array is nil.
+/// The documented tell is in WatchKit's own header, on the sibling overload that takes a
+/// language handler: "will never go straight to dictation because allows for switching
+/// input language". This overload therefore does.
+///
+/// There is no better option: the watchOS SDK ships no Speech.framework at all (verified
+/// against WatchOS26.5.sdk — no SFSpeechRecognizer at any deployment target), so this
+/// system controller is the only speech recognition the watch can reach. Anything with
+/// custom vocabulary has to stream audio to the Mac; see docs/VOICE-INPUT-SPEC.md.
+///
+/// Falls back to the old sheet if WatchKit hands us no visible controller, so the button
+/// can never become dead — better a picker than nothing.
+///
+/// Spoken text APPENDS, so a second thought never wipes the first, and the TextField
+/// beside this stays the editable preview: nothing dispatches until the user confirms.
 struct DictateLink: View {
     @Binding var draft: String
 
     var body: some View {
-        TextFieldLink(prompt: Text("Dictate")) {
-            Label("Dictate", systemImage: "mic.fill")
-        } onSubmit: { spoken in
-            let trimmed = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-            draft = draft.isEmpty ? trimmed : draft + " " + trimmed
+        if WKApplication.shared().visibleInterfaceController != nil {
+            Button(action: dictate) {
+                Label("Dictate", systemImage: "mic.fill")
+            }
+        } else {
+            TextFieldLink(prompt: Text("Dictate")) {
+                Label("Dictate", systemImage: "mic.fill")
+            } onSubmit: { append($0) }
         }
+    }
+
+    private func dictate() {
+        guard let controller = WKApplication.shared().visibleInterfaceController else { return }
+        controller.presentTextInputController(withSuggestions: nil, allowedInputMode: .plain) { results in
+            guard let spoken = results?.first as? String else { return }   // nil == cancelled
+            Task { @MainActor in append(spoken) }
+        }
+    }
+
+    private func append(_ spoken: String) {
+        let trimmed = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        draft = draft.isEmpty ? trimmed : draft + " " + trimmed
     }
 }
 
@@ -369,6 +403,10 @@ struct SessionsView: View {
     @State private var taskAgent = "claude"
     @State private var taskText = ""
     @State private var showTask = false
+    @State private var showCustom = false
+    @State private var customCmd = ""
+    @State private var customCwd = ""
+    @State private var showHelp = false
     @State private var openAgent: SessionRoute?
 
     private var snap: MachineSnapshot? { store.snaps.first { $0.host == host } }
@@ -445,6 +483,12 @@ struct SessionsView: View {
                 Button { taskAgent = "pi"; showTask = true } label: {
                     Label("Pi task", systemImage: "brain")
                 }
+                // The three buttons above cover three programs. Anything else the machine
+                // can run — herdr, tmux, a REPL, a script — needed a shell session plus a
+                // typed command, which nothing in the UI told you was possible.
+                Button { showCustom = true } label: {
+                    Label("Command…", systemImage: "chevron.left.forwardslash.chevron.right")
+                }
             }
             .disabled(snap?.reachable != true || snap?.authError != nil)
             if let s = snap?.stats {
@@ -465,11 +509,96 @@ struct SessionsView: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
             }
+            Button {
+                showHelp = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+            }
+            .accessibilityLabel("What is this?")
         }
         .navigationDestination(item: $openAgent) { route in
             AgentLiveView(host: route.host, agent: route.agent).environmentObject(store)
         }
         .sheet(isPresented: $showTask) { taskSheet }
+        .sheet(isPresented: $showCustom) { customSheet }
+        .sheet(isPresented: $showHelp) { helpSheet }
+    }
+
+    /// Launch any program the machine has, in any directory it is already working in.
+    private var customSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Run a command")
+                        .font(.headline)
+                    TextField("herdr, tmux, python3…", text: $customCmd)
+                        .autocorrectionDisabled()
+                    DictateLink(draft: $customCmd)
+
+                    let folders = store.workspaceSuggestions(host: host)
+                    if !folders.isEmpty {
+                        Text("Start in")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        // Tapping beats typing a path on a 45mm screen, and these are the
+                        // directories this machine's panes are already sitting in.
+                        ForEach(folders, id: \.self) { path in
+                            Button {
+                                customCwd = (customCwd == path) ? "" : path
+                            } label: {
+                                HStack {
+                                    Image(systemName: customCwd == path ? "checkmark.circle.fill" : "folder")
+                                    Text(lastPathBit(path)).lineLimit(1)
+                                }
+                            }
+                            .accessibilityLabel("Start in \(path)")
+                        }
+                    }
+
+                    Button("Start") {
+                        let cmd = customCmd.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !cmd.isEmpty else { return }
+                        let name = store.newSession(host: host, cmd: cmd,
+                                                    cwd: customCwd.isEmpty ? nil : customCwd)
+                        showCustom = false
+                        customCmd = ""
+                        openAgent = SessionRoute(host: host, agent: name)
+                    }
+                    .disabled(customCmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                .padding(.horizontal, 4)
+            }
+        }
+    }
+
+    /// The "?" the owner said was missing. Plain words, no jargon, no scrolling hunt.
+    private var helpSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    helpLine("Sessions", "Programs left running on this machine. They keep running when the watch sleeps — reopen one and you are back where you were.")
+                    helpLine("Shell / Claude / Codex", "Start a new session running that program.")
+                    helpLine("Command…", "Start a new session running anything else — herdr, tmux, python3 — optionally in a folder you are already working in.")
+                    helpLine("Open terminal", "The full screen of a session, with the key bar. Turn the Digital Crown to scroll back.")
+                    helpLine("Reply", "Type or dictate text, then send it. Nothing is sent until you tap Send.")
+                    helpLine("Key bar", "Enter, arrows, Tab, Escape, Page up/down, Home, End, Backspace and Ctrl-D — enough to drive a full-screen program.")
+                    helpLine("Interrupt", "Ctrl-C, to stop whatever is running.")
+                    helpLine("Screen peek", "A picture of the Mac's screen. Turn the Crown to zoom in and it re-fetches sharper.")
+                    helpLine("Control Mac", "Move the pointer and click, like a trackpad.")
+                }
+                .padding(.horizontal, 4)
+            }
+            .navigationTitle("What is this?")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    @ViewBuilder
+    private func helpLine(_ title: String, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title).font(.caption).bold()
+            Text(body).font(.caption2).foregroundStyle(.secondary)
+        }
     }
 
     /// meshd advertises "input" only on macOS hosts that ship the injector.
@@ -766,6 +895,15 @@ struct AgentLiveView: View {
         }
     }
 
+    /// Every key meshd will accept, in the order a hand reaches for them.
+    ///
+    /// This used to stop after Down — six keys — while the daemon has always accepted
+    /// fourteen and the phone already sent thirteen. The eight that were missing are
+    /// exactly the ones an interactive TUI needs: left/right to move within a line or
+    /// between panes, home/end and the page keys to move through history, ctrl-d to end
+    /// a REPL, backspace to fix a typo without retyping the line. Without them a real
+    /// program like herdr could be launched from the wrist but never driven, which is
+    /// why the terminal read as "clean but unusable".
     private var terminalKeyBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
@@ -776,6 +914,14 @@ struct AgentLiveView: View {
                 keyChip("Escape", "escape") { store.send(key: "escape") }
                 keyChip("Up", "arrow.up") { store.send(key: "up") }
                 keyChip("Down", "arrow.down") { store.send(key: "down") }
+                keyChip("Left", "arrow.left") { store.send(key: "left") }
+                keyChip("Right", "arrow.right") { store.send(key: "right") }
+                keyChip("Backspace", "delete.left") { store.send(key: "backspace") }
+                keyChip("Page up", "arrow.up.to.line") { store.send(key: "page-up") }
+                keyChip("Page down", "arrow.down.to.line") { store.send(key: "page-down") }
+                keyChip("Home", "arrow.up.to.line.compact") { store.send(key: "home") }
+                keyChip("End", "arrow.down.to.line.compact") { store.send(key: "end") }
+                keyChip("End of input, control D", "control") { store.send(key: "ctrl-d") }
                 keyChip("Smaller text", "textformat.size.smaller") { fontSize = max(9, fontSize - 1) }
                 keyChip("Larger text", "textformat.size.larger") { fontSize = min(24, fontSize + 1) }
             }
@@ -921,6 +1067,13 @@ struct GaugeRow: View {
 
 func shortName(_ host: String) -> String {
     host.replacingOccurrences(of: "arya-", with: "").replacingOccurrences(of: "agents", with: "")
+}
+
+/// A path's last two components — "lecoder-watch/Watch" out of a long absolute path.
+/// A full path never fits a watch row, and the leaf alone is ambiguous across repos.
+func lastPathBit(_ path: String) -> String {
+    let parts = path.split(separator: "/").map(String.init)
+    return parts.suffix(2).joined(separator: "/")
 }
 
 private func resetText(_ iso: String?) -> String? {

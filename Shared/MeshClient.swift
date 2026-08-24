@@ -101,14 +101,18 @@ struct MeshClient {
     }
 
     /// Whole main screen, or one display when `display` is given (1-based).
-    /// `width` is honoured only on the `?display=` path — meshd clamps it to 240…2000
-    /// and defaults to 480, which is right for a watch and far too soft for a phone.
-    /// Asking for a width therefore means naming a display, so callers that want a
-    /// sharp picture have to know which screen they are looking at.
+    ///
+    /// `width` is the longest edge; meshd clamps it to 240…2000 and defaults to 480.
+    /// It used to be honoured ONLY on the `?display=` path, so a caller that did not name
+    /// a display silently got 480px however much detail it asked for — and the client only
+    /// names a display when the Mac has more than one. On a single-display Mac, which is
+    /// most of them, no width could ever take effect. Both paths now carry it.
     func screenImage(display: Int? = nil, width: Int? = nil) async throws -> Data {
-        guard let display else { return try await request("/screen.jpg") }
-        let size = width.map { "&width=\(min(2000, max(240, $0)))" } ?? ""
-        return try await request("/screen.jpg?display=\(display)\(size)")
+        var query: [String] = []
+        if let display { query.append("display=\(display)") }
+        if let width { query.append("width=\(min(2000, max(240, width)))") }
+        let suffix = query.isEmpty ? "" : "?" + query.joined(separator: "&")
+        return try await request("/screen.jpg" + suffix)
     }
 
     func displays() async throws -> DisplayList {

@@ -125,6 +125,9 @@ final class WatchMeshStore: ObservableObject {
 
     private var pollTask: Task<Void, Never>?
     private var outputTask: Task<Void, Never>?
+    /// Single-flight for `refresh()`. See the guard there for why the watch needs this
+    /// even more than the phone does.
+    private var refreshing = false
     /// A watch off the tailnet can never reach these hosts, and finding that out costs
     /// a timeout per address per poll. Once a host fails, stop asking for a while.
     private var directBlockedUntil: [String: Date] = [:]
@@ -286,6 +289,22 @@ final class WatchMeshStore: ObservableObject {
     }
 
     func refresh() async {
+        // Single flight, for the same reason MeshStore.refresh() is single flight on the
+        // phone — an older, slower pass finishing late overwrites the newer green
+        // snapshot with "offline", and that race was most of the visible flapping.
+        //
+        // The watch needs this MORE than the phone, because reconnecting is what sets it
+        // off. `adoptConfigs` fires `Task { await refresh() }` whenever a relayed machine
+        // config changes, and it is itself called from `pullFromPhone()` — which runs
+        // inside this function. So one refresh spawns a second refresh from inside its own
+        // body, at exactly the moment a machine comes back and its config gains a MAC
+        // address. Add the reachability-regained trigger and the poll loop on top and
+        // three passes race, which is why the connection was "decently stable until it
+        // tried reconnecting again".
+        guard !refreshing else { return }
+        refreshing = true
+        defer { refreshing = false }
+
         // Run both routes at once so a slow phone does not delay a direct poll, and a
         // dead direct path does not delay the phone.
         async let phone: Void = pullFromPhone()
@@ -450,13 +469,13 @@ final class WatchMeshStore: ObservableObject {
     }
 
     @discardableResult
-    func newSession(host: String, cmd: String?, initialText: String? = nil) -> String {
+    func newSession(host: String, cmd: String?, cwd: String? = nil, initialText: String? = nil) -> String {
         let name = watchSessionName(cmd)
         if directReachable(host), let m = machines.first(where: { $0.host == host }) {
             lastError = nil
             Task {
                 do {
-                    try await MeshClient(machine: m).newSession(name: name, cmd: cmd, initialText: initialText)
+                    try await MeshClient(machine: m).newSession(name: name, cmd: cmd, cwd: cwd, initialText: initialText)
                     watch(host: host, agent: name)
                 } catch {
                     lastError = "new session failed"
@@ -464,7 +483,7 @@ final class WatchMeshStore: ObservableObject {
                 await refresh()
             }
         } else {
-            WatchLink.shared.send(WatchCommand(kind: .newAgent, host: host, agent: nil, text: name, key: nil, cmd: cmd, initialText: initialText))
+            WatchLink.shared.send(WatchCommand(kind: .newAgent, host: host, agent: nil, text: name, key: nil, cmd: cmd, cwd: cwd, initialText: initialText))
             watch(host: host, agent: name)
         }
         return name
@@ -477,13 +496,29 @@ final class WatchMeshStore: ObservableObject {
         return newSession(host: host, cmd: agent, initialText: trimmed + "\n")
     }
 
+    /// Directories the machine's own live panes are sitting in, newest first.
+    ///
+    /// Typing a path on a watch is not realistic, so the only workable way to choose a
+    /// workspace is to pick one you are already working in. The phone already offers
+    /// this; the panes carry `currentPath`, so the watch can too.
+    func workspaceSuggestions(host: String) -> [String] {
+        let agents = snaps.first { $0.host == host }?.agents ?? []
+        var seen = Set<String>()
+        return agents
+            .flatMap { $0.panes ?? [] }
+            .compactMap(\.currentPath)
+            .filter { $0 != "/" && seen.insert($0).inserted }
+    }
+
     func requestScreen(host: String, display: Int? = nil) {
         screenHost = host
         screenError = nil
         if directReachable(host), let m = machines.first(where: { $0.host == host }) {
             Task {
                 do {
-                    screenJPEGData = try await MeshClient(machine: m).screenImage(display: display)
+                    // Screen peek is a still you study, not a live pad, so it is worth
+                    // more than the 480px default: at 480 a Mac display is a blur.
+                    screenJPEGData = try await MeshClient(machine: m).screenImage(display: display, width: 960)
                     screenUpdatedISO = ISO8601DateFormatter().string(from: Date())
                 } catch {
                     screenError = "screen unavailable"

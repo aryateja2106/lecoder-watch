@@ -857,6 +857,11 @@ struct WatchCommand: Codable {
     var key: String?
     var pane: String? = nil
     var cmd: String? = nil
+    /// Where a new session should start. Optional, and it has to travel here rather than
+    /// only on the direct path: when the watch is off the tailnet the phone runs the
+    /// command, so a working directory the watch cannot relay is a working directory the
+    /// watch cannot choose. "Open an agent inside a workspace" needs exactly this.
+    var cwd: String? = nil
     var initialText: String? = nil
     var input: [InputEvent]? = nil
     var display: Int? = nil

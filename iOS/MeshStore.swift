@@ -302,7 +302,9 @@ final class MeshStore: ObservableObject {
         if let host = watchedScreenHost,
            let m = targets.first(where: { $0.host == host }) {
             do {
-                screenJPEGData = try await MeshClient(machine: m).screenImage(display: watchedScreenDisplay)
+                // A phone screen is ~390 points at 3x, so 480px was soft even before
+                // anyone zoomed. 1400 is legible and still about 270KB.
+                screenJPEGData = try await MeshClient(machine: m).screenImage(display: watchedScreenDisplay, width: 1400)
             } catch {
                 screenError = Self.describe(error)
             }
@@ -576,7 +578,7 @@ final class MeshStore: ObservableObject {
         case .newAgent:
             guard let host = command.host, let name = command.text,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            await newSession(on: machine, name: name, cmd: command.cmd, initialText: command.initialText)
+            await newSession(on: machine, name: name, cmd: command.cmd, cwd: command.cwd, initialText: command.initialText)
         case .newPane:
             guard let host = command.host, let agent = command.agent,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }

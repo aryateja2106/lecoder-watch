@@ -90,6 +90,7 @@ final class RemoteControl: ObservableObject {
     /// Preview magnification. A 44mm watch showing a 15" display is the most extreme
     /// version of the aiming problem in the whole product.
     @Published var previewZoom: CGFloat = 1
+    private var fetchingScreen = false
 
     private var activeDisplayInfo: DisplayInfo? { displays.first { $0.index == activeDisplay } }
 
@@ -100,7 +101,14 @@ final class RemoteControl: ObservableObject {
                           y: min(max(pointer.y + dy / Double(d.height), 0), 1))
     }
 
-    func zoomPreview(_ delta: CGFloat) { previewZoom = clampedZoom(previewZoom + delta) }
+    /// Zoom, then go and get a frame that actually holds the extra detail — otherwise
+    /// zooming in only magnifies the blur it was meant to resolve.
+    func zoomPreview(_ delta: CGFloat) {
+        let next = clampedZoom(previewZoom + delta)
+        guard next != previewZoom else { return }
+        previewZoom = next
+        Task { await refreshScreen() }
+    }
     func scroll(_ amount: Double) {
         if horizontalScroll { pendingScrollX += amount } else { pendingScroll += amount }
     }
@@ -216,8 +224,28 @@ final class RemoteControl: ObservableObject {
         }
     }
 
+    /// How wide a capture to ask for, in pixels of the longest edge.
+    ///
+    /// meshd defaults to 480, which is fine at fit-to-screen — the watch draws the picture
+    /// about 184 points wide — and hopeless the moment you zoom, because zooming magnifies
+    /// the frame already received instead of fetching a sharper one. At 6x you are looking
+    /// at a sixth of a 480px image stretched across the whole screen: about 80 source
+    /// pixels. That is why the Mac was unreadable however far you zoomed in.
+    ///
+    /// Scaling the request with the zoom keeps source pixels per screen point roughly
+    /// constant, so zooming in now reveals detail, while a fit-to-screen view stays cheap.
+    /// That matters: this frame is often relayed through the phone, and 2000px is ~500KB
+    /// against 480px at ~45KB, so paying for detail only when it can be seen is the point.
+    private var requestedWidth: Int { Int((480 * previewZoom).rounded()) }
+
     func refreshScreen() async {
-        screen = try? await client.screenImage(display: displays.count > 1 ? activeDisplay : nil)
+        // Single flight. Crown zooming fires this repeatedly, and an earlier, softer frame
+        // landing after a later, sharper one would undo the zoom the user just asked for.
+        guard !fetchingScreen else { return }
+        fetchingScreen = true
+        defer { fetchingScreen = false }
+        screen = try? await client.screenImage(display: displays.count > 1 ? activeDisplay : nil,
+                                              width: requestedWidth)
     }
 
     func volume(delta: Int? = nil, muted: Bool? = nil) {
