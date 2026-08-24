@@ -38,6 +38,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Unlock LeSearch Mesh so only you can reach your machines.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>MeshWatch connects to your machines over your private Tailscale network.</string>
 	<key>NSMicrophoneUsageDescription</key>

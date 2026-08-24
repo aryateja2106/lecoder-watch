@@ -710,6 +710,7 @@ private struct LimitRow: View {
 
 private struct SettingsTab: View {
     @EnvironmentObject var store: MeshStore
+    @EnvironmentObject var lock: AppLock
     @State private var newCommand = ""
     @State private var pairing = false
 
@@ -818,6 +819,20 @@ private struct SettingsTab: View {
                     }
                 } header: {
                     Text("Limit resume pins")
+                }
+
+                Section {
+                    Toggle(isOn: $lock.enabled) {
+                        Label("Require \(AppLock.methodName)", systemImage: "lock.fill")
+                    }
+                    .disabled(!AppLock.isAvailable)
+                    Text(AppLock.isAvailable
+                         ? "Machine tokens are stored in the Keychain. This asks for \(AppLock.methodName) before the app opens."
+                         : "Set a device passcode to enable this.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Security")
                 }
             }
             .navigationTitle("Settings")

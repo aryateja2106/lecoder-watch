@@ -165,7 +165,9 @@ final class WatchMeshStore: ObservableObject {
         machines = merged
         if let data = try? JSONEncoder().encode(merged) {
             // Survive relaunch: the watch app often opens before the phone answers.
-            UserDefaults.standard.set(data, forKey: Self.machinesKey)
+            // Keychain, not UserDefaults — this cache carries every machine's meshd
+            // token, and the watch backs up and restores like the phone does.
+            SecureStore.save(data, for: Self.machinesKey)
         }
         Task { await refresh() }
     }
@@ -173,7 +175,8 @@ final class WatchMeshStore: ObservableObject {
     private static let machinesKey = "watch.machines.v1"
 
     private func loadCachedMachines() {
-        guard let data = UserDefaults.standard.data(forKey: Self.machinesKey),
+        // Migrating read: older builds cached the list in UserDefaults in plaintext.
+        guard let data = SecureStore.migrateFromUserDefaults(key: Self.machinesKey),
               let cached = try? JSONDecoder().decode([Machine].self, from: data),
               !cached.isEmpty else { return }
         machines = cached
