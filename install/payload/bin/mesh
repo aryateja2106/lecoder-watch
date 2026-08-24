@@ -528,6 +528,7 @@ async function smokeTest(payload: string, version: string, staging: string) {
       MESHD_PORT: String(port),
       MESHD_TOKEN: crypto.randomUUID(),
       MESHD_EVENTS_PATH: join(home, "events.jsonl"),
+      MESHD_TELEMETRY: "off",            // a 30-second trial boot is not an install
     },
     stdout: "pipe",
     stderr: "pipe",

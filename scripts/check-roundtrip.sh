@@ -46,6 +46,7 @@ chmod 600 "$TMP/hdr"
 MESHD_TOKEN="$(cat "$TMP/.mesh/token")" \
 HOME="$TMP" MESHD_HOST=127.0.0.1 MESHD_PORT="$PORT" \
 MESHD_EVENTS_PATH="$TMP/events.jsonl" MESH_MUX="tmux -L $SOCK" \
+MESHD_TELEMETRY=off \
   bun "$ROOT/install/payload/meshd/server.ts" >"$TMP/meshd.log" 2>&1 &
 DAEMON_PID=$!
 

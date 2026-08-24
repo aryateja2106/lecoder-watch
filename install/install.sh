@@ -727,6 +727,9 @@ else
       [ -n "${MESHD_HOST:-}" ] && printf 'MESHD_HOST=%s\n' "$MESHD_HOST"
       [ -n "$EFFECTIVE_MESHD_MUX" ] && printf 'MESH_MUX=%s\n' "$EFFECTIVE_MESHD_MUX"
       [ -n "${CMUX_PORT:-}" ] && printf 'CMUX_PORT=%s\n' "$CMUX_PORT"
+      # An install-time opt-out must survive into the service environment, or
+      # MESHD_TELEMETRY=off would silently stop meaning anything under launchd.
+      [ -n "${MESHD_TELEMETRY:-}" ] && printf 'MESHD_TELEMETRY=%s\n' "$MESHD_TELEMETRY"
     } | service_start meshd "$MESH_HOME/meshd" server.ts
     MESHD_STATUS="down"; wait_http "http://127.0.0.1:${MESHD_PORT_VALUE}/health" && MESHD_STATUS="up"
   fi

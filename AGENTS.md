@@ -131,8 +131,13 @@ now fails when the daemon and the watch disagree.
 
 1. **Multiplexer-agnostic.** tmux, rmux, herdr, zellij, mosh — the user's choice, never
    ours. `MESH_MUX` selects it. Anything tmux-specific belongs behind an adapter.
-2. **Local-first.** No cloud STT, no relay, no telemetry. Nothing leaves the user's
-   machines except APNs pushes.
+2. **Local-first.** No cloud STT, no relay. Nothing of the user's leaves their
+   machines except APNs pushes. The one measured exception: the daemon may send one
+   anonymized daily heartbeat (version, platform, coarse numeric counters, random
+   install id — `install/payload/meshd/telemetry.ts` is the whole list), disabled
+   with `MESHD_TELEMETRY=off`. If you touch telemetry, keep that file,
+   `web/privacy.html`, and the README's Telemetry section in agreement — the privacy
+   page is a public promise, not documentation.
 3. **Text beats pixels on a watch.** `capture-pane` text is legible at any size; a JPEG of
    a Mac display is not. Reserve screen capture for what is genuinely graphical.
 4. **Review before dispatch.** Dictated or typed text lands in an editable preview.
