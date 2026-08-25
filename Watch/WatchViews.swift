@@ -25,7 +25,7 @@ import UIKit
 /// system controller is the only speech recognition the watch can reach. Anything with
 /// custom vocabulary has to stream audio to the Mac; see docs/VOICE-INPUT-SPEC.md.
 ///
-/// Falls back to the old sheet if WatchKit hands us no visible controller, so the button
+/// Falls back to the old sheet if WatchKit hands us no controller at all, so the button
 /// can never become dead — better a picker than nothing.
 ///
 /// Spoken text APPENDS, so a second thought never wipes the first, and the TextField
@@ -33,20 +33,44 @@ import UIKit
 struct DictateLink: View {
     @Binding var draft: String
 
+    /// Set only after WatchKit has actually handed us nothing to present from. It is
+    /// never read to *choose* the affordance up front — see `dictate()` — because that
+    /// choice cannot be made correctly at render time.
+    @State private var noController = false
+
     var body: some View {
-        if WKApplication.shared().visibleInterfaceController != nil {
-            Button(action: dictate) {
-                Label("Dictate", systemImage: "mic.fill")
-            }
-        } else {
+        if noController {
             TextFieldLink(prompt: Text("Dictate")) {
                 Label("Dictate", systemImage: "mic.fill")
             } onSubmit: { append($0) }
+        } else {
+            Button(action: dictate) {
+                Label("Dictate", systemImage: "mic.fill")
+            }
         }
     }
 
+    /// Resolve the controller HERE, at tap time — not in `body`.
+    ///
+    /// `body` runs while the sheet holding this button is still being presented, and
+    /// during that instant `visibleInterfaceController` is nil. Branching on it there
+    /// froze the button into whichever answer happened to be true first: on a sheet it
+    /// rendered the `TextFieldLink` — the system input *picker*, which reopens whatever
+    /// mode you used last and so lands on Scribble — and it stayed that way for the
+    /// life of the sheet however many times the real controller came back. The value
+    /// that matters is the one under the finger, so it is read under the finger.
+    ///
+    /// `rootInterfaceController` is the fallback: the app always has a root even when
+    /// nothing counts as "visible", and presenting from it reaches the same mic. Only
+    /// when both are nil do we give up the mic and swap in the picker, with a haptic —
+    /// a tap that produces neither speech nor a buzz reads as a broken button.
     private func dictate() {
-        guard let controller = WKApplication.shared().visibleInterfaceController else { return }
+        guard let controller = WKApplication.shared().visibleInterfaceController
+                ?? WKApplication.shared().rootInterfaceController else {
+            noController = true
+            WKInterfaceDevice.current().play(.failure)
+            return
+        }
         controller.presentTextInputController(withSuggestions: nil, allowedInputMode: .plain) { results in
             guard let spoken = results?.first as? String else { return }   // nil == cancelled
             Task { @MainActor in append(spoken) }
@@ -74,8 +98,11 @@ struct WatchRootView: View {
         }
         .onAppear {
             store.start()
-            WatchNotifications.shared.onAgentAction = { [weak store] host, session, text, key in
-                store?.respondToAgent(host: host, session: session, text: text, key: key)
+            // Approve / Decline / Reply / Stop from a notification take the same route
+            // as the in-app buttons — including the pane the event named — so a failure
+            // surfaces as `store.lastError` instead of disappearing silently.
+            WatchNotifications.shared.onAgentAction = { [weak store] host, session, pane, text, key in
+                store?.respondToAgent(host: host, session: session, pane: pane, text: text, key: key)
             }
             WatchNotifications.shared.requestAuthorizationOncePaired(hasMachines: !store.machines.isEmpty)
         }
@@ -95,6 +122,12 @@ struct MachinesListView: View {
     var body: some View {
         List {
             if store.hasNoMachines { noMachines }
+            // Above even "Needs you": if the link is down, every row below is a memory
+            // rather than a fact, and answering an agent from a stale row is the one
+            // mistake this screen can make on your behalf. Silence here used to be the
+            // only signal — you had to scroll to the Link section at the bottom and
+            // read a debug line to find out.
+            connectionBanner
             // The reason to look at your wrist. Above machines, above limits, above
             // everything — an agent that is blocked is the only thing here that is
             // costing you time right now.
@@ -131,9 +164,13 @@ struct MachinesListView: View {
                             // limit clears — the wrist action a mirrored notification tap can't do.
                             if let pin = store.pinnedLimitSessions.first(where: { $0.providerId.lowercased() == row.providerId.lowercased() }) {
                                 Spacer()
+                                // `.mini` drew a ~24pt tall control, well under the 44pt
+                                // Apple asks for and roughly a fingertip's width short of
+                                // usable — on a button that resumes a paid agent session.
                                 Button("Continue") { store.sendToPinned(pin) }
                                     .buttonStyle(.bordered)
-                                    .controlSize(.mini)
+                                    .controlSize(.small)
+                                    .frame(minHeight: WatchTouch.minHeight)
                                     .disabled(row.blocked)
                             }
                         }
@@ -216,6 +253,46 @@ struct MachinesListView: View {
         .refreshable { await store.refresh() }
     }
 
+    /// "Is what I am looking at still true?" — answered in place, at the top, whenever
+    /// the answer is no. Nothing is drawn while the link is live: a permanent status
+    /// band is wallpaper, and wallpaper is exactly what stops being read.
+    @ViewBuilder
+    private var connectionBanner: some View {
+        switch store.connectionState {
+        case .live, .waiting:
+            // .waiting is a cold start; `noMachines` and the "Connecting…" overlay
+            // already say so, and two of them saying it is noise.
+            EmptyView()
+        case .reconnecting:
+            Section {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.mini)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Reconnecting…").font(.caption.weight(.semibold))
+                        Text("Showing the last snapshot.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 2)
+                .accessibilityElement(children: .combine)
+            }
+        case .offline:
+            Section {
+                HStack(spacing: 8) {
+                    Image(systemName: "antenna.radiowaves.left.and.right.slash")
+                        .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Offline").font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                        Text("Out of touch with your iPhone. Everything below is old.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 2)
+                .accessibilityElement(children: .combine)
+            }
+        }
+    }
+
     /// Why there is nothing here, and the one button that might change it.
     @ViewBuilder
     private var noMachines: some View {
@@ -286,6 +363,10 @@ private struct AttentionRow: View {
     @EnvironmentObject var store: WatchMeshStore
     let item: LiveSessionPick
     @State private var answered = false
+    /// This row's own copy of the failure, not the store's — `lastError` is
+    /// mesh-wide, and three blocked agents all showing one machine's error is worse
+    /// than none of them showing it.
+    @State private var failure: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -324,30 +405,64 @@ private struct AttentionRow: View {
                     .lineLimit(2)
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
+                // The affirmative control on the highest-stakes row in the app: it
+                // presses Return in a live shell. It gets a full-height target, and
+                // `respondToAgent` now reports what actually happened rather than
+                // leaving "Sent" as an unbacked claim.
                 Button(answered ? "Sent" : item.risk.verb) {
-                    store.respondToAgent(host: item.host, session: item.session, text: nil, key: "enter")
-                    WKInterfaceDevice.current().play(.success)
+                    failure = nil
                     answered = true
+                    store.respondToAgent(host: item.host, session: item.session,
+                                         text: nil, key: "enter")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(item.risk.isDestructive ? .red : .orange)
                 .controlSize(.small)
                 .disabled(answered)
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight)
 
                 NavigationLink {
                     AgentLiveView(host: item.host, agent: item.session).environmentObject(store)
                 } label: {
                     Image(systemName: "chevron.right")
+                        .frame(width: WatchTouch.minWidth, height: WatchTouch.minHeight)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .fixedSize()
+                .accessibilityLabel("Open \(item.session)")
+            }
+
+            // Answering is the point of this row; the send failing is the other half of
+            // that, and it used to go nowhere on this screen — the button said "Sent"
+            // and the agent stayed blocked. Now the row un-answers itself so the tap
+            // can be repeated, and says why it has to be.
+            if let failure {
+                Text(failure)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
             }
         }
         .padding(.vertical, 2)
+        .onChange(of: store.lastError) { _, error in
+            guard answered, let error else { return }
+            failure = error
+            answered = false
+        }
     }
+}
+
+/// Fingertip minimums for the controls that sit inside list rows.
+///
+/// Apple asks for 44pt; a watch row cannot always give 44 in both directions without
+/// eating the content it exists to show, so these are the floor the audit settled on —
+/// wide enough that a chip is hit deliberately, tall enough that a thumb on a moving
+/// wrist does not slide off it.
+enum WatchTouch {
+    static let minWidth: CGFloat = 42
+    static let minHeight: CGFloat = 38
 }
 
 private func activeFirst(_ snaps: [MachineSnapshot]) -> [MachineSnapshot] {
@@ -373,7 +488,7 @@ struct EventsView: View {
 
     var body: some View {
         List(store.events.reversed()) { event in
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(event.title).font(.headline).lineLimit(2)
                 if let body = event.body {
                     Text(body).font(.caption2).foregroundStyle(.secondary).lineLimit(3)
@@ -381,10 +496,64 @@ struct EventsView: View {
                 Text([event.host, event.source].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                // The agent printed a link and the wrist is where you read it. Pushing
+                // it to the Mac's own browser is the only useful thing to do with it
+                // from here — and the button only exists when that Mac can honour it.
+                OpenOnMacButton(host: store.knownHost(for: event.host),
+                                url: firstLink(in: [event.body, event.title]
+                                    .compactMap { $0 }.joined(separator: "\n")))
             }
+            .padding(.vertical, 1)
         }
         .navigationTitle("Events")
         .overlay { if store.events.isEmpty { Text("No events").foregroundStyle(.secondary) } }
+    }
+}
+
+/// "Open on Mac", or nothing at all.
+///
+/// Renders itself away when there is no link, no known machine for it, or a daemon
+/// without the `openUrl` capability — meshd gained `/open` in 0.5.0, and a button that
+/// 404s against the 0.4.1 daemons still in the field would read as a network fault.
+struct OpenOnMacButton: View {
+    @EnvironmentObject var store: WatchMeshStore
+    let host: String?
+    let url: URL?
+
+    var body: some View {
+        if let host, let url, store.canOpenOnMac(host: host) {
+            Button {
+                store.openOnMac(host: host, url: url)
+            } label: {
+                Label("Open on Mac", systemImage: "safari")
+                    .font(.caption2)
+                    .frame(minHeight: WatchTouch.minHeight)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityHint(url.absoluteString)
+        }
+    }
+}
+
+/// A session's state as a glyph AND a word.
+///
+/// Never colour alone: outdoors the tint is washed out, and for roughly one man in
+/// twelve red and green are the same dot. The symbol and the label come from the same
+/// shared vocabulary the phone, the Lock Screen card and the widgets use, so "Needs
+/// you" means one thing everywhere.
+struct SessionStateChip: View {
+    let state: SessionDisplayState
+
+    var body: some View {
+        let bridged = state.sessionState
+        HStack(spacing: 3) {
+            Image(systemName: bridged.symbol).font(.caption2)
+            Text(bridged.cardLabel).font(.caption2.weight(.medium))
+        }
+        .foregroundStyle(bridged.tint)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(bridged.cardLabel)
     }
 }
 
@@ -421,8 +590,13 @@ struct SessionsView: View {
                         HStack(spacing: 6) {
                             Image(systemName: a.attached ? "dot.radiowaves.left.and.right" : "terminal")
                                 .foregroundStyle(a.attached ? .green : .secondary)
-                            VStack(alignment: .leading, spacing: 0) {
-                                Text(a.displayName)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(a.displayName).lineLimit(1)
+                                // What this session is DOING — the daemon's own verdict
+                                // when it has one (meshd 0.5.0), derived from the newest
+                                // event we hold otherwise. "attached" is a fact about a
+                                // terminal multiplexer, not an answer to "is it stuck?".
+                                SessionStateChip(state: store.displayState(of: a, host: host))
                                 Text(watchSessionSubtitle(a, route: store.routeLabel(for: host)))
                                     .font(.caption2).foregroundStyle(.secondary)
                             }
@@ -440,7 +614,7 @@ struct SessionsView: View {
             }
             if snap?.authError != nil {
                 Section("Fix") {
-                    Text("Open Mesh on iPhone and copy the install command for this machine.")
+                    Text("Open LeSearch Mesh on your iPhone and copy the install command for this machine.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text("Then refresh the watch.")
@@ -580,11 +754,14 @@ struct SessionsView: View {
                     helpLine("Shell / Claude / Codex", "Start a new session running that program.")
                     helpLine("Command…", "Start a new session running anything else — herdr, tmux, python3 — optionally in a folder you are already working in.")
                     helpLine("Open terminal", "The full screen of a session, with the key bar. Turn the Digital Crown to scroll back.")
+                    helpLine("Reader / Raw", "The first chip in the key bar. Reader wraps every line to the screen — best for questions, prose and errors. Raw keeps the Mac's own line breaks and lets you drag sideways — best for diffs and tables.")
                     helpLine("Reply", "Type or dictate text, then send it. Nothing is sent until you tap Send.")
-                    helpLine("Key bar", "Enter, arrows, Tab, Escape, Page up/down, Home, End, Backspace and Ctrl-D — enough to drive a full-screen program.")
+                    helpLine("Insert iPhone clipboard", "Types whatever is on your iPhone's clipboard into the session, so a URL or a key never has to be scribbled. Your iPhone must be open on LeSearch Mesh at the time.")
+                    helpLine("Open on Mac", "Appears when an agent has printed a link. Opens it in the Mac's own browser.")
+                    helpLine("Key bar", "Enter, arrows, Tab, Escape, Page up/down, Home, End, Backspace and Ctrl-D — enough to drive a full-screen program. Text size lives under the … chip at the end.")
                     helpLine("Interrupt", "Ctrl-C, to stop whatever is running.")
                     helpLine("Screen peek", "A picture of the Mac's screen. Turn the Crown to zoom in and it re-fetches sharper.")
-                    helpLine("Control Mac", "Move the pointer and click, like a trackpad.")
+                    helpLine("Control Mac", "Move the pointer and click, like a trackpad. The expand chip on the preview opens Inspect: the screen full size, Crown to move down the page, tap the sides to move across, tap the middle to come back.")
                 }
                 .padding(.horizontal, 4)
             }
@@ -605,9 +782,9 @@ struct SessionsView: View {
     private var supportsInput: Bool { snap?.capabilities?.contains("input") ?? false }
 
     private var emptySessionHint: String {
-        if snap?.authError != nil { return "Open Mesh on iPhone, fix the token, then refresh." }
+        if snap?.authError != nil { return "Open LeSearch Mesh on your iPhone, fix the token, then refresh." }
         if snap?.reachable == true { return "Start Shell, Claude, or Codex below." }
-        return "Open Mesh on iPhone or refresh when the Mac is nearby."
+        return "Open LeSearch Mesh on your iPhone, or refresh when the Mac is nearby."
     }
 
     private func openNewSession(cmd: String?, initialText: String? = nil) {
@@ -738,6 +915,9 @@ struct AgentLiveView: View {
                     Text(currentAgent?.displayName ?? agent)
                         .font(.headline)
                         .lineLimit(1)
+                    if let agent = currentAgent {
+                        SessionStateChip(state: store.displayState(of: agent, host: host))
+                    }
                     Text(statusText)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -758,19 +938,34 @@ struct AgentLiveView: View {
             Section("Actions") {
                 Button { store.send(text: "continue\n") } label: {
                     Label("Continue", systemImage: "play.fill")
+                        .frame(minHeight: WatchTouch.minHeight)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(continueBlocked)
                 Button { store.send(key: "enter") } label: {
                     Label("Enter", systemImage: "return")
+                        .frame(minHeight: WatchTouch.minHeight)
                 }
                 .buttonStyle(.bordered)
                 Button { showReply = true } label: {
                     Label("Reply", systemImage: "square.and.pencil")
+                        .frame(minHeight: WatchTouch.minHeight)
                 }
                 .buttonStyle(.bordered)
+                // The one thing a wrist cannot produce for itself: a URL, a stack
+                // trace, a key. It is nearly always already on the phone in your
+                // pocket, so fetch it from there rather than asking anyone to scribble
+                // it. Inserted without a newline — you read it before you send it.
+                Button { Task { await store.insertPhoneClipboard() } } label: {
+                    Label("Insert iPhone clipboard", systemImage: "doc.on.clipboard")
+                        .frame(minHeight: WatchTouch.minHeight)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityHint("Types whatever is on your iPhone's clipboard into this session")
+                OpenOnMacButton(host: host, url: visibleLink)
                 Button(role: .destructive) { confirmInterrupt = true } label: {
                     Label("Interrupt", systemImage: "xmark.octagon")
+                        .frame(minHeight: WatchTouch.minHeight)
                 }
                 .buttonStyle(.bordered)
             }
@@ -870,28 +1065,71 @@ struct AgentLiveView: View {
     // control carries a VoiceOver label.
     private var terminalScreen: some View {
         NavigationStack {
-            ScrollViewReader { proxy in
-                ScrollView(.vertical) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(terminalLines.isEmpty ? "waiting for output…" : terminalLines.joined(separator: "\n"))
-                            .font(.system(size: fontSize, design: .monospaced))
-                            .foregroundStyle(terminalLines.isEmpty ? .secondary : .primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityLabel("Terminal output, \(terminalLines.count) lines")
-                        Color.clear.frame(height: 1).id("tail")
-                    }
-                    .padding(.horizontal, 6)
-                    .padding(.bottom, 4)
-                }
-                .background(Color.black)
-                .onAppear { proxy.scrollTo("tail", anchor: .bottom) }
-                .onChange(of: store.output) { _, _ in
-                    withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("tail", anchor: .bottom) }
-                }
+            Group {
+                if store.readerOutput { readerTerminal } else { rawTerminal }
             }
             .navigationTitle(currentAgent?.displayName ?? agent)
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) { terminalKeyBar }
+        }
+    }
+
+    /// Reader: every line wrapped to the screen, nothing off to the right.
+    ///
+    /// This is the readable view and therefore the default — a watch is about 21
+    /// monospaced columns wide, and prose that runs off the edge is prose you cannot
+    /// read at all. When the daemon advertises "captureJoin" the store also asks it to
+    /// un-wrap the physical lines tmux stored and strip the box-drawing and spinner
+    /// glyphs, so what wraps here is a sentence rather than the ruins of a table.
+    private var readerTerminal: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(terminalLines.isEmpty ? "waiting for output…" : terminalLines.joined(separator: "\n"))
+                        .font(.system(size: fontSize, design: .monospaced))
+                        .foregroundStyle(terminalLines.isEmpty ? .secondary : .primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel("Terminal output, \(terminalLines.count) lines")
+                    Color.clear.frame(height: 1).id("tail")
+                }
+                .padding(.horizontal, 6)
+                .padding(.bottom, 4)
+            }
+            .background(Color.black)
+            .onAppear { proxy.scrollTo("tail", anchor: .bottom) }
+            .onChange(of: store.output) { _, _ in
+                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("tail", anchor: .bottom) }
+            }
+        }
+    }
+
+    /// Raw: the Mac's own line breaks, kept.
+    ///
+    /// Wrapping is exactly wrong for the other half of terminal output — a diff, a
+    /// table, `git status`, a stack trace with aligned columns — where re-flowing to 21
+    /// characters destroys the only structure the text had. So Raw refuses to wrap
+    /// (`fixedSize` lets the text take whatever width it needs) and lets you pan
+    /// instead: drag sideways to move across a long line, Crown up and down as usual.
+    private var rawTerminal: some View {
+        ScrollViewReader { proxy in
+            ScrollView([.horizontal, .vertical]) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(terminalLines.isEmpty ? "waiting for output…" : terminalLines.joined(separator: "\n"))
+                        .font(.system(size: fontSize, design: .monospaced))
+                        .foregroundStyle(terminalLines.isEmpty ? .secondary : .primary)
+                        // The whole point of Raw: never re-flow, however far right it runs.
+                        .fixedSize(horizontal: true, vertical: true)
+                        .accessibilityLabel("Terminal output, unwrapped, \(terminalLines.count) lines")
+                    Color.clear.frame(width: 1, height: 1).id("tail")
+                }
+                .padding(.horizontal, 6)
+                .padding(.bottom, 4)
+            }
+            .background(Color.black)
+            .onAppear { proxy.scrollTo("tail", anchor: .bottomLeading) }
+            .onChange(of: store.output) { _, _ in
+                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("tail", anchor: .bottomLeading) }
+            }
         }
     }
 
@@ -904,9 +1142,21 @@ struct AgentLiveView: View {
     /// a REPL, backspace to fix a typo without retyping the line. Without them a real
     /// program like herdr could be launched from the wrist but never driven, which is
     /// why the terminal read as "clean but unusable".
+    ///
+    /// The chips are 42×38 with 8pt between them. They were 28×28 at 6pt, which on a
+    /// 40mm watch put Escape and Up close enough together that a thumb could not
+    /// separate them — and every one of these sends a real keystroke to a real shell.
+    /// Fewer chips fit per screen, so the two text-size chips moved to the overflow
+    /// page: font size is set once, while Enter is pressed all day.
     private var terminalKeyBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
+                // First, because which view you are in changes what everything else
+                // looks like — and it is the fix for "I cannot read this".
+                keyChip(store.readerOutput ? "Raw view, do not wrap lines" : "Reader view, wrap lines",
+                        store.readerOutput ? "arrow.left.and.right" : "text.alignleft") {
+                    store.readerOutput.toggle()
+                }
                 keyChip("Reply", "text.bubble") { showReply = true }
                 keyChip("Enter", "return") { store.send(key: "enter") }
                 keyChip("Interrupt", "xmark.octagon", role: .destructive) { store.send(key: "ctrl-c") }
@@ -922,22 +1172,73 @@ struct AgentLiveView: View {
                 keyChip("Home", "arrow.up.to.line.compact") { store.send(key: "home") }
                 keyChip("End", "arrow.down.to.line.compact") { store.send(key: "end") }
                 keyChip("End of input, control D", "control") { store.send(key: "ctrl-d") }
-                keyChip("Smaller text", "textformat.size.smaller") { fontSize = max(9, fontSize - 1) }
-                keyChip("Larger text", "textformat.size.larger") { fontSize = min(24, fontSize + 1) }
+                // A push rather than a sheet: this bar already lives inside a presented
+                // sheet, and watchOS does not present a second one over it reliably.
+                NavigationLink {
+                    terminalOptions
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .frame(width: WatchTouch.minWidth, height: WatchTouch.minHeight)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Text size and view options")
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
             .padding(.vertical, 4)
         }
         .background(.ultraThinMaterial)
     }
 
+    /// The settings that are chosen once and then left alone, off the hot path.
+    private var terminalOptions: some View {
+        List {
+            Section("Text size") {
+                HStack(spacing: 8) {
+                    keyChip("Smaller text", "textformat.size.smaller") { fontSize = max(9, fontSize - 1) }
+                    keyChip("Larger text", "textformat.size.larger") { fontSize = min(24, fontSize + 1) }
+                    Spacer()
+                    Text("\(Int(fontSize))pt")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Section("View") {
+                Toggle("Wrap long lines", isOn: $store.readerOutput)
+                    .font(.caption)
+                Text(store.readerOutput
+                     ? "Reader wraps everything to the screen. Best for prose, questions and errors."
+                     : "Raw keeps the Mac's own line breaks. Best for diffs and tables — drag sideways to follow a long line.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if store.readerOutput && !store.supports("captureJoin", host: host) {
+                    // Say which half of the job is being done. Wrapping is ours; the
+                    // un-wrapping and glyph-stripping are the daemon's, and this one
+                    // cannot do them.
+                    Text("This machine's meshd is older than 0.5.0, so lines it already broke stay broken.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Terminal")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
     @ViewBuilder
     private func keyChip(_ label: String, _ icon: String, role: ButtonRole? = nil, action: @escaping () -> Void) -> some View {
         Button(role: role, action: action) {
-            Image(systemName: icon).frame(width: 28, height: 28)
+            Image(systemName: icon).frame(width: WatchTouch.minWidth, height: WatchTouch.minHeight)
         }
         .buttonStyle(.bordered)
         .accessibilityLabel(label)
+    }
+
+    /// A link the session has just printed, if any — newest first, and the event body
+    /// as a fallback for a session whose output has already scrolled past it.
+    private var visibleLink: URL? {
+        if let url = lastLink(in: Array(terminalLines.suffix(40))) { return url }
+        guard let event = store.latestEvent(host: host, session: agent) else { return nil }
+        return firstLink(in: [event.body, event.title].compactMap { $0 }.joined(separator: "\n"))
     }
 }
 
@@ -946,6 +1247,13 @@ struct AgentLiveView: View {
 struct ScreenPeekView: View {
     @EnvironmentObject var store: WatchMeshStore
     let host: String
+
+    /// When this view started asking. A spinner with no clock behind it is a promise
+    /// nobody is keeping: the relay path can take a couple of seconds, but past that
+    /// the honest thing is to say we are still trying rather than to keep spinning as
+    /// if the next frame were imminent.
+    @State private var askedAt = Date()
+    @State private var slow = false
 
     private var imageData: Data? {
         store.screenHost == host ? store.screenJPEGData : nil
@@ -963,9 +1271,16 @@ struct ScreenPeekView: View {
                         .scaledToFit()
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 } else if let error = store.screenError {
-                    Text(error)
+                    // The daemon's own words, not "something went wrong": Screen
+                    // Recording not granted and the Mac being asleep are different
+                    // problems with different fixes.
+                    Label(error, systemImage: "exclamationmark.triangle")
                         .font(.caption)
                         .foregroundStyle(.orange)
+                } else if slow {
+                    Label("No screen yet — still trying", systemImage: "hourglass")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 } else {
                     ProgressView("Fetching screen…")
                 }
@@ -975,9 +1290,10 @@ struct ScreenPeekView: View {
                         .foregroundStyle(.secondary)
                 }
                 Button {
-                    store.requestScreen(host: host)
+                    ask()
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
+                        .frame(minHeight: WatchTouch.minHeight)
                 }
                 .buttonStyle(.borderedProminent)
                 Text("Read only. Use iPhone for full terminal/VNC.")
@@ -987,8 +1303,22 @@ struct ScreenPeekView: View {
             .padding(.vertical, 6)
         }
         .navigationTitle("Screen")
-        .onAppear { store.requestScreen(host: host) }
+        .onAppear { ask() }
+        .onChange(of: store.screenJPEGData) { _, data in
+            if data != nil { slow = false }
+        }
+        .task(id: askedAt) {
+            slow = false
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled else { return }
+            if imageData == nil { slow = true }
+        }
         .onDisappear { store.stopScreen() }
+    }
+
+    private func ask() {
+        askedAt = Date()          // restarts the six-second clock
+        store.requestScreen(host: host)
     }
 }
 

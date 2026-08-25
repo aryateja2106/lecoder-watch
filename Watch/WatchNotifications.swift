@@ -14,13 +14,18 @@ import UserNotifications
 final class WatchNotifications: NSObject, UNUserNotificationCenterDelegate {
     static let shared = WatchNotifications()
 
-    typealias Handler = (_ host: String, _ session: String, _ text: String?, _ key: String?) -> Void
+    /// `pane` carries the exact `session:window.pane` the event came from when the
+    /// payload had one (meshd 0.4.2+), so Approve/Decline/Reply land in the agent's
+    /// own pane rather than whichever pane the mux session happens to have active.
+    /// Nil means "the session's active pane" — the pre-existing behaviour.
+    typealias Handler = (_ host: String, _ session: String, _ pane: String?,
+                         _ text: String?, _ key: String?) -> Void
 
     var onAgentAction: Handler? {
         didSet { drain() }
     }
 
-    private var pending: [(host: String, session: String, text: String?, key: String?)] = []
+    private var pending: [(host: String, session: String, pane: String?, text: String?, key: String?)] = []
 
     func activate() {
         UNUserNotificationCenter.current().delegate = self
@@ -48,7 +53,7 @@ final class WatchNotifications: NSObject, UNUserNotificationCenterDelegate {
         guard let handler = onAgentAction, !pending.isEmpty else { return }
         let queued = pending
         pending.removeAll()
-        for item in queued { handler(item.host, item.session, item.text, item.key) }
+        for item in queued { handler(item.host, item.session, item.pane, item.text, item.key) }
     }
 
     // MARK: UNUserNotificationCenterDelegate
@@ -63,16 +68,23 @@ final class WatchNotifications: NSObject, UNUserNotificationCenterDelegate {
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         defer { completionHandler() }
-        guard let target = AgentNotification.target(from: response.notification.request.content.userInfo),
+        let userInfo = response.notification.request.content.userInfo
+        guard let target = AgentNotification.target(from: userInfo),
               let cmd = AgentNotification.command(
                   for: response.actionIdentifier,
                   typed: (response as? UNTextInputNotificationResponse)?.userText,
               )
         else { return }
 
-        let item = (host: target.host, session: target.session, text: cmd.text, key: cmd.key)
+        // Approve → enter, Decline → escape, Reply → the typed text, Stop → ctrl-c.
+        // Every one of them routes through the same `respondToAgent` the in-app
+        // buttons use, so a failure is surfaced the same way rather than vanishing
+        // into a notification's completion handler.
+        let item = (host: target.host, session: target.session,
+                    pane: AgentNotification.pane(from: userInfo),
+                    text: cmd.text, key: cmd.key)
         if let handler = onAgentAction {
-            handler(item.host, item.session, item.text, item.key)
+            handler(item.host, item.session, item.pane, item.text, item.key)
         } else {
             pending.append(item)
         }

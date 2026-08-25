@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import WatchKit
 
 /// Watch brain. Two private paths to the mesh:
 ///  1. DIRECT — talk to each machine's meshd over the tailnet. Works in the
@@ -39,8 +40,24 @@ final class WatchMeshStore: ObservableObject {
     /// snapshot. See `connectionPhase`.
     var connectionState: ConnectionPhase { connectionPhase(lastContact: lastGoodContact) }
 
+    /// Reader mode asks the daemon to unwrap soft-wrapped lines and strip the
+    /// box-drawing and spinner glyphs a TUI paints (meshd 0.5.0 "captureJoin"), so a
+    /// 21-column screen shows sentences instead of rubble. Off = the capture exactly
+    /// as tmux hands it over, which is what the Raw view wants.
+    @Published var readerOutput = true
+
     struct WatchTarget: Equatable { let host: String; let agent: String; let pane: String? }
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
+
+    /// A session that still looks busy but has said nothing for this long has "gone
+    /// quiet" — distinct from "waiting", where somebody actually asked you something.
+    static let stallSeconds: TimeInterval = 600
+
+    /// The prefix the phone puts on a `.readPhoneClipboard` reply it could not
+    /// fulfil. UIPasteboard is foreground-only on iOS, so a blocked read has to come
+    /// back as a *sentence*: an empty clipboard and an unreadable one are different
+    /// facts, and an empty string would collapse them into the same shrug.
+    static let clipboardErrorPrefix = "mesh-error:"
 
     /// Merged machines: prefer direct when reachable, else the relayed snapshot.
     var snaps: [MachineSnapshot] {
@@ -108,18 +125,64 @@ final class WatchMeshStore: ObservableObject {
         return false
     }
 
+    // MARK: Capabilities
+
+    /// What this machine's daemon said it can do, from whichever path answered.
+    ///
+    /// Every meshd 0.5.0 addition in `MeshClient` is gated on this list, and its
+    /// default is nil = "assume a 0.4.1 daemon". A bare `MeshClient(machine:)`
+    /// therefore silently turns OFF region capture, reader mode and /open even
+    /// against a daemon that has them — which is why nothing in this file constructs
+    /// one directly any more; see `client(for:)`.
+    func capabilities(for host: String) -> [String]? {
+        snaps.first { $0.host == host }?.capabilities
+    }
+
+    func supports(_ capability: String, host: String) -> Bool {
+        capabilities(for: host)?.contains(capability) ?? false
+    }
+
+    /// A client that knows what the daemon on `host` can do. Nil when the machine is
+    /// not in our list — the caller then has only the phone relay, which is the same
+    /// answer it had before.
+    private func client(for host: String) -> MeshClient? {
+        guard let machine = machines.first(where: { $0.host == host }) else { return nil }
+        var client = MeshClient(machine: machine)
+        client.capabilities = capabilities(for: host)
+        return client
+    }
+
+    /// The host name THIS app uses for the machine a daemon (or an APNs payload)
+    /// called `name`. See `machineMatching` for why the two can differ.
+    func knownHost(for name: String?) -> String? {
+        guard let name, !name.isEmpty else { return nil }
+        return machineMatching(name, in: machines)?.host
+    }
+
+    /// How we are reaching this machine — a fact about the MACHINE, never about the
+    /// watch's link to the phone.
+    ///
+    /// The two used to be one string, and the conflation ran both ways: a machine the
+    /// phone had explicitly reported as down read "reconnecting" (as if the fault were
+    /// the watch's), and a live machine we simply had no word about read "offline" (as
+    /// if the Mac were the thing that had gone). Both are the wrong noun, and on a row
+    /// whose only other content is a session count that single word is the whole
+    /// diagnosis. So: if anything has an opinion about the host, report the host; only
+    /// when nothing does is the sentence allowed to be about the link.
     func routeLabel(for host: String) -> String {
         if directReachable(host) { return "direct" }
-        if !shouldTryDirect(host), relayed?.machines.contains(where: { $0.host == host && $0.reachable }) == true {
-            return "via phone"
-        }
-        if relayed?.machines.contains(where: { $0.host == host && $0.reachable }) == true {
-            return connectionState == .offline ? "phone snapshot" : "via phone"
+        if let relayedHost = relayed?.machines.first(where: { $0.host == host }) {
+            if relayedHost.reachable {
+                return connectionState == .offline ? "phone snapshot" : "via phone"
+            }
+            // The phone answered and said this machine is not answering IT. That is a
+            // fact about the Mac, and it stays true whatever the watch link is doing.
+            return connectionState == .offline ? "offline · last known" : "offline"
         }
         switch connectionState {
         case .live, .reconnecting: return "reconnecting"
         case .waiting: return "connecting"
-        case .offline: return "offline"
+        case .offline: return "no link to iPhone"
         }
     }
 
@@ -345,7 +408,13 @@ final class WatchMeshStore: ObservableObject {
                                            agents: agents,
                                            authError: authError,
                                            meshdVersion: health?.meshdVersion,
-                                           capabilities: health?.capabilities)
+                                           capabilities: health?.capabilities,
+                                           // Carried so the wrist wake path has a MAC to
+                                           // aim at and a subnet to aim it into; meshd
+                                           // 0.5.0 reports ipv4/netmask, older ones nil.
+                                           mac: health?.mac,
+                                           ipv4: health?.ipv4,
+                                           netmask: health?.netmask)
                 }
             }
             for await s in group { results.append(s) }
@@ -370,6 +439,52 @@ final class WatchMeshStore: ObservableObject {
         publishGlance()
     }
 
+    // MARK: Per-session status
+
+    /// The newest event this app holds for a (host, session) pair, for daemons that
+    /// send no `status`/`lastEvent*` of their own. `events` arrives oldest-first, so
+    /// the last match is the newest one; host names are matched tolerantly for the
+    /// same reason `sessionsNeedingAttention` does it — the daemon's name for a box
+    /// is not always the name this app stored.
+    func latestEvent(host: String, session: String) -> AgentEvent? {
+        events.last { event in
+            guard let eventHost = event.host, event.session == session else { return false }
+            return hostNamesMatch(eventHost, host)
+        }
+    }
+
+    /// What a session row should say: the daemon's own verdict when it has one
+    /// (meshd 0.5.0 "sessionStatus"), else derived from the newest event we hold.
+    func displayState(of agent: Agent, host: String, now: Date = Date()) -> SessionDisplayState {
+        agent.displayState(latestEvent: latestEvent(host: host, session: agent.name), now: now)
+    }
+
+    /// Sessions that still look busy but have produced nothing for `stallSeconds`.
+    ///
+    /// Deliberately not folded into "Needs you": nobody asked you anything, so there
+    /// is no button to press — but on a long unattended run the difference between
+    /// "still going" and "wedged" is the whole reason to look at your wrist. Sessions
+    /// already listed as waiting are excluded so one agent is never counted twice, and
+    /// a session that has never emitted an event is skipped rather than accused: not
+    /// having spoken yet is not the same as having gone quiet.
+    var stalledSessions: [(host: String, session: String)] {
+        let now = Date()
+        let waiting = Set(needsAttention.map { "\($0.host)\u{1}\($0.session)" })
+        var out: [(host: String, session: String)] = []
+        for snap in snaps where snap.reachable && snap.authError == nil {
+            for agent in snap.agents {
+                if waiting.contains("\(snap.host)\u{1}\(agent.name)") { continue }
+                guard displayState(of: agent, host: snap.host, now: now) == .working else { continue }
+                let event = latestEvent(host: snap.host, session: agent.name)
+                guard let last = parseISO(agent.lastEventISO) ?? parseISO(event?.createdISO) else { continue }
+                if now.timeIntervalSince(last) >= Self.stallSeconds {
+                    out.append((host: snap.host, session: agent.name))
+                }
+            }
+        }
+        return out
+    }
+
     /// Hand the face complications the little they can show. Written after every
     /// refresh, from whichever path answered — the complication runs in another
     /// process and has no way to ask.
@@ -381,6 +496,9 @@ final class WatchMeshStore: ObservableObject {
                                                 risky: $0.risk.isDestructive) },
             machinesUp: reachable.count,
             machinesTotal: machines.count,
+            // Rendered only in the rectangular band, and only when nothing is
+            // waiting — the circular count stays reserved for the actionable number.
+            stalled: stalledSessions.count,
         ))
     }
 
@@ -407,78 +525,247 @@ final class WatchMeshStore: ObservableObject {
     }
 
     private func pollOutput() async {
-        guard let w = watching, directReachable(w.host),
-              let m = machines.first(where: { $0.host == w.host }) else { return }
-        if let out = try? await MeshClient(machine: m).output(agent: w.agent, lines: 60, pane: w.pane) {
+        guard let w = watching, directReachable(w.host), let c = client(for: w.host) else { return }
+        // Reader mode is a *daemon* transform when the daemon has it: join unwraps the
+        // soft-wrapped lines tmux stores, plain strips the box-drawing. Against a
+        // 0.4.1 daemon `supports` is false, the flags never go on the wire, and the
+        // capture comes back byte-identical to today's — the reader view then still
+        // wraps text, it just cannot un-wrap what tmux already broke.
+        let cleaned = readerOutput && c.supports("captureJoin")
+        if let out = try? await c.output(agent: w.agent, lines: 60, pane: w.pane,
+                                         join: cleaned, plain: cleaned) {
             directOutput = out.lines
         }
     }
 
     // MARK: Send — direct if reachable, else via the phone relay.
 
+    /// Turn a relay acknowledgement into something the wrist can feel and read.
+    ///
+    /// The relay used to be fire-and-forget: `WatchLink.send` returns void whether the
+    /// phone took the command, was asleep, or is running a build that cannot decode it.
+    /// On a screen with no console and no second chance, "I pressed Enter and nothing
+    /// visibly happened" is indistinguishable from "Enter went through" — so every
+    /// write now waits for the phone to say so.
+    private func apply(_ ack: WatchLink.Ack, verb: String) {
+        switch ack {
+        case .delivered:
+            lastError = nil
+            WKInterfaceDevice.current().play(.success)
+        case .queued:
+            lastError = "iPhone asleep — \(verb) queued until it wakes"
+            WKInterfaceDevice.current().play(.retry)
+        case .failed(let why):
+            lastError = "\(verb) failed — \(why)"
+            WKInterfaceDevice.current().play(.failure)
+        }
+    }
+
     func send(text: String? = nil, key: String? = nil) {
         guard let w = watching else { return }
-        if directReachable(w.host), let m = machines.first(where: { $0.host == w.host }) {
+        if directReachable(w.host), let c = client(for: w.host) {
             sending = true
             lastError = nil
             Task {
                 do {
-                    try await MeshClient(machine: m).send(agent: w.agent, text: text, key: key, pane: w.pane)
+                    try await c.send(agent: w.agent, text: text, key: key, pane: w.pane)
+                    // No success haptic on this path deliberately. A key chip is
+                    // pressed in runs — ten Downs to scroll a list — and ten buzzes
+                    // for ten keys is not feedback, it is a vibrating watch. The
+                    // direct path answers in well under the 300ms below, so the
+                    // output redrawing IS the confirmation. Failure still buzzes:
+                    // that one is rare and worth interrupting for.
                 } catch {
                     lastError = "send failed"
+                    WKInterfaceDevice.current().play(.failure)
                 }
                 try? await Task.sleep(for: .milliseconds(300))
                 await pollOutput()
                 sending = false
             }
         } else {
-            WatchLink.shared.send(WatchCommand(kind: .agentSend, host: w.host, agent: w.agent, text: text, key: key, pane: w.pane))
+            sending = true
+            lastError = nil
+            Task {
+                // Not queued: a keystroke delivered ten minutes late lands on whatever
+                // is on screen then, which is worse than losing it.
+                let ack = await WatchLink.shared.acknowledge(
+                    WatchCommand(kind: .agentSend, host: w.host, agent: w.agent,
+                                 text: text, key: key, pane: w.pane))
+                apply(ack, verb: "send")
+                await pollOutput()
+                sending = false
+            }
         }
     }
 
     /// Answer an agent from a notification button. The host comes from the APNs
     /// payload, so it is the name the *daemon* uses; our stored name may be the key
     /// from another machine's hosts.json, hence the tolerant match.
-    func respondToAgent(host: String, session: String, text: String?, key: String?) {
+    ///
+    /// `pane` is the exact `session:window.pane` the event named, when it named one,
+    /// so Approve lands in the agent's pane rather than whichever pane the mux session
+    /// last had focused.
+    func respondToAgent(host: String, session: String, pane: String? = nil,
+                        text: String?, key: String?) {
         let match = machineMatching(host, in: machines)
-        if let m = match, directReachable(m.host) {
+        if let m = match, directReachable(m.host), let c = client(for: m.host) {
             lastError = nil
             Task {
-                do { try await MeshClient(machine: m).send(agent: session, text: text, key: key) }
-                catch { lastError = "reply failed" }
+                do {
+                    try await c.send(agent: session, text: text, key: key, pane: pane)
+                    WKInterfaceDevice.current().play(.success)
+                } catch {
+                    lastError = "reply failed"
+                    WKInterfaceDevice.current().play(.failure)
+                }
                 await refresh()
             }
         } else {
             // Off the tailnet, or the machine is not in our list yet: the phone has both.
-            WatchLink.shared.send(WatchCommand(kind: .agentSend, host: match?.host ?? host,
-                                               agent: session, text: text, key: key))
+            // Queued when the phone is asleep — an answer that arrives late still beats
+            // an agent left blocked, and `apply` says out loud that it is only queued.
+            lastError = nil
+            Task {
+                let ack = await WatchLink.shared.acknowledge(
+                    WatchCommand(kind: .agentSend, host: match?.host ?? host,
+                                 agent: session, text: text, key: key, pane: pane),
+                    queueWhenUnreachable: true)
+                apply(ack, verb: "reply")
+                await refresh()
+            }
         }
     }
 
     /// Send `continue` to a limit-pinned session (resume-at-reset from the wrist).
     func sendToPinned(_ pin: PinnedLimitSession) {
-        if directReachable(pin.host), let m = machines.first(where: { $0.host == pin.host }) {
+        if directReachable(pin.host), let c = client(for: pin.host) {
             lastError = nil
             Task {
                 do {
-                    try await MeshClient(machine: m).send(agent: pin.sessionName, text: "continue\n")
+                    try await c.send(agent: pin.sessionName, text: "continue\n")
+                    WKInterfaceDevice.current().play(.success)
                 } catch {
                     lastError = "resume failed"
+                    WKInterfaceDevice.current().play(.failure)
                 }
             }
         } else {
-            WatchLink.shared.send(WatchCommand(kind: .agentSend, host: pin.host, agent: pin.sessionName, text: "continue\n", key: nil))
+            lastError = nil
+            Task {
+                let ack = await WatchLink.shared.acknowledge(
+                    WatchCommand(kind: .agentSend, host: pin.host, agent: pin.sessionName,
+                                 text: "continue\n", key: nil),
+                    queueWhenUnreachable: true)
+                apply(ack, verb: "resume")
+            }
         }
     }
+
+    // MARK: The iPhone's own clipboard
+
+    /// Type whatever is on the iPhone's pasteboard into the watched session.
+    ///
+    /// This is the one thing a watch genuinely cannot do for itself: there is no
+    /// scribble surface wide enough for a URL, an error string or an API key, and the
+    /// text is nearly always already on the phone that is two feet away. UIPasteboard
+    /// is foreground-only on iOS, so the failure is real and has to be a sentence —
+    /// never an empty string, which would be indistinguishable from an empty clipboard.
+    ///
+    /// Text only, no newline: it lands in the prompt for you to read before you send it.
+    @discardableResult
+    func insertPhoneClipboard() async -> Bool {
+        guard watching != nil else { return false }
+        lastError = nil
+        let ack = await WatchLink.shared.acknowledge(
+            WatchCommand(kind: .readPhoneClipboard, host: nil, agent: nil, text: nil, key: nil))
+        func refuse(_ why: String) -> Bool {
+            lastError = why
+            WKInterfaceDevice.current().play(.failure)
+            return false
+        }
+        switch ack {
+        case .failed(let why):
+            return refuse("clipboard — \(why)")
+        case .queued:
+            return refuse("open LeSearch Mesh on your iPhone once, then try again")
+        case .delivered(let data):
+            guard let data, let text = try? JSONDecoder().decode(String.self, from: data) else {
+                // No payload: either an older phone build that does not know this
+                // command, or one that could not read its own pasteboard from the
+                // background. Both have the same fix.
+                return refuse("open LeSearch Mesh on your iPhone once — it can only read its clipboard while open")
+            }
+            if text.hasPrefix(Self.clipboardErrorPrefix) {
+                let why = String(text.dropFirst(Self.clipboardErrorPrefix.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return refuse(why.isEmpty ? "the iPhone could not read its clipboard" : why)
+            }
+            guard !text.isEmpty else { return refuse("the iPhone's clipboard is empty") }
+            send(text: text)
+            return true
+        }
+    }
+
+    // MARK: Open a link on the machine
+
+    /// Whether this machine's daemon has the /open route at all (meshd 0.5.0+).
+    /// A button that is honestly absent beats one that 404s into "network error".
+    func canOpenOnMac(host: String) -> Bool { supports("openUrl", host: host) }
+
+    /// Open a link in the machine's own browser. http/https only — `MeshClient`
+    /// checks again, and so does the daemon.
+    func openOnMac(host: String, url: URL) {
+        guard canOpenOnMac(host: host) else {
+            lastError = "\(shortHostName(host)) needs meshd 0.5.0 to open links"
+            WKInterfaceDevice.current().play(.failure)
+            return
+        }
+        if directReachable(host), let c = client(for: host) {
+            lastError = nil
+            Task {
+                do {
+                    try await c.openURL(url)
+                    WKInterfaceDevice.current().play(.success)
+                } catch {
+                    lastError = "could not open that link on \(shortHostName(host))"
+                    WKInterfaceDevice.current().play(.failure)
+                }
+            }
+        } else {
+            lastError = nil
+            Task {
+                let ack = await WatchLink.shared.acknowledge(
+                    WatchCommand(kind: .openURL, host: host, agent: nil, text: nil, key: nil,
+                                 url: url.absoluteString))
+                apply(ack, verb: "open link")
+            }
+        }
+    }
+
+    private func shortHostName(_ host: String) -> String {
+        host.split(separator: ".").first.map(String.init) ?? host
+    }
+
+    /// The PTY a wrist-launched session gets.
+    ///
+    /// The daemon's default is 80×24, and a watch draws about 21 monospaced columns —
+    /// so every logical line arrives pre-broken into four, and no amount of client-side
+    /// reflow can put it back together. Asking for a narrow terminal in the first place
+    /// is the only fix that reaches the source. Sent unconditionally: a daemon that
+    /// does not know these fields ignores them and creates the session at its default.
+    static let wristCols = 60
+    static let wristRows = 30
 
     @discardableResult
     func newSession(host: String, cmd: String?, cwd: String? = nil, initialText: String? = nil) -> String {
         let name = watchSessionName(cmd)
-        if directReachable(host), let m = machines.first(where: { $0.host == host }) {
+        if directReachable(host), let c = client(for: host) {
             lastError = nil
             Task {
                 do {
-                    try await MeshClient(machine: m).newSession(name: name, cmd: cmd, cwd: cwd, initialText: initialText)
+                    try await c.newSession(name: name, cmd: cmd, cwd: cwd, initialText: initialText,
+                                           cols: Self.wristCols, rows: Self.wristRows)
                     watch(host: host, agent: name)
                 } catch {
                     lastError = "new session failed"
@@ -486,7 +773,9 @@ final class WatchMeshStore: ObservableObject {
                 await refresh()
             }
         } else {
-            WatchLink.shared.send(WatchCommand(kind: .newAgent, host: host, agent: nil, text: name, key: nil, cmd: cmd, cwd: cwd, initialText: initialText))
+            WatchLink.shared.send(WatchCommand(kind: .newAgent, host: host, agent: nil, text: name, key: nil,
+                                               cmd: cmd, cwd: cwd, initialText: initialText,
+                                               cols: Self.wristCols, rows: Self.wristRows))
             watch(host: host, agent: name)
         }
         return name
@@ -513,24 +802,35 @@ final class WatchMeshStore: ObservableObject {
             .filter { $0 != "/" && seen.insert($0).inserted }
     }
 
-    func requestScreen(host: String, display: Int? = nil) {
+    /// Fetch a still of the Mac's screen. `rect` (meshd 0.5.0 "screenRegion") asks for
+    /// just the part being looked at, captured at native pixels — which is what makes
+    /// zooming reveal detail instead of magnifying a downsample. `MeshClient` drops it
+    /// against a daemon that never grew the parameter, so the frame is simply full.
+    func requestScreen(host: String, display: Int? = nil, rect: CGRect? = nil) {
         screenHost = host
         screenError = nil
-        if directReachable(host), let m = machines.first(where: { $0.host == host }) {
+        if directReachable(host), let c = client(for: host) {
             Task {
                 do {
                     // Screen peek is a still you study, not a live pad, so it is worth
                     // more than the 480px default: at 480 a Mac display is a blur.
-                    screenJPEGData = try await MeshClient(machine: m).screenImage(display: display, width: 960)
+                    screenJPEGData = try await c.screenImage(display: display, width: 960, rect: rect)
                     screenUpdatedISO = ISO8601DateFormatter().string(from: Date())
+                    screenError = nil
                 } catch {
-                    screenError = "screen unavailable"
-                    WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil, display: display))
+                    screenError = "\(shortHostName(host)) did not send a screen — asking the iPhone"
+                    WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil,
+                                                       display: display,
+                                                       rect: rect.map { [Double($0.origin.x), Double($0.origin.y),
+                                                                         Double($0.size.width), Double($0.size.height)] }))
                 }
             }
         } else {
             screenJPEGData = nil
-            WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil, display: display))
+            WatchLink.shared.send(WatchCommand(kind: .screenPeek, host: host, agent: nil, text: nil, key: nil,
+                                               display: display,
+                                               rect: rect.map { [Double($0.origin.x), Double($0.origin.y),
+                                                                 Double($0.size.width), Double($0.size.height)] }))
         }
     }
 
@@ -545,11 +845,11 @@ final class WatchMeshStore: ObservableObject {
     }
 
     func newPane(host: String, agent: String) {
-        if directReachable(host), let m = machines.first(where: { $0.host == host }) {
+        if directReachable(host), let c = client(for: host) {
             lastError = nil
             Task {
                 do {
-                    try await MeshClient(machine: m).newPane(agent: agent)
+                    try await c.newPane(agent: agent)
                 } catch {
                     lastError = "new pane failed"
                 }
@@ -562,11 +862,11 @@ final class WatchMeshStore: ObservableObject {
 
     func killSession(host: String, agent: String) {
         stopWatching()
-        if directReachable(host), let m = machines.first(where: { $0.host == host }) {
+        if directReachable(host), let c = client(for: host) {
             lastError = nil
             Task {
                 do {
-                    try await MeshClient(machine: m).kill(agent: agent)
+                    try await c.kill(agent: agent)
                 } catch {
                     lastError = "kill failed"
                 }
@@ -581,11 +881,11 @@ final class WatchMeshStore: ObservableObject {
         if watching?.pane == pane {
             watching = WatchTarget(host: host, agent: agent, pane: nil)
         }
-        if directReachable(host), let m = machines.first(where: { $0.host == host }) {
+        if directReachable(host), let c = client(for: host) {
             lastError = nil
             Task {
                 do {
-                    try await MeshClient(machine: m).killPane(agent: agent, paneId: pane)
+                    try await c.killPane(agent: agent, paneId: pane)
                 } catch {
                     lastError = "kill pane failed"
                 }
