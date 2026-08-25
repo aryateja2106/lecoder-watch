@@ -44,7 +44,15 @@ final class WatchMeshStore: ObservableObject {
     /// box-drawing and spinner glyphs a TUI paints (meshd 0.5.0 "captureJoin"), so a
     /// 21-column screen shows sentences instead of rubble. Off = the capture exactly
     /// as tmux hands it over, which is what the Raw view wants.
-    @Published var readerOutput = true
+    @Published var readerOutput = true {
+        didSet {
+            // Tell the phone too, or toggling Reader changes only the direct route and
+            // the relayed lines keep arriving in the other shape.
+            guard readerOutput != oldValue, let t = watching else { return }
+            WatchLink.shared.send(WatchCommand(kind: .agentOutput, host: t.host, agent: t.agent,
+                                               text: nil, key: nil, pane: t.pane, reader: readerOutput))
+        }
+    }
 
     struct WatchTarget: Equatable { let host: String; let agent: String; let pane: String? }
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
@@ -57,7 +65,7 @@ final class WatchMeshStore: ObservableObject {
     /// fulfil. UIPasteboard is foreground-only on iOS, so a blocked read has to come
     /// back as a *sentence*: an empty clipboard and an unreadable one are different
     /// facts, and an empty string would collapse them into the same shrug.
-    static let clipboardErrorPrefix = "mesh-error:"
+    static let clipboardErrorPrefix = RelayReply.errorPrefix
 
     /// Merged machines: prefer direct when reachable, else the relayed snapshot.
     var snaps: [MachineSnapshot] {
@@ -508,7 +516,8 @@ final class WatchMeshStore: ObservableObject {
         watching = WatchTarget(host: host, agent: agent, pane: pane)
         directOutput = []
         // Ask the phone to relay this agent's output too (used if direct fails).
-        WatchLink.shared.send(WatchCommand(kind: .agentOutput, host: host, agent: agent, text: nil, key: nil, pane: pane))
+        WatchLink.shared.send(WatchCommand(kind: .agentOutput, host: host, agent: agent, text: nil, key: nil,
+                                           pane: pane, reader: readerOutput))
         outputTask?.cancel()
         outputTask = Task { [weak self] in
             while !Task.isCancelled {

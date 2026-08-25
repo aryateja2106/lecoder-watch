@@ -392,7 +392,12 @@ struct MeshClient {
     /// session an update token belongs to; start tokens are session-less.
     func uploadLAToken(kind: LATokenKind, token: String, session: String? = nil) async throws {
         guard supports("laPush") else { throw MeshError.unsupported("laPush") }
-        var payload: [String: String] = ["kind": kind.rawValue, "token": token]
+        // Same environment the device token is registered with (MeshClient.registerPush).
+        // Omitting it made the daemon default to sandbox, so a TestFlight build's Live
+        // Activity push went to the wrong APNs gateway and was rejected.
+        var payload: [String: String] = [
+            "kind": kind.rawValue, "token": token, "env": APNsEnvironment.current,
+        ]
         if let session, !session.isEmpty { payload["session"] = session }
         let body = try JSONSerialization.data(withJSONObject: payload)
         _ = try await request("/la/token", method: "POST", body: body)

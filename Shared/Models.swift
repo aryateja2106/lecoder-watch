@@ -994,6 +994,18 @@ func normalizedPreviewPoint(tap: CGPoint, container: CGSize, imageAspect: Double
 
 // MARK: - Watch -> Phone command
 
+/// Replies to a relayed read are encoded as a bare `String`. A failure travels as
+/// that same string, prefixed — the wrist has no other channel to explain itself
+/// with. Both sides read this constant so the two halves cannot drift again: they
+/// already did once, and a phone encoding `["text": …]` against a watch decoding
+/// `String` fails identically to having no clipboard at all.
+enum RelayReply {
+    static let errorPrefix = "mesh-error:"
+
+    /// The failure form of a relayed read.
+    static func failure(_ why: String) -> String { errorPrefix + " " + why }
+}
+
 enum WatchCommandKind: String, Codable {
     case refresh
     case agentSend
@@ -1056,6 +1068,11 @@ struct WatchCommand: Codable {
     var url: String? = nil
     /// The directory an `fsList` command lists; nil = the machine's home.
     var path: String? = nil
+    /// Whether the watch is in Reader mode for an `agentOutput` relay. The relay is
+    /// the normal route for a watch that is not on the tailnet, so without this the
+    /// same session reads wrapped one way and unwrapped the other depending on how
+    /// it was reached. nil = an older watch build; the phone keeps the plain capture.
+    var reader: Bool? = nil
 }
 
 // MARK: - Tiny local phrase mapper

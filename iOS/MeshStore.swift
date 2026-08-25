@@ -51,6 +51,9 @@ final class MeshStore: ObservableObject {
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
     private var watchedAgent: String?
+    /// Mirrors the watch's Reader toggle so a relayed capture reads the same way its
+    /// direct-route twin does.
+    private var watchedReader = false
     private var watchedPane: String?
     private var watchedScreenHost: String?
     private var watchedScreenDisplay: Int?
@@ -70,6 +73,8 @@ final class MeshStore: ObservableObject {
     /// is then never offered again until it rotates. A remembered capability list is
     /// stale at worst: the first poll of the launch corrects it either way.
     private var capabilitiesByHost: [String: [String]] = [:]
+    /// Live Activity tokens are offered once per launch, after the first poll.
+    private var hasOfferedLATokensThisLaunch = false
     /// MAC + subnet per host, remembered from /health while the machine was awake.
     private(set) var netIdentityByHost: [String: MachineNetIdentity] = [:]
     /// Last poll where a host actually answered, so a missed poll degrades to "last
@@ -418,6 +423,16 @@ final class MeshStore: ObservableObject {
         if identitiesChanged { saveNetIdentities() }
         if capabilitiesChanged { saveCapabilities() }
 
+        // ActivityKit hands over the push-to-start token within moments of launch —
+        // usually before the first poll, when we do not yet know whether any machine
+        // can accept it, so the upload is refused and never retried. Offer them again
+        // once per launch as soon as we have actually heard from the fleet, or an
+        // upgrading user registers nothing until they happen to re-pair.
+        if !hasOfferedLATokensThisLaunch, !capabilitiesByHost.isEmpty {
+            hasOfferedLATokensThisLaunch = true
+            await LiveActivityController.shared.resendTokens()
+        }
+
         var usage: UsageSnapshot?
         for machine in targets {
             guard let fetched = try? await client(for: machine).usage(),
@@ -426,24 +441,29 @@ final class MeshStore: ObservableObject {
             break
         }
 
-        // Relay live output for whatever agent the watch is watching. Deliberately
-        // still the plain capture: `join`/`plain` are the watch's own reader-mode call
-        // to make, and the relayed lines have to match what the watch's direct path
-        // produces or the same session reads two different ways depending on the route.
+        // Relay live output for whatever agent the watch is watching, in the shape the
+        // watch is currently displaying. The relay is the normal route for a watch that
+        // is not on the tailnet, so sending the plain capture regardless meant Reader
+        // mode did half its job exactly where it was needed most. MeshClient drops the
+        // flags against a daemon without "captureJoin", which is the old behavior.
         var watchedOutput: [String]?
         if let host = watchedHost, let agent = watchedAgent,
            let m = targets.first(where: { $0.host == host }) {
-            watchedOutput = (try? await client(for: m).output(agent: agent, lines: 60, pane: watchedPane))?.lines
+            watchedOutput = (try? await client(for: m).output(agent: agent, lines: 60, pane: watchedPane,
+                                                              join: watchedReader, plain: watchedReader))?.lines
         }
         var screenJPEGData: Data?
         var screenError: String?
         if let host = watchedScreenHost,
            let m = targets.first(where: { $0.host == host }) {
             do {
-                // A phone screen is ~390 points at 3x, so 480px was soft even before
-                // anyone zoomed. 1400 is legible and still about 270KB.
+                // 1400px is right for the phone's own viewer at ~270KB — but this frame
+                // is about to ride a WatchConnectivity message, and those are capped at
+                // 262,144 bytes. Over the cap the send throws, PhoneConnectivity swallows
+                // it, and the wrist just shows nothing forever. The watch screen is 184
+                // points wide, so 600 is already generous.
                 screenJPEGData = try await client(for: m).screenImage(display: watchedScreenDisplay,
-                                                                      width: watchedScreenWidth ?? 1400,
+                                                                      width: watchedScreenWidth ?? 600,
                                                                       rect: watchedScreenRect,
                                                                       quality: watchedScreenQuality)
             } catch {
@@ -900,6 +920,7 @@ final class MeshStore: ObservableObject {
             watchedHost = command.host
             watchedAgent = command.agent
             watchedPane = command.pane
+            watchedReader = command.reader ?? false
             await refresh()
         case .screenPeek:
             watchedScreenHost = command.host
@@ -972,10 +993,10 @@ final class MeshStore: ObservableObject {
             // "you copied nothing", which is a lie about the user's own clipboard.
             // Say why instead.
             guard UIApplication.shared.applicationState == .active else {
-                return try? JSONEncoder().encode(
-                    ["error": "Open LeSearch Mesh on your iPhone first — iOS only shares the clipboard with an app you're looking at."])
+                return try? JSONEncoder().encode(RelayReply.failure(
+                    "open LeSearch Mesh on your iPhone — iOS only shares the clipboard with an app you're looking at"))
             }
-            return try? JSONEncoder().encode(["text": UIPasteboard.general.string ?? ""])
+            return try? JSONEncoder().encode(UIPasteboard.general.string ?? "")
         case .openURL:
             // Validated here as well as in MeshClient and again in the daemon: a
             // `file:` or custom scheme opened on someone's Mac is an attack surface,

@@ -760,7 +760,7 @@ struct SessionsView: View {
                     helpLine("Open on Mac", "Appears when an agent has printed a link. Opens it in the Mac's own browser.")
                     helpLine("Key bar", "Enter, arrows, Tab, Escape, Page up/down, Home, End, Backspace and Ctrl-D — enough to drive a full-screen program. Text size lives under the … chip at the end.")
                     helpLine("Interrupt", "Ctrl-C, to stop whatever is running.")
-                    helpLine("Screen peek", "A picture of the Mac's screen. Turn the Crown to zoom in and it re-fetches sharper.")
+                    helpLine("Screen peek", "A still picture of the Mac's screen, with a Refresh button. To zoom into it, open Control Mac and tap the expand chip — that is the screen you can move around.")
                     helpLine("Control Mac", "Move the pointer and click, like a trackpad. The expand chip on the preview opens Inspect: the screen full size, Crown to move down the page, tap the sides to move across, tap the middle to come back.")
                 }
                 .padding(.horizontal, 4)

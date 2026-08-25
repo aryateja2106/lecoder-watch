@@ -359,6 +359,7 @@ export async function pushLiveActivity(
     if (!targetSet.has(tok)) { keep.push(tok); continue; }
     let r = await sendOne(tok, payload, laOpts);
     // Same environment-flip forgiveness the alert lane earned the hard way.
+    let triedBothEnvs = false;
     if (!r.ok && isWrongEnvironment(r)) {
       const flipped: LAToken = { ...tok, env: tok.env === "prod" ? "dev" : "prod" };
       const retry = await sendOne(flipped, payload, laOpts);
@@ -368,10 +369,19 @@ export async function pushLiveActivity(
         changed = true;
         continue;
       }
+      triedBothEnvs = true;
       r = retry;
     }
     if (r.ok) sent++;
-    if (r.status === 410 || r.reason === "BadDeviceToken" || r.reason === "Unregistered") {
+    // Forget a token only when the device is definitively gone. Anything else —
+    // a malformed payload, a topic we got wrong, a gateway having a bad day — is
+    // our fault, and dropping the token would silently end Live Activities for
+    // that phone until it relaunches and registers again.
+    const deviceIsGone =
+      r.status === 410 ||
+      r.reason === "Unregistered" ||
+      (r.reason === "BadDeviceToken" && triedBothEnvs);
+    if (deviceIsGone) {
       changed = true;
       continue;
     }

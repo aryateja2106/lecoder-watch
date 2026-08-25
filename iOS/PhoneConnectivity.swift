@@ -11,6 +11,11 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     /// Returns optional payload data for reads the watch is waiting on.
     var commandHandler: ((WatchCommand) async -> Data?)?
 
+    /// Why the last snapshot did not reach the watch, or nil if it did. Read by the
+    /// phone's own diagnostics — a silent failure here looks exactly like a watch
+    /// that has gone quiet.
+    @Published private(set) var lastPushFailure: String?
+
     private override init() {
         super.init()
         if WCSession.isSupported() {
@@ -27,8 +32,13 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
         do {
             let data = try JSONEncoder().encode(snapshot)
             try session.updateApplicationContext(["snapshot": data])
+            lastPushFailure = nil
         } catch {
-            // updateApplicationContext throws if called too fast; safe to drop — next tick replaces it.
+            // Called too fast is genuinely safe to drop — the next tick replaces it.
+            // Too LARGE is not: every later snapshot carrying that screenshot fails the
+            // same way, and the watch sits on stale data with no idea why. Keep the
+            // reason so a screen that is not arriving can say something true.
+            lastPushFailure = "\(error.localizedDescription) (\((try? JSONEncoder().encode(snapshot))?.count ?? 0) bytes)"
         }
     }
 

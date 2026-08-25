@@ -229,7 +229,17 @@ grep -q 'Insert iPhone clipboard' "$WATCH_VIEWS" \
   || { bad "no 'Insert iPhone clipboard' affordance in the agent actions"; ok=0; }
 grep -q 'clipboardErrorPrefix' "$WATCH_STORE" \
   || { bad "the phone's clipboard error marker is not handled — a blocked read would look like an empty clipboard"; ok=0; }
-[ "$ok" = "1" ] && note "the iPhone's clipboard can be typed into a session, and its refusal is reported"
+# The three greps above all passed while the feature was completely dead: the
+# phone encoded a dictionary and the watch decoded a String, so every tap said
+# "open the app once" even with the app open. Assert the shapes agree, not that
+# the identifiers exist.
+grep -q 'JSONEncoder().encode(UIPasteboard.general.string ?? "")' "$ROOT/iOS/MeshStore.swift" \
+  || { bad "the phone no longer encodes its clipboard as a bare String — the watch decodes String and would refuse every read"; ok=0; }
+grep -q 'JSONEncoder().encode(RelayReply.failure(' "$ROOT/iOS/MeshStore.swift" \
+  || { bad "the phone's clipboard refusal is not a prefixed String — the watch cannot tell the user why"; ok=0; }
+grep -q 'decode(String.self' "$WATCH_STORE" \
+  || { bad "the watch no longer decodes the relayed clipboard as a String — check it still matches what the phone encodes"; ok=0; }
+[ "$ok" = "1" ] && note "the iPhone's clipboard can be typed into a session, and both sides agree on the wire shape"
 
 # ---- 14. notification buttons route through the same send path ----
 ok=1
