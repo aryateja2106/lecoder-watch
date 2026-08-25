@@ -519,19 +519,30 @@ struct OpenOnMacButton: View {
     @EnvironmentObject var store: WatchMeshStore
     let host: String?
     let url: URL?
+    @State private var confirming = false
 
     var body: some View {
         if let host, let url, store.canOpenOnMac(host: host) {
             Button {
-                store.openOnMac(host: host, url: url)
+                confirming = true
             } label: {
-                Label("Open on Mac", systemImage: "safari")
+                // The link is scraped from whatever the agent printed, and this opens it
+                // in the Mac's logged-in browser. Name the destination on the button —
+                // "Open on Mac" alone asks the user to trust text they never saw. The
+                // iPhone does the same thing at TerminalView's link row.
+                Label("Open \(url.host ?? "link")", systemImage: "safari")
                     .font(.caption2)
                     .frame(minHeight: WatchTouch.minHeight)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .accessibilityHint(url.absoluteString)
+            .confirmationDialog("Open on \(host)?", isPresented: $confirming, titleVisibility: .visible) {
+                Button("Open") { store.openOnMac(host: host, url: url) }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text(url.absoluteString)
+            }
         }
     }
 }

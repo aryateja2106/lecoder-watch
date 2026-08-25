@@ -163,7 +163,8 @@ const LINUX_SYSTEM: Record<string, string[]> = {
 /// loginctl that is not there (or a systemctl that wants polkit auth) reads as the
 /// failure it is instead of a silent "ok".
 export async function linuxSystemAction(action: string) {
-  const cmd = LINUX_SYSTEM[action];
+  // hasOwn, not a bare lookup — see the note in input.ts systemAction().
+  const cmd = Object.hasOwn(LINUX_SYSTEM, action) ? LINUX_SYSTEM[action] : undefined;
   if (!cmd) return { ok: false, error: `unsupported on linux: ${action}` };
   const r = await run(cmd);
   return {

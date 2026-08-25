@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import WebKit
 import ActivityKit
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject var store: MeshStore
@@ -1076,7 +1077,14 @@ private struct SettingsTab: View {
                             SecureField("token", text: $m.token)
                             HStack {
                                 Button {
-                                    UIPasteboard.general.string = m.token
+                                    // This machine's bearer token. A plain pasteboard write
+                                    // syncs to every device on the Apple ID via Universal
+                                    // Clipboard and sits there until something replaces it.
+                                    // Keep it on this device and let it expire.
+                                    UIPasteboard.general.setItems(
+                                        [[UTType.plainText.identifier: m.token]],
+                                        options: [.localOnly: true,
+                                                  .expirationDate: Date().addingTimeInterval(120)])
                                 } label: {
                                     Label("Copy token", systemImage: "key")
                                 }
@@ -1389,13 +1397,21 @@ private struct ControlWebView: UIViewRepresentable {
         config.allowsInlineMediaPlayback = true
         if let bearer {
             // The header only covers the main document; the page's own fetches need
-            // the token too, so hand it over before any page script runs.
-            let encoded = bearer.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "\"", with: "")
+            // the token too, so hand it over before any page script runs. Encoded as
+            // JSON rather than by stripping characters — stripping changes the token
+            // silently, and a quote that slipped through would be script injection.
+            let literal = String(data: (try? JSONSerialization.data(withJSONObject: [bearer], options: []))
+                                 ?? Data("[\"\"]".utf8), encoding: .utf8) ?? "[\"\"]"
             config.userContentController.addUserScript(
-                WKUserScript(source: "window.MESH_TOKEN = \"\(encoded)\";",
+                WKUserScript(source: "window.MESH_TOKEN = \(literal)[0];",
                              injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         let web = WKWebView(frame: .zero, configuration: config)
+        // This webview carries a bearer token in page scope, so it may only ever be on
+        // the daemon that issued it. Without this a link in daemon-served HTML could
+        // navigate somewhere else and the token would be injected into that page too.
+        context.coordinator.allowedOrigin = ControlWebView.origin(of: url)
+        web.navigationDelegate = context.coordinator
         web.allowsBackForwardNavigationGestures = true
         web.scrollView.minimumZoomScale = 0.25
         web.scrollView.maximumZoomScale = 6
@@ -1416,8 +1432,33 @@ private struct ControlWebView: UIViewRepresentable {
         Coordinator()
     }
 
-    final class Coordinator {
+    /// scheme://host:port — what "the same machine" means for this webview.
+    static func origin(of url: URL) -> String {
+        let scheme = url.scheme?.lowercased() ?? ""
+        let host = url.host?.lowercased() ?? ""
+        let port = url.port.map(String.init) ?? ""
+        return "\(scheme)://\(host):\(port)"
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
         var lastReloadToken: UUID?
+        var allowedOrigin: String?
+
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
+            // about:blank and the like carry no token risk and are how WebKit bootstraps.
+            guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+                return decisionHandler(.allow)
+            }
+            guard ControlWebView.origin(of: url) == allowedOrigin else {
+                // Off the daemon: hand it to Safari, where no token of ours exists.
+                UIApplication.shared.open(url)
+                return decisionHandler(.cancel)
+            }
+            decisionHandler(.allow)
+        }
     }
 }
 

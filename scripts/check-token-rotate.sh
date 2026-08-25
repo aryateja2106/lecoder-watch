@@ -105,6 +105,12 @@ cp "$MH/token" "$TH/old-token"
 printf '{"default":"seed","hosts":{"seed":{"ip":"10.0.0.9","port":8899,"token":"seed-host-token"}}}\n' > "$MH/hosts.json"
 cp "$MH/hosts.json" "$TH/hosts.expected"
 
+# Devices registered to receive pushes from this machine. Rotating is what the privacy
+# page calls revoking, and it only means that if these stop receiving too — the token
+# file locks a phone out of the API but a push token keeps delivering agent output.
+printf '[{"token":"aa","env":"prod"}]\n' > "$MH/push-tokens.json"
+printf '[{"kind":"start","token":"bb","env":"prod"}]\n' > "$MH/la-tokens.json"
+
 # Supervisor definitions in install.sh's exact shape. launchd and systemd replay their
 # own copy of MESHD_TOKEN on every start — that is how they keep it out of `ps` — so a
 # rotation that only rewrites the token file brings the daemon back on the OLD secret.
@@ -184,6 +190,12 @@ cmp -s "$BACKUP" "$TH/old-token" || fail "the backup does not hold the previous 
 
 cmp -s "$MH/hosts.json" "$TH/hosts.expected" || fail "hosts.json was modified by a token rotation"
 
+# Revocation has to mean revoked in both directions.
+for store in push-tokens.json la-tokens.json; do
+  [ -e "$MH/$store" ] && fail "$store survived a rotation — a revoked device still gets pushes"
+  ls "$MH/$store".bak-* >/dev/null 2>&1 || fail "$store was neither forgotten nor backed up"
+done
+
 # The supervisors' own copies must move too, or the next boot resurrects the leaked token.
 for pair in "$PLIST:launchd plist" "$UNIT:systemd unit"; do
   f="${pair%%:*}"; what="${pair#*:}"
@@ -242,4 +254,4 @@ if grep -Fq 'ss_flat' "$INSTALL"; then
   fail "install.sh still flattens the environment onto the tmux command line (ss_flat) — ps exposes MESHD_TOKEN"
 fi
 
-echo "check-token-rotate: OK (file+backup+modes, state preserved, daemon restarted and now serves the NEW token, no token in any argv)"
+echo "check-token-rotate: OK (file+backup+modes, hosts preserved, push/LA devices forgotten, daemon restarted on the NEW token, no token in any argv)"

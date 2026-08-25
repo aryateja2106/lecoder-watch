@@ -878,6 +878,24 @@ async function cmdTokenRotateLocal(bools: Set<string>, cfg: Config) {
   say(`  new token written to ${TOKEN_FILE} (0600)`);
   say(backup ? `  previous token kept at ${backup} (0600)` : "  no previous token to back up");
 
+  // Rotating locks a phone out of the HTTP API, but a device it registered earlier
+  // keeps receiving pushes — machine name, session name, and the line an agent is
+  // asking about — because those tokens live in their own files and nothing here
+  // touched them. "Revoked" has to mean revoked in both directions.
+  const forgotten: string[] = [];
+  for (const [label, file] of [["push", "push-tokens.json"], ["Live Activity", "la-tokens.json"]] as const) {
+    const path = join(MESH_HOME, file);
+    if (!existsSync(path)) continue;
+    const kept = join(MESH_HOME, `${file}.bak-${utcStamp()}`);
+    renameSync(path, kept);
+    chmodSync(kept, 0o600);
+    forgotten.push(label);
+  }
+  if (forgotten.length) {
+    say(`  forgot every registered ${forgotten.join(" and ")} device — they stop receiving anything`);
+    say("  your own phone re-registers the next time you open the app and pair");
+  }
+
   const supervisors = setSupervisorToken(token);
   if (supervisors.length) say(`  rewrote the ${supervisors.join(" + ")} service definition`);
 

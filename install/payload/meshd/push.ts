@@ -4,7 +4,7 @@
 // token to /push/register on every host it knows. Delivery uses system curl --http2
 // (APNs is HTTP/2-only; curl is everywhere meshd runs). JWT is ES256 via crypto.subtle.
 import os from "node:os";
-import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, chmod } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -61,6 +61,13 @@ async function jwt(): Promise<string | null> {
 }
 
 // ---------- token store ----------
+/// Re-assert 0600 on a file and 0700 on ~/.mesh. Both are no-ops the first time and
+/// the whole point every time after: Node applies a write's `mode` on creation only.
+async function harden(path: string) {
+  await chmod(path, 0o600).catch(() => {});
+  await chmod(MESH_DIR, 0o700).catch(() => {});
+}
+
 async function readTokens(): Promise<DeviceToken[]> {
   const raw = await readFile(TOKENS_PATH, "utf8").catch(() => "[]");
   try { return JSON.parse(raw) as DeviceToken[]; } catch { return []; }
@@ -68,6 +75,9 @@ async function readTokens(): Promise<DeviceToken[]> {
 async function writeTokens(tokens: DeviceToken[]) {
   await mkdir(MESH_DIR, { recursive: true, mode: 0o700 });
   await writeFile(TOKENS_PATH, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+  // `mode` applies only when the file is created, so a store that was ever written
+  // loose stays loose forever. These rows are device tokens: say it every time.
+  await harden(TOKENS_PATH);
 }
 
 /// LA tokens live in memory (hot path) and in a JSON file beside push-tokens.json
@@ -86,6 +96,7 @@ async function writeLaTokens(tokens: LAToken[]) {
   laCache = tokens;
   await mkdir(MESH_DIR, { recursive: true, mode: 0o700 });
   await writeFile(LA_TOKENS_PATH, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+  await harden(LA_TOKENS_PATH);
 }
 
 // ---------- one banner per session ----------
@@ -422,6 +433,10 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
     // the alphabet and a sane range instead of pinning one size.
     if (!/^[0-9a-f]{32,512}$/.test(token)) return json({ error: "bad token" }, 400);
     const session = body.session ? String(body.session) : undefined;
+    // An update token with no session is unreachable: pushLiveActivity only targets
+    // rows that name one, so nothing would ever send to it and no 410 would ever
+    // prune it. Refuse it rather than storing a row that can only accumulate.
+    if (kind === "update" && !session) return json({ error: "an update token needs its session" }, 400);
     const env: "dev" | "prod" = body.env === "prod" ? "prod" : "dev";
     const tokens = (await readLaTokens()).filter((t) =>
       t.token !== token
@@ -429,6 +444,15 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
       // the token of the one it replaced, or ends go to a card that no longer exists.
       && !(kind === "update" && session && t.kind === "update" && t.session === session));
     tokens.push({ kind, token, session, env, addedISO: new Date().toISOString() });
+    // A device re-registers its start token on every launch and after every reinstall,
+    // and each one arrives as a fresh hex string, so "one per device" only holds if
+    // something enforces a ceiling. Oldest out first; a live device re-registers.
+    const MAX_START = 24;
+    const starts = tokens.filter((t) => t.kind === "start");
+    if (starts.length > MAX_START) {
+      const doomed = new Set(starts.slice(0, starts.length - MAX_START).map((t) => t.token));
+      for (let i = tokens.length - 1; i >= 0; i--) if (doomed.has(tokens[i].token)) tokens.splice(i, 1);
+    }
     await writeLaTokens(tokens);
     return json({
       ok: true,

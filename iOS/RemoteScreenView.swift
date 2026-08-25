@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Drive a Mac from the phone: its live screen, a pointer you can see, and a keyboard
 /// with the modifiers that actually matter.
@@ -530,7 +531,12 @@ final class RemoteScreenModel: ObservableObject {
     func copyFromMachine() {
         Task {
             if let text = try? await client.clipboard(), !text.isEmpty {
-                UIPasteboard.general.string = text
+                // Whatever the Mac had on its clipboard — which, per this screen's own
+                // reason for existing, is often a token or a key an agent printed. Do
+                // not sync that to every device on the Apple ID; expire it instead.
+                UIPasteboard.general.setItems(
+                    [[UTType.plainText.identifier: text]],
+                    options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(300)])
                 flash("Copied \(text.count) characters from \(machine.host)")
             } else {
                 flash("\(machine.host)'s clipboard is empty")

@@ -199,7 +199,9 @@ const SYSTEM_ACTIONS: Record<string, string[]> = {
 /// failure the user genuinely needs to see.
 async function systemAction(action: string) {
   if (!IS_MAC) return linuxSystemAction(action);
-  const cmd = SYSTEM_ACTIONS[action];
+  // hasOwn, not a bare lookup: "constructor" and "toString" are not actions, and
+  // reaching them returns something confusing instead of "unknown action".
+  const cmd = Object.hasOwn(SYSTEM_ACTIONS, action) ? SYSTEM_ACTIONS[action] : undefined;
   if (!cmd) return { ok: false, error: `unknown action: ${action}` };
   const r = await runChecked(cmd);
   return {

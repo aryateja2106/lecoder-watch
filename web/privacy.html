@@ -155,8 +155,11 @@ footer a:hover{color:var(--ink)}
         something to show before it reaches the network.</li>
   </ul>
   <p>
-    Deleting the app deletes all of it. To revoke a phone's access from the other side,
-    rotate the token on the machine — the app is then locked out immediately.
+    Deleting the app deletes all of it. To revoke a phone's access from the other side, run
+    <code class="inline">mesh token rotate</code> on the machine. That locks the app out of the
+    machine <em>and</em> forgets every device registered to receive notifications from it, so a
+    phone you have revoked stops receiving them too. Your own phone re-registers the next time
+    you open the app and pair.
   </p>
 
   <h2>No accounts</h2>

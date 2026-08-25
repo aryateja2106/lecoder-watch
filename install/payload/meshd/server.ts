@@ -694,12 +694,27 @@ const lastEventBySession = new Map<string, LastSessionEvent>();
 // still owes the Lock Screen an "end" once the wait clears.
 const laActiveSessions = new Set<string>();
 
+/// How many sessions' worth of status we keep. Session names come from callers, so
+/// without a ceiling a long-lived daemon accumulates a row per name it has ever seen.
+const MAX_TRACKED_SESSIONS = 500;
+
 function noteSessionEvent(event: AgentEvent) {
   if (!event.session) return;
-  const atMs = Date.parse(event.createdISO) || Date.now();
+  const now = Date.now();
+  // A clock-skewed or hand-written future timestamp would otherwise win every
+  // comparison below forever, freezing the row on whatever level it arrived with.
+  const atMs = Math.min(Date.parse(event.createdISO) || now, now);
   const prev = lastEventBySession.get(event.session);
   if (prev && prev.atMs > atMs) return;
+  // Re-insert so the Map's insertion order tracks recency; the oldest row leaves.
+  lastEventBySession.delete(event.session);
   lastEventBySession.set(event.session, { level: event.level, title: event.title, iso: event.createdISO, atMs });
+  while (lastEventBySession.size > MAX_TRACKED_SESSIONS) {
+    const oldest = lastEventBySession.keys().next().value;
+    if (oldest === undefined) break;
+    lastEventBySession.delete(oldest);
+    laActiveSessions.delete(oldest);
+  }
 }
 
 const ERROR_LEVELS = new Set(["error", "failed", "failure"]);
