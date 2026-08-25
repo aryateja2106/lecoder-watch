@@ -81,6 +81,55 @@ public func movedPointer(_ pointer: CGPoint, by delta: CGSize,
 /// contains, which looks broken rather than close.
 public func clampedZoom(_ zoom: CGFloat) -> CGFloat { min(max(zoom, 1), 6) }
 
+// MARK: - Region capture (meshd 0.5.0 "screenRegion")
+
+/// The part of the remote screen a zoomed, panned view is actually showing, in
+/// normalized screen coordinates — origin top-left, 0…1 on both axes. This is the
+/// exact rect `MeshClient.screenImage(rect:)` sends, so the daemon can capture just
+/// that region at native resolution instead of downsampling the whole display and
+/// letting the client stretch it.
+///
+/// Aspect ratios rather than sizes on purpose: the mapping depends only on shape,
+/// which keeps it one pure function the checks can pin without a view in sight.
+/// The model is `.scaledToFit` then zoom: at zoom 1 the whole image is visible
+/// (letterboxed on the axis that does not match), so the result is the unit rect;
+/// zoomed, the fitted axis shows 1/zoom of the image and the letterboxed axis
+/// proportionally more, up to all of it.
+///
+/// `pan` is the offset of the view's centre from the image's centre, as a fraction
+/// of the full image (x: 0.25 = a quarter screen to the right). It is clamped
+/// through `clampedPan`, so an over-scrolled gesture can never request pixels that
+/// do not exist — the returned rect always lies inside the unit square.
+public func visibleRect(zoom: CGFloat, pan: CGPoint,
+                        containerAspect: Double, imageAspect: Double) -> CGRect {
+    guard containerAspect > 0, imageAspect > 0 else {
+        return CGRect(x: 0, y: 0, width: 1, height: 1)
+    }
+    let z = Double(max(zoom, 1))
+    let fx = min(1, max(1, containerAspect / imageAspect) / z)
+    let fy = min(1, max(1, imageAspect / containerAspect) / z)
+    let pan = clampedPan(pan, zoom: zoom, containerAspect: containerAspect, imageAspect: imageAspect)
+    return CGRect(x: 0.5 + Double(pan.x) - fx / 2,
+                  y: 0.5 + Double(pan.y) - fy / 2,
+                  width: fx, height: fy)
+}
+
+/// Clamp a pan offset so the visible rect stays entirely on the image — the same
+/// slack rule as `zoomedOffset`, but for an explicit pan instead of the pointer.
+/// At zoom 1 (or below) there is nowhere to pan, so the answer is `.zero`, which is
+/// what keeps the fit-to-screen view rock solid however the gesture ends.
+public func clampedPan(_ pan: CGPoint, zoom: CGFloat,
+                       containerAspect: Double, imageAspect: Double) -> CGPoint {
+    guard containerAspect > 0, imageAspect > 0 else { return .zero }
+    let z = Double(max(zoom, 1))
+    let fx = min(1, max(1, containerAspect / imageAspect) / z)
+    let fy = min(1, max(1, imageAspect / containerAspect) / z)
+    let slackX = (1 - fx) / 2
+    let slackY = (1 - fy) / 2
+    return CGPoint(x: min(max(Double(pan.x), -slackX), slackX),
+                   y: min(max(Double(pan.y), -slackY), slackY))
+}
+
 /// Which point on the remote screen a tap refers to, undoing the zoom and the offset
 /// the picture was drawn with. Nil for a tap in the letterbox, which points at nothing.
 ///

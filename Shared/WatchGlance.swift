@@ -26,6 +26,14 @@ struct WatchGlance: Codable, Hashable {
     var waiting: [Waiting]
     var machinesUp: Int
     var machinesTotal: Int
+    /// Sessions that were working but have gone quiet past the stall threshold —
+    /// meshd 0.5.0's per-session status aged out, or the app's own derivation.
+    /// Optional for the same decode-tolerance reason as `Waiting.risky` above: a
+    /// glance written by an older app must keep decoding, or the complication
+    /// blanks until the next refresh.
+    var stalled: Int? = nil
+
+    var stalledCount: Int { stalled ?? 0 }
 
     static let empty = WatchGlance(updatedISO: "", waiting: [], machinesUp: 0, machinesTotal: 0)
 
@@ -95,6 +103,14 @@ struct WatchGlance: Codable, Hashable {
             let eyebrow = waiting.count == 1 ? "WAITING ON YOU" : "\(waiting.count) WAITING"
             let title = "\(first.session) · \(shortHost(first.host))"
             return (eyebrow, title, first.line)
+        }
+        // Below waiting on purpose: a question outranks a hunch. And only in this
+        // rectangular band — the circular count stays reserved for the actionable
+        // number, because "2" on a watch face must always mean "2 need you".
+        if stalledCount > 0 {
+            let eyebrow = stalledCount == 1 ? "1 GONE QUIET" : "\(stalledCount) GONE QUIET"
+            return (eyebrow, "No output for a while",
+                    machinesTotal == 0 ? "Open to check on it" : "\(machinesUp) of \(machinesTotal) machines up")
         }
         if machinesTotal == 0 {
             return ("NOT PAIRED", "Pair a machine", "Open LeSearch Mesh on your iPhone.")

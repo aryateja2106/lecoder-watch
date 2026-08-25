@@ -219,6 +219,12 @@ struct HealthInfo: Codable, Hashable {
     var capabilities: [String]?
     /// Primary physical interface MAC (meshd 0.4.0+) — cached for Wake-on-LAN.
     var mac: String?
+    /// Primary interface IPv4 + netmask (meshd 0.5.0+), cached alongside the MAC so
+    /// a wake peer can be chosen for sharing the sleeping target's subnet — and aim
+    /// the magic packet at that subnet's directed broadcast — instead of picking the
+    /// first reachable peer and spraying 255.255.255.255 into the wrong LAN.
+    var ipv4: String? = nil
+    var netmask: String? = nil
 }
 
 // MARK: - Doctor (setup truth)
@@ -284,6 +290,15 @@ struct Agent: Codable, Hashable, Identifiable {
     var memMB: Double?   // resident memory of this session's process tree
     var cpuPct: Double?  // summed %CPU of this session's process tree
     var panes: [Pane]?    // present when meshd supports pane listing
+    /// meshd 0.5.0+ ("sessionStatus"): daemon-computed per-session status —
+    /// "working" | "waiting" | "error" | "idle". The daemon owns both the event log
+    /// and the process listing, so its verdict beats anything derivable here; absent
+    /// on older daemons, in which case `displayState(latestEvent:)` derives one.
+    var status: String? = nil
+    /// meshd 0.5.0+: level and timestamp of the last event this session produced,
+    /// so a row can show event-derived state without a second /events fetch.
+    var lastEventLevel: String? = nil
+    var lastEventISO: String? = nil
 
     /// "512 MB" / "1.2 GB" — compact memory label, or nil if unknown.
     var memLabel: String? {
@@ -321,6 +336,44 @@ struct Pane: Codable, Hashable, Identifiable {
 struct PaneList: Codable, Hashable {
     var name: String
     var panes: [Pane]
+}
+
+// MARK: - Remote files (meshd /fs)
+
+/// One row of `GET /fs`. Field names match `Entry` in meshd's files.ts exactly —
+/// that file is the schema; this is its Swift shadow.
+struct FsEntry: Codable, Hashable, Identifiable {
+    var id: String { path }
+    var name: String
+    var path: String
+    /// "dir" | "file" | "link". Kept a string rather than an enum so an unknown
+    /// future kind decodes as a row instead of failing the whole listing.
+    /// Symlinks are reported, never followed — a listing cannot wander.
+    var kind: String
+    var size: Int
+    var modifiedISO: String?
+
+    var isDirectory: Bool { kind == "dir" }
+    var isSymlink: Bool { kind == "link" }
+    var modified: Date? { parseISO(modifiedISO) }
+}
+
+/// The answer to `GET /fs?path=` — matches `listDirectory` in files.ts. The failure
+/// shape ({ok:false, error}) ships with HTTP 404, which MeshClient turns into a
+/// thrown error before decoding, so the optionals here are tolerance, not routing.
+struct FsListing: Codable, Hashable {
+    var ok: Bool
+    var path: String?
+    /// nil at the filesystem root, where there is nowhere further up.
+    var parent: String?
+    /// The daemon's home directory — the natural "start over" target for a browser.
+    var home: String?
+    var entries: [FsEntry]?
+    var error: String?
+
+    /// Directories first, then case-insensitive by name — the daemon already sorted;
+    /// this just spares every view the nil dance.
+    var rows: [FsEntry] { entries ?? [] }
 }
 
 // MARK: - Usage (OpenUsage)
@@ -549,6 +602,81 @@ func cardStateForLevel(_ level: String?) -> SessionState {
     }
 }
 
+// MARK: - Per-session display status (list rows)
+
+/// The four words a session *row* can say, aligned with the daemon's own `status`
+/// field on `/agents` (meshd 0.5.0+, "sessionStatus" capability). Distinct from
+/// `SessionState`, which is inferred from live output inside an open session: this
+/// one is event/attach-derived and has no "unknown", because a row that shrugs is
+/// a row that answers nothing.
+enum SessionDisplayState: String, Codable {
+    case working
+    case waiting
+    case error
+    case idle
+
+    /// Bridge into the existing card vocabulary so `SessionStatusLabel`, the tints
+    /// and the symbols stay one system across phone, watch and widgets.
+    var sessionState: SessionState {
+        switch self {
+        case .working: return .running
+        case .waiting: return .waiting
+        case .error:   return .error
+        case .idle:    return .idle
+        }
+    }
+}
+
+/// Client-side mirror of the daemon's status computation, for daemons that do not
+/// advertise "sessionStatus". Pure and clock-injected so a headless check can pin
+/// every branch. Must stay in step with the daemon's semantics:
+///
+///   error   — last event level error/failed/failure, younger than 60 minutes
+///   waiting — last event an unanswered ask (warning/needs-input level, or a
+///             needs-attention title), younger than 60 minutes
+///   working — session attached, or any event younger than 5 minutes
+///   idle    — everything else
+///
+/// The hour cap is what stops "Needs you" going stale forever: hooks only fire at
+/// ask/stop boundaries, so with no resume signal an answered question would
+/// otherwise hold its row until the next event ever arrives.
+func derivedSessionDisplayState(level: String?, title: String? = nil,
+                                eventDate: Date?, attached: Bool,
+                                now: Date = Date()) -> SessionDisplayState {
+    let age = eventDate.map { now.timeIntervalSince($0) }
+    let fresh = age.map { $0 >= 0 && $0 < 3600 } ?? false
+    if fresh {
+        switch cardStateForLevel(level) {
+        case .error:   return .error
+        case .waiting: return .waiting
+        default:
+            if let title, title.lowercased().contains("needs attention") { return .waiting }
+        }
+    }
+    if attached { return .working }
+    if let age, age >= 0, age < 300 { return .working }
+    return .idle
+}
+
+extension Agent {
+    /// What this session's row should say. Prefers the daemon's own `status`
+    /// (meshd 0.5.0+); otherwise derives one from the daemon's `lastEventLevel` /
+    /// `lastEventISO` when present, or from `latestEvent` — the newest `AgentEvent`
+    /// the caller holds for this (host, session) — when the daemon sent neither.
+    /// An unrecognized daemon status string falls through to derivation rather than
+    /// failing, so a future daemon vocabulary cannot blank today's rows.
+    func displayState(latestEvent: AgentEvent? = nil, now: Date = Date()) -> SessionDisplayState {
+        if let status, let mapped = SessionDisplayState(rawValue: status.lowercased()) {
+            return mapped
+        }
+        return derivedSessionDisplayState(level: lastEventLevel ?? latestEvent?.level,
+                                          title: latestEvent?.title,
+                                          eventDate: parseISO(lastEventISO) ?? parseISO(latestEvent?.createdISO),
+                                          attached: attached,
+                                          now: now)
+    }
+}
+
 // MARK: - Relay envelope (iPhone -> Watch over WatchConnectivity)
 
 /// One bundle the phone pushes to the watch so the watch never talks to the mesh directly.
@@ -592,6 +720,10 @@ struct MachineSnapshot: Codable, Hashable, Identifiable {
     var tailnetError: String? = nil
     /// Hardware MAC from /health, so the "Wake via <peer>" button knows what to wake.
     var mac: String? = nil
+    /// Primary-interface IPv4 + netmask from /health (meshd 0.5.0+), relayed so the
+    /// watch can pick a wake peer on the sleeping target's own subnet too.
+    var ipv4: String? = nil
+    var netmask: String? = nil
     /// Seconds since this host last actually answered. Non-nil means the data shown is
     /// remembered, not fresh — a relayed tailnet drops polls, and blanking the whole
     /// machine on the first miss is what made the app look broken every few minutes.
@@ -761,6 +893,33 @@ struct VolumeState: Codable, Hashable {
     var error: String?
 }
 
+/// The answer to `POST /system`. meshd 0.5.0 runs every action through a checked
+/// spawn and reports the real exit code and stderr; older daemons said
+/// `{ok:true, action}` no matter what actually happened. Every field is optional so
+/// both shapes — and whatever a future daemon adds — decode without a fuss.
+struct SystemResult: Codable, Hashable {
+    var ok: Bool?
+    var exitCode: Int?
+    var stderr: String?
+    var action: String?
+    var error: String?
+
+    /// True only when the daemon explicitly said so. An old daemon's blind
+    /// `ok:true` still reads as success — that is today's behavior, unchanged.
+    var succeeded: Bool { ok == true }
+
+    /// One line for a toast when it did not work, or nil when it did. The stderr
+    /// tail is the most honest thing available; the daemon's error string is next.
+    var failureLine: String? {
+        if succeeded { return nil }
+        if let stderr = stderr?.trimmingCharacters(in: .whitespacesAndNewlines), !stderr.isEmpty {
+            return String(stderr.suffix(120))
+        }
+        if let error, !error.isEmpty { return error }
+        return ok == false ? "failed" + (exitCode.map { " (exit \($0))" } ?? "") : nil
+    }
+}
+
 /// Wrist rotation → cursor velocity, the air-mouse mapping.
 ///
 /// WowMouse does this on Wear OS by pairing as a Bluetooth HID mouse. watchOS gives
@@ -853,6 +1012,14 @@ enum WatchCommandKind: String, Codable {
     case listApps
     case activateApp
     case listDisplays
+    /// The iPhone's own UIPasteboard — NOT the Mac's clipboard (that is
+    /// `readClipboard`). Only answerable while the phone app is foreground;
+    /// the phone must reply with an honest error otherwise, never an empty string.
+    case readPhoneClipboard
+    /// Open `url` in the target machine's default browser (meshd 0.5.0+ /open).
+    case openURL
+    /// List `path` on the target machine via GET /fs; reply is an encoded FsListing.
+    case fsList
 }
 
 struct WatchCommand: Codable {
@@ -873,6 +1040,22 @@ struct WatchCommand: Codable {
     var display: Int? = nil
     var volumeDelta: Int? = nil
     var volumeMuted: Bool? = nil
+    /// Normalized crop for the screenPeek command — [x, y, w, h], each 0…1, the same
+    /// rect `MeshClient.screenImage(rect:)` takes. A flat array rather than CGRect
+    /// because CGRect's Codable form nests, and this envelope stays flat on purpose.
+    var rect: [Double]? = nil
+    /// Longest-edge pixels for screenPeek; nil = the phone's default width.
+    var width: Int? = nil
+    /// JPEG quality 1…100 for screenPeek; nil = the daemon's default.
+    var quality: Int? = nil
+    /// PTY size for newAgent — see `MeshClient.newSession(cols:rows:)`.
+    var cols: Int? = nil
+    var rows: Int? = nil
+    /// The link an `openURL` command opens on the machine. http/https only —
+    /// the phone validates before relaying, the daemon again before spawning.
+    var url: String? = nil
+    /// The directory an `fsList` command lists; nil = the machine's home.
+    var path: String? = nil
 }
 
 // MARK: - Tiny local phrase mapper
