@@ -164,7 +164,7 @@ cannot do. Linux hosts have input and files but no screen capture, and say so.
 **A green build proves very little here.** Three features have shipped correct and
 completely dead — one because no hook was ever registered, one because event hostnames never
 matched what pairing stored, one because every fixture used a timestamp shape the daemon
-does not emit. Run it against a real daemon before believing it. See [MEMORY.md](MEMORY.md).
+does not emit. Run it against a real daemon before believing it.
 
 ## Telemetry
 
@@ -179,7 +179,7 @@ Turn it off with `MESHD_TELEMETRY=off` in the daemon's environment (set it when 
 run the installer and it is carried into the service). The daemon works identically
 either way. The sending code is one small file you can read:
 [`install/payload/meshd/telemetry.ts`](install/payload/meshd/telemetry.ts) — and the
-full promise lives at [the privacy page](web/privacy.html).
+full promise lives at [the privacy page](https://mesh.lesearch.ai/privacy).
 
 ## Requirements
 
@@ -213,8 +213,8 @@ xcodebuild -project MeshWatch.xcodeproj -scheme 'MeshWatch Watch App' \
 sh scripts/check-all.sh
 ```
 
-Contributing, and what an agent needs to know before editing: [AGENTS.md](AGENTS.md).
-Specs and change proposals: [openspec/](openspec/). File map: [index.md](index.md).
+Contributing, and how the repo fits together: [CONTEXT.md](CONTEXT.md). File map:
+[index.md](index.md).
 
 ## Layout
 
@@ -227,7 +227,6 @@ MeshWatchWidgets/  iOS Live Activity + Dynamic Island
 MeshDesktop/       Mac menu bar app — status, permissions, pairing QR
 install/           the installer, the meshd payload, and the mesh CLI
 scripts/           self-checks, packaging, release
-openspec/          specs and change proposals
 web/               landing page (Vercel)
 docs/              runbooks and design notes
 ```

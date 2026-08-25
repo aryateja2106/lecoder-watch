@@ -22,27 +22,34 @@
   --radius:8px; --wrap:720px;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth;color-scheme:dark}
+html{color-scheme:dark}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);
   font-size:15.5px;line-height:1.7;-webkit-font-smoothing:antialiased}
 ::selection{background:var(--ink);color:var(--bg)}
 a{color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:4px}
+.nav a.link,.foot a,p a,li a{transition:color .16s ease,background-color .16s ease,border-color .16s ease,box-shadow .2s ease,transform .2s cubic-bezier(.2,.7,.3,1)}
 .wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
 
 header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
   background:rgba(25,25,25,.85);border-bottom:1px solid var(--line)}
 .nav{display:flex;align-items:center;gap:16px;height:60px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;text-decoration:none;font-size:15px}
-.brand img{width:26px;height:26px;border-radius:6px;background:#fff;padding:2px}
+.brand img{width:28px;height:28px;background:transparent;padding:0;filter:invert(.92)}
 .nav .spacer{flex:1}
 .nav a.link{color:var(--ink-2);text-decoration:none;font-size:13.5px}
 .nav a.link:hover{color:var(--ink)}
 
 main{padding:64px 0 90px}
-h1{font-size:clamp(30px,5vw,40px);letter-spacing:-.03em;line-height:1.1;margin:0;font-weight:800}
+h1{font-size:clamp(30px,5vw,40px);letter-spacing:-.03em;line-height:1.1;margin:0;font-weight:800;color:var(--ink)}
+@supports(-webkit-background-clip:text){
+  h1{background:linear-gradient(180deg,#ffffff 55%,#b9b9b6);
+     -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+}
 .updated{color:var(--ink-3);font-size:13px;margin-top:12px}
-.tldr{background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);
-  padding:20px 22px;margin:36px 0 8px;color:var(--ink-2)}
+.tldr{background:linear-gradient(180deg,#232323,#1d1d1d);border:1px solid var(--line-2);border-radius:var(--radius);
+  padding:20px 22px;margin:36px 0 8px;color:var(--ink-2);box-shadow:inset 0 1px 0 rgba(255,255,255,.045)}
 .tldr strong{color:var(--ink)}
 .badge{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;
   color:var(--ok);border:1px solid var(--line-2);background:var(--bg-2);
@@ -75,7 +82,7 @@ footer a:hover{color:var(--ink)}
 
 <main class="wrap">
   <h1>Privacy</h1>
-  <div class="updated">Last updated 24 August 2026</div>
+  <div class="updated">Last updated 25 August 2026</div>
 
   <div class="tldr">
     <div class="badge">Data Not Collected</div><br>
@@ -110,8 +117,9 @@ footer a:hover{color:var(--ink)}
   <h2>The daemon's heartbeat</h2>
   <p>
     The <code>meshd</code> daemon you install separately on your machines may send one
-    anonymized heartbeat per day: its version, its platform, coarse feature counters
-    (how many times a class of feature was used, as a number), and a random install id.
+    anonymized heartbeat per day: its version, its platform, its uptime in whole hours,
+    coarse feature counters (how many times a class of feature was used, as a number),
+    and a random install id.
     That is the whole list. It carries no commands, no keystrokes, no terminal or screen
     content, no hostnames, and no identifier tied to you as a person — the install id is
     a random string that tells us a daemon exists, not whose it is.

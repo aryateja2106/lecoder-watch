@@ -106,11 +106,18 @@ We can honestly answer **Data Not Collected** for every category.
 > transmitted request in real time." … "Data that is processed only on device is not
 > 'collected'."
 
-meshd runs on the user's machine and we operate no servers, so nothing reaches us. Say it
-plainly in the listing: *No accounts. No telemetry. No servers of ours.*
+The *apps* transmit nothing anywhere, so Data Not Collected holds. The daemon is a
+different, disclosed story: meshd sends one anonymized heartbeat a day (version, platform,
+uptime, coarse counters, random install id), `MESHD_TELEMETRY=off` silences it, and the
+privacy page documents it. Say it plainly in the listing: *No accounts. No servers of ours
+in the data path. The apps collect nothing — Data Not Collected. The daemon's optional
+daily heartbeat is disclosed on the privacy page and `MESHD_TELEMETRY=off` turns it off.*
+Never write "no telemetry" — that claim was retired when the heartbeat shipped.
 
-**This answer becomes false the moment we add a hosted relay, crash reporting, or an
-analytics SDK.** See `openspec/changes/reach-my-mac-from-anywhere/`.
+**The apps' Data Not Collected answer becomes false the moment we add a hosted relay,
+crash reporting, or an analytics SDK to the apps.** A cloud relay is a
+[roadmap](../ROADMAP.md) non-goal today; if that stance ever changes, revisit this answer
+before shipping the change.
 
 - [ ] **Privacy policy in two places** — 5.1.1(i) requires it in App Store Connect metadata
       *and* "within the app in an easily accessible manner". A Settings › Privacy Policy row
@@ -197,6 +204,17 @@ Upload screenshots **serially** — uploading many at once is a known cause of
 `IMAGE_TOOL_FAILURE`. Scrub any TestFlight chrome, debug banners or staging hostnames from
 captures; one documented rejection was for a screenshot still showing a "Back to TestFlight"
 button.
+
+## App identity is accepted debt — never "fix" it in a branding sweep
+
+The bundle ids (`com.lecoder.meshwatch`, `com.lecoder.meshwatch.*`, `com.lecoder.meshdesktop`),
+the APNs topic (`com.lecoder.meshwatch`), and the `meshwatch://` pairing URL scheme are
+internal names pinned by the live App Store Connect app record (6803438426, on TestFlight).
+Changing the bundle id means a **new** App Store app: a new TestFlight link, every tester
+re-invited, every machine re-paired, and push broken until the APNs topic moves with it.
+These identifiers are invisible to customers — the display name everywhere is LeSearch Mesh.
+The decision is: keep them forever, and keep them out of scope for any rename or branding
+pass. User-facing *strings* say LeSearch Mesh; identifiers stay `com.lecoder.*`.
 
 ## Two things outside the store that will bite
 

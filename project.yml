@@ -57,7 +57,7 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private Tailscale network."
+        NSLocalNetworkUsageDescription: "LeSearch Mesh connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSFaceIDUsageDescription: "Unlock LeSearch Mesh so only you can reach your machines."
         UIBackgroundModes:
@@ -156,7 +156,7 @@ targets:
         WKCompanionAppBundleIdentifier: com.lecoder.meshwatch
         # The watch dials meshd directly (f3e88d0), so it needs its own Local
         # Network grant — the phone's does not carry over.
-        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
+        NSLocalNetworkUsageDescription: "LeSearch Mesh connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

@@ -3,8 +3,8 @@
 Drafts only. Nothing here has been posted anywhere; posting is yours to do.
 
 Links to use:
-- TestFlight: `https://testflight.apple.com/join/pVYPTxc7` (live once Beta App Review clears)
-- Site: `https://lesearch-mesh-web.vercel.app` → becomes `https://mesh.lesearch.ai` once the CNAME lands
+- TestFlight: `https://testflight.apple.com/join/pVYPTxc7` (live)
+- Site: `https://mesh.lesearch.ai`
 - Installer source: `https://github.com/LeSearch-AI/mesh-install`
 
 ---
@@ -44,7 +44,8 @@ Links to use:
 > If you own a MacBook, an iPhone and an Apple Watch, I'd genuinely like you to break
 > it: [TestFlight link]
 >
-> Built in public under LeSearch AI. macOS + Linux daemon is open and readable.
+> Built in public under LeSearch AI. All of it is open and MIT — the daemon, the
+> installer, and the apps.
 
 ---
 
@@ -57,7 +58,7 @@ Links to use:
 > blocks → watch buzzes with the question → one tap → it continues.
 >
 > Local-first: your phone talks straight to your machine. No cloud relay, no account,
-> nothing of yours on my servers because I don't have any.
+> nothing of yours passing through my servers.
 >
 > One detail I'm proud of: the one-tap button sends Return, and Return accepts the
 > agent's highlighted default — so it's a *yes*, not an acknowledgement. For a
@@ -87,9 +88,14 @@ Links to use:
 
 - Don't say "verified end to end on device" — push delivery to a real device is still
   unproven. Say "free beta, tell me if your wrist buzzes".
-- Don't call the iOS/watchOS app open source. The **daemon and installer** are public;
-  the app is not.
+- The open-source claim is now the full one: all of it is public and MIT — daemon, CLI,
+  installer, and the iOS/watchOS/Mac apps. Say that; don't undersell it to the old
+  "daemon only" line.
 - Don't imply it works from anywhere. It works where your phone can reach your machine —
   a tailnet or the same LAN. There is no hole-punching.
 - Don't name competitors as broken. "They relay through their cloud" is a factual
   difference; anything stronger invites a correction you'd lose.
+- Don't say "no telemetry" or "nothing ever phones home". The apps collect nothing;
+  the daemon sends one anonymized heartbeat a day, disclosed at
+  `https://mesh.lesearch.ai/privacy`, and `MESHD_TELEMETRY=off` silences it. Phrase
+  privacy claims as "no cloud relay, nothing of yours passing through my servers".

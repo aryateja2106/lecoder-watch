@@ -1,6 +1,6 @@
 # Controlling the Mac from the watch
 
-MeshWatch drives the MacBook end to end from the wrist: pointer, full keyboard, media,
+LeSearch Mesh drives the MacBook end to end from the wrist: pointer, full keyboard, media,
 apps, windows, system power — across every attached display.
 
 ```
@@ -10,7 +10,7 @@ Watch  RemoteView ──HTTP POST /input──▶ meshd ──stdin NDJSON──
 
 A watch app cannot inject input into macOS itself, and watchOS blocks low-level
 networking (TN3135) — no `NWConnection`, no WebSocket. `URLSession` to meshd is the one
-channel that works, and it is the channel MeshWatch already used.
+channel that works, and it is the channel Mesh already used.
 
 ## Pieces
 
