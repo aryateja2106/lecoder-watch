@@ -37,7 +37,7 @@ status=$?
 if [ "$status" -eq 0 ]; then
   "$event_bin" "$SOURCE" "Completed" "$SESSION" >/dev/null 2>&1 || true
 else
-  "$event_bin" "$SOURCE" "Failed" "exit $status in $SESSION" >/dev/null 2>&1 || true
+  MESHD_LEVEL=error "$event_bin" "$SOURCE" "Failed" "exit $status in $SESSION" >/dev/null 2>&1 || true
 fi
 
 exit "$status"

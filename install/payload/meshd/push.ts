@@ -11,10 +11,16 @@ import { join } from "node:path";
 const MESH_DIR = join(homedir(), ".mesh");
 const APNS_DIR = join(MESH_DIR, "apns");
 const TOKENS_PATH = join(MESH_DIR, "push-tokens.json");
+const LA_TOKENS_PATH = join(MESH_DIR, "la-tokens.json");
 const TEAM_ID = process.env.MESHD_APPLE_TEAM ?? "B5B87F7AXF";
 const TOPIC = process.env.MESHD_APNS_TOPIC ?? "com.lecoder.meshwatch";
 
 type DeviceToken = { token: string; env: "dev" | "prod"; addedISO: string };
+/// A Live Activity token: "start" tokens can conjure a Lock Screen card out of
+/// nothing (Activity.pushToStartTokenUpdates, one per device), "update" tokens
+/// address one running activity — which is per-session here, since attributes are
+/// {host, session}.
+type LAToken = { kind: "start" | "update"; token: string; session?: string; env: "dev" | "prod"; addedISO: string };
 
 function b64url(data: Uint8Array | string): string {
   const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
@@ -64,6 +70,24 @@ async function writeTokens(tokens: DeviceToken[]) {
   await writeFile(TOKENS_PATH, JSON.stringify(tokens, null, 2), { mode: 0o600 });
 }
 
+/// LA tokens live in memory (hot path) and in a JSON file beside push-tokens.json
+/// (daemon restarts must not orphan a Lock Screen card that only these tokens can end).
+let laCache: LAToken[] | null = null;
+async function readLaTokens(): Promise<LAToken[]> {
+  if (laCache) return laCache;
+  const raw = await readFile(LA_TOKENS_PATH, "utf8").catch(() => "[]");
+  try {
+    const parsed = JSON.parse(raw);
+    laCache = Array.isArray(parsed) ? (parsed as LAToken[]) : [];
+  } catch { laCache = []; }
+  return laCache;
+}
+async function writeLaTokens(tokens: LAToken[]) {
+  laCache = tokens;
+  await mkdir(MESH_DIR, { recursive: true, mode: 0o700 });
+  await writeFile(LA_TOKENS_PATH, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+}
+
 // ---------- one banner per session ----------
 /// APNs replaces a notification whose collapse id it has already delivered, so a later
 /// "Claude stopped" overwrites the "Claude needs attention" banner instead of stacking
@@ -102,7 +126,13 @@ export function collapseId(host?: string, session?: string): string | null {
 }
 
 // ---------- delivery ----------
-async function sendOne(dev: DeviceToken, payload: any, collapse?: string | null): Promise<{ ok: boolean; status: number; reason?: string }> {
+/// One HTTP/2 POST to APNs. `opts` widens the original alert-only shape additively:
+/// the Live Activity lane sends the same request with a different push-type and a
+/// suffixed topic, so there is exactly one place that talks to the gateway.
+async function sendOne(
+  dev: { token: string; env: "dev" | "prod" }, payload: any,
+  opts?: { collapse?: string | null; pushType?: string; topic?: string },
+): Promise<{ ok: boolean; status: number; reason?: string }> {
   const bearer = await jwt();
   if (!bearer) return { ok: false, status: 0, reason: "no APNs key installed" };
   const host = dev.env === "prod" ? "api.push.apple.com" : "api.sandbox.push.apple.com";
@@ -110,10 +140,10 @@ async function sendOne(dev: DeviceToken, payload: any, collapse?: string | null)
     "curl", "-s", "--http2", "-m", "10",
     "-o", "/dev/stdout", "-w", "\n%{http_code}",
     "-H", `authorization: bearer ${bearer}`,
-    "-H", `apns-topic: ${TOPIC}`,
-    "-H", "apns-push-type: alert",
+    "-H", `apns-topic: ${opts?.topic ?? TOPIC}`,
+    "-H", `apns-push-type: ${opts?.pushType ?? "alert"}`,
     "-H", "apns-priority: 10",
-    ...(collapse ? ["-H", `apns-collapse-id: ${collapse}`] : []),
+    ...(opts?.collapse ? ["-H", `apns-collapse-id: ${opts.collapse}`] : []),
     "-d", "@-",
     `https://${host}/3/device/${dev.token}`,
   ], { stdin: new TextEncoder().encode(JSON.stringify(payload)), stdout: "pipe", stderr: "ignore" });
@@ -126,11 +156,28 @@ async function sendOne(dev: DeviceToken, payload: any, collapse?: string | null)
   return { ok: status === 200, status, reason };
 }
 
+/// The flood fix's ledger, kept here so it is observable from outside: /push (GET)
+/// reports how many events were judged push-worthy vs stored-for-polling-only since
+/// the daemon started. Counted where the decision is made (addEvent), not where the
+/// send happens, so a daemon with no devices registered still shows the verdicts.
+let alertsQueuedCount = 0;
+let alertsGatedCount = 0;
+export function notePushDecision(queued: boolean) {
+  if (queued) alertsQueuedCount++;
+  else alertsGatedCount++;
+}
+
 /// What /push (GET) and /doctor both report — exported so doctor.ts never grows
 /// its own idea of "configured".
 export async function pushStatus() {
   const k = await loadKey().catch(() => null);
-  return { configured: Boolean(k), keyId: k?.keyId ?? null, topic: TOPIC, devices: (await readTokens()).length };
+  const la = await readLaTokens().catch(() => [] as LAToken[]);
+  return {
+    configured: Boolean(k), keyId: k?.keyId ?? null, topic: TOPIC, devices: (await readTokens()).length,
+    alertsQueued: alertsQueuedCount, alertsGated: alertsGatedCount,
+    laStartTokens: la.filter((t) => t.kind === "start").length,
+    laUpdateTokens: la.filter((t) => t.kind === "update").length,
+  };
 }
 
 /// One buzz per question. The same blocked prompt re-fires from hooks and pollers
@@ -170,6 +217,18 @@ export const BLOCKED_LEVELS = ["warning", "needs-input", "needs_input", "needsin
 export function isActionable(level?: string, session?: string, replyable?: boolean): boolean {
   if (replyable === false) return false;
   return Boolean(session) && BLOCKED_LEVELS.includes(String(level ?? "").toLowerCase());
+}
+
+/// The flood fix: should this event become an APNs push at all? Warnings, errors and
+/// needs-input make a phone buzz; a finished turn ("Claude stopped", level info) is
+/// news the pollers pick up, not a time-insensitive interruption — the old behavior
+/// pushed EVERY event, which made the majority of buzzes non-actionable turn-end
+/// noise. The title fallback catches producers that shout "needs attention" without
+/// grading a level. Every event still lands in the /events feed unchanged; /push/test
+/// bypasses this via its force flag as before.
+export function passesPushGate(level?: string, title?: string): boolean {
+  if (BLOCKED_LEVELS.includes(String(level ?? "").toLowerCase())) return true;
+  return /needs[ _-](attention|input)/i.test(String(title ?? ""));
 }
 
 /// The APNs body. Pure and exported so its shape can be asserted — it is a contract
@@ -223,14 +282,14 @@ export async function pushAlert(
   let changed = false;
   const keep: DeviceToken[] = [];
   for (const dev of tokens) {
-    let r = await sendOne(dev, payload, collapse);
+    let r = await sendOne(dev, payload, { collapse });
     // BadDeviceToken usually means the token is dead — but it says exactly the same
     // thing when the token is alive and we simply asked the wrong gateway. A build
     // that moves from sideloaded to TestFlight flips environments, so try the other
     // side once before writing the device off, and remember the answer.
     if (!r.ok && isWrongEnvironment(r)) {
       const flipped: DeviceToken = { ...dev, env: dev.env === "prod" ? "dev" : "prod" };
-      const retry = await sendOne(flipped, payload, collapse);
+      const retry = await sendOne(flipped, payload, { collapse });
       if (retry.ok) {
         sent++;
         keep.push(flipped);
@@ -250,6 +309,78 @@ export async function pushAlert(
   return { ok: sent > 0, sent, of: tokens.length };
 }
 
+// ---------- Live Activity delivery ----------
+/// APNs `liveactivity` pushes: event "start" conjures the Lock Screen card from a
+/// suspended app (the thing Activity.request can never do), "update" refreshes the
+/// running card, "end" dismisses it when the wait clears. The content-state keys
+/// mirror SessionActivityAttributes.ContentState in Shared/SessionActivity.swift
+/// byte-for-byte — a typo there fails silently (the push arrives, the card doesn't).
+///
+/// Deliberately absent from content-state: Date-typed fields (blockedSince). The
+/// decoder's date strategy for pushed content-state is not something to guess at from
+/// here — a wrong encoding kills the whole decode silently — so only the required
+/// String/number fields travel until it is verified on a physical device.
+export async function pushLiveActivity(
+  event: "start" | "update" | "end",
+  opts: {
+    session?: string;
+    attributes?: { host: string; session: string };
+    contentState: Record<string, unknown>;
+    alert?: { title: string; body?: string };
+  },
+): Promise<{ ok: boolean; sent: number; of: number }> {
+  const all = await readLaTokens();
+  const targets = event === "start"
+    ? all.filter((t) => t.kind === "start")
+    : all.filter((t) => t.kind === "update" && t.session != null && t.session === opts.session);
+  if (targets.length === 0) return { ok: false, sent: 0, of: 0 };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    aps: {
+      timestamp: now,
+      event,
+      // attributes-type/attributes only mean anything on a start: they are the card's
+      // identity, and iOS 17.2+ treats a start for an already-live identity as an update.
+      ...(event === "start" && opts.attributes
+        ? { "attributes-type": "SessionActivityAttributes", attributes: opts.attributes }
+        : {}),
+      "content-state": opts.contentState,
+      // A card nothing updates goes visibly stale instead of lying forever.
+      "stale-date": now + 900,
+      ...(opts.alert ? { alert: { title: opts.alert.title.slice(0, 120), body: opts.alert.body?.slice(0, 500) } } : {}),
+    },
+  };
+  const laOpts = { pushType: "liveactivity", topic: `${TOPIC}.push-type.liveactivity` };
+  let sent = 0;
+  let changed = false;
+  const keep: LAToken[] = [];
+  const targetSet = new Set(targets);
+  for (const tok of all) {
+    if (!targetSet.has(tok)) { keep.push(tok); continue; }
+    let r = await sendOne(tok, payload, laOpts);
+    // Same environment-flip forgiveness the alert lane earned the hard way.
+    if (!r.ok && isWrongEnvironment(r)) {
+      const flipped: LAToken = { ...tok, env: tok.env === "prod" ? "dev" : "prod" };
+      const retry = await sendOne(flipped, payload, laOpts);
+      if (retry.ok) {
+        sent++;
+        keep.push(flipped);
+        changed = true;
+        continue;
+      }
+      r = retry;
+    }
+    if (r.ok) sent++;
+    if (r.status === 410 || r.reason === "BadDeviceToken" || r.reason === "Unregistered") {
+      changed = true;
+      continue;
+    }
+    keep.push(tok);
+  }
+  if (changed) await writeLaTokens(keep);
+  return { ok: sent > 0, sent, of: targets.length };
+}
+
 // ---------- routes (mirrors handleInput contract: null = not ours) ----------
 export async function handlePush(req: Request, url: URL): Promise<Response | null> {
   const json = (data: any, status = 200) =>
@@ -267,6 +398,33 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
     tokens.push({ token, env, addedISO: new Date().toISOString() });
     await writeTokens(tokens);
     return json({ ok: true, devices: tokens.length });
+  }
+  // The app uploads its Live Activity tokens here: kind "start" once per device
+  // (Activity.pushToStartTokenUpdates), kind "update" per running activity with the
+  // session it belongs to (activity.pushTokenUpdates). Tokens rotate — the newest
+  // upload replaces its predecessor rather than accumulating beside it.
+  if (url.pathname === "/la/token" && req.method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as any;
+    const kind = body.kind === "start" ? "start" as const : body.kind === "update" ? "update" as const : null;
+    if (!kind) return json({ error: "kind must be \"start\" or \"update\"" }, 400);
+    const token = String(body.token ?? "").toLowerCase();
+    // LA tokens are hex like device tokens but longer and variable-length; validate
+    // the alphabet and a sane range instead of pinning one size.
+    if (!/^[0-9a-f]{32,512}$/.test(token)) return json({ error: "bad token" }, 400);
+    const session = body.session ? String(body.session) : undefined;
+    const env: "dev" | "prod" = body.env === "prod" ? "prod" : "dev";
+    const tokens = (await readLaTokens()).filter((t) =>
+      t.token !== token
+      // One current update token per session: a re-registered activity supersedes
+      // the token of the one it replaced, or ends go to a card that no longer exists.
+      && !(kind === "update" && session && t.kind === "update" && t.session === session));
+    tokens.push({ kind, token, session, env, addedISO: new Date().toISOString() });
+    await writeLaTokens(tokens);
+    return json({
+      ok: true,
+      start: tokens.filter((t) => t.kind === "start").length,
+      update: tokens.filter((t) => t.kind === "update").length,
+    });
   }
   if (url.pathname === "/push/test" && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as any;

@@ -21,17 +21,6 @@
           }
         ]
       }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$HOME/.mesh/bin/mesh-hook --source claude --title \"Claude subagent stopped\""
-          }
-        ]
-      }
     ]
   }
 }

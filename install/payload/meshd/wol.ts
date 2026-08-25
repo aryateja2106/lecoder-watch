@@ -128,6 +128,18 @@ export function primaryMac(): string | null {
   return mac;
 }
 
+/**
+ * The primary interface's IPv4 address and netmask — what /health shares so a phone
+ * can compute this machine's directed broadcast later and judge whether a wake peer
+ * is actually on the same LAN. Null when there is no real interface, same as
+ * primaryMac(): the honest answer for a container or a Tailscale-only box.
+ */
+export function primaryIPv4(): { address: string; netmask: string } | null {
+  const iface = primaryIface();
+  if (!iface) return null;
+  return { address: iface.info.address, netmask: String(iface.info.netmask ?? "") };
+}
+
 /** The one interface this machine is actually on a LAN through, or null. */
 function primaryIface(): { name: string; info: os.NetworkInterfaceInfo } | null {
   for (const [name, addrs] of Object.entries(os.networkInterfaces())) {

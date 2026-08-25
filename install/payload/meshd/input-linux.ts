@@ -9,16 +9,21 @@
 const DISPLAY = process.env.MESH_DISPLAY ?? process.env.DISPLAY ?? ":0";
 const ENV = { ...process.env, DISPLAY };
 
-async function run(cmd: string[], stdin?: string): Promise<{ out: string; code: number }> {
-  const p = Bun.spawn(cmd, {
-    env: ENV,
-    stdin: stdin === undefined ? "ignore" : "pipe",
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  if (stdin !== undefined) { p.stdin.write(stdin); p.stdin.end(); }
-  const out = await new Response(p.stdout).text();
-  return { out, code: await p.exited };
+async function run(cmd: string[], stdin?: string): Promise<{ out: string; stderr: string; code: number }> {
+  try {
+    const p = Bun.spawn(cmd, {
+      env: ENV,
+      stdin: stdin === undefined ? "ignore" : "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (stdin !== undefined) { p.stdin.write(stdin); p.stdin.end(); }
+    const [out, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
+    return { out, stderr: stderr.trim(), code: await p.exited };
+  } catch (e: any) {
+    // Bun.spawn throws when the binary does not exist — that is a result, not a crash.
+    return { out: "", stderr: String(e?.message ?? e), code: 127 };
+  }
 }
 
 async function has(bin: string): Promise<boolean> {
@@ -150,11 +155,22 @@ export async function linuxVolume(body: any) {
 const LINUX_SYSTEM: Record<string, string[]> = {
   lock: ["loginctl", "lock-session"],
   displaysleep: ["xset", "dpms", "force", "off"],
+  shutdown: ["systemctl", "poweroff"],
+  restart: ["systemctl", "reboot"],
 };
 
+/// Truthful by contract: exit code and stderr travel back to the client, so a
+/// loginctl that is not there (or a systemctl that wants polkit auth) reads as the
+/// failure it is instead of a silent "ok".
 export async function linuxSystemAction(action: string) {
   const cmd = LINUX_SYSTEM[action];
   if (!cmd) return { ok: false, error: `unsupported on linux: ${action}` };
-  await run(cmd);
-  return { ok: true, action };
+  const r = await run(cmd);
+  return {
+    ok: r.code === 0,
+    action,
+    exitCode: r.code,
+    stderr: r.stderr,
+    ...(r.code === 0 ? {} : { error: r.stderr.slice(0, 300) || `exit ${r.code}` }),
+  };
 }

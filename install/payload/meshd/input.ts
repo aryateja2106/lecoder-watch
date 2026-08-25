@@ -7,11 +7,18 @@
 //   GET  /clipboard        -> { text }
 //   POST /clipboard        <- { text }
 //   POST /volume           <- { level } | { delta } | { muted }   (GET reads current)
-//   POST /system           <- { action: "displaysleep" | "lock" | "screensaver" | "sleep" }
+//   POST /system           <- { action: "displaysleep" | "lock" | "screensaver" | "sleep"
+//                                       | "shutdown" | "restart" }
+//                          -> { ok, action, exitCode, stderr } — truthful, never faked
+//   POST /open             <- { url }   open an http/https URL in the default browser
 //   GET  /apps             -> { front, running: [{name,bundleID,front}], installed: [name] }
 //   POST /apps             <- { activate: "Safari" }
 //   GET  /displays         -> { displays: [{index,id,x,y,width,height,main,name}] }
-//   GET  /screen.jpg?display=2[&width=1400]  capture one display (no display: server.ts)
+//   GET  /screen.jpg[?display=2][&width=1400][&x=&y=&w=&h=][&q=70]
+//        Full display by default; x/y/w/h (normalized 0..1) crop a region at NATIVE
+//        pixels (no downscale unless width is asked for); q re-encodes JPEG quality.
+//        A served crop is announced via x-mesh-rect / x-mesh-display headers — their
+//        absence means "full frame" (an old daemon, or a crop that could not be cut).
 //   GET  /desktop?token=…   remote desktop page (polls /screen.jpg, posts /input)
 //
 // ponytail: its own module, not inlined into server.ts, because three meshd
@@ -47,6 +54,20 @@ async function run(cmd: string[], stdin?: string): Promise<string> {
   const out = await new Response(p.stdout).text();
   await p.exited;
   return out;
+}
+
+/// Like run(), but nothing is thrown away: exit code and stderr come back so the
+/// caller can tell the client the truth. A missing binary is a result (127), not a
+/// crash — Bun.spawn throws on ENOENT and a route must not 500 over it.
+async function runChecked(cmd: string[], stdin?: string): Promise<{ out: string; stderr: string; code: number }> {
+  try {
+    const p = Bun.spawn(cmd, { stdin: stdin === undefined ? "ignore" : "pipe", stdout: "pipe", stderr: "pipe" });
+    if (stdin !== undefined) { p.stdin.write(stdin); p.stdin.end(); }
+    const [out, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
+    return { out, stderr: stderr.trim(), code: await p.exited };
+  } catch (e: any) {
+    return { out: "", stderr: String(e?.message ?? e), code: 127 };
+  }
 }
 
 // ---------- helper lifecycle ----------
@@ -157,21 +178,37 @@ async function volume(body: any) {
 }
 
 /// Power/session actions that have no HID equivalent. Allowlisted by name — the
-/// watch never gets to name a command. Deliberately no restart/shutdown: those kill
-/// every running agent session, and a wrist tap is too cheap for that.
+/// watch never gets to name a command. shutdown/restart go through System Events
+/// (graceful: apps with unsaved changes can veto, and the FIRST use raises a TCC
+/// Automation consent dialog on the Mac's own screen — unattended it fails with
+/// -1743, which now travels back verbatim instead of a fake ok). Clients are
+/// expected to arm+confirm before sending either; /sbin/shutdown is deliberately
+/// not used because it needs root and meshd runs as a user LaunchAgent.
 const SYSTEM_ACTIONS: Record<string, string[]> = {
   displaysleep: ["/usr/bin/pmset", "displaysleepnow"],
   sleep: ["/usr/bin/pmset", "sleepnow"],
   lock: ["/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession", "-suspend"],
   screensaver: ["/usr/bin/open", "-a", "ScreenSaverEngine"],
+  shutdown: ["/usr/bin/osascript", "-e", 'tell app "System Events" to shut down'],
+  restart: ["/usr/bin/osascript", "-e", 'tell app "System Events" to restart'],
 };
 
+/// Every action reports its real exit code and stderr. It used to answer ok:true
+/// unconditionally, so a pmset that failed or an osascript that was denied rendered
+/// as success on the wrist — the fire-and-forget helper was reused for actions whose
+/// failure the user genuinely needs to see.
 async function systemAction(action: string) {
   if (!IS_MAC) return linuxSystemAction(action);
   const cmd = SYSTEM_ACTIONS[action];
   if (!cmd) return { ok: false, error: `unknown action: ${action}` };
-  await run(cmd);
-  return { ok: true, action };
+  const r = await runChecked(cmd);
+  return {
+    ok: r.code === 0,
+    action,
+    exitCode: r.code,
+    stderr: r.stderr,
+    ...(r.code === 0 ? {} : { error: r.stderr.slice(0, 300) || `exit ${r.code}` }),
+  };
 }
 
 // lsappinfo, not AppleScript: `tell application "System Events"` would make meshd
@@ -223,19 +260,144 @@ async function listDisplays() {
   }
 }
 
+// ---------- screen capture ----------
+/// Normalized to the chosen display: x/y in [0,1) from its top-left, w/h fractions
+/// of its size. Normalized because the client zooms a view, not pixels — it should
+/// not need to know the display's resolution to ask for "the top-right quarter".
+type CaptureRect = { x: number; y: number; w: number; h: number };
+
+type CaptureParams = {
+  display: number | null;
+  width: number | null;      // null = the caller never asked; regions then stay native
+  rect: CaptureRect | null;
+  quality: number | null;
+  error?: string;
+};
+
+/// One parser for both /screen.jpg routes so they cannot disagree about what a
+/// width or a rect means. Unknown params are ignored (old clients, new daemons —
+/// and the reverse: an old daemon ignores these same params and serves the full
+/// frame, which is why the crop is announced in a response header).
+export function parseCaptureParams(url: URL): CaptureParams {
+  const sp = url.searchParams;
+  const display = sp.has("display") ? Number(sp.get("display")) : null;
+  // Same clamp the width has always had — wider for reading, capped so a watch can
+  // never ask for a 6MB frame.
+  const width = sp.has("width") ? Math.min(2000, Math.max(240, Number(sp.get("width")) || 480)) : null;
+  let quality: number | null = null;
+  if (sp.has("q")) {
+    const n = Number(sp.get("q"));
+    if (Number.isFinite(n)) quality = Math.min(100, Math.max(1, Math.round(n)));
+  }
+  let rect: CaptureRect | null = null;
+  if (["x", "y", "w", "h"].some((k) => sp.has(k))) {
+    const f = (k: string, d: number) => {
+      const n = Number(sp.get(k) ?? d);
+      return Number.isFinite(n) ? n : d;
+    };
+    const x = Math.min(0.99, Math.max(0, f("x", 0)));
+    const y = Math.min(0.99, Math.max(0, f("y", 0)));
+    const w = Math.min(1 - x, Math.max(0, f("w", 1)));
+    const h = Math.min(1 - y, Math.max(0, f("h", 1)));
+    // A sliver this thin is a client bug, and screencapture would happily return a
+    // one-pixel ribbon that decodes fine and reads as "the screen is blank".
+    if (w <= 0.01 || h <= 0.01) return { display, width, quality, rect: null, error: "region too small (w and h must exceed 0.01)" };
+    rect = { x, y, w, h };
+  }
+  return { display, width, quality, rect };
+}
+
+/// The chosen display's global bounds in points (screencapture -R speaks global
+/// point coordinates). Null when mesh-input cannot answer — no swiftc, no window
+/// server — in which case the caller crops pixels out of a full frame instead.
+async function displayPointBounds(index: number | null): Promise<{ index: number; x: number; y: number; width: number; height: number } | null> {
+  const d: any = await listDisplays().catch(() => null);
+  if (!d?.ok || !Array.isArray(d.displays) || d.displays.length === 0) return null;
+  const pick = index != null
+    ? d.displays.find((dd: any) => dd.index === index)
+    : (d.displays.find((dd: any) => dd.main) ?? d.displays[0]);
+  if (!pick || !(pick.width > 0) || !(pick.height > 0)) return null;
+  return { index: Number(pick.index) || 1, x: Number(pick.x) || 0, y: Number(pick.y) || 0, width: Number(pick.width), height: Number(pick.height) };
+}
+
+async function imagePixelWidth(path: string): Promise<number> {
+  const out = await run(["/usr/bin/sips", "-g", "pixelWidth", path]);
+  return Number(out.match(/pixelWidth:\s*(\d+)/)?.[1] ?? 0);
+}
+
 /// screencapture -D is 1-based with 1 = main, the same order mesh-input reports, so a
 /// preview and a moveTo on the watch agree about which screen "2" is.
-async function captureDisplay(index: number, width = 480): Promise<Response> {
-  const path = join(tmpdir(), `meshd-display-${index}-${process.pid}.jpg`);
+///
+/// A rect turns this into region capture at NATIVE resolution: screencapture -R takes
+/// the region in global points and hands back native (2x on Retina) pixels, which is
+/// the whole fix for "zoom magnifies detail the frame never carried" — the old path
+/// always shot the entire display and downsampled it before the client ever zoomed.
+/// The served crop is echoed in x-mesh-rect (normalized) + x-mesh-display; a response
+/// without those headers is a full frame and the client must not interpret it as a crop.
+export async function captureScreen(params: CaptureParams): Promise<Response> {
+  if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
+  const { display, rect, quality } = params;
+  // Full frames keep their historical default (480) so old clients see identical
+  // behavior; a region defaults to native pixels — downscaling is opt-in via width.
+  const width = params.width ?? (rect ? null : 480);
+  const path = join(tmpdir(), `meshd-screen-${display ?? "main"}-${process.pid}-${Date.now()}.jpg`);
+  const headers: Record<string, string> = { "content-type": "image/jpeg", "cache-control": "no-store" };
+  const fullShotArgs = display != null
+    ? ["-x", "-D", String(display), "-t", "jpg", path]
+    : ["-x", "-t", "jpg", path];
   try {
-    const shot = Bun.spawn(["/usr/sbin/screencapture", "-x", "-D", String(index), "-t", "jpg", path],
-      { stdout: "ignore", stderr: "ignore" });
-    if ((await shot.exited) !== 0) return json({ error: "screenshot unavailable" }, 503);
-    const scale = Bun.spawn(["/usr/bin/sips", "-Z", String(width), path], { stdout: "ignore", stderr: "ignore" });
-    await scale.exited;
-    return new Response(await readFile(path), {
-      headers: { "content-type": "image/jpeg", "cache-control": "no-store" },
-    });
+    let cropped = false;
+    if (rect) {
+      const bounds = await displayPointBounds(display);
+      if (bounds) {
+        const rx = Math.round(bounds.x + rect.x * bounds.width);
+        const ry = Math.round(bounds.y + rect.y * bounds.height);
+        const rw = Math.max(1, Math.round(rect.w * bounds.width));
+        const rh = Math.max(1, Math.round(rect.h * bounds.height));
+        const shot = Bun.spawn(["/usr/sbin/screencapture", "-x", "-R", `${rx},${ry},${rw},${rh}`, "-t", "jpg", path], { stdout: "ignore", stderr: "ignore" });
+        if ((await shot.exited) === 0) {
+          cropped = true;
+          headers["x-mesh-display"] = String(bounds.index);
+        }
+      }
+      if (!cropped) {
+        // No display geometry (helper unavailable) — shoot the whole frame at native
+        // pixels and cut the same normalized rect out in pixel space. Same result,
+        // no point math needed. If even the cut fails, the full frame is served
+        // WITHOUT the rect header: the honest old-daemon shape.
+        const shot = Bun.spawn(["/usr/sbin/screencapture", ...fullShotArgs], { stdout: "ignore", stderr: "ignore" });
+        if ((await shot.exited) !== 0) return json({ error: "screenshot unavailable" }, 503);
+        const dims = await run(["/usr/bin/sips", "-g", "pixelWidth", "-g", "pixelHeight", path]);
+        const pw = Number(dims.match(/pixelWidth:\s*(\d+)/)?.[1] ?? 0);
+        const ph = Number(dims.match(/pixelHeight:\s*(\d+)/)?.[1] ?? 0);
+        if (pw > 0 && ph > 0) {
+          const cw = Math.max(1, Math.round(rect.w * pw));
+          const ch = Math.max(1, Math.round(rect.h * ph));
+          const oy = Math.round(rect.y * ph);
+          const ox = Math.round(rect.x * pw);
+          const cut = await runChecked(["/usr/bin/sips", "-c", String(ch), String(cw), "--cropOffset", String(oy), String(ox), path]);
+          if (cut.code === 0) {
+            cropped = true;
+            if (display != null) headers["x-mesh-display"] = String(display);
+          }
+        }
+      }
+      if (cropped) headers["x-mesh-rect"] = `${rect.x},${rect.y},${rect.w},${rect.h}`;
+    } else {
+      const shot = Bun.spawn(["/usr/sbin/screencapture", ...fullShotArgs], { stdout: "ignore", stderr: "ignore" });
+      if ((await shot.exited) !== 0) return json({ error: "screenshot unavailable" }, 503);
+    }
+    if (width != null) {
+      // Never upscale a crop to meet the width — that would manufacture blur out of
+      // the very pixels this path exists to preserve. Full frames keep the historic
+      // unconditional resample.
+      const scale = !cropped || (await imagePixelWidth(path)) > width;
+      if (scale) await run(["/usr/bin/sips", "-Z", String(width), path]);
+    }
+    if (quality != null) {
+      await run(["/usr/bin/sips", "-s", "format", "jpeg", "-s", "formatOptions", String(quality), path]);
+    }
+    return new Response(await readFile(path), { headers });
   } finally {
     unlink(path).catch(() => {});
   }
@@ -277,15 +439,30 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
     const result = await listDisplays();
     return json(result, result.ok ? 200 : 404);
   }
-  // Only claim /screen.jpg when a display is named; the plain route stays in server.ts.
-  if (path === "/screen.jpg" && req.method === "GET" && url.searchParams.has("display")) {
+  // The whole capture route lives here now — with or without a display named — so
+  // rect/width/quality mean exactly one thing. server.ts no longer carries its own copy.
+  if (path === "/screen.jpg" && req.method === "GET") {
     if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
-    const index = Number(url.searchParams.get("display"));
-    if (!Number.isInteger(index) || index < 1) return json({ error: "bad display" }, 400);
-    // Wider captures for reading UI, not just "did my click land"; capped so a watch
-    // can never ask for a 6MB frame.
-    const width = Math.min(2000, Math.max(240, Number(url.searchParams.get("width") ?? "480") || 480));
-    return await captureDisplay(index, width);
+    const params = parseCaptureParams(url);
+    if (params.error) return json({ error: params.error }, 400);
+    if (params.display != null && (!Number.isInteger(params.display) || params.display < 1)) {
+      return json({ error: "bad display" }, 400);
+    }
+    return await captureScreen(params);
+  }
+  // Open a URL in the machine's default browser — the wrist's whole "browser" is
+  // open-then-watch-through-screen-peek. http/https only: this route must never
+  // become a way to launch arbitrary handlers (file:, ssh:, x-apple-*, ...).
+  if (path === "/open" && req.method === "POST") {
+    const body = (await req.json().catch(() => ({}))) as any;
+    let target: URL;
+    try { target = new URL(String(body?.url ?? "")); } catch { return json({ error: "invalid url" }, 400); }
+    if (target.protocol !== "http:" && target.protocol !== "https:") {
+      return json({ error: "only http/https urls can be opened" }, 400);
+    }
+    const r = await runChecked(IS_MAC ? ["/usr/bin/open", target.toString()] : ["xdg-open", target.toString()]);
+    if (r.code !== 0) return json({ ok: false, error: r.stderr.slice(0, 300) || `exit ${r.code}` }, 502);
+    return json({ ok: true, opened: target.toString() });
   }
   if (path === "/apps" && req.method === "GET") {
     const result = await listApps();
