@@ -37,6 +37,14 @@ struct PairMachineView: View {
             && normalizedPairingCode(code).count >= 6
     }
 
+    /// The address as it will actually be dialled, port and all — the thing being
+    /// waited on, so a wait that fails has already shown what was tried.
+    private var contactLabel: String {
+        let host = address.trimmingCharacters(in: .whitespaces)
+        guard !host.isEmpty else { return "that machine" }
+        return "\(host):\(Int(port) ?? 8899)"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -68,7 +76,22 @@ struct PairMachineView: View {
             }
             .disabled(busy)
             .overlay {
-                if busy { ProgressView().controlSize(.large) }
+                if busy {
+                    // Named, because a bare spinner over a disabled form is
+                    // indistinguishable from a frozen app — and this particular wait
+                    // can run the full 10s claim timeout when the address is wrong,
+                    // which is exactly when someone needs to be told what is being
+                    // tried so they can see the typo.
+                    VStack(spacing: 12) {
+                        ProgressView().controlSize(.large)
+                        Text("Contacting \(contactLabel)…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                }
             }
         }
     }

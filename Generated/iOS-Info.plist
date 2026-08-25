@@ -45,7 +45,7 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock LeSearch Mesh so only you can reach your machines.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>MeshWatch connects to your machines over your private Tailscale network.</string>
+	<string>LeSearch Mesh connects to your machines over your private network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Dictate commands to your agents.</string>
 	<key>NSSupportsLiveActivities</key>

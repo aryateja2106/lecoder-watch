@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WebKit
 
 // MARK: - Terminal tab
@@ -104,6 +105,18 @@ struct TerminalTab: View {
                             HStack {
                                 Circle().fill(snap.authError != nil ? .orange : (snap.reachable ? .green : .secondary)).frame(width: 7, height: 7)
                                 Text(snap.host)
+                                Spacer()
+                                // Browsing the machine's own filesystem is the fastest
+                                // way to answer "where do I start this?" — and the one
+                                // question a phone keyboard is worst at.
+                                NavigationLink {
+                                    FileBrowserView(machine: m, capabilities: snap.capabilities)
+                                } label: {
+                                    Label("Files", systemImage: "folder")
+                                }
+                                .labelStyle(.iconOnly)
+                                .buttonStyle(.borderless)
+                                .disabled(!terminalReady(snap))
                             }
                         }
                     }
@@ -192,10 +205,12 @@ private struct ManualBridgeScreen: View {
 
 // MARK: - New session sheet
 
-private struct NewSessionSheet: View {
+struct NewSessionSheet: View {
     @EnvironmentObject var store: MeshStore
     @Environment(\.dismiss) private var dismiss
     let machine: Machine
+    /// Pre-filled working directory — how the file browser hands a folder over.
+    var initialCwd: String? = nil
 
     @State private var name = ""
     @State private var command = ""
@@ -203,6 +218,8 @@ private struct NewSessionSheet: View {
     @State private var taskAgent = "claude"
     @State private var taskText = ""
     @State private var busy = false
+    @State private var browsing = false
+    @State private var compact = false
 
     // Common launchers; "shell" means just a plain rmux session.
     private let presets = ["shell", "claude", "codex", "pi", "agy", "bun", "python3"]
@@ -240,6 +257,11 @@ private struct NewSessionSheet: View {
         return "phone-\(prefix)-\(Int(Date().timeIntervalSince1970) % 100000)"
     }
 
+    /// Handed to the file browser so the client it builds is gated like every other.
+    private var capabilities: [String]? {
+        store.snapshot?.machines.first { $0.host == machine.host }?.capabilities
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -257,12 +279,23 @@ private struct NewSessionSheet: View {
                     TextField("or custom command", text: $command)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
-                    TextField("Working directory (optional)", text: $cwd)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
+                    HStack {
+                        TextField("Working directory (optional)", text: $cwd)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        Button("Browse…") { browsing = true }
+                            .buttonStyle(.borderless)
+                            .font(.callout)
+                    }
                     if !cwdRecents.isEmpty {
                         FlowButtons(items: cwdRecents) { cwd = $0 }
                     }
+                    // 80×24 is what a phone-created session should be when you intend to
+                    // read it back on a phone or a watch: meshd's default PTY is sized
+                    // for a desktop, and a TUI laid out for 200 columns wraps into
+                    // nonsense at 21. Old daemons ignore cols/rows, so this is a
+                    // best-effort request rather than a promise.
+                    Toggle("Compact (80×24)", isOn: $compact)
                 }
                 Section("Task") {
                     Picker("Agent", selection: $taskAgent) {
@@ -285,18 +318,34 @@ private struct NewSessionSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        busy = true
-                        Task {
-                            await store.newSession(on: machine, name: sessionName, cmd: launchCommand, cwd: cwd, initialText: initialText)
-                            busy = false
-                            dismiss()
-                        }
+                    Button("Create") { Task { await create() } }
+                        .disabled(busy)
+                }
+            }
+            .onAppear {
+                if cwd.isEmpty, let initialCwd, !initialCwd.isEmpty { cwd = initialCwd }
+            }
+            .sheet(isPresented: $browsing) {
+                NavigationStack {
+                    FileBrowserView(machine: machine, capabilities: capabilities) { picked in
+                        cwd = picked
                     }
-                    .disabled(busy)
                 }
             }
         }
+    }
+
+    private func create() async {
+        busy = true
+        defer { busy = false }
+        await store.newSession(on: machine,
+                               name: sessionName,
+                               cmd: launchCommand,
+                               cwd: cwd.trimmingCharacters(in: .whitespacesAndNewlines),
+                               initialText: initialText,
+                               cols: compact ? 80 : nil,
+                               rows: compact ? 24 : nil)
+        dismiss()
     }
 }
 
@@ -320,6 +369,19 @@ private struct SessionPeekScreen: View {
     @State private var showingPhrase = false
     @State private var loading = false
     @State private var lastUpdated: Date?
+    /// The last poll came back with nothing at all. Distinct from "no output": one is
+    /// a quiet session, the other is a machine that stopped answering, and a screen
+    /// that shows the same thing for both is the reason "updated 14:02" used to be a
+    /// lie told every two seconds.
+    @State private var unreachable = false
+    @State private var openingLink: LinkTarget?
+    /// Links the session printed — a dev server, a PR, an auth callback. Computed once
+    /// per poll rather than per body pass: scanning is cheap, but not once a scroll.
+    @State private var links: [URL] = []
+
+    /// The store's constructor, never a bare `MeshClient(machine:)`: one built without
+    /// capabilities silently switches every 0.5.0 feature off.
+    private var client: MeshClient { store.client(for: machine) }
 
     private var visibleLines: [String] {
         // Keep interior blank lines so TUI output (tables, code, agent panes) stays
@@ -387,6 +449,7 @@ private struct SessionPeekScreen: View {
         }
         .sheet(isPresented: $showingCompose) { composeSheet }
         .sheet(isPresented: $showingPhrase) { phraseSheet }
+        .sheet(item: $openingLink) { target in SafariView(url: target.url) }
     }
 
     private var headerCard: some View {
@@ -410,7 +473,14 @@ private struct SessionPeekScreen: View {
                 StatPill(label: "Mem", value: session.memLabel ?? "—")
                 StatPill(label: "State", value: state.label, tone: stateColor(state))
             }
-            if let lastUpdated {
+            if unreachable {
+                Label(lastUpdated == nil
+                      ? "\(machine.host) isn't answering — nothing has loaded yet"
+                      : "\(machine.host) stopped answering · showing the last output",
+                      systemImage: "wifi.exclamationmark")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else if let lastUpdated {
                 Text("updated \(lastUpdated.formatted(date: .omitted, time: .shortened))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -487,6 +557,22 @@ private struct SessionPeekScreen: View {
             .padding(12)
             .background(Color.black, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .foregroundStyle(.white)
+            if !links.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(links, id: \.absoluteString) { link in
+                            Button {
+                                openingLink = LinkTarget(url: link)
+                            } label: {
+                                Label(link.host ?? link.absoluteString, systemImage: "safari")
+                                    .lineLimit(1)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                }
+            }
         }
         .padding(16)
         .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -502,6 +588,16 @@ private struct SessionPeekScreen: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(session.isCmux)
+            // meshd's own remote desktop, opened knowing which session you came from —
+            // which is what lets its paste go into this pane instead of into whatever
+            // the Mac happens to have focused. Needs no VNC server installed anywhere.
+            NavigationLink {
+                RemoteScreenView(machine: machine, session: session.name, pane: selectedPane)
+            } label: {
+                Label("Control screen", systemImage: "cursorarrow.rays")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
             // Watch a computer-use/browser agent live, then Stop/Reply on this same card.
             NavigationLink {
                 RemoteWebScreen(title: "\(machine.host) screen", urlString: machine.resolvedVNC)
@@ -513,6 +609,14 @@ private struct SessionPeekScreen: View {
             HStack {
                 Button { showingCompose = true } label: { Label("Reply", systemImage: "square.and.pencil") }
                 Button { showingPhrase = true } label: { Label("Command", systemImage: "waveform") }
+                // Straight into this pane, as one bracketed paste where the daemon
+                // supports it. Typing a multi-line block as keystrokes makes a TUI
+                // submit on every newline, which is how a pasted prompt becomes eight
+                // half-finished ones.
+                Button { Task { await pasteIntoPane() } } label: {
+                    Label("Paste", systemImage: "doc.on.clipboard")
+                }
+                .disabled(!UIPasteboard.general.hasStrings)
                 if !session.isCmux {
                     Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
                 }
@@ -645,26 +749,56 @@ private struct SessionPeekScreen: View {
     private func refresh() async {
         loading = true
         defer { loading = false }
-        async let out = try? MeshClient(machine: machine).output(agent: session.name, lines: 120, pane: selectedPane)
-        async let paneList = try? MeshClient(machine: machine).panes(agent: session.name)
-        if let fetched = await out { output = fetched.lines }
-        if let fetchedPanes = await paneList {
+        // Hoisted: the two concurrent calls then capture plain values instead of the
+        // view (and its environment) across a task boundary.
+        let mesh = client
+        let name = session.name
+        let pane = selectedPane
+        async let out = try? mesh.output(agent: name, lines: 120, pane: pane)
+        async let paneList = try? mesh.panes(agent: name)
+        let fetchedOutput = await out
+        let fetchedPanes = await paneList
+        if let fetchedOutput {
+            output = fetchedOutput.lines
+            // Scanned off the fetched lines rather than off `visibleLines`, so this
+            // never depends on when a @State write becomes readable again.
+            links = detectedLinks(in: Array(fetchedOutput.lines.suffix(32)))
+        }
+        if let fetchedPanes {
             panes = fetchedPanes
             if selectedPane == nil {
                 selectedPane = fetchedPanes.first(where: { $0.active })?.paneId ?? fetchedPanes.first?.paneId
             }
         }
-        lastUpdated = Date()
+        // Only real data moves the clock. Stamping `Date()` unconditionally meant a
+        // machine that had been unreachable for an hour still reported itself updated
+        // two seconds ago — the timestamp described the poll, not the output.
+        if fetchedOutput != nil || fetchedPanes != nil {
+            lastUpdated = Date()
+            unreachable = false
+        } else {
+            unreachable = true
+        }
     }
 
     private func send(text: String? = nil, key: String? = nil) async {
-        try? await MeshClient(machine: machine).send(agent: session.name, text: text, key: key, pane: selectedPane)
+        try? await client.send(agent: session.name, text: text, key: key, pane: selectedPane)
+        try? await Task.sleep(for: .milliseconds(350))
+        await refresh()
+    }
+
+    /// Paste the phone's clipboard into the selected pane. `paste: true` only reaches
+    /// the wire on a daemon that advertised "paste"; older ones get today's typed-keys
+    /// behavior from the same call, so there is nothing to branch on here.
+    private func pasteIntoPane() async {
+        guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        try? await client.send(agent: session.name, text: text, pane: selectedPane, paste: true)
         try? await Task.sleep(for: .milliseconds(350))
         await refresh()
     }
 
     private func newPane() async {
-        try? await MeshClient(machine: machine).newPane(agent: session.name)
+        try? await client.newPane(agent: session.name)
         try? await Task.sleep(for: .milliseconds(350))
         selectedPane = nil
         await refresh()
@@ -672,7 +806,7 @@ private struct SessionPeekScreen: View {
 
     private func killPane() async {
         guard let pane = activePane else { return }
-        try? await MeshClient(machine: machine).killPane(agent: session.name, paneId: pane.paneId)
+        try? await client.killPane(agent: session.name, paneId: pane.paneId)
         try? await Task.sleep(for: .milliseconds(350))
         selectedPane = nil
         await refresh()
@@ -705,12 +839,15 @@ private struct FlowButtons: View {
 // MARK: - Terminal screen (WKWebView over the bridge)
 
 private struct BridgeTerminalScreen: View {
+    @EnvironmentObject var store: MeshStore
     let machine: Machine
     let session: String
     let initialPane: String?
 
     @State private var panes: [Pane] = []
     @State private var selectedPane: String?   // nil = whole session (default)
+    @State private var phase: WebLoadPhase = .loading
+    @State private var reloadToken = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -718,8 +855,11 @@ private struct BridgeTerminalScreen: View {
                 paneSwitcher
             }
             if let url = machine.terminalURL(session: session, pane: selectedPane) {
-                BridgeWebView(url: url)
-                    .ignoresSafeArea(edges: .bottom)
+                ZStack {
+                    BridgeWebView(url: url, reloadToken: reloadToken, phase: $phase)
+                        .ignoresSafeArea(edges: .bottom)
+                    webStatus(url: url)
+                }
             } else {
                 ContentUnavailableView("No bridge", systemImage: "wifi.exclamationmark")
             }
@@ -727,6 +867,55 @@ private struct BridgeTerminalScreen: View {
         .navigationTitle(session)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadPanes() }
+    }
+
+    /// A WKWebView that cannot reach its host renders a blank black rectangle — which,
+    /// on a terminal page, is indistinguishable from a terminal that has nothing to say.
+    /// This is the difference between the two.
+    @ViewBuilder
+    private func webStatus(url: URL) -> some View {
+        switch phase {
+        case .ready:
+            EmptyView()
+        case .loading:
+            VStack(spacing: 10) {
+                ProgressView().tint(.white)
+                Text("Connecting to \(machine.host)'s bridge")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.black)
+            .allowsHitTesting(false)
+        case .failed(let message):
+            VStack(spacing: 12) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.largeTitle)
+                    .foregroundStyle(.orange)
+                Text("Can't reach the terminal bridge")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.75))
+                    .multilineTextAlignment(.center)
+                Text(url.absoluteString)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+                Button {
+                    phase = .loading
+                    reloadToken += 1
+                } label: {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.black)
+        }
     }
 
     private var paneSwitcher: some View {
@@ -754,7 +943,7 @@ private struct BridgeTerminalScreen: View {
 
     private func loadPanes() async {
         do {
-            let fetched = try await MeshClient(machine: machine).panes(agent: session)
+            let fetched = try await store.client(for: machine).panes(agent: session)
             panes = fetched
             // Default to the active pane so the chip selection matches the bridge's view.
             if selectedPane == nil { selectedPane = initialPane ?? fetched.first(where: { $0.active })?.paneId }
@@ -764,11 +953,28 @@ private struct BridgeTerminalScreen: View {
     }
 }
 
+/// What a hosted page is doing. Reported by the navigation delegate, because a
+/// `WKWebView` tells nobody anything unless you ask it to.
+enum WebLoadPhase {
+    case loading
+    case ready
+    case failed(String)
+}
+
 /// WKWebView wrapper. The bridge page (xterm + keybar + splits) handles all
 /// touch input, scroll/select/copy, and the WebSocket stream itself.
 ///
+/// The delegate exists because the failure looks like success: a bridge that is down,
+/// a tailnet that dropped, a wrong port — every one of them paints the same black
+/// rectangle a working terminal at a fresh prompt does. `phase` carries the answer back
+/// out so the screen above can say which it is and offer a retry.
 private struct BridgeWebView: UIViewRepresentable {
     let url: URL
+    /// Bumped by the retry button. `url` alone cannot express "same page, try again".
+    var reloadToken: Int
+    @Binding var phase: WebLoadPhase
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -778,12 +984,54 @@ private struct BridgeWebView: UIViewRepresentable {
         web.backgroundColor = .black
         web.scrollView.backgroundColor = .black
         web.scrollView.bounces = false
+        web.navigationDelegate = context.coordinator
+        context.coordinator.requested = url
+        context.coordinator.token = reloadToken
         web.load(URLRequest(url: url))
         return web
     }
 
     func updateUIView(_ web: WKWebView, context: Context) {
-        if web.url != url { web.load(URLRequest(url: url)) }
+        context.coordinator.parent = self
+        guard context.coordinator.requested != url || context.coordinator.token != reloadToken else { return }
+        context.coordinator.requested = url
+        context.coordinator.token = reloadToken
+        web.load(URLRequest(url: url))
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var parent: BridgeWebView
+        /// What we last asked for, so `updateUIView` reloads on a real change rather
+        /// than on every layout pass (`web.url` is nil until the first load lands).
+        var requested: URL?
+        var token = -1
+
+        init(_ parent: BridgeWebView) { self.parent = parent }
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            parent.phase = .loading
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            parent.phase = .ready
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            report(error)
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
+                     withError error: Error) {
+            report(error)
+        }
+
+        private func report(_ error: Error) {
+            // -999 is "a newer load replaced this one", which every retry produces and
+            // which is not a failure anybody wants to read about.
+            let ns = error as NSError
+            guard !(ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled) else { return }
+            parent.phase = .failed(ns.localizedDescription)
+        }
     }
 }
 

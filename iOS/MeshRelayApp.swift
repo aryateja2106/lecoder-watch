@@ -35,9 +35,19 @@ struct MeshRelayApp: App {
         NotificationManager.shared.onLimitResume = { providerId in
             Task { await store.resumePinnedLimit(providerId: providerId) }
         }
-        NotificationManager.shared.onAgentAction = { host, session, text, key in
-            Task { await store.respondToAgent(host: host, session: session, text: text, key: key) }
+        NotificationManager.shared.onAgentAction = { host, session, text, key, pane in
+            Task { await store.respondToAgent(host: host, session: session, text: text, key: key, pane: pane) }
         }
+        // Live Activity push tokens go to the machines themselves — meshd pushes the
+        // card directly, same as it pushes alerts, so there is no cloud in the path.
+        // Wired here rather than in the controller so the controller keeps knowing
+        // nothing about the machine list.
+        LiveActivityController.shared.uploadToken = { kind, token, session in
+            await store.uploadLAToken(kind: kind, token: token, session: session)
+        }
+        // Adopting orphaned activities has to happen before the first poll: a card left
+        // over from a killed launch must be picked back up, not duplicated.
+        LiveActivityController.shared.begin()
         // Must happen before launch completes, so it cannot move to onAppear.
         BackgroundRefresh.register(store: store)
     }

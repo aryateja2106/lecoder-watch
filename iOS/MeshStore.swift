@@ -1,5 +1,25 @@
 import Foundation
 import Combine
+import CoreGraphics
+import UIKit
+
+/// A failure with the moment it happened. A bare string could not say whether it was
+/// describing right now or a tap from twenty minutes ago, so it sat in the Monitor tab
+/// forever and stopped meaning anything.
+struct StoreError: Equatable {
+    var message: String
+    var at: Date
+}
+
+/// What we remember about a machine's network identity while it is awake — exactly the
+/// three facts a Wake-on-LAN needs once it is asleep and can no longer be asked.
+/// UserDefaults rather than the Keychain: a MAC and a subnet are not secrets, and the
+/// Keychain blob is the token store.
+struct MachineNetIdentity: Codable, Hashable {
+    var mac: String? = nil
+    var ipv4: String? = nil
+    var netmask: String? = nil
+}
 
 /// iPhone-side brain: persists the machine list, polls every machine's meshd
 /// concurrently, builds the snapshot for the UI, and relays it to the watch.
@@ -10,8 +30,12 @@ final class MeshStore: ObservableObject {
     @Published var pinnedLimitSessions: [PinnedLimitSession] = []
     @Published var snapshot: MeshSnapshot?
     @Published var events: [AgentEvent] = []
-    @Published var lastError: String?
+    @Published var lastError: StoreError?
     @Published var polling = false
+    /// False until the very first poll has finished. "No machines online" and "we have
+    /// not looked yet" are different sentences, and showing the first one during launch
+    /// is how the app told people their fleet was down every single cold start.
+    @Published private(set) var hasEverPolled = false
     /// Set when every machine fails instantly — iOS is blocking local-network traffic
     /// and no amount of retrying will help until the user grants the permission.
     @Published var localNetworkBlocked = false
@@ -21,6 +45,8 @@ final class MeshStore: ObservableObject {
     private let installTokenKey = "mesh.installToken.v1"
     private let quickCommandsKey = "mesh.quickCommands.v1"
     private let pinnedLimitsKey = "mesh.pinnedLimits.v1"
+    private let netIdentityKey = "mesh.netIdentity.v1"
+    private let capabilitiesKey = "mesh.capabilities.v1"
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
@@ -28,6 +54,24 @@ final class MeshStore: ObservableObject {
     private var watchedPane: String?
     private var watchedScreenHost: String?
     private var watchedScreenDisplay: Int?
+    /// Normalized crop / size / quality the watch asked for on its last screenPeek.
+    /// Held across polls because the watch names them once and then just waits for
+    /// frames; re-sending them on every poll would be three fields of noise per tick.
+    private var watchedScreenRect: CGRect?
+    private var watchedScreenWidth: Int?
+    private var watchedScreenQuality: Int?
+    /// What each daemon last advertised on /health, so every `MeshClient` built here
+    /// knows which 0.5.0 features it may use. Absent = assume an old daemon and leave
+    /// every gated parameter off the wire, which is exactly what 0.4.1 expects.
+    ///
+    /// Persisted, because the alternative is a launch where every gated feature is off
+    /// until the first poll lands — and the Live Activity push-to-start token arrives
+    /// from ActivityKit *before* that, gets refused for want of a known "laPush", and
+    /// is then never offered again until it rotates. A remembered capability list is
+    /// stale at worst: the first poll of the launch corrects it either way.
+    private var capabilitiesByHost: [String: [String]] = [:]
+    /// MAC + subnet per host, remembered from /health while the machine was awake.
+    private(set) var netIdentityByHost: [String: MachineNetIdentity] = [:]
     /// Last poll where a host actually answered, so a missed poll degrades to "last
     /// seen 12s ago" instead of wiping the machine — including the buttons that let
     /// you do anything about it, which are disabled while it reads unreachable.
@@ -47,6 +91,31 @@ final class MeshStore: ObservableObject {
         PhoneConnectivity.shared.commandHandler = { [weak self] cmd in
             await self?.handle(cmd)
         }
+    }
+
+    // MARK: Errors
+
+    /// Record a failure with its timestamp. Everything that used to assign a bare
+    /// string goes through here so no lane can put an undateable error on screen.
+    func fail(_ message: String) {
+        lastError = StoreError(message: message, at: Date())
+    }
+
+    // MARK: Clients
+
+    /// A `MeshClient` that knows what this machine's daemon can do. Building one
+    /// without the capabilities silently disables every 0.5.0 feature — correct
+    /// against a 0.4.1 daemon, wrong against a 0.5.0 one — so this is the only
+    /// constructor the store uses.
+    func client(for machine: Machine) -> MeshClient {
+        var configured = MeshClient(machine: machine)
+        configured.capabilities = capabilitiesByHost[machine.host]
+        return configured
+    }
+
+    /// Whether a machine's daemon advertised a capability, from the last poll.
+    func supports(_ capability: String, host: String) -> Bool {
+        capabilitiesByHost[host]?.contains(capability) ?? false
     }
 
     // MARK: Persistence
@@ -69,6 +138,33 @@ final class MeshStore: ObservableObject {
            let decoded = try? JSONDecoder().decode([PinnedLimitSession].self, from: data) {
             pinnedLimitSessions = decoded
         }
+        if let data = UserDefaults.standard.data(forKey: netIdentityKey),
+           let decoded = try? JSONDecoder().decode([String: MachineNetIdentity].self, from: data) {
+            netIdentityByHost = decoded
+        }
+        if let data = UserDefaults.standard.data(forKey: capabilitiesKey),
+           let decoded = try? JSONDecoder().decode([String: [String]].self, from: data) {
+            capabilitiesByHost = decoded
+        }
+        // A MAC cached by an earlier build lives on the Machine itself; fold it in so
+        // the wake path has one place to look.
+        for machine in machines {
+            guard let mac = machine.macAddress, !mac.isEmpty,
+                  netIdentityByHost[machine.host]?.mac == nil else { continue }
+            var identity = netIdentityByHost[machine.host] ?? MachineNetIdentity()
+            identity.mac = mac
+            netIdentityByHost[machine.host] = identity
+        }
+    }
+
+    private func saveNetIdentities() {
+        guard let data = try? JSONEncoder().encode(netIdentityByHost) else { return }
+        UserDefaults.standard.set(data, forKey: netIdentityKey)
+    }
+
+    private func saveCapabilities() {
+        guard let data = try? JSONEncoder().encode(capabilitiesByHost) else { return }
+        UserDefaults.standard.set(data, forKey: capabilitiesKey)
     }
 
     func deleteMachines(atOffsets offsets: IndexSet) {
@@ -89,6 +185,9 @@ final class MeshStore: ObservableObject {
         // "let this thing alert you about it" now has an obvious referent.
         NotificationManager.shared.requestAuthorizationOncePaired(hasMachines: !machines.isEmpty)
         await refresh()
+        // After the refresh, so the capability list this machine advertises is known
+        // before we try to hand it tokens that only a "laPush" daemon can accept.
+        await LiveActivityController.shared.resendTokens()
         return hosts
     }
 
@@ -143,7 +242,7 @@ final class MeshStore: ObservableObject {
     /// get the token next launch.
     func uploadPushToken(_ token: String) async {
         for machine in machines {
-            try? await MeshClient(machine: machine).registerPush(deviceToken: token)
+            try? await client(for: machine).registerPush(deviceToken: token)
         }
     }
 
@@ -170,12 +269,20 @@ final class MeshStore: ObservableObject {
         guard !polling else { return }
         polling = true
         defer { polling = false }
+        let startedAt = Date()
         let targets = machines
+        // Read once on the main actor; the per-machine tasks below are nonisolated and
+        // must not reach back into store state while the group is running.
+        let cachedCapabilities = capabilitiesByHost
         var results: [MachineSnapshot] = []
         await withTaskGroup(of: MachineSnapshot.self) { group in
             for machine in targets {
                 group.addTask {
-                    let client = MeshClient(machine: machine)
+                    // Seeded from the last poll so the very first call of this pass is
+                    // already capability-correct, then replaced by whatever /health
+                    // says a moment later.
+                    var client = MeshClient(machine: machine)
+                    client.capabilities = cachedCapabilities[machine.host]
                     var stats: Stats?
                     var health: HealthInfo?
                     var tailnetPeers: [TailnetPeer]?
@@ -202,6 +309,8 @@ final class MeshStore: ObservableObject {
                                                agents: [],
                                                error: deniedInstantly ? "blocked by iOS" : (errorText ?? "unreachable"))
                     }
+                    // From here on this client speaks the daemon's own dialect.
+                    if let advertised = health?.capabilities { client.capabilities = advertised }
                     do {
                         stats = try await client.stats()
                     } catch {
@@ -253,7 +362,9 @@ final class MeshStore: ObservableObject {
                                            capabilities: health?.capabilities,
                                            tailnetPeers: tailnetPeers,
                                            tailnetError: tailnetError,
-                                           mac: health?.mac)
+                                           mac: health?.mac,
+                                           ipv4: health?.ipv4,
+                                           netmask: health?.netmask)
                 }
             }
             // Publish each machine the moment it answers. Waiting for the whole group
@@ -275,30 +386,54 @@ final class MeshStore: ObservableObject {
             .map { holdRecentlyGood($0) }
 
         // Remember each machine's hardware MAC while it's awake — that's exactly the
-        // information you no longer have once it's asleep and you want to wake it.
+        // information you no longer have once it's asleep and you want to wake it. The
+        // subnet (ipv4 + netmask, meshd 0.5.0+) rides along for the same reason: it is
+        // what picks a peer that can actually reach the sleeping machine's LAN.
         var machinesChanged = false
+        var identitiesChanged = false
+        var capabilitiesChanged = false
         for snap in ordered {
-            guard let mac = snap.mac, !mac.isEmpty,
-                  let idx = machines.firstIndex(where: { $0.host == snap.host }),
-                  machines[idx].macAddress != mac else { continue }
-            machines[idx].macAddress = mac
-            machinesChanged = true
+            guard snap.reachable else { continue }
+            if let mac = snap.mac, !mac.isEmpty,
+               let idx = machines.firstIndex(where: { $0.host == snap.host }),
+               machines[idx].macAddress != mac {
+                machines[idx].macAddress = mac
+                machinesChanged = true
+            }
+            var identity = netIdentityByHost[snap.host] ?? MachineNetIdentity()
+            let updated = MachineNetIdentity(mac: snap.mac ?? identity.mac,
+                                             ipv4: snap.ipv4 ?? identity.ipv4,
+                                             netmask: snap.netmask ?? identity.netmask)
+            if updated != identity {
+                identity = updated
+                netIdentityByHost[snap.host] = identity
+                identitiesChanged = true
+            }
+            if let caps = snap.capabilities, capabilitiesByHost[snap.host] != caps {
+                capabilitiesByHost[snap.host] = caps
+                capabilitiesChanged = true
+            }
         }
         if machinesChanged { save() }
+        if identitiesChanged { saveNetIdentities() }
+        if capabilitiesChanged { saveCapabilities() }
 
         var usage: UsageSnapshot?
         for machine in targets {
-            guard let fetched = try? await MeshClient(machine: machine).usage(),
+            guard let fetched = try? await client(for: machine).usage(),
                   !fetched.providers.isEmpty else { continue }
             usage = fetched
             break
         }
 
-        // Relay live output for whatever agent the watch is watching.
+        // Relay live output for whatever agent the watch is watching. Deliberately
+        // still the plain capture: `join`/`plain` are the watch's own reader-mode call
+        // to make, and the relayed lines have to match what the watch's direct path
+        // produces or the same session reads two different ways depending on the route.
         var watchedOutput: [String]?
         if let host = watchedHost, let agent = watchedAgent,
            let m = targets.first(where: { $0.host == host }) {
-            watchedOutput = (try? await MeshClient(machine: m).output(agent: agent, lines: 60, pane: watchedPane))?.lines
+            watchedOutput = (try? await client(for: m).output(agent: agent, lines: 60, pane: watchedPane))?.lines
         }
         var screenJPEGData: Data?
         var screenError: String?
@@ -307,7 +442,10 @@ final class MeshStore: ObservableObject {
             do {
                 // A phone screen is ~390 points at 3x, so 480px was soft even before
                 // anyone zoomed. 1400 is legible and still about 270KB.
-                screenJPEGData = try await MeshClient(machine: m).screenImage(display: watchedScreenDisplay, width: 1400)
+                screenJPEGData = try await client(for: m).screenImage(display: watchedScreenDisplay,
+                                                                      width: watchedScreenWidth ?? 1400,
+                                                                      rect: watchedScreenRect,
+                                                                      quality: watchedScreenQuality)
             } catch {
                 screenError = Self.describe(error)
             }
@@ -347,6 +485,17 @@ final class MeshStore: ObservableObject {
         if !(snap.events ?? []).isEmpty {
             NotificationManager.shared.clearResolvedAlerts(
                 attention: sessionsNeedingAttention(from: snap).map { ($0.host, $0.session) })
+        }
+
+        // "We have looked" — the Machines tab stops saying "checking…" about a fleet it
+        // has never actually contacted, and starts saying what it found.
+        hasEverPolled = true
+
+        // A healthy pass retires an older complaint. Only an *older* one: an error
+        // raised during this very refresh is the freshest thing we know and clearing it
+        // here would make failures flash and vanish.
+        if let error = lastError, error.at < startedAt, reachableCount > 0, !localNetworkBlocked {
+            lastError = nil
         }
     }
 
@@ -399,7 +548,7 @@ final class MeshStore: ObservableObject {
         var notifyEvents: [AgentEvent] = []
         for machine in targets {
             let previousSince = lastEventISOByHost[machine.host]
-            guard let machineEvents = try? await MeshClient(machine: machine).events(since: previousSince) else { continue }
+            guard let machineEvents = try? await client(for: machine).events(since: previousSince) else { continue }
             let shouldNotify = initializedEventHosts.contains(machine.host)
             initializedEventHosts.insert(machine.host)
             guard !machineEvents.isEmpty else {
@@ -408,15 +557,15 @@ final class MeshStore: ObservableObject {
                 }
                 continue
             }
-            let tagged = machineEvents.map { event in
-                AgentEvent(id: event.id,
-                           host: event.host ?? machine.host,
-                           source: event.source,
-                           session: event.session,
-                           level: event.level,
-                           title: event.title,
-                           body: event.body,
-                           createdISO: event.createdISO)
+            // Copy-and-mutate, never a memberwise re-init. The old re-init named eight
+            // fields and silently dropped the two it did not — `replyable` and `pane`,
+            // the exact fields that decide whether an alert gets buttons and where a
+            // reply lands — and it would drop every future field the same way. Only the
+            // host is being filled in here, so only the host should be written.
+            let tagged = machineEvents.map { event -> AgentEvent in
+                var tagged = event
+                tagged.host = event.host ?? machine.host
+                return tagged
             }
             fetched.append(contentsOf: tagged)
             if shouldNotify {
@@ -433,19 +582,19 @@ final class MeshStore: ObservableObject {
     func resumePinnedLimit(providerId: String) async {
         guard let pin = pinnedLimitSessions.first(where: { $0.providerId.lowercased() == providerId.lowercased() }),
               let machine = machines.first(where: { $0.host == pin.host }) else {
-            lastError = "No pinned session for \(providerId). Set one in Settings."
+            fail("No pinned session for \(providerId). Set one in Settings.")
             return
         }
         if let provider = snapshot?.usage?.providers.first(where: { $0.id.lowercased() == providerId.lowercased() }),
            provider.limits.contains(where: { LimitHelpers.isBlocked($0) }) {
-            lastError = "\(provider.displayName) is still at its limit. Try again after it resets."
+            fail("\(provider.displayName) is still at its limit. Try again after it resets.")
             return
         }
         do {
-            try await MeshClient(machine: machine).send(agent: pin.sessionName, text: "continue\n")
+            try await client(for: machine).send(agent: pin.sessionName, text: "continue\n")
             await refresh()
         } catch {
-            lastError = "continue failed: \(error)"
+            fail("continue failed: \(Self.describe(error))")
         }
     }
 
@@ -466,41 +615,217 @@ final class MeshStore: ObservableObject {
     // MARK: Sessions
 
     /// Create a new rmux session on a machine, then refresh so it appears in the list.
-    func newSession(on machine: Machine, name: String, cmd: String?, cwd: String? = nil, initialText: String? = nil) async {
+    func newSession(on machine: Machine, name: String, cmd: String?, cwd: String? = nil, initialText: String? = nil,
+                    cols: Int? = nil, rows: Int? = nil) async {
         do {
-            try await MeshClient(machine: machine).newSession(name: name, cmd: cmd, cwd: cwd, initialText: initialText)
+            try await client(for: machine).newSession(name: name, cmd: cmd, cwd: cwd, initialText: initialText,
+                                                      cols: cols, rows: rows)
             await refresh()
         } catch {
-            lastError = "create session failed: \(error)"
+            fail("create session failed: \(Self.describe(error))")
         }
     }
 
     /// Kill a session on a machine, then refresh so it drops out of every client's list.
     func kill(on machine: Machine, name: String) async {
         do {
-            try await MeshClient(machine: machine).kill(agent: name)
+            try await client(for: machine).kill(agent: name)
             await refresh()
         } catch {
-            lastError = "kill session failed: \(error)"
+            fail("kill session failed: \(Self.describe(error))")
         }
     }
 
     // MARK: Watch commands
 
-    /// Returns payload data for commands the watch is waiting on an answer for.
+    /// Answer an agent from a notification button, or from the Needs-you row.
+    ///
+    /// The failure used to be swallowed on the theory that nobody was looking. They
+    /// often are — the same call backs the in-app affirmative — and a tap that quietly
+    /// did nothing is indistinguishable from a tap that worked, which is the worst
+    /// possible outcome for a button whose whole job is to unblock an agent. The error
+    /// is recorded either way; if nobody is looking it costs a line in Monitor.
+    ///
+    /// `pane` routes the answer into the pane the question came from, when the event
+    /// named one. Nil means the session's active pane — the pre-existing behavior.
+    ///
+    /// Returns nil when the answer landed, or the reason it did not, so a caller with a
+    /// button can stop labelling it "Sent" on the strength of having tried.
     @discardableResult
-    /// Answer an agent from a notification button. Errors are swallowed on purpose:
-    /// there is no UI to report into — the user has already put the phone down — and
-    /// the next poll shows whether the session moved.
-    func respondToAgent(host: String, session: String, text: String?, key: String?) async {
-        guard let machine = machineMatching(host, in: machines) else { return }
-        try? await MeshClient(machine: machine).send(agent: session, text: text, key: key)
+    func respondToAgent(host: String, session: String, text: String?, key: String?,
+                        pane: String? = nil) async -> String? {
+        guard let machine = machineMatching(host, in: machines) else {
+            let line = "\(host) isn't paired on this phone, so there is nowhere to send that."
+            fail(line)
+            return line
+        }
+        var failure: String?
+        do {
+            try await client(for: machine).send(agent: session, text: text, key: key, pane: pane)
+        } catch {
+            failure = "Couldn't answer \(session) on \(host): \(Self.describe(error))"
+            fail(failure!)
+        }
         await refresh()
+        return failure
+    }
+
+    // MARK: Power
+
+    /// Run a `/system` action and report what actually happened. meshd 0.5.0 answers
+    /// with the real exit code and stderr, so a `pmset` that was refused finally reads
+    /// as refused; older daemons say `{ok:true}` regardless and that stays "worked",
+    /// which is exactly today's behavior and no worse.
+    ///
+    /// Returns nil on success, or the line to show the user.
+    @discardableResult
+    func systemAction(_ action: String, on machine: Machine) async -> String? {
+        do {
+            let result = try await client(for: machine).systemAction(action)
+            guard let line = result.failureLine else { return nil }
+            fail("\(action) on \(machine.host): \(line)")
+            return line
+        } catch MeshClient.MeshError.unsupported(let capability) {
+            let line = "\(machine.host) runs an agent without \(capability) support. Re-run the install command on it."
+            fail(line)
+            return line
+        } catch {
+            let line = Self.describe(error)
+            fail("\(action) on \(machine.host): \(line)")
+            return line
+        }
+    }
+
+    /// The directed broadcast for an address and its mask — host bits all ones. Nil
+    /// unless both parse as dotted quads: guessing here aims a magic packet at the
+    /// wrong network, which is worse than not sending one at all.
+    static func directedBroadcast(ipv4: String?, netmask: String?) -> String? {
+        guard let address = quad(ipv4), let mask = quad(netmask) else { return nil }
+        return (0..<4).map { String((address[$0] & mask[$0]) | (~mask[$0] & 255)) }.joined(separator: ".")
+    }
+
+    /// Whether two addresses sit on the same IPv4 subnet. Requires both masks and
+    /// requires them to agree — two hosts claiming different masks for one wire is not
+    /// something to paper over by picking one.
+    static func sameSubnet(_ address: String?, _ mask: String?,
+                           _ otherAddress: String?, _ otherMask: String?) -> Bool {
+        guard let a = quad(address), let m = quad(mask),
+              let b = quad(otherAddress), let n = quad(otherMask), m == n else { return false }
+        return (0..<4).allSatisfy { (a[$0] & m[$0]) == (b[$0] & m[$0]) }
+    }
+
+    private static func quad(_ text: String?) -> [Int]? {
+        guard let text else { return nil }
+        let parts = text.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4, parts.allSatisfy({ (0...255).contains($0) }) else { return nil }
+        return parts
+    }
+
+    /// The remembered network identity for a host, whether it came from this session's
+    /// polls or from a previous launch.
+    func netIdentity(for host: String) -> MachineNetIdentity {
+        var identity = netIdentityByHost[host] ?? MachineNetIdentity()
+        if let snap = snapshot?.machines.first(where: { $0.host == host }) {
+            identity = MachineNetIdentity(mac: snap.mac ?? identity.mac,
+                                          ipv4: snap.ipv4 ?? identity.ipv4,
+                                          netmask: snap.netmask ?? identity.netmask)
+        }
+        if identity.mac == nil { identity.mac = machines.first { $0.host == host }?.macAddress }
+        return identity
+    }
+
+    /// An awake machine that can broadcast a magic packet onto the sleeping one's own
+    /// LAN. Wake-on-LAN is a LAN broadcast, so the phone cannot send it across the
+    /// tailnet itself and a peer on the *wrong* network sends a packet nobody hears.
+    ///
+    /// When the target's subnet is known (meshd 0.5.0 reports it), only a peer on that
+    /// subnet qualifies. When it is not — an old daemon never said — any wake-capable
+    /// peer is offered, which is exactly the pre-0.5.0 behavior.
+    func wakePeer(for host: String) -> Machine? {
+        let target = netIdentity(for: host)
+        let peers = (snapshot?.machines ?? []).filter {
+            $0.host != host && $0.reachable && !$0.isStale && ($0.capabilities?.contains("wake") ?? false)
+        }
+        if target.ipv4 != nil, target.netmask != nil {
+            let onSubnet = peers.first { peer in
+                let identity = netIdentity(for: peer.host)
+                return Self.sameSubnet(target.ipv4, target.netmask, identity.ipv4, identity.netmask)
+            }
+            return onSubnet.flatMap { peer in machines.first { $0.host == peer.host } }
+        }
+        return peers.compactMap { peer in machines.first { $0.host == peer.host } }.first
+    }
+
+    /// Ask a peer to wake a sleeping machine. Returns nil on success, or the honest
+    /// reason it could not be done — never a button that pretends.
+    @discardableResult
+    func wake(host: String) async -> String? {
+        let identity = netIdentity(for: host)
+        guard let mac = identity.mac, !mac.isEmpty else {
+            let line = "No hardware address for \(host) yet. Open it once while it's awake and this appears."
+            fail(line)
+            return line
+        }
+        guard let peer = wakePeer(for: host) else {
+            let line = identity.ipv4 == nil
+                ? "Can't wake \(host): no online machine can broadcast for it."
+                : "Can't wake \(host): no online peer on that network."
+            fail(line)
+            return line
+        }
+        let broadcast = Self.directedBroadcast(ipv4: identity.ipv4, netmask: identity.netmask)
+        do {
+            try await client(for: peer).wake(mac: mac, via: broadcast)
+            return nil
+        } catch {
+            let line = "Wake via \(peer.host) failed: \(Self.describe(error))"
+            fail(line)
+            return line
+        }
+    }
+
+    // MARK: Live Activity push tokens
+
+    /// Hand a Live Activity push token to every paired machine that can use one.
+    /// Hosts without the "laPush" capability refuse client-side and are skipped in
+    /// silence — an old daemon has no route to take it.
+    func uploadLAToken(kind: MeshClient.LATokenKind, token: String, session: String? = nil) async {
+        for machine in machines {
+            try? await client(for: machine).uploadLAToken(kind: kind, token: token, session: session)
+        }
+    }
+
+    // MARK: What the user is looking at
+
+    /// The session on screen right now, if any. A banner about the thing you are
+    /// already staring at is pure noise, so both notification lanes consult this.
+    @Published private(set) var currentlyViewing: SessionTarget? {
+        didSet {
+            NotificationManager.shared.currentlyViewing =
+                currentlyViewing.map { (host: $0.host, session: $0.session) }
+        }
+    }
+
+    /// Called by a session screen as it appears and disappears.
+    func viewing(_ target: SessionTarget?) {
+        currentlyViewing = target
     }
 
     /// Set by a `meshwatch://session/<host>/<name>` link (the live card, or a
     /// notification tap) and consumed by the Terminal tab.
-    @Published var deepLinkSession: SessionTarget?
+    ///
+    /// Doubles as the "on screen" signal for the route it drives: SwiftUI clears it
+    /// when the destination is popped, so it is already an accurate statement about
+    /// what is visible.
+    @Published var deepLinkSession: SessionTarget? {
+        didSet {
+            guard let deepLinkSession else {
+                if currentlyViewing == oldValue { viewing(nil) }
+                return
+            }
+            viewing(deepLinkSession)
+        }
+    }
 
     struct SessionTarget: Identifiable, Hashable {
         var host: String
@@ -544,6 +869,8 @@ final class MeshStore: ObservableObject {
         return true
     }
 
+    /// Service one command relayed from the watch. Returns payload data for the
+    /// commands the watch is waiting on an answer for, nil for fire-and-forget ones.
     func handle(_ command: WatchCommand) async -> Data? {
         switch command.kind {
         case .refresh:
@@ -554,7 +881,7 @@ final class MeshStore: ObservableObject {
         case .agentSend:
             guard let host = command.host, let agent = command.agent,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await MeshClient(machine: machine).send(agent: agent, text: command.text, key: command.key, pane: command.pane)
+            try? await client(for: machine).send(agent: agent, text: command.text, key: command.key, pane: command.pane)
             await refresh()
         case .killAgent:
             guard let host = command.host, let agent = command.agent,
@@ -563,7 +890,7 @@ final class MeshStore: ObservableObject {
         case .killPane:
             guard let host = command.host, let agent = command.agent, let pane = command.pane,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await MeshClient(machine: machine).killPane(agent: agent, paneId: pane)
+            try? await client(for: machine).killPane(agent: agent, paneId: pane)
             if watchedHost == host, watchedAgent == agent, watchedPane == pane {
                 watchedPane = nil
             }
@@ -577,56 +904,113 @@ final class MeshStore: ObservableObject {
         case .screenPeek:
             watchedScreenHost = command.host
             watchedScreenDisplay = command.display
+            // A watch that has zoomed into a corner asks for that corner. The rect is
+            // only honoured against a daemon advertising "screenRegion"; MeshClient
+            // drops it otherwise and the full frame comes back, which is the right
+            // degradation — a stretched full frame beats a hard error.
+            if let rect = command.rect, rect.count == 4 {
+                watchedScreenRect = CGRect(x: rect[0], y: rect[1], width: rect[2], height: rect[3])
+            } else {
+                watchedScreenRect = nil
+            }
+            watchedScreenWidth = command.width
+            watchedScreenQuality = command.quality
             await refresh()
         case .newAgent:
             guard let host = command.host, let name = command.text,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            await newSession(on: machine, name: name, cmd: command.cmd, cwd: command.cwd, initialText: command.initialText)
+            await newSession(on: machine, name: name, cmd: command.cmd, cwd: command.cwd,
+                             initialText: command.initialText, cols: command.cols, rows: command.rows)
         case .newPane:
             guard let host = command.host, let agent = command.agent,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await MeshClient(machine: machine).newPane(agent: agent)
+            try? await client(for: machine).newPane(agent: agent)
             await refresh()
         case .input:
             // Watch trackpad/keys, relayed when the watch itself can't reach meshd.
             guard let host = command.host, let events = command.input,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await MeshClient(machine: machine).input(events)
+            try? await client(for: machine).input(events)
         case .volume:
             guard let host = command.host,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await MeshClient(machine: machine).volume(delta: command.volumeDelta, muted: command.volumeMuted)
+            _ = try? await client(for: machine).volume(delta: command.volumeDelta, muted: command.volumeMuted)
         case .clipboard:
             guard let host = command.host, let text = command.text,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await MeshClient(machine: machine).setClipboard(text)
+            try? await client(for: machine).setClipboard(text)
         case .system:
             guard let host = command.host, let action = command.text,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await MeshClient(machine: machine).system(action)
+            // Answer with the daemon's real verdict instead of dropping it. A watch
+            // that ignores the reply is unaffected; one that decodes `SystemResult`
+            // can finally say "that failed" instead of animating a success it did not
+            // observe. Client-side refusals (shutdown on a daemon without "power")
+            // come back as a result too, not as silence.
+            do {
+                let result = try await client(for: machine).systemAction(action)
+                if let line = result.failureLine { fail("\(action) on \(host): \(line)") }
+                return try? JSONEncoder().encode(result)
+            } catch MeshClient.MeshError.unsupported(let capability) {
+                let line = "\(host) has no \(capability) support — update the agent on it."
+                fail(line)
+                return try? JSONEncoder().encode(SystemResult(ok: false, exitCode: nil, stderr: nil, action: action, error: line))
+            } catch {
+                let line = Self.describe(error)
+                fail("\(action) on \(host): \(line)")
+                return try? JSONEncoder().encode(SystemResult(ok: false, exitCode: nil, stderr: nil, action: action, error: line))
+            }
         case .readClipboard:
             guard let host = command.host,
                   let machine = machines.first(where: { $0.host == host }),
-                  let text = try? await MeshClient(machine: machine).clipboard() else { return nil }
+                  let text = try? await client(for: machine).clipboard() else { return nil }
             return try? JSONEncoder().encode(text)
+        case .readPhoneClipboard:
+            // The *iPhone's* pasteboard, not the Mac's — that one is `readClipboard`.
+            // iOS only serves UIPasteboard to a foreground app: from the background it
+            // hands back nothing, and relaying that empty string would tell the wrist
+            // "you copied nothing", which is a lie about the user's own clipboard.
+            // Say why instead.
+            guard UIApplication.shared.applicationState == .active else {
+                return try? JSONEncoder().encode(
+                    ["error": "Open LeSearch Mesh on your iPhone first — iOS only shares the clipboard with an app you're looking at."])
+            }
+            return try? JSONEncoder().encode(["text": UIPasteboard.general.string ?? ""])
+        case .openURL:
+            // Validated here as well as in MeshClient and again in the daemon: a
+            // `file:` or custom scheme opened on someone's Mac is an attack surface,
+            // and the wrist is the least verifiable place a URL can come from.
+            guard let host = command.host, let raw = command.url,
+                  let url = URL(string: raw),
+                  let machine = machines.first(where: { $0.host == host }) else { return nil }
+            do {
+                try await client(for: machine).openURL(url)
+            } catch {
+                fail("Couldn't open that link on \(host): \(Self.describe(error))")
+            }
+        case .fsList:
+            guard let host = command.host,
+                  let machine = machines.first(where: { $0.host == host }),
+                  let listing = try? await client(for: machine).fsList(path: command.path) else { return nil }
+            return try? JSONEncoder().encode(listing)
         case .listApps:
             guard let host = command.host,
                   let machine = machines.first(where: { $0.host == host }),
-                  let apps = try? await MeshClient(machine: machine).apps() else { return nil }
+                  let apps = try? await client(for: machine).apps() else { return nil }
             return try? JSONEncoder().encode(apps)
         case .activateApp:
             guard let host = command.host, let name = command.text,
                   let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await MeshClient(machine: machine).activateApp(name)
+            try? await client(for: machine).activateApp(name)
         case .listDisplays:
             guard let host = command.host,
                   let machine = machines.first(where: { $0.host == host }),
-                  let list = try? await MeshClient(machine: machine).displays() else { return nil }
+                  let list = try? await client(for: machine).displays() else { return nil }
             return try? JSONEncoder().encode(list)
         case .inputStatus:
             guard let host = command.host,
                   let machine = machines.first(where: { $0.host == host }),
-                  let status = try? await MeshClient(machine: machine).inputStatus(prompt: command.text == "prompt")
+                  let status = try? await client(for: machine).inputStatus(prompt: command.text == "prompt")
             else { return nil }
             return try? JSONEncoder().encode(status)
         }
@@ -649,6 +1033,11 @@ final class MeshStore: ObservableObject {
     /// `/health` needs no token, so a green address next to a red auth row isolates
     /// the fault to the token rather than the network — and vice versa. That is
     /// exactly the distinction the machine row's single error string cannot make.
+    ///
+    /// The only place that builds a bare `MeshClient` on purpose: it is `nonisolated`
+    /// and cannot reach the store's capability cache, and it deliberately calls the two
+    /// routes every daemon since 0.1 has served. A diagnosis must work against the
+    /// oldest daemon in the fleet — that is when you need one.
     nonisolated static func diagnose(_ machine: Machine) async -> [AddressDiagnosis] {
         var results: [AddressDiagnosis] = []
         for address in machine.addresses {
@@ -705,6 +1094,10 @@ final class MeshStore: ObservableObject {
             case .http(let code): return "HTTP \(code)"
             case .badURL: return "bad URL"
             case .decode: return "bad response"
+            // Not a network failure at all: the call never left the phone because the
+            // daemon never claimed it could do this. Say which thing is missing —
+            // "unsupported" alone sends people looking at the wrong end.
+            case .unsupported(let capability): return "this agent has no \(capability) support"
             }
         }
         return error.localizedDescription

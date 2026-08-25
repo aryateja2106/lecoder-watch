@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import WebKit
+import ActivityKit
 
 struct ContentView: View {
     @EnvironmentObject var store: MeshStore
@@ -25,6 +26,14 @@ struct ContentView: View {
         .onOpenURL { url in
             if store.open(url: url), store.deepLinkPair == nil { tab = .terminal }
         }
+        // Whatever set it — a link, the live card, the Needs-you row — the session
+        // screen lives in the Terminal tab's stack. Pushing it without switching tabs
+        // put the session on a stack nobody was looking at, and it is also what
+        // `MeshStore.currentlyViewing` reports as on screen, so the alert suppression
+        // that hangs off it would have been suppressing alerts about an invisible view.
+        .onChange(of: store.deepLinkSession) { _, target in
+            if target != nil { tab = .terminal }
+        }
         // A scanned pairing QR (system Camera → banner → here) opens the pair sheet
         // pre-filled over whatever tab is up; the user confirms the code and taps Pair.
         .sheet(item: $store.deepLinkPair) { target in
@@ -48,9 +57,18 @@ private struct MonitorTab: View {
                                 .foregroundStyle(.red)
                         }
                         if let lastError = store.lastError {
-                            Text(lastError)
-                                .font(.caption)
-                                .foregroundStyle(.red)
+                            // With the time on it. A bare line could be describing the
+                            // tap you just made or one from this morning, and reading
+                            // it as "right now" is how a resolved failure kept sending
+                            // people to debug a mesh that was already fine.
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(lastError.message)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                                Text(lastError.at, format: .relative(presentation: .named))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -107,9 +125,10 @@ private struct LocalNetworkBlockedBanner: View {
             Label("iOS is blocking the connection", systemImage: "exclamationmark.shield")
                 .font(.headline)
                 .foregroundStyle(.orange)
-            Text("Your machines are on Tailscale (100.x), which iOS treats as a local "
-                 + "network. MeshWatch needs Local Network permission — every request is "
-                 + "being dropped before it leaves the phone.")
+            Text("Your machines are on addresses iOS treats as a local network — a "
+                 + "192.168.x home LAN, or the 100.x range a VPN like Tailscale uses. "
+                 + "LeSearch Mesh needs Local Network permission, and every request is "
+                 + "being dropped before it leaves the phone until it has one.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button {
@@ -136,8 +155,34 @@ private struct MachinesTab: View {
     private var rows: [MachineSnapshot] {
         let machines = store.snapshot?.machines.isEmpty == false
             ? store.snapshot?.machines ?? []
-            : store.machines.map { MachineSnapshot(host: $0.host, reachable: false, stats: nil, agents: [], error: "checking...") }
+            : store.machines.map {
+                MachineSnapshot(host: $0.host, reachable: false, stats: nil, agents: [],
+                                // "checking…" is only true before we have ever looked.
+                                error: store.hasEverPolled ? "no answer" : "checking…")
+            }
         return activeFirst(machines)
+    }
+
+    /// Before the first poll finishes there is nothing to say about any machine, and
+    /// the list's fallback rows said "offline" — a claim about a fleet the app had not
+    /// contacted once. This is the honest version of that moment, and it lasts until
+    /// the first host answers (the poll publishes progressively, so usually well under
+    /// a second on a healthy tailnet).
+    private var firstPoll: some View {
+        VStack(spacing: 12) {
+            ProgressView {
+                Text(store.machines.count == 1
+                     ? "Checking your machine…"
+                     : "Checking your \(store.machines.count) machines…")
+            }
+            .controlSize(.large)
+            Text("Nothing has answered yet — this is the first look since launch.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
     }
 
     var body: some View {
@@ -145,6 +190,8 @@ private struct MachinesTab: View {
             Group {
                 if store.machines.isEmpty {
                     NoMachinesView { pairing = true }
+                } else if !store.hasEverPolled && store.snapshot == nil {
+                    firstPoll
                 } else {
                     machineList
                 }
@@ -212,21 +259,19 @@ private struct MachinesTab: View {
 private struct MachineDetailView: View {
     @EnvironmentObject var store: MeshStore
     let host: String
-    @State private var wokeVia: String?
 
     private var snapshot: MachineSnapshot? {
         store.snapshot?.machines.first { $0.host == host }
     }
 
-    /// An awake peer that can broadcast the magic packet for this machine. WoL is a
-    /// LAN broadcast — the phone can't send it across the tailnet itself.
-    private var wakePeer: Machine? {
-        guard let peers = store.snapshot?.machines else { return nil }
-        for p in peers where p.host != host && p.reachable && !p.isStale
-            && (p.capabilities?.contains("wake") ?? false) {
-            if let m = store.machines.first(where: { $0.host == p.host }) { return m }
+    /// The newest event this phone holds for a session on this machine, so a row can
+    /// say what the session is doing even when the daemon predates `sessionStatus`.
+    private func latestEvent(for session: String) -> AgentEvent? {
+        store.events.last { event in
+            guard event.session == session else { return false }
+            guard let eventHost = event.host, !eventHost.isEmpty else { return true }
+            return hostNamesMatch(eventHost, host)
         }
-        return nil
     }
 
     var body: some View {
@@ -280,6 +325,9 @@ private struct MachineDetailView: View {
                     } else {
                         StatRow(label: "Stats", value: "not available")
                     }
+                    if let machine = store.machines.first(where: { $0.host == m.host }) {
+                        MachinePowerSection(machine: machine, snapshot: m)
+                    }
                 } else {
                     ServiceStatusRow(label: "meshd", ok: false, detail: m.error ?? "unreachable")
                     ServiceStatusRow(label: "bridge", ok: m.bridgeReachable, detail: m.bridgeError)
@@ -292,28 +340,18 @@ private struct MachineDetailView: View {
                         Text(machine.baseURLs.map(\.absoluteString).joined(separator: " or "))
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
-                        // Turn the machine on from the couch: any awake peer on its LAN
-                        // broadcasts the magic packet. The MAC was cached while it was up.
-                        if let mac = machine.macAddress, let peer = wakePeer {
-                            Button {
-                                Task {
-                                    try? await MeshClient(machine: peer).wake(mac: mac)
-                                    wokeVia = peer.host
-                                }
-                            } label: {
-                                Label(wokeVia == nil ? "Wake via \(peer.host)"
-                                                     : "Magic packet sent — waking takes ~30s",
-                                      systemImage: "power")
-                            }
-                            .disabled(wokeVia != nil)
-                        }
                     }
+                    // Turn the machine on from the couch: an awake peer on its own LAN
+                    // broadcasts the magic packet. Everything this needs — the MAC and
+                    // the subnet — was cached while the machine was still up.
+                    WakeRow(host: m.host)
                 }
                 ForEach(m.agents) { a in
                     HStack {
                         Image(systemName: "terminal")
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(a.displayName)
+                            SessionStateBadge(state: a.displayState(latestEvent: latestEvent(for: a.name)))
                             Text(a.isCmux ? "cmux" : "\(a.windows) pane\(a.windows == 1 ? "" : "s")")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
@@ -371,12 +409,208 @@ private struct MachineDetailView: View {
     }
 }
 
+/// What one session is doing, in a shape you can read without colour.
+///
+/// The dot alone was the old version, and a red dot next to a green dot is the same
+/// dot to about one man in twelve. The glyph carries the meaning — a question mark, a
+/// gear, a tick, a warning triangle — and the word carries it again; the tint is the
+/// third copy, not the only one.
+private struct SessionStateBadge: View {
+    let state: SessionDisplayState
+
+    var body: some View {
+        let bridged = state.sessionState
+        Label {
+            Text(bridged.cardLabel)
+                .font(.caption2.weight(.medium))
+        } icon: {
+            Image(systemName: bridged.symbol)
+                .font(.caption2)
+        }
+        .foregroundStyle(bridged.tint)
+        .accessibilityLabel("Session state: \(bridged.cardLabel)")
+    }
+}
+
+/// Power and session control for a reachable machine.
+///
+/// Lock, Sleep display and Sleep are one tap: each is reversible from the machine's own
+/// keyboard, and asking "are you sure?" about locking a screen trains people to dismiss
+/// the dialog that matters. Restart and Shut Down are not reversible from anywhere — a
+/// shut-down machine cannot be woken by anything in this app except a Wake-on-LAN that
+/// needs a peer on its LAN — so both confirm, and both only appear where the daemon
+/// says it can actually do them.
+private struct MachinePowerSection: View {
+    @EnvironmentObject var store: MeshStore
+    let machine: Machine
+    let snapshot: MachineSnapshot
+
+    @State private var pending: PowerAction?
+    @State private var running: String?
+    @State private var failure: String?
+
+    /// One row. `action` is meshd's own vocabulary for `POST /system`, not ours, so
+    /// the string that reaches the daemon is the string written here.
+    private struct PowerAction: Identifiable, Equatable {
+        var id: String { action }
+        var action: String
+        var label: String
+        var symbol: String
+        /// Nil for the reversible ones. Present means it confirms first.
+        var confirm: (title: String, verb: String, consequence: String)?
+
+        static func == (lhs: PowerAction, rhs: PowerAction) -> Bool { lhs.action == rhs.action }
+    }
+
+    /// meshd 0.5.0 added shutdown and restart. Offering them against an older daemon
+    /// would be a button that 400s, so they appear only where "power" is advertised.
+    private var canPowerOff: Bool { snapshot.capabilities?.contains("power") ?? false }
+
+    /// Reversible from the machine's own keyboard, so no dialog: asking "are you sure?"
+    /// about locking a screen is how people learn to dismiss the dialog that matters.
+    private let reversible: [PowerAction] = [
+        PowerAction(action: "lock", label: "Lock", symbol: "lock.fill", confirm: nil),
+        PowerAction(action: "displaysleep", label: "Sleep display", symbol: "display", confirm: nil),
+        PowerAction(action: "sleep", label: "Sleep", symbol: "moon.fill", confirm: nil),
+    ]
+
+    private var irreversible: [PowerAction] {
+        let name = machineShortName(machine.host)
+        return [
+            PowerAction(action: "restart", label: "Restart…", symbol: "arrow.clockwise.circle",
+                        confirm: (title: "Restart \(name)?",
+                                  verb: "Restart",
+                                  consequence: "Every session on it stops. Anything unsaved there is lost, and agents mid-task will not come back on their own.")),
+            PowerAction(action: "shutdown", label: "Shut Down…", symbol: "power",
+                        confirm: (title: "Shut down \(name)?",
+                                  verb: "Shut Down",
+                                  consequence: "Every session stops and the machine goes dark. After that only its own power button, or a wake packet from a machine on the same network, brings it back.")),
+        ]
+    }
+
+    var body: some View {
+        Section("Power") {
+            ForEach(reversible) { item in
+                Button {
+                    run(item)
+                } label: {
+                    Label(running == item.action ? "\(item.label)…" : item.label, systemImage: item.symbol)
+                }
+                .disabled(running != nil)
+            }
+            if canPowerOff {
+                ForEach(irreversible) { item in
+                    Button(role: .destructive) {
+                        pending = item
+                    } label: {
+                        Label(running == item.action ? "\(item.label)…" : item.label, systemImage: item.symbol)
+                    }
+                    .disabled(running != nil)
+                }
+            } else {
+                Text("Restart and Shut Down need a newer agent on this machine. Re-run the install command on it.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if let failure {
+                // The daemon's own words, not a shrug. macOS raises a one-time
+                // Automation permission prompt for shutdown and restart and refuses
+                // with -1743 until someone approves it at the Mac — that answer travels
+                // back verbatim, and printing it is the only way anyone would know to
+                // go and approve it.
+                Label(failure, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .confirmationDialog(pending?.confirm?.title ?? "",
+                            isPresented: Binding(get: { pending != nil },
+                                                 set: { if !$0 { pending = nil } }),
+                            titleVisibility: .visible,
+                            presenting: pending) { item in
+            Button(item.confirm?.verb ?? item.label, role: .destructive) { run(item) }
+            Button("Cancel", role: .cancel) { pending = nil }
+        } message: { item in
+            Text(item.confirm?.consequence ?? "")
+        }
+    }
+
+    private func run(_ item: PowerAction) {
+        pending = nil
+        running = item.action
+        failure = nil
+        Task { @MainActor in
+            failure = await store.systemAction(item.action, on: machine)
+            running = nil
+        }
+    }
+}
+
+/// Wake-on-LAN for a machine that has gone dark.
+///
+/// The packet is a LAN broadcast, so the phone cannot send it across a tailnet and a
+/// peer on the *wrong* network sends one nobody hears. Every state here is a sentence
+/// about why, because a greyed-out or missing button teaches nothing: no cached MAC,
+/// no online peer on that subnet, or a peer and a button.
+private struct WakeRow: View {
+    @EnvironmentObject var store: MeshStore
+    let host: String
+
+    @State private var sending = false
+    @State private var sentVia: String?
+    @State private var failure: String?
+
+    private var identity: MachineNetIdentity { store.netIdentity(for: host) }
+
+    var body: some View {
+        if identity.mac == nil {
+            Text("No hardware address for \(machineShortName(host)) yet. Open it once while it's awake and a Wake button appears here.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        } else if let peer = store.wakePeer(for: host) {
+            Button {
+                sending = true
+                failure = nil
+                Task { @MainActor in
+                    if let problem = await store.wake(host: host) {
+                        failure = problem
+                    } else {
+                        sentVia = peer.host
+                    }
+                    sending = false
+                }
+            } label: {
+                Label(label(peer: peer), systemImage: "power")
+            }
+            .disabled(sending || sentVia != nil)
+            if let failure {
+                Label(failure, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        } else {
+            Text(identity.ipv4 == nil
+                 ? "Nothing else is online to broadcast a wake packet for \(machineShortName(host))."
+                 : "Can't wake \(machineShortName(host)): no online machine is on its network (\(identity.ipv4 ?? "")).")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func label(peer: Machine) -> String {
+        if sending { return "Sending…" }
+        if let sentVia { return "Magic packet sent via \(machineShortName(sentVia)) — waking takes ~30s" }
+        return "Wake via \(machineShortName(peer.host))"
+    }
+}
+
 /// Setup & permissions for one machine, read from /doctor — which tests each
 /// capability by exercising it, so a green row means it actually works, not that it is
 /// configured. The two macOS grants (Accessibility, Screen Recording) fail silently and
 /// can only be prompted from the process that needs them, so this offers a button that
 /// POSTs /doctor/fix to pop the real system dialogs on the Mac itself.
 private struct MachineSetupSection: View {
+    @EnvironmentObject var store: MeshStore
     let machine: Machine
     @State private var report: DoctorReport?
     @State private var loading = false
@@ -425,7 +659,11 @@ private struct MachineSetupSection: View {
         if fix { asking = true } else { loading = true }
         defer { asking = false; loading = false }
         do {
-            report = try await MeshClient(machine: machine).doctor(fix: fix)
+            // The store's constructor, not a bare `MeshClient(machine:)`. /doctor is not
+            // capability-gated today, but a client built without the capability list is
+            // the shape of every 0.5.0 feature silently staying off, and one file with
+            // one exception in it is how that starts.
+            report = try await store.client(for: machine).doctor(fix: fix)
             error = nil
         } catch {
             // An older daemon has no /doctor route; say so instead of showing a raw 404.
@@ -451,6 +689,7 @@ private struct AttentionRow: View {
     @EnvironmentObject var store: MeshStore
     let item: LiveSessionPick
     @State private var answered = false
+    @State private var failure: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -487,10 +726,27 @@ private struct AttentionRow: View {
                     .foregroundStyle(.red)
             }
 
+            if let failure {
+                // "Sent" used to appear the instant the button was tapped, whether or
+                // not anything reached the machine — which is the one lie a button
+                // like this must never tell, because the agent stays blocked and the
+                // screen says it was answered.
+                Label(failure, systemImage: "exclamationmark.triangle.fill")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+
             HStack(spacing: 10) {
                 Button(answered ? "Sent" : item.risk.verb) {
-                    Task { await store.respondToAgent(host: item.host, session: item.session, text: nil, key: "enter") }
                     answered = true
+                    failure = nil
+                    Task { @MainActor in
+                        if let problem = await store.respondToAgent(
+                            host: item.host, session: item.session, text: nil, key: "enter") {
+                            failure = problem
+                            answered = false
+                        }
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(item.risk.isDestructive ? .red : .orange)
@@ -711,8 +967,66 @@ private struct LimitRow: View {
 private struct SettingsTab: View {
     @EnvironmentObject var store: MeshStore
     @EnvironmentObject var lock: AppLock
+    @ObservedObject private var notifications = NotificationManager.shared
     @State private var newCommand = ""
     @State private var pairing = false
+    /// Read from ActivityKit rather than from our own controller so the row states the
+    /// system's answer, not our cache of it, and follows the same stream the controller
+    /// does — a permission flipped in Settings updates this without a relaunch.
+    @State private var liveActivitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+
+    /// Alerts, split by what they are about. One switch for all agent notifications is
+    /// what made people turn the whole category off — the turn-end chatter and the
+    /// blocked agent arrived through the same door, and only one of them was worth a buzz.
+    private var alertsSection: some View {
+        Section {
+            Toggle(isOn: $notifications.alertNeedsAttention) {
+                Label("An agent is waiting on you", systemImage: "exclamationmark.bubble.fill")
+            }
+            Toggle(isOn: $notifications.alertErrors) {
+                Label("Something failed", systemImage: "exclamationmark.triangle.fill")
+            }
+            Toggle(isOn: $notifications.alertTurnEnd) {
+                Label("A turn finished", systemImage: "checkmark.circle.fill")
+            }
+            Text("Turn-finished alerts are off by default: on a busy day they are most of the buzzing, and none of them is a question. Machines on the current agent stop sending them entirely; older ones still send, and this takes their banners back down.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            if notifications.authorizationDenied {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Notifications are off for this app — turn them on in Settings",
+                          systemImage: "bell.slash")
+                }
+                .font(.caption)
+            }
+            if !liveActivitiesEnabled {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Live Activities are off for this app — enable in Settings",
+                          systemImage: "rectangle.on.rectangle.slash")
+                }
+                .font(.caption)
+                Text("Without them there is no Lock Screen card and no Dynamic Island for a session that needs you — only the notification.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Alerts")
+        }
+        .task {
+            liveActivitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+            for await enabled in ActivityAuthorizationInfo().activityEnablementUpdates {
+                liveActivitiesEnabled = enabled
+            }
+        }
+    }
 
     /// Sideloading several times an hour makes "is this the new build?" a real
     /// question; the timestamp answers it with nothing to remember to bump.
@@ -785,6 +1099,8 @@ private struct SettingsTab: View {
                     }
                     .font(.caption)
                 }
+
+                alertsSection
 
                 Section("Quick send") {
                     ForEach($store.quickCommands, id: \.self) { $cmd in
