@@ -64,8 +64,8 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     private var lastBlockedByLimitKey: [String: Bool] = [:] {
         didSet { UserDefaults.standard.set(lastBlockedByLimitKey, forKey: lastBlockedDefaultsKey) }
     }
-    private var scheduledResetISOByKey: [String: String] = [:] {
-        didSet { UserDefaults.standard.set(scheduledResetISOByKey, forKey: scheduledResetsDefaultsKey) }
+    private var scheduledResetWindowByKey: [String: String] = [:] {
+        didSet { UserDefaults.standard.set(scheduledResetWindowByKey, forKey: scheduledResetsDefaultsKey) }
     }
 
     private let blockedThreshold = LimitHelpers.blockedThreshold
@@ -95,7 +95,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
             lastBlockedByLimitKey = saved
         }
         if let saved = UserDefaults.standard.dictionary(forKey: scheduledResetsDefaultsKey) as? [String: String] {
-            scheduledResetISOByKey = saved
+            scheduledResetWindowByKey = saved
         }
         UNUserNotificationCenter.current().delegate = self
         AgentNotification.registerCategories()
@@ -364,13 +364,19 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         for provider in usage.providers {
             for limit in provider.limits {
                 let limitKey = LimitHelpers.limitKey(providerId: provider.id, label: limit.label)
+                // One normalized identity for this reset window, spliced into every key
+                // below. OpenUsage re-derives resetsAt on each poll and it jitters by
+                // seconds; the raw ISO minted a brand-new key for 2:29:59 vs 2:30:04
+                // while the banner text — rendered at minute resolution — stayed
+                // word-for-word identical. That is the hourly re-fire of the same alert,
+                // and the reset request that tore itself down and re-armed every poll.
+                let window = Self.alertWindow(from: limit.resetsAtISO)
                 // nil pct means "unknown", not "cleared" — skip alerts so blocked state
                 // doesn't flap, but keep any reset alert already armed for this window alive:
                 // a nil poll must NOT cancel the OS-persisted reset notification.
                 guard let pct = limit.usedPct else {
-                    if let iso = limit.resetsAtISO,
-                       scheduledResetISOByKey[limitKey] == iso,
-                       let d = LimitHelpers.resetDate(from: iso), d.timeIntervalSinceNow > 1 {
+                    if scheduledResetWindowByKey[limitKey] == window,
+                       let d = LimitHelpers.resetDate(from: limit.resetsAtISO), d.timeIntervalSinceNow > 1 {
                         desiredResetIds.insert("mesh-limit-reset-\(limitKey)")
                     }
                     continue
@@ -378,7 +384,6 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                 let blocked = pct >= blockedThreshold
                 let wasBlocked = lastBlockedByLimitKey[limitKey] ?? false
 
-                let window = limit.resetsAtISO ?? "none"
                 let remaining = LimitHelpers.remainingPct(usedPct: pct) ?? 100
 
                 // Anything delivered for an earlier window is describing a budget
@@ -400,16 +405,20 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
 
                 // Budget tiers: 50% then 25% left. Firing the lowest crossed tier and
                 // suppressing the ones above it means a fast burn produces one alert,
-                // not a burst.
-                if let tier = LimitHelpers.crossedTier(remainingPct: remaining) {
+                // not a burst. A blocked limit gets "limit reached" below instead: both
+                // at once is the near-identical pair the user screenshotted, and
+                // crossedTier(remainingPct: 0) is 25, so the pair even disagreed.
+                if !blocked, let tier = LimitHelpers.crossedTier(remainingPct: remaining) {
                     let tierKey = "usage-tier\(tier)-\(limitKey)-\(window)"
                     if !firedKeys.contains(tierKey) {
                         for passed in LimitHelpers.tiersAtOrAbove(tier) {
                             firedKeys.insert("usage-tier\(passed)-\(limitKey)-\(window)")
                         }
                         notifyNow(id: tierKey,
-                                  title: "\(provider.displayName) \(limit.label) — \(tier)% left",
-                                  body: warningBody(provider: provider, limit: limit, pct: pct),
+                                  title: Self.tierAlertTitle(provider: provider.displayName,
+                                                             label: limit.label,
+                                                             remainingPct: remaining),
+                                  body: Self.warningBody(limit: limit, pct: pct),
                                   thread: "limit-\(limitKey)")
                     }
                 }
@@ -425,7 +434,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                 }
 
                 if blocked {
-                    let hitKey = "usage-hit-\(limitKey)-\(limit.resetsAtISO ?? "none")"
+                    let hitKey = "usage-hit-\(limitKey)-\(window)"
                     if !firedKeys.contains(hitKey) {
                         firedKeys.insert(hitKey)
                         notifyNow(id: hitKey,
@@ -435,7 +444,7 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                                   thread: "limit-\(limitKey)")
                     }
                 } else if wasBlocked && pct < LimitHelpers.clearedThreshold {
-                    let availKey = "usage-available-\(limitKey)-\(limit.resetsAtISO ?? "none")"
+                    let availKey = "usage-available-\(limitKey)-\(window)"
                     if !firedKeys.contains(availKey) {
                         firedKeys.insert(availKey)
                         // The budget warnings and the "limit reached" alert are all
@@ -461,19 +470,19 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     private func scheduleResetNotification(provider: UsageProvider,
                                            limit: UsageLimit,
                                            pinned: [PinnedLimitSession]) -> String? {
-        guard let iso = limit.resetsAtISO,
-              let resetDate = LimitHelpers.resetDate(from: iso) else { return nil }
+        guard let resetDate = LimitHelpers.resetDate(from: limit.resetsAtISO) else { return nil }
         let seconds = resetDate.timeIntervalSinceNow
         guard seconds > 1 else { return nil }
 
         let limitKey = LimitHelpers.limitKey(providerId: provider.id, label: limit.label)
         let id = "mesh-limit-reset-\(limitKey)"
-        if scheduledResetISOByKey[limitKey] == iso {
+        let window = Self.alertWindow(from: limit.resetsAtISO)
+        if scheduledResetWindowByKey[limitKey] == window {
             return id
         }
 
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [id])
-        scheduledResetISOByKey[limitKey] = iso
+        scheduledResetWindowByKey[limitKey] = window
 
         let pin = pinned.first { $0.providerId.lowercased() == provider.id.lowercased() }
         let body: String
@@ -520,28 +529,56 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     }
 
     private func cancelStaleResetNotifications(keeping desired: Set<String>) {
-        let staleKeys = scheduledResetISOByKey.keys.filter { key in
+        let staleKeys = scheduledResetWindowByKey.keys.filter { key in
             let id = "mesh-limit-reset-\(key)"
             return !desired.contains(id)
         }
         guard !staleKeys.isEmpty else { return }
         let ids = staleKeys.map { "mesh-limit-reset-\($0)" }
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
-        for key in staleKeys { scheduledResetISOByKey.removeValue(forKey: key) }
+        for key in staleKeys { scheduledResetWindowByKey.removeValue(forKey: key) }
     }
 
     // MARK: - Copy helpers
+
+    // PURE-ALERT-IDENTITY-BEGIN — scripts/check-usage-alert-identity.sh compiles the
+    // functions between these markers verbatim and runs them. Keep them free of
+    // instance state and of UserNotifications types, or that check stops building.
+
+    /// The identity of one reset window, at the same resolution the banner shows it.
+    /// `resetCountdown` renders a far-off reset as "Resets Aug 27, 2026 at 2:30 PM" —
+    /// seconds are dropped. OpenUsage re-derives resetsAt every poll and it drifts by
+    /// a few seconds, so keying on the raw ISO minted a new key for 2:30:01 vs
+    /// 2:30:04 while the text stayed word-for-word identical: the gate saw a new
+    /// event, the user saw the same banner again, roughly hourly. Bucketing to the
+    /// minute makes the key exactly as fine-grained as what the user can read, so two
+    /// polls they cannot tell apart get one alert and a reset time they *can* see
+    /// change still gets its own.
+    static func alertWindow(from iso: String?) -> String {
+        guard let date = LimitHelpers.resetDate(from: iso) else { return iso ?? "none" }
+        return "m\(Int((date.timeIntervalSince1970 / 60).rounded(.down)))"
+    }
+
+    /// Title for a budget-tier alert. It reports the *remaining* percentage, not the
+    /// tier that was crossed: `crossedTier` answers "which threshold did we fall
+    /// through" and returns 25 for 0% left, so the old title read "25% left" above a
+    /// body that read "0% left" — the banner contradicted itself.
+    static func tierAlertTitle(provider: String, label: String, remainingPct: Int) -> String {
+        "\(provider) \(label) — \(remainingPct)% left"
+    }
+
+    static func warningBody(limit: UsageLimit, pct: Double) -> String {
+        let left = LimitHelpers.remainingPct(usedPct: pct).map { "\($0)% left" } ?? String(format: "%.0f%% used", pct)
+        let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO).map { " · \($0)" } ?? ""
+        return "\(left)\(countdown)"
+    }
+
+    // PURE-ALERT-IDENTITY-END
 
     private func sessionStartedBody(limit: UsageLimit) -> String {
         LimitHelpers.resetCountdown(from: limit.resetsAtISO)
             .map { "Your window is open · \($0)" }
             ?? "Your session window is open."
-    }
-
-    private func warningBody(provider: UsageProvider, limit: UsageLimit, pct: Double) -> String {
-        let left = LimitHelpers.remainingPct(usedPct: pct).map { "\($0)% left" } ?? String(format: "%.0f%% used", pct)
-        let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO).map { " · \($0)" } ?? ""
-        return "\(left)\(countdown)"
     }
 
     private func blockedBody(provider: UsageProvider, limit: UsageLimit, pinned: [PinnedLimitSession]) -> String {
