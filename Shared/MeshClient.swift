@@ -40,6 +40,15 @@ struct MeshClient {
     }
 
     private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
+        try await requestFrame(path, method: method, body: body).data
+    }
+
+    /// `request` with the response kept. Everything used to discard it, so a caller
+    /// could not tell a cropped frame from a whole display — and the watch answered by
+    /// zooming a crop that was already the zoom, which is why text got *worse* the
+    /// further you zoomed in.
+    private func requestFrame(_ path: String, method: String = "GET",
+                              body: Data? = nil) async throws -> (data: Data, response: HTTPURLResponse?) {
         guard !machine.baseURLs.isEmpty else {
             throw MeshError.badURL
         }
@@ -59,7 +68,7 @@ struct MeshClient {
                 if let http = resp as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                     throw MeshError.http(http.statusCode)
                 }
-                return data
+                return (data, resp as? HTTPURLResponse)
             } catch {
                 lastError = error
             }
@@ -138,6 +147,32 @@ struct MeshClient {
     /// client simply never asks one for a crop.
     func screenImage(display: Int? = nil, width: Int? = nil,
                      rect: CGRect? = nil, quality: Int? = nil) async throws -> Data {
+        try await screenFrame(display: display, width: width, rect: rect, quality: quality).data
+    }
+
+    /// The header meshd stamps on a frame it really cropped, carrying the region it
+    /// served as `x,y,w,h` normalized (install/payload/meshd/input.ts). Named once,
+    /// here, because check-inspect-crop.sh compares this literal against the daemon's.
+    static let screenRectHeader = "x-mesh-rect"
+
+    /// Parse `screenRectHeader`. Absent, malformed or degenerate = "no crop", which is
+    /// the only safe reading: a caller that guesses a crop from, say, the aspect ratio
+    /// draws the picture somewhere it is not, and on the phone that moves every
+    /// tap-to-place-cursor away from the thing it was aimed at.
+    static func servedRect(header: String?) -> CGRect? {
+        let n = (header ?? "").split(separator: ",").compactMap {
+            Double($0.trimmingCharacters(in: .whitespaces))
+        }
+        guard n.count == 4, n[2] > 0, n[3] > 0 else { return nil }
+        return CGRect(x: n[0], y: n[1], width: n[2], height: n[3])
+    }
+
+    /// The query both entry points send, written once so a parameter can never again be
+    /// honoured on one path and quietly dropped on the other — that is exactly how
+    /// `width` came to work only when a display was named, which on a single-display
+    /// Mac (most of them) meant never.
+    private func screenImageQuery(display: Int?, width: Int?,
+                                  rect: CGRect?, quality: Int?) -> String {
         var query: [String] = []
         if let display { query.append("display=\(display)") }
         if let width { query.append("width=\(min(2000, max(240, width)))") }
@@ -155,8 +190,17 @@ struct MeshClient {
             }
             if let quality { query.append("q=\(min(100, max(1, quality)))") }
         }
-        let suffix = query.isEmpty ? "" : "?" + query.joined(separator: "&")
-        return try await request("/screen.jpg" + suffix)
+        return query.isEmpty ? "" : "?" + query.joined(separator: "&")
+    }
+
+    /// `screenImage`, plus the region the daemon says the bytes actually cover — nil
+    /// when it served the whole display. The caller needs this to know whether to
+    /// magnify the frame itself or leave it alone; it must never be inferred.
+    func screenFrame(display: Int? = nil, width: Int? = nil,
+                     rect: CGRect? = nil, quality: Int? = nil) async throws -> (data: Data, rect: CGRect?) {
+        let query = screenImageQuery(display: display, width: width, rect: rect, quality: quality)
+        let (data, response) = try await requestFrame("/screen.jpg" + query)
+        return (data, MeshClient.servedRect(header: response?.value(forHTTPHeaderField: MeshClient.screenRectHeader)))
     }
 
     func displays() async throws -> DisplayList {
@@ -409,4 +453,36 @@ struct MeshClient {
         let p = paneId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? paneId
         _ = try await request("/agents/\(a)/panes/\(p)", method: "DELETE")
     }
+}
+
+// MARK: - Reading a served frame
+
+// The two decisions `screenFrame`'s rect forces on whoever draws it. They live beside
+// the protocol they come from and not in the watch view, because a self-check can
+// compile this file while Watch/RemoteView.swift drags in WatchKit and cannot be built
+// off a device at all — and this repo has shipped four features that were dead in the
+// app while a green build said otherwise.
+
+/// The zoom and pan the CLIENT must still apply on top of an arrived frame.
+///
+/// A frame with a served rect already *is* the region that was asked for, cut at
+/// native pixels by `screencapture -R`. Scaling and offsetting it again shows 1/zoom
+/// of the crop: at 6x that is roughly 100 real source pixels stretched across a 44mm
+/// watch, which is why zooming in used to make text less readable rather than more.
+/// A nil rect is the whole display — a pre-0.5.0 daemon, or one that declined the crop
+/// — and there client-side zoom is the only magnification there is.
+func frameTransform(servedRect: CGRect?, zoom: CGFloat, pan: CGPoint) -> (zoom: CGFloat, pan: CGPoint) {
+    servedRect == nil ? (zoom, pan) : (1, .zero)
+}
+
+/// How far one sideways pan tap moves the view: exactly one viewport, so consecutive
+/// taps tile the display instead of overlapping or leaping past it.
+///
+/// It was a hardcoded ±0.5 of the whole display while `clampedPan`'s slack is only
+/// (1 - 1/zoom)/2 — 0.25 at 2x, 0.42 at 6x — so every side tap saturated against an
+/// edge and left exactly three reachable columns at any zoom. That is the "I can only
+/// zoom, I cannot move from one corner to another" complaint.
+func panStep(zoom: CGFloat, pan: CGPoint, containerAspect: Double, imageAspect: Double) -> Double {
+    Double(visibleRect(zoom: zoom, pan: pan,
+                       containerAspect: containerAspect, imageAspect: imageAspect).width)
 }

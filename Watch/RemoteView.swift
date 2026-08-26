@@ -19,6 +19,10 @@ final class RemoteControl: ObservableObject {
 
     @Published var status: InputStatus?
     @Published var screen: Data?
+    /// Which part of the display `screen` actually covers, straight from the daemon's
+    /// own header — never guessed. Nil = the whole display, which is what every
+    /// pre-0.5.0 daemon serves and what the client still has to zoom for itself.
+    @Published var screenRect: CGRect?
     @Published var note: String?
     @Published var dragLocked = false
     @Published var displays: [DisplayInfo] = []
@@ -201,9 +205,12 @@ final class RemoteControl: ObservableObject {
             note = nil
         } catch {
             // First failure flips us to the phone relay; nothing is retried — a dropped
-            // cursor delta is better than a late one.
+            // cursor delta is better than a late one. `viaRelay` says so by itself: this
+            // used to also write note = "via phone", and because flush() returns early
+            // on an empty batch it never reached the `note = nil` above — so the one
+            // mode indicator on the screen was permanently occupied and air mouse and
+            // drag lock could both be ON with nothing to show it.
             viaRelay = true
-            note = "via phone"
             relay(batch)
         }
     }
@@ -227,7 +234,6 @@ final class RemoteControl: ObservableObject {
             // Probe doubles as the route check: one 3s timeout here beats the first
             // drag stalling while URLSession works through every address.
             viaRelay = true
-            note = "via phone"
             // The phone can still answer for us — including raising the Accessibility
             // prompt on the Mac, which is the one thing the user must be told about.
             let reply = await WatchLink.shared.request(
@@ -265,9 +271,13 @@ final class RemoteControl: ObservableObject {
         do {
             // `rect` is dropped by MeshClient unless the daemon advertises
             // "screenRegion", so an old daemon still gets exactly today's request.
-            screen = try await client.screenImage(display: displays.count > 1 ? activeDisplay : nil,
-                                                  width: requestedWidth,
-                                                  rect: supports("screenRegion") ? visibleRegion : nil)
+            // The rect that comes BACK is what the daemon says it served, and the only
+            // thing allowed to decide whether the view zooms this frame again.
+            let frame = try await client.screenFrame(display: displays.count > 1 ? activeDisplay : nil,
+                                                     width: requestedWidth,
+                                                     rect: supports("screenRegion") ? visibleRegion : nil)
+            screen = frame.data
+            screenRect = frame.rect
             screenError = nil
         } catch MeshClient.MeshError.http(let code) where code == 401 || code == 403 {
             screenError = "token rejected — re-pair this machine on your iPhone"
@@ -435,9 +445,13 @@ struct RemoteView: View {
             // Slow second loop: the preview is for "did that land?", not a video feed.
             while !Task.isCancelled {
                 if remote.viaRelay {
+                    // No rect on the relay: the phone hands over bytes and drops the
+                    // headers, so nothing here can tell a crop from a whole display.
+                    // Asking for one anyway is how Inspect ended up magnifying a frame
+                    // that was already magnified. Soft and in the right place beats
+                    // sharp and somewhere else.
                     store.requestScreen(host: remote.machine.host,
-                                        display: remote.displays.count > 1 ? remote.activeDisplay : nil,
-                                        rect: remote.visibleRegion)
+                                        display: remote.displays.count > 1 ? remote.activeDisplay : nil)
                 } else {
                     await remote.refreshScreen()
                 }
@@ -478,21 +492,30 @@ struct RemoteView: View {
     /// The Mac's screen, full-bleed, with the chrome gone.
     ///
     /// Crown pans up and down (it is the only precise continuous input a watch has);
-    /// the left and right thirds pan sideways a screen-width at a time, because a drag
+    /// the left and right thirds pan sideways one viewport at a time, because a drag
     /// here would fight the trackpad muscle memory from the mode next door. The middle
     /// third leaves — the one control worth reserving the biggest target for.
     private var inspector: some View {
         GeometryReader { geo in
+            // Two different shapes, and confusing them is half of the "zoom does not
+            // help" bug: `aspect` is the shape of the picture in hand — the CROP, once
+            // the daemon starts cutting them — and only lays out the image. Every
+            // decision about which region to ask for next belongs to the display.
             let aspect = screenAspect ?? 1.6
+            let displayAspect = regionAspect
             let containerAspect = geo.size.height > 0 ? Double(geo.size.width / geo.size.height) : 1.6
+            // A served crop already IS the viewport, so it is drawn at 1x and unmoved;
+            // a whole-display frame still gets today's client-side zoom and pan.
+            let draw = frameTransform(servedRect: servedRect, zoom: remote.previewZoom, pan: inspectPan)
             ZStack {
                 Color.black
                 if let shot = screenShot {
                     Image(uiImage: shot)
                         .resizable()
                         .scaledToFit()
-                        .scaleEffect(remote.previewZoom)
-                        .offset(panOffset(in: geo.size, imageAspect: aspect))
+                        .scaleEffect(draw.zoom)
+                        .offset(panOffset(pan: draw.pan, zoom: draw.zoom,
+                                          in: geo.size, imageAspect: aspect))
                 } else if let error = remote.screenError {
                     // Only reachable over an empty frame. When the phone is relaying,
                     // `screenError` can be a leftover from the direct path we already
@@ -521,12 +544,15 @@ struct RemoteView: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
             .contentShape(Rectangle())
+            .overlay(alignment: .top) {
+                inspectZoomChips(containerAspect: containerAspect, imageAspect: displayAspect)
+            }
             .onTapGesture { point in
                 let third = geo.size.width / 3
                 if point.x < third {
-                    pan(by: -0.5, containerAspect: containerAspect, imageAspect: aspect)
+                    pan(-1, containerAspect: containerAspect, imageAspect: displayAspect)
                 } else if point.x > geo.size.width - third {
-                    pan(by: 0.5, containerAspect: containerAspect, imageAspect: aspect)
+                    pan(1, containerAspect: containerAspect, imageAspect: displayAspect)
                 } else {
                     inspecting = false
                 }
@@ -540,10 +566,15 @@ struct RemoteView: View {
                 // paragraph, coarse enough to reach the bottom of a long page.
                 inspectPan = clampedPan(CGPoint(x: inspectPan.x, y: inspectPan.y + (new - old) / 40),
                                         zoom: remote.previewZoom,
-                                        containerAspect: containerAspect, imageAspect: aspect)
-                syncRegion(containerAspect: containerAspect, imageAspect: aspect)
+                                        containerAspect: containerAspect, imageAspect: displayAspect)
+                syncRegion(zoom: remote.previewZoom,
+                           containerAspect: containerAspect, imageAspect: displayAspect)
+                fetchRegionNow()
             }
-            .onAppear { syncRegion(containerAspect: containerAspect, imageAspect: aspect) }
+            .onAppear {
+                syncRegion(zoom: remote.previewZoom,
+                           containerAspect: containerAspect, imageAspect: displayAspect)
+            }
             .task(id: hintToken) {
                 showInspectHint = true
                 try? await Task.sleep(for: .seconds(3))
@@ -552,11 +583,63 @@ struct RemoteView: View {
             }
         }
         .ignoresSafeArea()
-        .onDisappear { remote.visibleRegion = nil }
+        .onDisappear {
+            remote.visibleRegion = nil
+            // The frame in hand is a crop of wherever Inspect was looking. Left in
+            // place it would be drawn in the preview as if it were the whole display,
+            // putting the cursor overlay on the wrong pixels until a full frame lands.
+            remote.screen = nil
+            remote.screenRect = nil
+            Task { await remote.refreshScreen() }
+        }
     }
 
-    private func pan(by fraction: Double, containerAspect: Double, imageAspect: Double) {
-        let next = clampedPan(CGPoint(x: inspectPan.x + fraction, y: inspectPan.y),
+    /// − and + without the crown (it pans) and without a pinch (a 44mm screen has no
+    /// room for two fingers). Changing magnification used to mean leaving Inspect,
+    /// hitting a 9pt chip and coming back — which resets the pan to the centre, so you
+    /// lost your place every time you changed zoom.
+    private func inspectZoomChips(containerAspect: Double, imageAspect: Double) -> some View {
+        HStack(spacing: 6) {
+            Button { inspectZoom(-1, containerAspect: containerAspect, imageAspect: imageAspect) } label: {
+                Image(systemName: "minus")
+            }
+            .disabled(remote.previewZoom <= 1)
+            .accessibilityLabel("Zoom out")
+            Text("\(Int(remote.previewZoom.rounded()))x")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white)
+            Button { inspectZoom(1, containerAspect: containerAspect, imageAspect: imageAspect) } label: {
+                Image(systemName: "plus")
+            }
+            .disabled(remote.previewZoom >= 6)
+            .accessibilityLabel("Zoom in")
+        }
+        .font(.system(size: 11, weight: .bold))
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(.black.opacity(0.55), in: Capsule())
+        .padding(.top, 2)
+    }
+
+    private func inspectZoom(_ delta: CGFloat, containerAspect: Double, imageAspect: Double) {
+        let next = clampedZoom(remote.previewZoom + delta)
+        guard next != remote.previewZoom else { return }
+        // Re-clamp and publish the new region BEFORE zoomPreview goes and fetches, or
+        // the sharper frame that comes back is a crop of where we were looking one
+        // zoom level ago and the picture jumps sideways as it lands.
+        inspectPan = clampedPan(inspectPan, zoom: next,
+                                containerAspect: containerAspect, imageAspect: imageAspect)
+        syncRegion(zoom: next, containerAspect: containerAspect, imageAspect: imageAspect)
+        remote.zoomPreview(delta)
+        hintToken += 1
+    }
+
+    private func pan(_ direction: Double, containerAspect: Double, imageAspect: Double) {
+        let step = panStep(zoom: remote.previewZoom, pan: inspectPan,
+                           containerAspect: containerAspect, imageAspect: imageAspect)
+        let next = clampedPan(CGPoint(x: inspectPan.x + direction * step, y: inspectPan.y),
                               zoom: remote.previewZoom,
                               containerAspect: containerAspect, imageAspect: imageAspect)
         // Already hard against the edge: say so with the failure tick rather than the
@@ -564,22 +647,36 @@ struct RemoteView: View {
         // usually a tap aimed at the wrong thing.
         let moved = next != inspectPan
         inspectPan = next
-        syncRegion(containerAspect: containerAspect, imageAspect: imageAspect)
+        syncRegion(zoom: remote.previewZoom, containerAspect: containerAspect, imageAspect: imageAspect)
+        if moved { fetchRegionNow() }
         WKInterfaceDevice.current().play(moved ? .click : .failure)
         hintToken += 1
     }
 
+    /// Go and get the region we just moved to, instead of waiting out the 2s preview
+    /// poll. Once the daemon is cropping, the picture cannot move until the next frame
+    /// lands — so without this a side tap or a crown turn buzzes and then shows the
+    /// same view for up to two seconds, which reads as "panning does not work". It is
+    /// safe to call as fast as the crown fires: `refreshScreen` is single flight, so
+    /// the ticks in between cost nothing and the frame rate settles at one per round
+    /// trip. Relayed sessions do not need it — they get no crop, so they still pan
+    /// client-side and instantly.
+    private func fetchRegionNow() {
+        guard !remote.viaRelay else { return }
+        Task { await remote.refreshScreen() }
+    }
+
     /// Tell the daemon what we are looking at, so the next frame is that region at
     /// native pixels instead of the whole display downsampled and then stretched.
-    private func syncRegion(containerAspect: Double, imageAspect: Double) {
-        remote.visibleRegion = visibleRect(zoom: remote.previewZoom, pan: inspectPan,
+    private func syncRegion(zoom: CGFloat, containerAspect: Double, imageAspect: Double) {
+        remote.visibleRegion = visibleRect(zoom: zoom, pan: inspectPan,
                                            containerAspect: containerAspect, imageAspect: imageAspect)
     }
 
-    private func panOffset(in container: CGSize, imageAspect: Double) -> CGSize {
+    private func panOffset(pan: CGPoint, zoom: CGFloat, in container: CGSize, imageAspect: Double) -> CGSize {
         let fit = fittedSize(imageAspect: imageAspect, container: container)
-        let scaled = CGSize(width: fit.width * remote.previewZoom, height: fit.height * remote.previewZoom)
-        return CGSize(width: -inspectPan.x * scaled.width, height: -inspectPan.y * scaled.height)
+        let scaled = CGSize(width: fit.width * zoom, height: fit.height * zoom)
+        return CGSize(width: -pan.x * scaled.width, height: -pan.y * scaled.height)
     }
 
     /// Direct grab when we have one, else whatever the phone last relayed.
@@ -588,6 +685,24 @@ struct RemoteView: View {
     }
 
     private var screenShot: UIImage? { screenData.flatMap(UIImage.init(data:)) }
+
+    /// The region the frame being drawn covers — only ever the daemon's own answer for
+    /// the frame we fetched ourselves. A relayed frame arrives as bare bytes, so it is
+    /// treated as a whole display: old behaviour, never a confident wrong one.
+    private var servedRect: CGRect? { remote.screen == nil ? nil : remote.screenRect }
+
+    /// The DISPLAY's shape, which is what decides which region to ask for next.
+    ///
+    /// `screenAspect` measures the picture in hand, and once the daemon starts cropping
+    /// that picture is the crop — feeding its shape back into `visibleRect` computes the
+    /// next region from the wrong rectangle, so the view creeps sideways as you scroll
+    /// and the pan clamp stops at the wrong place. /displays is authoritative; the image
+    /// is the fallback, and only while it is still the whole screen.
+    private var regionAspect: Double {
+        remote.displays.first { $0.index == remote.activeDisplay }?.aspect
+            ?? (servedRect == nil ? screenAspect : nil)
+            ?? 1.6
+    }
 
     /// One chip per screen. Switching repoints the preview, taps and window snaps
     /// together, so "the screen I'm looking at" is always the one I'm driving.
@@ -659,6 +774,12 @@ struct RemoteView: View {
             .onTapGesture { point in
                 remote.tap(at: point, in: geo.size, imageAspect: screenAspect)
             }
+            // The way in that people actually find. The chip below is 9pt and third in
+            // a row of three, so it read as another zoom button and the screen looked
+            // like it could only be zoomed, never moved. A long press is safe here in a
+            // way it is not on the trackpad: this view has no minimumDistance-0 drag to
+            // fight, only the tap, and a tap still places the cursor.
+            .onLongPressGesture(minimumDuration: 0.4) { enterInspect() }
         }
         .frame(height: remote.previewZoom > 1 ? 96 : 56)
         .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -676,24 +797,30 @@ struct RemoteView: View {
             Button { remote.zoomPreview(1) } label: { Image(systemName: "plus") }
                 .disabled(remote.previewZoom >= 6)
                 .accessibilityLabel("Zoom in")
-            Button {
-                inspectPan = .zero
-                hintToken += 1
-                // Entering at 1x would show the whole display fitted — and then the
-                // side zones would pan across nothing, because there is nothing
-                // off-screen to pan to. Inspect exists to get closer than that, so it
-                // starts closer, and the gesture hint stops being a lie.
-                if remote.previewZoom < 2 { remote.zoomPreview(2 - remote.previewZoom) }
-                inspecting = true
-            } label: {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-            }
-            .accessibilityLabel("Inspect the screen full size")
+            // Words, not a third glyph: as an unlabeled 9pt symbol beside − and + this
+            // read as one more zoom step, so the whole read-and-pan mode behind it went
+            // undiscovered and the Mac's screen looked like it could only be magnified
+            // in place.
+            Button { enterInspect() } label: { Text("Read") }
+                .accessibilityLabel("Read the screen full size")
         }
         .font(.system(size: 9, weight: .bold))
         .buttonStyle(.bordered)
         .controlSize(.mini)
         .padding(2)
+    }
+
+    /// Open Inspect from the chip or from a long press on the picture itself.
+    private func enterInspect() {
+        inspectPan = .zero
+        hintToken += 1
+        // Entering at 1x would show the whole display fitted — and then the side zones
+        // would pan across nothing, because there is nothing off-screen to pan to.
+        // Inspect exists to get closer than that, so it starts closer, and the gesture
+        // hint stops being a lie.
+        if remote.previewZoom < 2 { remote.zoomPreview(2 - remote.previewZoom) }
+        inspecting = true
+        WKInterfaceDevice.current().play(.start)
     }
 
     /// Measured from the screenshot itself, so it is right even before /displays answers.
@@ -707,16 +834,23 @@ struct RemoteView: View {
     private var trackpad: some View {
         RoundedRectangle(cornerRadius: 10)
             .fill(remote.dragLocked ? Color.orange.opacity(0.28) : Color.gray.opacity(0.22))
+            // Modes first, messages second. A mode is a state of the Mac you are still
+            // in when you look away — drag lock is literally holding the mouse button
+            // down over there — so it outranks anything transient. The old order put a
+            // note on top, and one of those notes ("via phone") was never cleared, so
+            // air mouse and drag lock could both be on with nothing to say so.
             .overlay(alignment: .center) {
-                if let note = remote.note {
-                    Text(note).font(.caption2).foregroundStyle(.secondary)
-                } else if remote.status?.trusted == false {
-                    Text("Needs Accessibility").font(.caption2).foregroundStyle(.orange)
-                } else if remote.dragLocked {
-                    Text("drag held").font(.caption2).foregroundStyle(.orange)
+                if remote.dragLocked {
+                    Text("drag held — tap ✋ to release").font(.caption2).foregroundStyle(.orange)
                 } else if remote.airMouse {
                     Text("air mouse — point your arm").font(.caption2).foregroundStyle(.blue)
-                } else if padOnly {
+                } else if remote.status?.trusted == false {
+                    Text("Needs Accessibility").font(.caption2).foregroundStyle(.orange)
+                } else if let note = remote.note {
+                    Text(note).font(.caption2).foregroundStyle(.secondary)
+                } else if remote.viaRelay {
+                    Text("via iPhone").font(.caption2).foregroundStyle(.secondary)
+                } else {
                     Text("tap · tap-tap right-clicks").font(.caption2).foregroundStyle(.secondary)
                 }
             }
@@ -738,14 +872,17 @@ struct RemoteView: View {
                     .onEnded { value in
                         let distance = hypot(value.translation.width, value.translation.height)
                         if !moved || distance < 5 {
-                            // Full-pad mode: a second tap inside the window right-clicks.
+                            // A second tap inside the window right-clicks. This was
+                            // gated on full-pad mode while `lastTapAt` was kept in both,
+                            // so in the mode people actually start in a double tap sent
+                            // a second LEFT click and right click was unreachable.
                             // The first tap's left click already went out — deferring
                             // every tap by the window would tax the quick approvals this
                             // mode exists for, and click-then-right-click is how people
                             // use a real mouse anyway (focus it, then open the menu).
                             // ponytail: eager double-tap; a deferred-click toggle only if
                             // right-clicking links at the wrist ever matters.
-                            if padOnly, isDoubleTap(previous: lastTapAt, now: Date()) {
+                            if isDoubleTap(previous: lastTapAt, now: Date()) {
                                 remote.perform([.click("right")])
                                 lastTapAt = nil
                             } else {
@@ -775,11 +912,16 @@ struct RemoteView: View {
             // Primary action = the Double Tap hand gesture on Series 9 and later, which
             // is the pinch-to-click WowMouse is built around — native, no BLE needed.
             primaryClickButton
+            // Two hands side by side, and one of them holds the Mac's mouse button
+            // down. A filled-vs-outline glyph at 17pt is not a mode indicator, so the
+            // button carries the tint too — the same blue and orange the trackpad and
+            // the sticky modifiers already use for "this is ON".
             padButton(remote.airMouse ? "hand.point.up.braille.fill" : "hand.point.up.braille",
-                      "Air mouse") { remote.setAirMouse(!remote.airMouse) }
-            padButton(remote.dragLocked ? "hand.raised.fill" : "hand.raised", "Drag lock") {
-                remote.toggleDragLock()
-            }
+                      remote.airMouse ? "Air mouse on" : "Air mouse",
+                      tint: remote.airMouse ? .blue : nil) { remote.setAirMouse(!remote.airMouse) }
+            padButton(remote.dragLocked ? "hand.raised.fill" : "hand.raised",
+                      remote.dragLocked ? "Drag lock on" : "Drag lock",
+                      tint: remote.dragLocked ? .orange : nil) { remote.toggleDragLock() }
             padButton("keyboard", "Type") { typing = true }
             NavigationLink {
                 RemoteHubView(remote: remote)
@@ -828,7 +970,8 @@ struct RemoteView: View {
         .accessibilityLabel(padOnly ? "Show screen preview" : "Full trackpad")
     }
 
-    private func padButton(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
+    private func padButton(_ symbol: String, _ label: String, tint: Color? = nil,
+                           action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.caption)
@@ -836,6 +979,7 @@ struct RemoteView: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+        .tint(tint)
         .accessibilityLabel(label)
     }
 }
@@ -1044,10 +1188,21 @@ struct RemoteMediaView: View {
         List {
             Section("Playback") {
                 HStack(spacing: 4) {
-                    mediaButton("previous", "backward.end")
-                    mediaButton("playpause", "playpause")
-                    mediaButton("next", "forward.end")
+                    mediaButton("previous", "backward.end", "Previous track")
+                    mediaButton("playpause", "playpause", "Play or pause")
+                    mediaButton("next", "forward.end", "Next track")
                 }
+                HStack(spacing: 4) {
+                    mediaButton("rewind", "backward", "Rewind")
+                    mediaButton("fastforward", "forward", "Fast forward")
+                }
+                // Not "back 10 seconds": these are the NX_KEYTYPE_REWIND / _FAST media
+                // keys, and how far they move — if at all — is the playing app's
+                // decision. macOS has no system-wide ten-second seek to promise
+                // instead, and on Linux xdotool maps them to prev/next track outright.
+                Text("Rewind · Fast forward")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
             }
             Section("Volume") {
                 HStack(spacing: 4) {
@@ -1070,11 +1225,11 @@ struct RemoteMediaView: View {
         .navigationTitle("Media")
     }
 
-    private func mediaButton(_ key: String, _ symbol: String) -> some View {
+    private func mediaButton(_ key: String, _ symbol: String, _ label: String? = nil) -> some View {
         Button { remote.media(key) } label: { Image(systemName: symbol).font(.caption) }
             .buttonStyle(.bordered)
             .controlSize(.mini)
-            .accessibilityLabel(key)
+            .accessibilityLabel(label ?? key)
     }
 }
 
@@ -1278,8 +1433,14 @@ private struct TypeSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 10) {
+                // Every line typed from here goes to a shell or an agent prompt, where
+                // the watch keyboard's automatic capital turns `git status` into
+                // `Git status` — a command not found, for a reason nothing on screen
+                // explains. Never lowercase the text instead: that would mangle paths,
+                // flags and proper nouns the user typed deliberately.
                 TextField("Type or dictate…", text: $text)
                     .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
                 DictateLink(draft: $text)
                 HStack(spacing: 6) {
                     Button("Type") { send(withReturn: false) }
