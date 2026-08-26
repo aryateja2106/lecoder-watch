@@ -541,7 +541,16 @@ final class WatchMeshStore: ObservableObject {
         // capture comes back byte-identical to today's — the reader view then still
         // wraps text, it just cannot un-wrap what tmux already broke.
         let cleaned = readerOutput && c.supports("captureJoin")
-        if let out = try? await c.output(agent: w.agent, lines: 60, pane: w.pane,
+        // 60 lines was about three wrist-screens: scrolling back past a compile error
+        // ran out of buffer before it ran out of screen. 300 is ~15 screens.
+        //
+        // The ceiling is not this route (a direct HTTP capture) but the relay: the same
+        // capture rides `updateApplicationContext`, which WatchConnectivity caps at
+        // 262,144 bytes and which throws SILENTLY past it — the wrist would just stop
+        // updating with no error anywhere. 300 lines of a wide Mac pane (~200 columns)
+        // is ~60KB encoded, and it shares that snapshot with a 600px screen-peek JPEG
+        // (~110KB once JSON-encoded), so the worst case still leaves ~90KB of slack.
+        if let out = try? await c.output(agent: w.agent, lines: 300, pane: w.pane,
                                          join: cleaned, plain: cleaned) {
             directOutput = out.lines
         }

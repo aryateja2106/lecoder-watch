@@ -716,8 +716,13 @@ struct SessionsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Run a command")
                         .font(.headline)
+                    // `git status` is not `Git status`. watchOS capitalises the first
+                    // letter of every field by default and autocorrectionDisabled() does
+                    // not touch that, so every command typed here arrived shifted and had
+                    // to be un-shifted by hand — four extra taps on a 45mm screen.
                     TextField("herdr, tmux, python3…", text: $customCmd)
                         .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
                     DictateLink(draft: $customCmd)
 
                     let folders = store.workspaceSuggestions(host: host)
@@ -808,8 +813,11 @@ struct SessionsView: View {
             VStack(spacing: 12) {
                 Text("\(taskAgent.capitalized) task")
                     .font(.headline)
+                // Same shift-key tax as the command field: this text is pasted straight
+                // into an agent prompt where paths and flags are case-sensitive.
                 TextField("Build/fix/check…", text: $taskText)
                     .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
                 DictateLink(draft: $taskText)
                 Button("Start") {
                     if let name = store.newTask(host: host, agent: taskAgent, task: taskText) {
@@ -829,6 +837,36 @@ struct SessionsView: View {
 
 // MARK: - Live agent view (see + respond)
 
+/// Keeps `following` true only while the last line is actually on screen.
+///
+/// The terminal auto-scrolls to the tail on every poll, which is right when you are
+/// watching an agent work and exactly wrong when you have scrolled back to read
+/// something: at a 1.5s poll the view was yanked to the bottom before a sentence could
+/// be finished. Rather than tracking drag gestures by hand, this reads the scroll
+/// view's own geometry — the reader "unfollows" by scrolling up and "refollows" by
+/// scrolling back down, with no button to discover and no mode to get stuck in.
+///
+/// `onScrollGeometryChange` is watchOS 11; the app targets 10. On a watchOS 10 device
+/// the modifier is simply absent and `following` stays true — that is today's
+/// always-follow behaviour, not a broken one.
+private struct FollowsTail: ViewModifier {
+    @Binding var following: Bool
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(watchOS 11.0, *) {
+            content.onScrollGeometryChange(for: Bool.self) { geo in
+                // 24pt of slack ≈ one 13pt monospaced line plus the 4pt bottom padding,
+                // so "the newest line is visible" counts as being at the bottom.
+                geo.visibleRect.maxY >= geo.contentSize.height - 24
+            } action: { _, atBottom in
+                if following != atBottom { following = atBottom }
+            }
+        } else {
+            content
+        }
+    }
+}
+
 struct AgentLiveView: View {
     @EnvironmentObject var store: WatchMeshStore
     @Environment(\.dismiss) private var dismiss
@@ -841,6 +879,10 @@ struct AgentLiveView: View {
     @State private var confirmInterrupt = false
     @State private var fontSize: CGFloat = 13
     @State private var selectedPane: String?
+    /// Whether new output should yank the view to the bottom. False the moment the
+    /// reader scrolls up, true again when they land back on the last line — see
+    /// `FollowsTail`. Reset on every open so a fresh terminal always starts at "now".
+    @State private var followTail = true
 
     private var currentAgent: Agent? {
         store.snaps.first { $0.host == host }?.agents.first { $0.name == agent }
@@ -1048,26 +1090,52 @@ struct AgentLiveView: View {
 
     private var replySheet: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                Text("Send to \(currentAgent?.displayName ?? agent)")
-                    .font(.headline)
-                    .lineLimit(1)
-                TextField("Say, scribble, or type…", text: $reply)
-                    .autocorrectionDisabled()
-                DictateLink(draft: $reply)
-                Button("Send") {
-                    if !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        store.send(text: reply + "\n")
-                        reply = ""
-                        showReply = false
+            ScrollView {
+                VStack(spacing: 12) {
+                    Text("Send to \(currentAgent?.displayName ?? agent)")
+                        .font(.headline)
+                        .lineLimit(1)
+                    // Same shift-key tax as the command field, and this text lands on an
+                    // agent's prompt line where `--no-verify` is not `--No-verify`.
+                    // `axis: .vertical` because a reply is often two thoughts, and a
+                    // single-line field showed only the tail of what you had dictated.
+                    TextField("Say, scribble, or type…", text: $reply, axis: .vertical)
+                        .lineLimit(1...4)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                    HStack(spacing: 6) {
+                        DictateLink(draft: $reply)
+                        // The only way to get a line break into the draft: watchOS
+                        // dictation and scribble both end the field instead of inserting
+                        // one, so a multi-line message was unreachable from the wrist.
+                        Button { reply += "\n" } label: {
+                            Image(systemName: "arrow.turn.down.left")
+                        }
+                        .accessibilityLabel("Add a line break, do not send")
                     }
+                    // Send leaves the text sitting on the agent's input line — that is
+                    // what you want when the next thing you press is a key-bar chip, or
+                    // when the TUI is going to ask you to confirm. Send ⏎ submits it.
+                    // Shape copied from the phone-control Type / Type ⏎ pair.
+                    HStack(spacing: 6) {
+                        Button("Send") { sendReply(withReturn: false) }
+                            .buttonStyle(.bordered)
+                        Button("Send ⏎") { sendReply(withReturn: true) }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .padding()
             }
-            .padding()
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showReply = false } } }
         }
+    }
+
+    private func sendReply(withReturn: Bool) {
+        guard !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        store.send(text: withReturn ? reply + "\n" : reply)
+        reply = ""
+        showReply = false
     }
 
     // A genuine terminal on the wrist: full-bleed monospaced output that the Digital
@@ -1107,8 +1175,13 @@ struct AgentLiveView: View {
                 .padding(.bottom, 4)
             }
             .background(Color.black)
-            .onAppear { proxy.scrollTo("tail", anchor: .bottom) }
+            .modifier(FollowsTail(following: $followTail))
+            .onAppear { followTail = true; proxy.scrollTo("tail", anchor: .bottom) }
             .onChange(of: store.output) { _, _ in
+                // Only while the reader is still at the bottom. This fired on every
+                // 1.5s poll before, so scrolling back to read the error that scrolled
+                // past was snatched away within a second-and-a-half, every time.
+                guard followTail else { return }
                 withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("tail", anchor: .bottom) }
             }
         }
@@ -1137,8 +1210,10 @@ struct AgentLiveView: View {
                 .padding(.bottom, 4)
             }
             .background(Color.black)
-            .onAppear { proxy.scrollTo("tail", anchor: .bottomLeading) }
+            .modifier(FollowsTail(following: $followTail))
+            .onAppear { followTail = true; proxy.scrollTo("tail", anchor: .bottomLeading) }
             .onChange(of: store.output) { _, _ in
+                guard followTail else { return }
                 withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("tail", anchor: .bottomLeading) }
             }
         }
