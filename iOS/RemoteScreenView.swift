@@ -2,6 +2,12 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+/// Where the scroll direction is remembered. File-scope, not a `static` on the model,
+/// because the property that reads it is a stored default — there is no `self` yet at
+/// that point. Versioned like every other key here so a future meaning change cannot
+/// silently inherit an old value and flip somebody's scrolling.
+private let naturalScrollKey = "mesh.remote.naturalScrolling.v1"
+
 /// Drive a Mac from the phone: its live screen, a pointer you can see, and a keyboard
 /// with the modifiers that actually matter.
 ///
@@ -62,6 +68,11 @@ final class RemoteScreenModel: ObservableObject {
     @Published var dragMode: DragMode = .pointer
     /// Sticky modifiers, cleared by the next non-modifier key — so ⌘⇧4 works.
     @Published var mods: Set<String> = []
+    /// Which way two fingers push the remote screen. Survives the app because a
+    /// scroll direction you have to re-pick every session is worse than no setting.
+    @Published var naturalScrolling = UserDefaults.standard.object(forKey: naturalScrollKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(naturalScrolling, forKey: naturalScrollKey) }
+    }
 
     /// No frame for longer than `staleAfter`. The picture is then a photograph of the
     /// past, so it is dimmed and every click is refused: a tap aimed at a stale frame
@@ -452,7 +463,11 @@ final class RemoteScreenModel: ObservableObject {
     func dragEnded() { send([.release]) }
 
     func scroll(_ delta: CGSize) {
-        send([.scroll(dx: Double(-delta.width), dy: Double(-delta.height))])
+        // `true` is the sign this has always shipped with — the picture follows the
+        // fingers, like the Mac's own trackpad. Nobody's muscle memory may change
+        // because a preference appeared, so the default has to reproduce it exactly.
+        let sign: Double = naturalScrolling ? -1 : 1
+        send([.scroll(dx: sign * Double(delta.width), dy: sign * Double(delta.height))])
     }
 
     func send(_ events: [InputEvent]) {
@@ -564,6 +579,7 @@ struct TrackpadSurface: UIViewRepresentable {
     var onTap: (CGPoint) -> Void            // location in the surface
     var onDoubleTap: (CGPoint) -> Void
     var onSecondaryTap: () -> Void
+    var onTertiaryTap: () -> Void
     var onZoom: (CGFloat, CGPoint) -> Void  // incremental scale factor, pinch centroid
     var onDragBegan: () -> Void
     var onDragEnded: () -> Void
@@ -582,6 +598,11 @@ struct TrackpadSurface: UIViewRepresentable {
         let pan = UIPanGestureRecognizer(target: c, action: #selector(Coordinator.pan(_:)))
         pan.maximumNumberOfTouches = 1
         view.addGestureRecognizer(pan)
+        // Without this the long press cancels the pan the instant it wins, so the
+        // button goes down and then nothing ever moves: no dragging a window, no
+        // drag-selecting text, no moving a slider. The whole press-and-hold-then-drag
+        // gesture was dead for exactly one missing delegate.
+        pan.delegate = c
 
         let twoFinger = UIPanGestureRecognizer(target: c, action: #selector(Coordinator.scroll(_:)))
         twoFinger.minimumNumberOfTouches = 2
@@ -603,8 +624,13 @@ struct TrackpadSurface: UIViewRepresentable {
         tap.require(toFail: double)          // or every double-click is also two singles
         view.addGestureRecognizer(tap)
 
+        let threeTap = UITapGestureRecognizer(target: c, action: #selector(Coordinator.tertiary(_:)))
+        threeTap.numberOfTouchesRequired = 3
+        view.addGestureRecognizer(threeTap)
+
         let twoTap = UITapGestureRecognizer(target: c, action: #selector(Coordinator.secondary(_:)))
         twoTap.numberOfTouchesRequired = 2
+        twoTap.require(toFail: threeTap)     // or a late third finger middle-clicks *and* right-clicks
         view.addGestureRecognizer(twoTap)
 
         // Press-and-hold then move is a drag on a real trackpad: button down, move,
@@ -613,6 +639,7 @@ struct TrackpadSurface: UIViewRepresentable {
         hold.minimumPressDuration = 0.35
         hold.allowableMovement = .greatestFiniteMagnitude
         view.addGestureRecognizer(hold)
+        hold.delegate = c                    // the other half of the drag: see pan.delegate above
 
         return view
     }
@@ -660,6 +687,7 @@ struct TrackpadSurface: UIViewRepresentable {
         @objc func tap(_ g: UITapGestureRecognizer) { parent.onTap(g.location(in: g.view)) }
         @objc func doubleTap(_ g: UITapGestureRecognizer) { parent.onDoubleTap(g.location(in: g.view)) }
         @objc func secondary(_ g: UITapGestureRecognizer) { parent.onSecondaryTap() }
+        @objc func tertiary(_ g: UITapGestureRecognizer) { parent.onTertiaryTap() }
 
         @objc func hold(_ g: UILongPressGestureRecognizer) {
             if g.state == .began { dragging = true; parent.onDragBegan() }
@@ -707,8 +735,12 @@ struct RemoteScreenView: View {
         .statusBarHidden(chromeHidden)
         .overlay(alignment: .top) { toast }
         .animation(.easeInOut(duration: 0.2), value: chromeHidden)
-        .onAppear { remote.start() }
-        .onDisappear { remote.stop() }
+        // Watching a Mac is a screen you look at without touching, so the idle timer
+        // dims it mid-session — on the one screen whose entire job is being looked at.
+        // Cleared on the way out, and only here: a phone that never sleeps again after
+        // you leave this view is a worse bug than the dim.
+        .onAppear { remote.start(); UIApplication.shared.isIdleTimerDisabled = true }
+        .onDisappear { remote.stop(); UIApplication.shared.isIdleTimerDisabled = false }
     }
 
     // MARK: Screen, pointer, gestures
@@ -765,7 +797,14 @@ struct RemoteScreenView: View {
                             remote.click(count: 2)
                         }
                     },
-                    onSecondaryTap: { if !chromeHidden, remote.dragMode == .pointer { remote.click("right") } },
+                    // Both fire wherever the pointer already is, so neither needs a mode
+                    // and neither conflicts with immersive mode's single-tap-shows-chrome.
+                    // Gating these on .pointer made them silently dead in pan mode, and
+                    // hiding the chrome left no other way to right-click at all.
+                    onSecondaryTap: { remote.click("right") },
+                    // "middle", not "center": input-linux.ts's BUTTONS map has no
+                    // "center" and drops it silently, so a paste-on-Linux would vanish.
+                    onTertiaryTap: { remote.click("middle") },
                     onZoom: { scale, location in remote.pinch(scale: scale, at: location, container: size) },
                     onDragBegan: { if !chromeHidden, remote.dragMode == .pointer { remote.dragBegan() } },
                     onDragEnded: { if !chromeHidden, remote.dragMode == .pointer { remote.dragEnded() } },
@@ -919,8 +958,17 @@ struct RemoteScreenView: View {
     // MARK: Keyboard
 
     private static let modifiers = [("⇧", "shift"), ("⌃", "ctrl"), ("⌥", "option"), ("⌘", "cmd")]
+    // "space" is here because this bar is the only way to reach the OS input path — the
+    // text field types *into* whatever has focus, so ⌥Space (Raycast) and ⌘Space were
+    // literally unsendable from the phone without it. Both hosts know the name: keycode
+    // 49 on the Mac, keysym "space" via xdotool.
     private static let specials = [("esc", "escape"), ("tab", "tab"), ("↩", "return"), ("⌫", "delete"),
+                                   ("space", "space"),
                                    ("↑", "up"), ("↓", "down"), ("←", "left"), ("→", "right")]
+    /// The launcher chords spelled out. Sticky modifiers already make them *possible*
+    /// (tap ⌥, tap space); one labelled button is what makes them findable.
+    private static let chords: [(String, String, [String])] = [("⌘space", "space", ["cmd"]),
+                                                               ("⌥space", "space", ["option"])]
 
     private var keyboardPane: some View {
         VStack(spacing: 8) {
@@ -938,6 +986,13 @@ struct RemoteScreenView: View {
                     Divider().frame(height: 18)
                     ForEach(Self.specials, id: \.1) { label, key in
                         Button(label) { remote.pressKey(key) }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    }
+                    Divider().frame(height: 18)
+                    // send(), not pressKey(): a chord carries its own modifiers and must
+                    // not consume the sticky ones the user is part-way through setting.
+                    ForEach(Self.chords, id: \.0) { label, key, mods in
+                        Button(label) { remote.send([.key(key, mods)]) }
                             .buttonStyle(.bordered).controlSize(.small)
                     }
                 }
@@ -986,6 +1041,10 @@ struct RemoteScreenView: View {
                 } label: {
                     Label("Hide controls", systemImage: "arrow.up.left.and.arrow.down.right")
                 }
+                // On: an upward two-finger gesture pushes the content up, like the Mac's
+                // own trackpad. Off: it pushes the content down. A preference nothing can
+                // set is the same as no preference, which is how this shipped dead once.
+                Toggle("Natural scrolling", isOn: $remote.naturalScrolling)
                 Divider()
                 Button { remote.pasteFromPhone() } label: {
                     Label("Paste from iPhone", systemImage: "doc.on.clipboard")
