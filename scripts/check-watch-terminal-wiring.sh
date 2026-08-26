@@ -86,10 +86,19 @@ fi
 # The client only names a display when a Mac has several, so a width that is honoured
 # only alongside ?display= is a width that a single-display Mac can never use.
 ok=1
-awk '/func screenImage/,/^    }/' "$CLIENT" | grep -q 'guard let display else' \
-  && { bad "MeshClient.screenImage still returns early without a display — width is dropped"; ok=0; }
-awk '/func screenImage/,/^    }/' "$CLIENT" | grep -q 'width=' \
-  || { bad "MeshClient.screenImage never sends a width"; ok=0; }
+# Aimed at the query builder, not at screenImage. screenImage is now a one-line
+# delegation, and an awk range anchored on it ran straight past its closing brace and
+# swallowed screenImageQuery — so this assertion passed because it was reading a
+# DIFFERENT function than the one it named. Both entry points share one builder, so
+# assert the builder, and separately assert they both actually reach it.
+awk '/func screenImageQuery/,/^    }/' "$CLIENT" | grep -q 'guard let display else' \
+  && { bad "MeshClient.screenImageQuery still returns early without a display — width is dropped"; ok=0; }
+awk '/func screenImageQuery/,/^    }/' "$CLIENT" | grep -q 'width=' \
+  || { bad "MeshClient.screenImageQuery never sends a width"; ok=0; }
+for entry in screenImage screenFrame; do
+  awk "/func $entry\\(/,/^    }/" "$CLIENT" | grep -qE 'screenImageQuery|screenFrame\(' \
+    || { bad "MeshClient.$entry does not route through screenImageQuery — the two entry points can now disagree on what they send"; ok=0; }
+done
 grep -q 'sp.get("width")' "$INPUT" \
   || { bad "the plain /screen.jpg route ignores &width"; ok=0; }
 # The width must be parsed by the ONE parser both routes share, not re-derived per
