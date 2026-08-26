@@ -867,6 +867,11 @@ private struct BridgeTerminalScreen: View {
         .navigationTitle(session)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadPanes() }
+        // Watching an agent work is a screen you look at without touching, so the auto
+        // lock dims it mid-run. Released on disappear, never at app scope: a phone that
+        // never sleeps again is a worse bug than the dim.
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
     }
 
     /// A WKWebView that cannot reach its host renders a blank black rectangle — which,

@@ -25,6 +25,17 @@ struct MeshRelayApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        // .autocorrectionDisabled() is on all 14 fields that reach a shell, but it does
+        // not touch smart punctuation: iOS still rewrote `--flag` into `–flag` and "x"
+        // into curly quotes on the way to bash, so the command failed for a reason
+        // nothing on screen explained and the daemon looked broken. Set app-wide because
+        // every one of those fields would otherwise have to remember to opt out.
+        UITextField.appearance().smartQuotesType = .no
+        UITextField.appearance().smartDashesType = .no
+        UITextField.appearance().smartInsertDeleteType = .no
+        UITextView.appearance().smartQuotesType = .no
+        UITextView.appearance().smartDashesType = .no
+        UITextView.appearance().smartInsertDeleteType = .no
         let store = MeshStore()
         _store = StateObject(wrappedValue: store)
         PushDelegate.onToken = { token in
