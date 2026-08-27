@@ -67,6 +67,18 @@ if xcodebuild test \
   exit 0
 fi
 
+# Distinguish "the app died" from "the harness never started". A runner killed before
+# it connects proves nothing at all, and reporting that as an app crash sends you
+# hunting a bug that is not there — which is exactly the failure mode this whole check
+# exists to end. Both still exit non-zero: a gate that proved nothing must not pass.
+if grep -q "before establishing connection\|never finished bootstrapping" "$log"; then
+  note "INCONCLUSIVE: the test runner was killed before it connected — nothing was proven about the app."
+  note "             Usually another xcodebuild or simulator run was competing for the same device."
+  note "             Re-run this alone; do not read it as a pass or a failure."
+  note "full log: $log"
+  exit 1
+fi
+
 note "FAIL: the app did not survive the smoke test"
 grep -E "Test Case .*failed|error:|Crash|crashed" "$log" | head -20 | sed 's/^/  /'
 note "full log: $log"
