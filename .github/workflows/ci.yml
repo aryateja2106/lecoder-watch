@@ -120,6 +120,12 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      # Static checks cannot see a UIKit appearance invocation that only throws when
+      # replayed onto a live view: 0.5.0 shipped one, every screen with a TextField died,
+      # and every check in scripts/ stayed green. This one runs the app.
+      - name: Smoke test MeshWatch (launches the app)
+        run: sh scripts/check-ios-smoke.sh
+
       - name: Build MeshWatch Watch App
         run: |
           xcodebuild -project MeshWatch.xcodeproj -scheme "MeshWatch Watch App" \

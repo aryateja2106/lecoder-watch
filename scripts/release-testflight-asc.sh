@@ -93,6 +93,11 @@ echo "==> self-checks"
 sh "$ROOT/scripts/check-all.sh" >/dev/null || { echo "FAIL: check-all.sh is red — not shipping"; exit 1; }
 echo "    all self-checks passed"
 
+# 0.5.0 passed every check above and still could not show a text field without dying.
+# A build that has not been launched has not been tested, so launch it before shipping it.
+echo "==> smoke test (launches the app on a simulator)"
+sh "$ROOT/scripts/check-ios-smoke.sh" || { echo "FAIL: the app did not survive being launched — not shipping"; exit 1; }
+
 echo "==> archive + upload (this takes a few minutes)"
 OUT="$(asc publish testflight --app "$APP_ID" \
   --project MeshWatch.xcodeproj --scheme MeshWatch \

@@ -116,19 +116,19 @@ struct PairMachineView: View {
     private var fields: some View {
         Section {
             LabeledContent("Address") {
-                TextField("100.x.y.z", text: $address)
+                TextField("100.x.y.z", text: $address.shellSafe)
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
             }
             LabeledContent("Port") {
-                TextField("8899", text: $port)
+                TextField("8899", text: $port.shellSafe)
                     .multilineTextAlignment(.trailing)
                     .keyboardType(.numberPad)
             }
             LabeledContent("Code") {
-                TextField("XXXX-XXXX", text: $code)
+                TextField("XXXX-XXXX", text: $code.shellSafe)
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.characters)

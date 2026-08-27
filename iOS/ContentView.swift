@@ -1109,16 +1109,16 @@ private struct SettingsTab: View {
                 Section("Machines") {
                     ForEach($store.machines) { $m in
                         VStack(alignment: .leading, spacing: 10) {
-                            TextField("host", text: $m.host)
+                            TextField("host", text: $m.host.shellSafe)
                                 .font(.headline)
                                 .autocorrectionDisabled()
                                 .textInputAutocapitalization(.never)
-                            LabeledContent("IP") { TextField("ip", text: $m.ip).multilineTextAlignment(.trailing) }
+                            LabeledContent("IP") { TextField("ip", text: $m.ip.shellSafe).multilineTextAlignment(.trailing) }
                             LabeledContent("Port") { TextField("port", value: $m.port, format: .number).multilineTextAlignment(.trailing) }
                             LabeledContent("Bridge") {
                                 TextField("http://ip:7820", text: Binding(
                                     get: { m.bridgeURL ?? "" },
-                                    set: { m.bridgeURL = $0.isEmpty ? nil : $0 }
+                                    set: { let v = $0.shellSafePunctuation; m.bridgeURL = v.isEmpty ? nil : v }
                                 ))
                                 .multilineTextAlignment(.trailing)
                                 .autocorrectionDisabled()
@@ -1127,7 +1127,7 @@ private struct SettingsTab: View {
                             LabeledContent("VNC") {
                                 TextField("http://ip:6080/vnc.html", text: Binding(
                                     get: { m.vncURL ?? "" },
-                                    set: { m.vncURL = $0.isEmpty ? nil : $0 }
+                                    set: { let v = $0.shellSafePunctuation; m.vncURL = v.isEmpty ? nil : v }
                                 ))
                                 .multilineTextAlignment(.trailing)
                                 .autocorrectionDisabled()
@@ -1171,13 +1171,13 @@ private struct SettingsTab: View {
 
                 Section("Quick send") {
                     ForEach($store.quickCommands, id: \.self) { $cmd in
-                        TextField("command", text: $cmd)
+                        TextField("command", text: $cmd.shellSafe)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                     }
                     .onDelete { store.quickCommands.remove(atOffsets: $0); store.save() }
                     HStack {
-                        TextField("new command", text: $newCommand)
+                        TextField("new command", text: $newCommand.shellSafe)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                         Button {
@@ -1296,7 +1296,7 @@ private struct PinnedLimitEditor: View {
                     Text(m.host).tag(m.host)
                 }
             }
-            TextField("rmux session or cmux:surface:N", text: $sessionName)
+            TextField("rmux session or cmux:surface:N", text: $sessionName.shellSafe)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
             HStack {

@@ -118,6 +118,26 @@ Other things that are true and not obvious:
   to delete and reinstall, which wipes the Keychain and un-pairs every machine they had
   added. The script warns when it detects this. See [updating.md](updating.md).
 
+### The build must survive being launched
+
+`scripts/release-testflight-asc.sh` will not upload a build that cannot open. It runs
+`scripts/check-ios-smoke.sh`, which installs the app on a simulator, visits every tab and
+opens the pairing sheet.
+
+This exists because 0.5.0 shipped an app that closed itself on every screen containing a
+text box, and **every check in `scripts/` was green** while it did. The cause was
+`UITextField.appearance().smartQuotesType = .no` — iOS replays a stored appearance
+instruction onto each text field as it appears, and replaying an input-trait setter
+throws. Nothing that reads source code can see that; the check meant to guard the area
+was grepping for that exact line and *requiring* it.
+
+The rule that follows: **a check that greps for a mechanism proves intent, not
+behaviour.** Anything that can only fail at runtime needs something that runs.
+
+If the machine has no iOS simulator new enough to install the app, the check says so and
+exits 0 — a runner that cannot test this reports "not covered here", never a false green.
+Run the release from a machine with a current Xcode.
+
 ### The older paths
 
 The `xcodebuild` script (needs the issuer id explicitly):

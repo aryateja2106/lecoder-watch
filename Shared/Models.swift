@@ -4,7 +4,22 @@ import Foundation
 
 /// A machine on the Tailscale mesh that runs `meshd`.
 struct Machine: Codable, Identifiable, Hashable {
-    var id: String { host }
+    /// Stable row identity, and deliberately NOT `host`.
+    ///
+    /// `id` used to be `host`, which the machine editor binds straight to a TextField:
+    /// the row's identity changed on every keystroke while you renamed a machine, and
+    /// two machines added with "Add manually" both claimed the id "new-machine".
+    /// Duplicate or moving ids inside a `ForEach` over bindings are a crash, not a
+    /// cosmetic glitch.
+    ///
+    /// Optional so a list written by an older build still decodes — a non-optional
+    /// stored id would fail to decode every pre-existing machine, and the `try?` at the
+    /// call site turns that into a silently empty fleet. `MeshStore.load()` stamps any
+    /// machine that arrives without one, so the fallback below is only ever used for the
+    /// instant between decode and stamp; it is derived from `host` rather than fresh so
+    /// that even then it does not change identity on every access.
+    var uid: UUID?
+    var id: String { uid?.uuidString ?? "host:\(host)" }
     var host: String          // display name, e.g. "arya-macbook-pro"
     var ip: String            // tailscale IP, e.g. "100.100.1.99"
     var port: Int             // meshd port, default 8899
@@ -168,7 +183,11 @@ func mergingPairedHosts(_ existing: [Machine], _ paired: [PairedHost]) -> [Machi
             out[i].token = entry.token
             out[i].port = entry.port
         } else {
-            out.append(Machine(host: entry.host, ip: entry.ip, port: entry.port, token: entry.token))
+            // Stamp the id here, not on the next launch: a machine paired in this
+            // session would otherwise fall back to a host-derived id, and renaming it
+            // before relaunching would change its identity mid-edit — the bug `uid`
+            // exists to stop.
+            out.append(Machine(uid: UUID(), host: entry.host, ip: entry.ip, port: entry.port, token: entry.token))
         }
     }
     return out

@@ -116,7 +116,7 @@ struct FileBrowserView: View {
         }
         .task(id: path) { await load() }
         .alert("New folder", isPresented: $creatingFolder) {
-            TextField("name", text: $folderName)
+            TextField("name", text: $folderName.shellSafe)
             Button("Cancel", role: .cancel) { }
             Button("Create") { Task { await makeFolder() } }
         } message: {

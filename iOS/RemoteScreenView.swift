@@ -1000,7 +1000,7 @@ struct RemoteScreenView: View {
             }
 
             HStack(spacing: 8) {
-                TextField("Type on \(remote.machine.host)", text: $typing)
+                TextField("Type on \(remote.machine.host)", text: $typing.shellSafe)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)

@@ -7,7 +7,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "0.5.0"
+    MARKETING_VERSION: "0.5.1"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     GENERATE_INFOPLIST_FILE: NO
@@ -20,6 +20,10 @@ schemes:
         MeshWatch: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - MeshWatchUITests
   MeshWatch Watch App:
     build:
       targets:
@@ -33,6 +37,20 @@ schemes:
     run:
       config: Debug
 targets:
+  # Runs the app and puts a text field on screen. Static checks cannot see a UIKit
+  # appearance invocation that only throws when it is replayed onto a live view.
+  MeshWatchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: MeshWatch
+    settings:
+      base:
+        TEST_TARGET_NAME: MeshWatch
+        GENERATE_INFOPLIST_FILE: YES
+
   MeshWatch:
     type: application
     platform: iOS

@@ -133,7 +133,11 @@ final class MeshStore: ObservableObject {
         // this kept them in UserDefaults in plaintext; migrate those once.
         if let data = SecureStore.migrateFromUserDefaults(key: defaultsKey),
            let decoded = try? JSONDecoder().decode([Machine].self, from: data) {
-            machines = decoded
+            // Stamp every machine written before `uid` existed, once, before anything
+            // renders — the rest of the app may then treat `id` as stable and unique.
+            let needsStamping = decoded.contains { $0.uid == nil }
+            machines = decoded.map { var m = $0; if m.uid == nil { m.uid = UUID() }; return m }
+            if needsStamping { save() }
         }
         if let decoded = UserDefaults.standard.stringArray(forKey: quickCommandsKey), !decoded.isEmpty {
             quickCommands = Self.mergedQuickCommands(decoded)
@@ -223,11 +227,20 @@ final class MeshStore: ObservableObject {
         }
     }
 
+    /// Match on `host`, not on `id`. A machine is the same machine when it is the same
+    /// box; `id` is only the row's identity in a list, and a freshly paired `Machine`
+    /// carries a brand new one — matching on it would append a second copy of a machine
+    /// you already had every time you re-paired it. The existing row's `uid` is kept so
+    /// the list does not lose the row's identity underneath the user.
     func update(_ machine: Machine) {
-        if let idx = machines.firstIndex(where: { $0.id == machine.id }) {
-            machines[idx] = machine
+        if let idx = machines.firstIndex(where: { $0.host == machine.host }) {
+            var merged = machine
+            merged.uid = machines[idx].uid ?? machine.uid ?? UUID()
+            machines[idx] = merged
         } else {
-            machines.append(machine)
+            var added = machine
+            if added.uid == nil { added.uid = UUID() }
+            machines.append(added)
         }
         save()
     }
@@ -236,7 +249,14 @@ final class MeshStore: ObservableObject {
     /// machine already has a token of its own and a random one here would just 401,
     /// which reads as "the machine is broken" instead of "you have not paired it".
     func addMachine() {
-        machines.append(Machine(host: "new-machine", ip: "", port: 8899, token: ""))
+        // A unique name as well as a unique id: two rows called "new-machine" are
+        // indistinguishable to the user even once the list can render them safely.
+        var name = "new-machine"
+        var n = 2
+        while machines.contains(where: { $0.host == name }) {
+            name = "new-machine-\(n)"; n += 1
+        }
+        machines.append(Machine(uid: UUID(), host: name, ip: "", port: 8899, token: ""))
         save()
     }
 
@@ -283,6 +303,15 @@ final class MeshStore: ObservableObject {
         await withTaskGroup(of: MachineSnapshot.self) { group in
             for machine in targets {
                 group.addTask {
+                    // A machine added by hand has no token yet. Polling it answers
+                    // "token rejected", which reads as "this machine is broken" when the
+                    // truth is "you have not paired it" — and it is the very first thing
+                    // you see after tapping Add manually.
+                    guard machine.isConfigured else {
+                        return MachineSnapshot(
+                            host: machine.host, config: machine, reachable: false, agents: [],
+                            error: "not paired yet — use Pair a machine, or paste this machine's token below")
+                    }
                     // Seeded from the last poll so the very first call of this pass is
                     // already capability-correct, then replaced by whatever /health
                     // says a moment later.
@@ -522,7 +551,9 @@ final class MeshStore: ObservableObject {
     /// Emit a snapshot containing the hosts that have answered so far, with the rest
     /// carrying whatever we last knew, so the list fills in progressively.
     private func publishPartial(_ answered: [MachineSnapshot], targets: [Machine]) {
-        let byHost = Dictionary(uniqueKeysWithValues: answered.map { ($0.host, $0) })
+        // `uniqueKeysWithValues` TRAPS on a duplicate key, and two machines can share a
+        // host name — nothing stops you naming them both "pi". Keep the newest answer.
+        let byHost = Dictionary(answered.map { ($0.host, $0) }, uniquingKeysWith: { _, newer in newer })
         let merged = targets.map { machine -> MachineSnapshot in
             if let fresh = byHost[machine.host] { return holdRecentlyGood(fresh) }
             if let remembered = lastGood[machine.host] {

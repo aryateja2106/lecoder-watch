@@ -175,7 +175,7 @@ private struct ManualBridgeScreen: View {
     var body: some View {
         Form {
             Section("Session") {
-                TextField("pi-shell", text: $session)
+                TextField("pi-shell", text: $session.shellSafe)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                 FlowButtons(items: suggestions) { session = $0 }
@@ -266,7 +266,7 @@ struct NewSessionSheet: View {
         NavigationStack {
             Form {
                 Section("Session name") {
-                    TextField("e.g. build-watch", text: $name)
+                    TextField("e.g. build-watch", text: $name.shellSafe)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 }
@@ -276,11 +276,11 @@ struct NewSessionSheet: View {
                             Text(p).tag(p == "shell" ? "" : p)
                         }
                     }
-                    TextField("or custom command", text: $command)
+                    TextField("or custom command", text: $command.shellSafe)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                     HStack {
-                        TextField("Working directory (optional)", text: $cwd)
+                        TextField("Working directory (optional)", text: $cwd.shellSafe)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                         Button("Browse…") { browsing = true }
@@ -301,7 +301,7 @@ struct NewSessionSheet: View {
                     Picker("Agent", selection: $taskAgent) {
                         ForEach(taskAgents, id: \.self) { Text($0).tag($0) }
                     }
-                    TextField("Describe the task", text: $taskText, axis: .vertical)
+                    TextField("Describe the task", text: $taskText.shellSafe, axis: .vertical)
                         .lineLimit(2...5)
                         .autocorrectionDisabled()
                     if !taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -683,7 +683,7 @@ private struct SessionPeekScreen: View {
         NavigationStack {
             Form {
                 Section("Send to \(session.displayName)") {
-                    TextField("Type, paste, or dictate a command", text: $composeText, axis: .vertical)
+                    TextField("Type, paste, or dictate a command", text: $composeText.shellSafe, axis: .vertical)
                         .lineLimit(3...8)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -711,7 +711,7 @@ private struct SessionPeekScreen: View {
         NavigationStack {
             Form {
                 Section("Say what you want") {
-                    TextField("list files, go to Projects, start codex", text: $phraseText, axis: .vertical)
+                    TextField("list files, go to Projects, start codex", text: $phraseText.shellSafe, axis: .vertical)
                         .lineLimit(2...5)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)

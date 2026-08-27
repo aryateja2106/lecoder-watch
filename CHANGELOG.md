@@ -9,6 +9,34 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-08-27 (iPhone and Watch app)
+
+### Fixed
+- **The app closed itself on any screen with a text box.** 0.5.0 turned off iOS smart
+  punctuation app-wide, so that typing `--flag` into a command did not arrive at the
+  shell as `–flag`. It did that through the UIKit appearance proxy — and iOS replays a
+  stored appearance instruction onto *every* text box the moment it appears on screen,
+  which throws. Tapping **Pair a machine**, opening **Settings**, or reaching any other
+  screen with a field on it killed the app instantly. Smart punctuation is still off,
+  now handled per field where it cannot take the screen down with it.
+- **Renaming a machine no longer corrupts the list.** A machine's identity in the list
+  was its name, and the name is the thing you edit — so the row changed identity on
+  every keystroke, and two machines added with **Add manually** were indistinguishable
+  to the list itself. Machines now carry a private stable id; existing machines are
+  given one on first launch and nothing is lost.
+- **Machine tokens are no longer left behind in plain text.** Tokens moved into the
+  Keychain in an earlier build, but the unencrypted copy from before that move was only
+  deleted on the single launch that performed the move — so a phone that had already
+  migrated kept a readable copy of every token, included in device backups. It is now
+  cleared whenever it is found. *(Found on a real device, not in review.)*
+
+### Added
+- **The app is now launched before it ships.** A smoke test runs the real app on a
+  simulator, visits every tab and opens the pairing sheet. The crash above passed every
+  existing check because all of them read source code, and no amount of reading can see
+  an instruction that only fails when iOS replays it onto a live screen. Releasing to
+  TestFlight now refuses to proceed if the app cannot survive being opened.
+
 ## [0.5.2] — 2026-08-27 (installer only)
 
 ### Fixed
