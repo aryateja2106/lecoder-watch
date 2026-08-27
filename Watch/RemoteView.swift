@@ -864,7 +864,7 @@ struct RemoteView: View {
             // air mouse and drag lock could both be on with nothing to say so.
             .overlay(alignment: .center) {
                 if remote.dragLocked {
-                    Text("drag held — tap ✋ to release").font(.caption2).foregroundStyle(.orange)
+                    Text("drag held — tap the lock to release").font(.caption2).foregroundStyle(.orange)
                 } else if remote.airMouse {
                     Text("air mouse — point your arm").font(.caption2).foregroundStyle(.blue)
                 } else if remote.status?.trusted == false {
@@ -935,14 +935,20 @@ struct RemoteView: View {
             // Primary action = the Double Tap hand gesture on Series 9 and later, which
             // is the pinch-to-click WowMouse is built around — native, no BLE needed.
             primaryClickButton
-            // Two hands side by side, and one of them holds the Mac's mouse button
-            // down. A filled-vs-outline glyph at 17pt is not a mode indicator, so the
-            // button carries the tint too — the same blue and orange the trackpad and
-            // the sticky modifiers already use for "this is ON".
-            padButton(remote.airMouse ? "hand.point.up.braille.fill" : "hand.point.up.braille",
+            // These two used to be `hand.point.up.braille` and `hand.raised`: two hands,
+            // side by side, at caption size on a 40mm screen, distinguished only by
+            // fill. Asked what they did, the person who uses this every day said "the
+            // hand symbol icon, which I am not able to understand" — and could not say
+            // which hand he meant, which is the whole problem in one sentence.
+            //
+            // Now each glyph says its own name. A gyroscope is the motion sensor that
+            // drives the arm-pointing cursor; a padlock is the lock in "drag lock", and
+            // it opens when the button is released. Tints stay, because on a screen this
+            // size colour is read before shape.
+            padButton("gyroscope",
                       remote.airMouse ? "Air mouse on" : "Air mouse",
                       tint: remote.airMouse ? .blue : nil) { remote.setAirMouse(!remote.airMouse) }
-            padButton(remote.dragLocked ? "hand.raised.fill" : "hand.raised",
+            padButton(remote.dragLocked ? "lock.fill" : "lock.open",
                       remote.dragLocked ? "Drag lock on" : "Drag lock",
                       tint: remote.dragLocked ? .orange : nil) { remote.toggleDragLock() }
             padButton("keyboard", "Type") { typing = true }
