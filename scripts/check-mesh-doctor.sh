@@ -68,7 +68,18 @@ echo "check-mesh-doctor: server.ts wired"
 # Asserted by watching which method actually arrives, not by reading the source.
 CLI="$ROOT/install/payload/bin/mesh"
 LOG="$TMP/methods.log"
-/usr/bin/python3 - "$TMP" <<'PY' 2>"$LOG" &
+
+# The stub needs a python. Hardcoding /usr/bin/python3 fails on any box that does not have
+# one there — a minimal ubuntu image has no python at all — and a check that cannot run
+# must say so, not fail as though the thing it tests were broken.
+PY3=""
+for c in python3 /usr/bin/python3; do command -v "$c" >/dev/null 2>&1 && { PY3="$c"; break; }; done
+if [ -z "$PY3" ]; then
+  echo "check-mesh-doctor: NOTE — CLI --fix case skipped, no python3 for the stub server"
+  exit 0
+fi
+
+"$PY3" - "$TMP" <<'PY' 2>"$LOG" &
 import http.server, socketserver, sys
 class H(http.server.BaseHTTPRequestHandler):
     def _r(self):
@@ -80,11 +91,22 @@ class H(http.server.BaseHTTPRequestHandler):
 socketserver.TCPServer(("127.0.0.1", 8893), H).serve_forever()
 PY
 STUB=$!
+# A spin with no delay is not a wait. This burned all 40 attempts in milliseconds on a
+# cold CI runner, long before python had bound the port — and then measured an empty log
+# and reported the CLI as broken. Sleep between tries, and say so if it never comes up,
+# rather than blaming the thing under test for the harness not being ready.
 i=0
-while [ "$i" -lt 40 ]; do
-  curl -sf -m 1 "http://127.0.0.1:8893/doctor" >/dev/null 2>&1 && break
+stub_up=0
+while [ "$i" -lt 60 ]; do
+  if curl -sf -m 1 "http://127.0.0.1:8893/doctor" >/dev/null 2>&1; then stub_up=1; break; fi
+  sleep 0.2
   i=$((i + 1))
 done
+if [ "$stub_up" -ne 1 ]; then
+  kill "$STUB" 2>/dev/null || true
+  echo "FAIL: check-mesh-doctor: the stub server never came up on 127.0.0.1:8893 — harness problem, not a CLI problem"
+  exit 1
+fi
 
 printf '{"default":"probe","hosts":{"probe":{"ip":"127.0.0.1","port":8893,"token":"t"}}}\n' \
   > "$TMP/hosts.json"

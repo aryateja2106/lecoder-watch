@@ -62,9 +62,65 @@ Keys are per **team**, not per app. One key ships every app on the team.
    The App Store **name is globally unique and reserving it takes it out of
    circulation** — do not spend a name you want for a different product.
 
-## Every release
+## Every release — use the script
 
-Either the script (needs the issuer id explicitly):
+```bash
+sh scripts/release-testflight-asc.sh              # ship to yourself + internal testers
+```
+
+```bash
+sh scripts/release-testflight-asc.sh --external   # …and to the public link, via Beta App Review
+```
+
+`--dry-run` prints what it would do and touches nothing. It regenerates the project, runs
+`check-all.sh`, archives Release, uploads, **adds the build to a group**, and writes
+*What to Test* from `CHANGELOG.md`'s Unreleased block.
+
+### The trap the script exists to remove
+
+**`--upload-only` leaves the build in no group at all.** It processes, goes `VALID`, and is
+installable by *nobody* — not external testers, not internal ones, not you. Every list view
+shows a healthy build. This is the whole answer to "I can't find the update in TestFlight":
+on 2026-08-27 build `202608270920` was uploaded and valid and sitting in zero groups.
+
+A build only reaches people once it is **added to a group**, and the two kinds differ:
+
+| Group | Who | Gate |
+|---|---|---|
+| **Internal** | App Store Connect team members, ≤100 | none — installable as soon as processing ends |
+| **External** (the public link) | anyone with the link | **Beta App Review** |
+
+`externalBuildState: READY_FOR_BETA_SUBMISSION` means uploaded, processed, valid, and
+reaching nobody. `IN_BETA_TESTING` is the one that means your friends have it.
+
+### Checking, rather than assuming
+
+```bash
+asc testflight distribution view --build-id "$BUILD_ID"
+```
+
+```bash
+asc testflight groups links view --group-id "$GROUP_ID" --type builds
+```
+
+**`asc builds groups list --build-id` is marked experimental and reported zero groups for a
+build that was demonstrably in one.** Use `groups links view` above; it is authoritative.
+
+Other things that are true and not obvious:
+
+- `asc testflight review submit --build-id <ID> --confirm` submits for Beta App Review from
+  the command line. The web UI is not required.
+- `asc publish testflight --build <ID> --group <ID>` distributes a build **that already
+  exists** — no rebuild, no re-upload. This is how you fix a build that went up in no group.
+- Build numbers must be unique forever; the scripts use a UTC `YYYYMMDDHHMM` stamp.
+- **Never let the marketing version go backwards.** App Store Connect allows it and iOS
+  punishes it: a tester on a higher version reads the new build as older and may be asked
+  to delete and reinstall, which wipes the Keychain and un-pairs every machine they had
+  added. The script warns when it detects this. See [updating.md](updating.md).
+
+### The older paths
+
+The `xcodebuild` script (needs the issuer id explicitly):
 
 ```bash
 ASC_KEY_ID=Y4MR7X24UL ASC_ISSUER_ID=<uuid> sh scripts/release-testflight.sh
