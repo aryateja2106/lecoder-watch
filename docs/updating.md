@@ -27,11 +27,33 @@ Verify App"* dead end), and each re-sign makes iOS treat it as a new app identit
 
 ### On the watch
 
-Nothing to do. The watch app is **embedded in the iPhone app** (`embed: true` in
-`project.yml`), so one upload ships both and updating the phone updates the watch.
+The watch app is **embedded in the iPhone app** (`embed: true` in `project.yml`), so one
+upload ships both. But the watch app is **not installed by TestFlight** — TestFlight only
+installs the iPhone app, and watchOS then installs the embedded watch app itself.
 
-If the watch app doesn't appear after an update: iPhone → **Watch** app → scroll to
-**Available Apps** → **Install**. That is a first-install step, not an update step.
+Those two installers do not follow the same rules, and the difference bites right now:
+
+| | Installed by | Enforces version ordering? |
+|---|---|---|
+| iPhone app | TestFlight, on the tester's tap | **no** — any build installs |
+| Watch app | watchOS, from the installed iPhone app | **yes** |
+
+Because of the rename down to 0.5.0, watchOS reads the new watch app as *older* than the
+1.0 already on the wrist and declines the in-place update. **The phone updates and the
+watch silently does not** — no error, no prompt. The wrist keeps running 1.0, which
+predates everything shipped after the rename.
+
+**The fix, and it costs nothing:** iPhone → **Watch** app → the app → *Delete App from
+Apple Watch*, then reinstall it from **Available Apps**. A first install does no version
+comparison, so the current build goes on.
+
+Do **not** delete the *iPhone* app to fix a stale watch. That wipes the phone's Keychain
+and un-pairs every machine. The watch's own Keychain entry (`watch.machines.v1`) is only a
+cache — `WatchMeshStore.adoptConfigs(from:)` re-seeds it from the phone over WCSession on
+the next sync — so removing just the watch app loses no pairing.
+
+If the watch app does not appear under **Available Apps** at all, that is the plain
+first-install case and the same **Install** button covers it.
 
 ### What it will not do
 
