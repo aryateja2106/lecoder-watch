@@ -220,7 +220,7 @@ struct MeshClient {
     }
 
     func panes(agent: String) async throws -> [Pane] {
-        let data = try await request("/agents/\(agent)/panes")
+        let data = try await request("/agents/\(Self.pathSegment(agent))/panes")
         return try JSONDecoder().decode(PaneList.self, from: data).panes
     }
 
@@ -232,7 +232,7 @@ struct MeshClient {
     /// byte-identical to today's.
     func output(agent: String, lines: Int = 80, pane: String? = nil,
                 join: Bool = false, plain: Bool = false) async throws -> AgentOutput {
-        var path = "/agents/\(agent)/output?lines=\(lines)"
+        var path = "/agents/\(Self.pathSegment(agent))/output?lines=\(lines)"
         if let pane, !pane.isEmpty {
             let enc = pane.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? pane
             path += "&pane=\(enc)"
@@ -259,7 +259,7 @@ struct MeshClient {
         if let pane, !pane.isEmpty { payload["pane"] = pane }
         if paste, supports("paste") { payload["paste"] = true }
         let body = try JSONSerialization.data(withJSONObject: payload)
-        _ = try await request("/agents/\(agent)/send", method: "POST", body: body)
+        _ = try await request("/agents/\(Self.pathSegment(agent))/send", method: "POST", body: body)
     }
 
     /// Create a new rmux session (optionally launching a command, e.g. "claude" / "codex").
@@ -298,16 +298,33 @@ struct MeshClient {
         _ = try await request("/fs/mkdir", method: "POST", body: body)
     }
 
+    /// One path segment of a URL, with everything that could end the segment escaped.
+    ///
+    /// `.urlPathAllowed` deliberately permits `/`, because it is meant for a whole path —
+    /// so the two call sites that already "encoded" the agent name were not protecting
+    /// against the one character that matters. A session identified by anything other
+    /// than a bare mux name — a cwd, a worktree path, later a Claude `session_id` — then
+    /// produced `/agents//Users/x/y/send`, which does not match meshd's
+    /// `^/agents/([^/]+)/send$` and 404s before session resolution is ever attempted.
+    /// Verified against the live daemon: raw segment 404, percent-encoded 200.
+    private static let pathSegmentAllowed: CharacterSet = {
+        var set = CharacterSet.urlPathAllowed
+        set.remove("/")
+        return set
+    }()
+
+    static func pathSegment(_ raw: String) -> String {
+        raw.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed) ?? raw
+    }
+
     func newPane(agent: String) async throws {
-        let enc = agent.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? agent
         let body = try JSONSerialization.data(withJSONObject: [:])
-        _ = try await request("/agents/\(enc)/panes", method: "POST", body: body)
+        _ = try await request("/agents/\(Self.pathSegment(agent))/panes", method: "POST", body: body)
     }
 
     /// Kill (delete) an rmux session entirely.
     func kill(agent: String) async throws {
-        let enc = agent.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? agent
-        _ = try await request("/agents/\(enc)", method: "DELETE")
+        _ = try await request("/agents/\(Self.pathSegment(agent))", method: "DELETE")
     }
 
     // MARK: - Mac remote control
@@ -449,9 +466,7 @@ struct MeshClient {
 
     /// Kill a single pane within a session.
     func killPane(agent: String, paneId: String) async throws {
-        let a = agent.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? agent
-        let p = paneId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? paneId
-        _ = try await request("/agents/\(a)/panes/\(p)", method: "DELETE")
+        _ = try await request("/agents/\(Self.pathSegment(agent))/panes/\(Self.pathSegment(paneId))", method: "DELETE")
     }
 }
 

@@ -157,7 +157,7 @@ def main():
             token = f.readline().strip()
     if not token:
         print(f"mesh-hook: missing MESHD_TOKEN and unreadable {token_file}", file=sys.stderr)
-        return 2
+        return 0
 
     host = os.getenv("MESHD_HOST", "127.0.0.1")
     port = os.getenv("MESHD_PORT", "8899")
@@ -175,8 +175,29 @@ def main():
         print(f"mesh-hook: HTTP {e.code}", file=sys.stderr)
     except OSError as e:
         print(f"mesh-hook: {e}", file=sys.stderr)
-    return 1
+    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # Never a non-zero exit, whatever happens inside.
+    #
+    # This hook is registered on Stop, and Claude Code treats a Stop hook exiting 2 as a
+    # BLOCKING error: it refuses to end the turn and loops. So an unreadable token file —
+    # a rotated token, a half-finished install, a MESH_HOME that moved — did not merely
+    # lose a notification, it wedged the session that was trying to finish. Verified on
+    # the deployed hook: `printf '{"hook_event_name":"Stop"}' | env -u MESHD_TOKEN
+    # MESH_HOME=/nonexistent mesh-hook --source claude` exits 2.
+    #
+    # This is telemetry. It has no opinion about whether the agent may proceed, so it must
+    # never be able to express one. Failures go to stderr, where Claude shows them without
+    # acting on them, and the exit status stays 0 — including for an argparse error or an
+    # unexpected exception, which would otherwise escape as 2 and 1 respectively.
+    try:
+        main()
+    except SystemExit as e:                     # argparse --help / bad flags
+        if e.code not in (0, None):
+            print(f"mesh-hook: exiting 0 despite {e.code} — a hook must not block a turn",
+                  file=sys.stderr)
+    except Exception as e:                      # anything at all
+        print(f"mesh-hook: {type(e).__name__}: {e}", file=sys.stderr)
+    raise SystemExit(0)
