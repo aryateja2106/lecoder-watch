@@ -1,9 +1,10 @@
 # What exists, what is half-built, and what is only planned
 
-Generated from a spoken backlog on **2026-08-27**, then graded item by item against
-the code — not against memory, and not against this repo's own docs. Every grade below
-carries file:line evidence in the tracked issue; a claim with no citation was graded
-`missing` on purpose.
+Generated on **2026-08-27** from two passes: a spoken backlog structured into issues and
+graded item by item against the code, and an adversarial review of the whole application
+whose findings were each re-checked by a second agent instructed to refute them
+(21 of 44 survived). Grades cite file:line in the tracked issue; a claim with no citation
+was graded `missing` on purpose.
 
 The machine-readable source is [`.github/backlog.json`](../.github/backlog.json), and
 `sh scripts/sync-issues.sh` turns it into GitHub issues (idempotent by title, so it is
@@ -18,10 +19,33 @@ reach it, and a check fails if it breaks. Most of this repo's real capability si
 | `done` | 0 | shipped, reachable from the UI, and guarded by a check |
 | `partial` | 11 | some of it works — usually one platform, or the code without the surface |
 | `buried` | 1 | built and working, but nothing in the UI calls it |
-| `missing` | 63 | not built |
-| **total** | **75** | |
+| `missing` | 79 | not built (for a defect: not yet fixed) |
+| **total** | **91** | |
 
 ---
+
+## Confirmed defects
+
+Found by adversarial review on 2026-08-27; each was independently verified by a second agent told to refute it. Six more were found and already fixed.
+
+| Severity | Area | Defect |
+|---|---|---|
+| `blocker` | ios | An "agent needs attention" event graded at info level raises a banner and then deletes i… |
+| `high` | ios | `dragEnded()` goes through the same `inputBlocked` guard as every other input |
+| `high` | shared | `fsList` percent-encodes the path with `.urlQueryAllowed` |
+| `high` | install | `mesh doctor --fix` reads the flag from the wrong bag (`"fix" in flags`) |
+| `high` | ci | `mesh uninstall --yes` removes only the meshd launchd job/systemd unit and leaves the `r… |
+| `high` | watch | `pushClipboard` writes "copied to Mac" unconditionally |
+| `high` | daemon | agentKillPane guards infra by session *name* but kills by *pane id* |
+| `high` | daemon | agentSend validates that the session is addressable but never validates the `pane` target |
+| `high` | install | ensure_tmux aborts the whole install whenever tmux is missing |
+| `high` | daemon | readTextFile does `readFile(path)` on the whole file and only then slices it to `max` |
+| `medium` | daemon | POST /agents/new answers `{ok:true |
+| `medium` | install | The cmux-bridge starter hardcodes /opt/homebrew/bin/bun |
+| `medium` | daemon | The entire codex-state module from the tip commit is dead code: server.ts never imports it |
+| `medium` | shared | `lastError = error` keeps the error from the *last* address tried rather than the most i… |
+| `medium` | daemon | agentNewPane returns `{ok:true}` unconditionally: the fallback split at line 526 has its… |
+| `low` | shared | The `captureJoin` gap row describes screen-capture throughput |
 
 ## Control surface & input
 
