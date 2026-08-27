@@ -192,9 +192,30 @@ final class RemoteControl: ObservableObject {
     func relinquish() {
         if dragLocked {
             dragLocked = false
-            // Straight onto the queue and flushed by `perform`, which retains the
-            // actor for the duration — this has to survive the view that asked for it.
-            perform([.release])
+            // Sent directly, never queued. Queueing it was the bug: `perform` hands the
+            // event to `flush()`, and `flush()` returns immediately while a request is
+            // already in flight — which during a drag is the ordinary state, not a rare
+            // one, since a single `client.input` walks every address in turn and the
+            // flush interval is 40ms. The `.release` was left sitting in `discrete`, and
+            // the only thing that ever drains `discrete` is the view's `.task` loop,
+            // which SwiftUI cancels on the very disappear that called this. So nothing
+            // drained it, ever: the Mac's button stayed physically down, every later
+            // pointer move became a drag, and the one screen with a release button was
+            // gone. Retaining the actor was never the binding constraint — the
+            // `inFlight` guard was, and it turned that flush into a no-op.
+            //
+            // Detached so it outlives the view too, and both transports are tried in
+            // turn: this is the one event that must not be dropped, so unlike a cursor
+            // delta it is queued for the phone if the phone is unreachable right now.
+            let client = self.client
+            let host = machine.host
+            let direct = !viaRelay
+            Task.detached {
+                if direct, (try? await client.input([.release])) != nil { return }
+                WatchLink.shared.send(WatchCommand(kind: .input, host: host, agent: nil,
+                                                   text: nil, key: nil, input: [.release]),
+                                      queueIfUnreachable: true)
+            }
         }
         setAirMouse(false)
     }

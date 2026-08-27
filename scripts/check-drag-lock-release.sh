@@ -43,5 +43,26 @@ if grep -q 'onDisappear {.*stopMotion()' "$VIEW"; then
   bad "onDisappear still calls stopMotion() directly — that path never releases the button"
 fi
 
+# 4. The release must be DELIVERED, not merely queued. Assertions 1-3 all passed while
+#    the button stayed down, because they only proved the event was handed to the batch
+#    queue. `perform()` routes through `flush()`, which returns early whenever a request
+#    is already in flight — the ordinary state during a drag — and the only thing that
+#    drains the queue afterwards is the view's `.task` loop, which SwiftUI cancels on the
+#    very disappear that triggered this. So the event sat in `discrete` forever.
+if printf '%s' "$body" | grep -qE '(^|[^A-Za-z])perform\(' ; then
+  bad "relinquish() sends the release through perform()/the batch queue — flush() returns early while a request is in flight, and the loop that would drain it is cancelled by the same disappear"
+fi
+
+# 5. It has to outlive the view. A plain `Task {}` on a @MainActor object that the view
+#    is releasing is not a promise that it runs.
+printf '%s' "$body" | grep -q 'Task.detached'   || bad "relinquish() does not send the release from a detached task, so it dies with the view that asked for it"
+
+# 6. And it has to have somewhere to go when the direct route is not the live one. A
+#    watch usually has no Tailscale, so the phone relay is the normal path, not the
+#    exception — a release that only knows the direct route is a release that never
+#    lands on a real wrist.
+printf '%s' "$body" | grep -q 'WatchLink.shared.send'   || bad "relinquish() has no relay fallback — on a watch reaching meshd through the phone the release never arrives"
+printf '%s' "$body" | grep -q 'queueIfUnreachable: true'   || bad "relinquish() drops the release when the phone is briefly unreachable; this is the one event that must be queued"
+
 [ "$ok" -eq 1 ] || exit 1
-echo "check-drag-lock-release.sh: OK (exiting the Control screen releases the button and disarms air mouse)"
+echo "check-drag-lock-release.sh: OK (the release is sent directly, outlives the view, and has a queued relay fallback)"
