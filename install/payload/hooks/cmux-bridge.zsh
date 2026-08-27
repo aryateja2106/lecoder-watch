@@ -16,7 +16,12 @@ start_cmux_bridge() {
   if curl -sf "http://127.0.0.1:${port}/health" >/dev/null 2>&1 && _cmux_bridge_healthy; then
     return 0
   fi
-  lsof -ti ":${port}" | xargs kill -9 2>/dev/null || true
+  # -sTCP:LISTEN is load-bearing. `lsof -i :PORT` matches a socket with that port on
+  # EITHER end, so the bare form also listed every client CONNECTED to the bridge —
+  # and meshd is one, because /agents asks the bridge for cmux sessions. Opening any
+  # new interactive shell while the bridge looked unhealthy therefore kill -9'd the
+  # user's running meshd. Only the process actually holding the port may be replaced.
+  lsof -ti "tcp:${port}" -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
   sleep 0.5
   nohup launchctl asuser "$(id -u)" /bin/zsh -lc \
     "cd '$mesh_home/meshd' && PATH='/Applications/cmux.app/Contents/Resources/bin:/opt/homebrew/bin:/usr/bin:/bin' CMUX_PORT='$cmux_port' exec /opt/homebrew/bin/bun run cmux-bridge.ts >>'$log' 2>&1" \

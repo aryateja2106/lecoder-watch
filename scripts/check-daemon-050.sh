@@ -54,6 +54,16 @@ chmod 600 "$TMP/hdr"
 # The tmux server starts from OUR first command so it runs with no user config.
 tmux -L "$SOCK" -f /dev/null new-session -d -s mesh-boot "exec cat"
 
+# ...and no pane may run the user's LOGIN SHELL, which `-f /dev/null` does not cover.
+# A session created without a cmd (the sized one below) otherwise starts an interactive
+# zsh that sources the user's whole config. On this machine that config auto-starts the
+# cmux bridge, whose starter runs `lsof -ti :PORT | xargs kill -9` — and because
+# `lsof -i :PORT` matches a socket with that port on EITHER end, that killed the
+# throwaway meshd this script had just launched, roughly six runs in ten. A self-check
+# has no business executing a developer's shell profile: it is not hermetic, and here it
+# was not even survivable.
+tmux -L "$SOCK" set-option -g default-shell /bin/sh \; set-option -g default-command 'exec cat'
+
 MESHD_TOKEN="$(cat "$TMP/.mesh/token")" \
 HOME="$TMP" MESHD_HOST=127.0.0.1 MESHD_PORT="$PORT" \
 MESHD_EVENTS_PATH="$TMP/events.jsonl" MESH_MUX="tmux -L $SOCK" \

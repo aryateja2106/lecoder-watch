@@ -9,7 +9,12 @@ healthy() {
     | grep -q '"windows"[[:space:]]*:[[:space:]]*\['
 }
 if curl -sf "http://127.0.0.1:${BRIDGE_PORT}/health" >/dev/null && healthy; then exit 0; fi
-lsof -ti ":${BRIDGE_PORT}" | xargs kill -9 2>/dev/null || true
+# -sTCP:LISTEN is load-bearing. `lsof -i :PORT` matches a socket with that port on
+# EITHER end, so the bare form also listed every client CONNECTED to the bridge —
+# and meshd is one, because /agents asks the bridge for cmux sessions. Opening any
+# new interactive shell while the bridge looked unhealthy therefore kill -9'd the
+# user's running meshd. Only the process actually holding the port may be replaced.
+lsof -ti "tcp:${BRIDGE_PORT}" -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
 sleep 0.5
 MESH_HOME="${MESH_HOME:-$HOME/.mesh}"
 CMUX_PORT="${CMUX_PORT:-9160}"
