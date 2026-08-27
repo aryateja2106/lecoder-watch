@@ -176,6 +176,29 @@ final class RemoteControl: ObservableObject {
         WKInterfaceDevice.current().play(dragLocked ? .start : .stop)
     }
 
+    /// Everything this screen left running on the Mac, undone. Called when the view
+    /// goes away, which is the only moment the wrist stops being able to undo it.
+    ///
+    /// Drag lock is the dangerous half. `.hold` presses the physical mouse button and
+    /// nothing but `.release` lifts it, and `.release` was emitted from exactly one
+    /// place — `toggleDragLock`. So walking back out of this screen with drag lock on
+    /// left the button held down on the Mac: every later pointer movement, from the
+    /// watch or from the Mac's own trackpad, became a drag that selected and dropped
+    /// whatever it crossed. There was no screen anywhere offering the button that
+    /// would have fixed it.
+    ///
+    /// Air mouse is the quiet half. `stopMotion()` ends the sensor updates but left
+    /// `airMouse` true, so coming back showed an armed mode whose arm moved nothing.
+    func relinquish() {
+        if dragLocked {
+            dragLocked = false
+            // Straight onto the queue and flushed by `perform`, which retains the
+            // actor for the duration — this has to survive the view that asked for it.
+            perform([.release])
+        }
+        setAirMouse(false)
+    }
+
     // MARK: loop
 
     /// Drain accumulated motion + queued actions. Called on a timer by the view.
@@ -484,7 +507,7 @@ struct RemoteView: View {
                 remote.update(machine: match)
             }
         }
-        .onDisappear { store.stopScreen(); remote.stopMotion() }
+        .onDisappear { store.stopScreen(); remote.relinquish() }
     }
 
     // MARK: Inspect
