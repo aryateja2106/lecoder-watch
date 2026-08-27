@@ -599,6 +599,41 @@ function syncBin(payload: string): { updated: string[]; unchanged: number } {
   return { updated, unchanged };
 }
 
+/**
+ * hooks/ moves on upgrade too.
+ *
+ * It did not, and that stranded a whole class of fix. `hooks/cmux-bridge.zsh` is sourced
+ * by every interactive zsh, and the shipped copy killed processes by port alone —
+ * `lsof -ti ":$port"` matches a socket with that port on EITHER end, so it selected meshd
+ * (which holds a client connection to the bridge) and SIGKILLed the daemon whenever a
+ * terminal opened. The fix went out in 0.5.0. On a machine that ran `mesh upgrade`, the
+ * broken file stayed exactly where it was: bin/ and meshd/ moved, hooks/ did not.
+ *
+ * Measured on a real machine the moment the upgrade finished: meshd 0.5.0 running,
+ * bin/start-cmux-bridge-inner.zsh fixed, hooks/cmux-bridge.zsh still carrying the line
+ * that had just taken that daemon down. Only a fresh install ever got the fix, which is
+ * the one thing an existing user does not do.
+ *
+ * Same rules as syncBin: byte-identical files are left alone, extra files are never
+ * removed — anything a user has put in hooks/ is theirs.
+ */
+function syncHooks(payload: string): { updated: string[]; unchanged: number } {
+  const from = join(payload, "hooks"), to = join(MESH_HOME, "hooks");
+  const updated: string[] = [];
+  let unchanged = 0;
+  if (!existsSync(from)) return { updated, unchanged };
+  mkdirSync(to, { recursive: true });
+  for (const e of readdirSync(from, { withFileTypes: true })) {
+    if (!e.isFile()) continue;
+    const a = join(from, e.name), b = join(to, e.name);
+    if (existsSync(b) && Buffer.compare(readFileSync(a), readFileSync(b)) === 0) { unchanged++; continue; }
+    copyFileSync(a, b);
+    chmodSync(b, 0o644);
+    updated.push(e.name);
+  }
+  return { updated, unchanged };
+}
+
 const shq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
 /**
@@ -710,7 +745,9 @@ async function cmdUpgradeLocal(flags: Record<string, string>, bools: Set<string>
   try {
     backup = swapInMeshd(payload, oldDisk, epoch);
     const bin = syncBin(payload);
+    const hooks = syncHooks(payload);
     say(`  installed meshd ${newVersion}  (bin: ${bin.updated.length ? bin.updated.join(", ") : "no changes"}${bin.unchanged ? `, ${bin.unchanged} unchanged` : ""})`);
+    if (hooks.updated.length) say(`  hooks: ${hooks.updated.join(", ")}`);
 
     if (noRestart) {
       say(`  --no-restart: ${MESH_HOME}/meshd is ${newVersion}, the running daemon is still ${oldRunning || "whatever it was"}`);

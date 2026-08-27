@@ -103,8 +103,16 @@ if ! command -v tmux >/dev/null 2>&1; then
 fi
 
 RH="$TH/rhome"
-mkdir -p "$RH/.mesh" "$TH/tmux"
+mkdir -p "$RH/.mesh" "$TH/tmux" "$RH/.mesh/hooks"
 cp -R "$ROOT/install/payload/meshd" "$RH/.mesh/meshd"
+
+# A hooks/ file from an older release, plus one of the user's own. Upgrade used to move
+# bin/ and meshd/ and leave hooks/ untouched — so a fix shipped in a hook only ever
+# reached people doing a FRESH install, which is precisely the people who do not need it.
+# That stranded the cmux-bridge fix: on a machine that upgraded, the line that SIGKILLs
+# meshd on every interactive shell was still there afterwards. Measured on a real machine.
+printf 'stale hook from an older release\n' > "$RH/.mesh/hooks/cmux-bridge.zsh"
+printf 'mine, keep it\n' > "$RH/.mesh/hooks/my-own-hook.zsh"
 sed 's/^const VERSION = .*/const VERSION = "0.0.1-test";/' "$RH/.mesh/meshd/server.ts" > "$RH/v" && mv "$RH/v" "$RH/.mesh/meshd/server.ts"
 printf 'restart-phase-token\n' > "$RH/.mesh/token"
 cp "$RH/.mesh/token" "$TH/rtoken.expected"
@@ -123,4 +131,10 @@ LIVE="$(curl -fsS "http://127.0.0.1:$RPORT/health" 2>/dev/null | sed -n 's/.*"me
   || { cat "$TH/restart.log"; fail "the restarted daemon reports '${LIVE:-nothing}', not $NEW_VERSION — the upgrade was cosmetic"; }
 cmp -s "$RH/.mesh/token" "$TH/rtoken.expected" || fail "the restart phase modified the token"
 
-echo "check-mesh-upgrade: OK (0.0.1-test -> $NEW_VERSION, state preserved, failure is a no-op, daemon really restarted)"
+# hooks/ has to arrive with everything else.
+cmp -s "$RH/.mesh/hooks/cmux-bridge.zsh" "$ROOT/install/payload/hooks/cmux-bridge.zsh" \
+  || fail "upgrade left the old hooks/cmux-bridge.zsh in place — a fix shipped in a hook never reaches anyone who upgrades"
+[ -f "$RH/.mesh/hooks/my-own-hook.zsh" ] \
+  || fail "upgrade deleted a hook the user put there themselves"
+
+echo "check-mesh-upgrade: OK (0.0.1-test -> $NEW_VERSION, state preserved, hooks synced, failure is a no-op, daemon really restarted)"
