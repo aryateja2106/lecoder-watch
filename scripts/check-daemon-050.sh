@@ -1,5 +1,5 @@
 #!/bin/sh
-# The 0.5.0 daemon contract, end to end against a throwaway meshd:
+# The 0.5.x daemon contract, end to end against a throwaway meshd:
 #   - push gate: an info event is stored for pollers but never queued for APNs;
 #     a warning is queued (observed via the alertsQueued/alertsGated counters on /push)
 #   - /agents rows carry status / lastEventLevel / lastEventISO
@@ -82,12 +82,22 @@ api() { curl -sf -m 20 -H @"$TMP/hdr" "$@"; }
 
 # ---- /health: version, new capabilities, ipv4+netmask ----
 api "http://127.0.0.1:$PORT/health" > "$TMP/health.json"
-/usr/bin/python3 - "$TMP/health.json" <<'PY'
+# The expected version is read from the source under test, not frozen into this file. It
+# was pinned to a literal "0.5.0", so the first patch release turned the whole suite red
+# for a version bump — and because check-all.sh had been piped through `tail` in a couple
+# of places, the pipeline's exit status was tail's and the failure went unseen. A daemon
+# reporting a version other than its own source is still a failure, which is the property
+# actually worth asserting.
+WANT_VERSION="$(tr -d '\000' < "$ROOT/install/payload/meshd/server.ts" \
+  | sed -n 's/^[[:space:]]*const VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+[ -n "$WANT_VERSION" ] || { echo "FAIL: could not read VERSION out of meshd/server.ts"; exit 1; }
+/usr/bin/python3 - "$TMP/health.json" "$WANT_VERSION" <<'PY'
 import json, sys
 h = json.load(open(sys.argv[1]))
+want_version = sys.argv[2]
 fail = []
-if h.get("meshdVersion") != "0.5.0":
-    fail.append(f"meshdVersion is {h.get('meshdVersion')!r}, want 0.5.0")
+if h.get("meshdVersion") != want_version:
+    fail.append(f"meshdVersion is {h.get('meshdVersion')!r}, want {want_version!r} (the version in meshd/server.ts)")
 want = {"screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin"}
 missing = want - set(h.get("capabilities", []))
 if missing:
@@ -98,7 +108,7 @@ for key in ("ipv4", "netmask"):
 for f in fail: print("FAIL:", f)
 sys.exit(1 if fail else 0)
 PY
-echo "check-daemon-050: health OK (0.5.0, capabilities, ipv4/netmask)"
+echo "check-daemon-050: health OK ($WANT_VERSION, capabilities, ipv4/netmask)"
 
 # ---- push gate + /agents status fields ----
 # A warning must be queued for push AND flip the session row to "waiting";

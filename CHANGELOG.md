@@ -9,6 +9,18 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-08-27 (daemon only)
+
+### Fixed
+- **A machine you reach by name stopped answering.** 0.5.0 added a guard that refuses
+  requests addressed to a hostname the daemon does not recognise — and it compared the
+  name against a list of *IP addresses*, so reaching a machine by its address worked and
+  reaching it by its name never could. The phone stores each machine as an address *and*
+  a name and falls back to the name, and Tailscale's short name (`arya-macbook-pro`) is
+  the natural thing to have stored — so the moment a machine upgraded to 0.5.0, any phone
+  holding it by name saw **HTTP 421** and the machine read as offline. It now answers to
+  its own hostname and its own Tailscale name, and still refuses everybody else's.
+
 ### Fixed
 - **`mesh doctor --fix` never asked macOS for anything.** A bare `--fix` was parsed
   into a bucket the command never looked at, so the one invocation that exists to

@@ -75,6 +75,9 @@ jobs:
       - name: check-install-idempotent.sh
         run: sh scripts/check-install-idempotent.sh
 
+      - name: check-host-guard.sh
+        run: sh scripts/check-host-guard.sh
+
       - name: check-token-rotate.sh
         run: sh scripts/check-token-rotate.sh
 
