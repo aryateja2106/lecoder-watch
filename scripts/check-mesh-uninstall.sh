@@ -13,6 +13,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MESH="$ROOT/install/payload/bin/mesh"
 command -v bun >/dev/null 2>&1 || { echo "check-mesh-uninstall: SKIP (no bun)"; exit 0; }
 
+# Record the real ~/.mesh BEFORE anything runs, so the last assertion can compare states
+# rather than demand one. It used to assert the directory exists, which is only true on a
+# machine that already has mesh installed -- so this check, and therefore all of
+# check-all.sh, failed on every clean machine including both CI runners.
+if [ -d "$HOME/.mesh" ]; then real_mesh_before=y; else real_mesh_before=n; fi
+
 TMP="$(mktemp -d)"
 SB="$TMP/fakehome"
 trap 'rm -rf "$TMP"' EXIT
@@ -80,7 +86,7 @@ chk "kept an rc backup"      "$([ -f "$SB/.zshrc.bak" ] && echo y || echo n)" "y
 chk "no triple blank line"   "$(awk 'BEGIN{r=0;m=0} /^[[:space:]]*$/{r++; if(r>m)m=r; next} {r=0} END{print (m>2)?"bad":"ok"}' "$SB/.zshrc")" "ok"
 
 # ---- 4. the sandbox really was a sandbox ----
-chk "real ~/.mesh untouched" "$([ -d "$HOME/.mesh" ] && echo y || echo n)" "y"
+chk "real ~/.mesh untouched" "$([ -d "$HOME/.mesh" ] && echo y || echo n)" "$real_mesh_before"
 
 if [ "$fail" = "0" ]; then
   echo "check-mesh-uninstall: OK (removes every installer artefact, keeps every user line)"
