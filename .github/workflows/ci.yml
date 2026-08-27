@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches:
+      # main is where the shipping work actually lands, and it was not in this list — so
+      # the branch everything gets pushed to was the one branch CI never ran on.
+      - 'main'
       - 'feat/**'
       - 'fix/**'
       - 'claude/**'
