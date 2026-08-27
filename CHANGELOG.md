@@ -34,10 +34,24 @@ each entry as you ship the slice, not at release time.
   watch can pull whatever you last copied on the Mac and drop it into a session.
 
 ### Fixed
+- **Pasting a big clipboard no longer takes the machine off the mesh.** Copying a long
+  log and tapping paste killed the daemon outright: over about a megabyte the write
+  into the multiplexer failed in a way no error handler could see, so every layer
+  reported success and then the process exited. Fixed at the root, and the fallback it
+  exposed — which refused anything over roughly 300 KB — now sends in chunks, so a
+  large paste actually arrives.
+- **`mesh self-check` stops printing your machine's token.** The Authorization header
+  was assembled in a way that fell apart under `/bin/sh`: no probe was ever actually
+  authenticated, and the token was written into a predictable, world-readable file in
+  `/tmp` and printed to the terminal. The same file also tested the wrong port for the
+  terminal bridge, so the bridge was never checked at all.
 - **The watch stops walking away holding the Mac's mouse button down.** Leaving the
   remote screen mid-drag left the button pressed on the real machine, so the next thing
   you touched on the Mac got selected, dragged or dropped. Leaving now releases the
-  drag and disarms the air mouse.
+  drag and disarms the air mouse. (The first version of this queued the release behind a
+  send that was already in flight, and the queue was emptied by a loop the same exit had
+  already cancelled — so the button could still be down. It is sent directly now, over
+  whichever route is live.)
 - **The two hand icons nobody could tell apart.** The air-mouse toggle and the drag
   lock both drew a hand. They are now a gyroscope and a padlock that visibly opens and
   closes, so the control row says what state you are in instead of asking you to

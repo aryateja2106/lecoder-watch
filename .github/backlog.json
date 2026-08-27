@@ -1,0 +1,1127 @@
+[
+  {
+    "n": 1,
+    "title": "A dictated notification reply must land in an editable draft",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A11`.\n\n## The problem\nIn-app dictation already lands in an editable field the user confirms (DictateLink into TypeSheet and the reply sheet). The notification Reply action does not: Shared/AgentNotifications.swift registers a UNTextInputNotificationAction whose button is \"Send\", so watchOS dictation fires the recognised text straight at a live agent prompt. That is the one path that breaks \"review before dispatch\", and it is the path used when it matters most \u2014 from a raised wrist, mid-run.\n\n## Acceptance\n- [ ] Choosing Reply on a watch agent notification opens the app's own review sheet with the dictated text pre-filled and editable; nothing reaches the session until Send is tapped\n- [ ] Approve, Decline and Stop are unchanged \u2014 each is one unambiguous key and stays one tap from the notification\n- [ ] Cancelling the review sends nothing, leaves the agent blocked, and leaves the notification still actionable\n- [ ] The issue is explicitly hand-checked on a real Apple Watch and says so: an agent cannot verify that the mic opens or that the banner behaves\n\n## Where it stands today \u2014 `missing`\nShared/AgentNotifications.swift:107-113 \u2014 `let reply = UNTextInputNotificationAction(identifier: Action.reply.rawValue, title: Action.reply.title, options: [], textInputButtonTitle: \"Send\", textInputPlaceholder: \"Reply to the agent\")`, with `options: []` (no `.foreground`), so the system text field still dispatches straight through. Shared/AgentNotifications.swift:66-68 confirms the handler sends whatever was typed: `case .reply: let text = (typed ?? \"\")\u2026 return text.isEmpty ? nil : (text, nil)`. Approve/Decline/Stop remain plain one-tap actions (Shared/AgentNotifications.swift:117-125), which is the unchanged half the acceptance asks for.\n\n**What is actually left:** Turn Reply into a foreground action that opens the app's own review sheet pre-filled and editable, keep cancel = send nothing / notification still actionable, and record the hand-check on a real Apple Watch.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "M",
+    "round": "A"
+  },
+  {
+    "n": 2,
+    "title": "Clear agent events, one by one and all at once",
+    "labels": [
+      "area:daemon",
+      "effort:M",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A12`.\n\n## The problem\n\"In our notifications or the events, we don't have an option to clear them or remove them one by one.\" Both lists are read-only: EventsView on the watch and the Events section of MonitorTab on the phone render store.events with no swipe, no delete and no Clear all. The daemon only offers GET and POST /events, so ~/.mesh/agent-events.jsonl just grows and the newest 100 are shown forever.\n\n## Acceptance\n- [ ] meshd gains DELETE /events/:id and DELETE /events behind the same auth as every other route, rewriting ~/.mesh/agent-events.jsonl, and advertises a new capability string so an older daemon never gets a dead button\n- [ ] Watch EventsView supports swipe-to-delete on a row plus a \"Clear all\" with confirmation; the iOS MonitorTab Events section does the same\n- [ ] A cleared event stays cleared across an app relaunch AND a daemon restart, and does not reappear through the phone relay's snapshot\n- [ ] On a daemon without the capability the clear affordances are absent rather than failing, and a scripts/check-*.sh proves the route exists in server.ts and that both clients call it\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/server.ts:987-988 \u2014 only `GET /events` and `POST /events` are routed; the only DELETE handlers in the file are killPane/kill at install/payload/meshd/server.ts:1035 and 1040. No new capability string is advertised. Watch/WatchViews.swift:486-511 \u2014 EventsView is a bare `List(store.events.reversed())` with no ForEach, no `.onDelete`, no swipeActions and no Clear all. iOS/ContentView.swift:77-99 \u2014 the MonitorTab Events section is a read-only `ForEach(store.events.reversed())`; the only `.onDelete` calls in that file are for machines (iOS/ContentView.swift:1160) and quick commands (iOS/ContentView.swift:1178).\n\n**What is actually left:** All of it: DELETE /events/:id and DELETE /events with the jsonl rewrite, a capability string, both clients' delete UI, relay-snapshot correctness, and the check script.",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "M",
+    "round": "A"
+  },
+  {
+    "n": 3,
+    "title": "Decide the future of Screen peek: keep, merge into Control, or remove",
+    "labels": [
+      "area:watch",
+      "effort:S",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A6`.\n\n## The problem\nA machine's screen on the watch offers both \"Screen peek\" (a read-only JPEG with a Refresh button) and \"Control Mac\", whose Read mode shows the same picture bigger, pannable and zoomable. Arya: \"I don't see the reason why we have a screen peek.\" Two doors to the same picture is a discoverability tax on the smallest screen in the product.\n\n## Acceptance\n- [ ] Arya confirms the verdict before anything is deleted \u2014 this issue does not close on an agent's judgement\n- [ ] Exactly one entry point to \"look at this Mac's screen\" remains in SessionsView (Watch/WatchViews.swift), and it still works on a machine that does NOT advertise `input` \u2014 Control Mac is hidden behind supportsInput, which is the case Screen peek covers today\n- [ ] If Screen peek goes, ScreenPeekView and any relay path left with no caller go with it, and sh scripts/check-all.sh still passes\n- [ ] CHANGELOG records the decision and the reason for it\n\n## Where it stands today \u2014 `missing`\nWatch/WatchViews.swift:636-650 \u2014 the Monitor section still renders BOTH entry points: `NavigationLink { ScreenPeekView(host: host) } label: { Label(\"Screen peek\", \u2026) }` and, gated on `supportsInput` (Watch/WatchViews.swift:798), `NavigationLink { RemoteView(machine: m) } label: { Label(\"Control Mac\", \u2026) }`. ScreenPeekView still exists at Watch/WatchViews.swift:1333 with its relay path live (Watch/WatchMeshStore.swift:855-879, `.screenPeek`). The helpSheet still documents both as separate things (Watch/WatchViews.swift:779-780). grep for `peek` in CHANGELOG.md returns zero hits \u2014 no decision recorded.\n\n**What is actually left:** The decision itself (Arya's, not an agent's), then either the removal + dead-path cleanup + check-all pass, or a recorded keep \u2014 plus the CHANGELOG entry either way.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "S",
+    "round": "A"
+  },
+  {
+    "n": 4,
+    "title": "First-class /commands, bash-mode ! and file-reference @ in the terminal",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A9`.\n\n## The problem\nDriving Claude Code or Codex from a phone or a wrist means typing \"/\", \"!\" and \"@\" \u2014 the three characters the on-screen keyboards make hardest to reach and the ones with the highest payoff. Neither app knows they exist: quick commands are plain shell strings and there is no slash-command list anywhere.\n\n## Acceptance\n- [ ] When a session's agentType is claude or codex, the compose surface offers a \"/\" chip that lists that agent's slash commands and inserts the chosen one into the draft \u2014 never straight down the wire\n- [ ] \"!\" and \"@\" have their own one-tap inserts on both the iPhone compose surface and the watch terminal key bar\n- [ ] Everything inserted lands in the editable draft, so it is completed and reviewed before sending (AGENTS.md design principle 4)\n- [ ] On a plain shell session (agentType nil) the agent-specific chips are absent rather than present-and-inert\n- [ ] Proof against a real Claude Code session in a mux pane: tapping \"/\", picking a command, then Send actually runs it\n\n## Where it stands today \u2014 `missing`\ngrep for `slashCommand|slash command|bashMode` across iOS/TerminalView.swift and Watch/WatchViews.swift returns zero hits. `agentType` is read in those files only for usage-limit gating (iOS/TerminalView.swift:407, 465, 489; Watch/WatchViews.swift:920, 933) \u2014 never to branch the compose surface. The iOS quick commands are plain strings from `store.quickCommands` (iOS/TerminalView.swift:674), and the watch key bar (Watch/WatchViews.swift:1246-1261) has no \"/\", \"!\" or \"@\" chip.\n\n**What is actually left:** Everything: the per-agent slash-command list and inserter, the ! and @ one-tap inserts on both clients, draft-only insertion, and the nil-agentType absence rule.\n\n**Depends on:** One compose surface per session instead of four ways to send text",
+    "status": "missing",
+    "area": "watch",
+    "effort": "M",
+    "round": "A"
+  },
+  {
+    "n": 5,
+    "title": "Give Read mode visible pan buttons on both axes",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A5`.\n\n## The problem\nArya likes Read mode but asked for \"small minimal buttons to move around ... left and right as well, so that we can move to any corner of the screen\". Today there is no button for any direction: the crown pans up and down, and sideways panning is hidden in invisible left/right tap zones announced only by a hint that fades after three seconds. Once the hint is gone, half the picture is unreachable.\n\n## Acceptance\n- [ ] The inspector in Watch/RemoteView.swift shows persistent minimal controls for up, down, left and right, each at least WatchTouch.minWidth x minHeight, that do not cover the middle-third exit target\n- [ ] From centre at 6x, repeated taps reach all four corners of the display; clampedPan stops exactly at each edge and the button disables (or plays .failure) once there\n- [ ] Each tap calls fetchRegionNow() on a direct route so the picture moves on the next frame instead of up to 2s later\n- [ ] The crown keeps its current vertical pan, and the invisible side zones are either kept deliberately or removed \u2014 not left as a second undocumented input\n\n## Where it stands today \u2014 `missing`\nWatch/RemoteView.swift:521-608 \u2014 the inspector's only visible overlay is `inspectZoomChips` (Watch/RemoteView.swift:571, 624-645: \u2212/+/zoom label only). Horizontal panning is still invisible tap thirds at Watch/RemoteView.swift:573-581 (`if point.x < third { pan(-1\u2026) } else if point.x > geo.size.width - third { pan(1\u2026) } else { inspecting = false }`), and the only announcement is the 3-second hint at Watch/RemoteView.swift:557-565 + 601-606 (`Text(\"Crown \u2195 \u00b7 sides \u2194 \u00b7 tap middle to exit\")`, then `withAnimation { showInspectHint = false }`). Vertical pan is crown-only (Watch/RemoteView.swift:584-596). No up/down/left/right buttons exist.\n\n**What is actually left:** The four persistent WatchTouch-sized buttons, plus disabled/.failure state at each edge. The plumbing they would sit on already exists and works: `clampedPan` + `panStep` (Watch/RemoteView.swift:663-668), edge `.failure` haptic (Watch/RemoteView.swift:671-675), and `fetchRegionNow()` on the direct route (Watch/RemoteView.swift:674, 687-690).",
+    "status": "missing",
+    "area": "watch",
+    "effort": "M",
+    "round": "A"
+  },
+  {
+    "n": 6,
+    "title": "Give the full-keyboard modifier row the same glyphs, and add fn",
+    "labels": [
+      "area:watch",
+      "effort:S",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A1`.\n\n## The problem\nOn the watch's \"Every key\" keyboard (Control > Mac > Keyboard > Every key) the modifier row still spells out \"cmd / shift / opt / ctrl\", which wraps mid-word inside a 40mm chip and reads as a layout bug \u2014 and fn is missing entirely. One level up, the Keys screen already shows the real keycap glyphs, so the same four modifiers look like two different features depending on which screen you reached them from.\n\n## Acceptance\n- [ ] RemoteKeyboardView.modifierRow in Watch/RemoteView.swift renders the same five chips as RemoteKeysView (\u2318 \u21e7 \u2325 \u2303 fn), reading RemoteKeysView.modifiers rather than a second literal [\"cmd\",\"shift\",\"opt\",\"ctrl\"] array\n- [ ] Each chip carries accessibilityLabel = the spoken word (Command/Shift/Option/Control/Function) and accessibilityValue \"held\" or \"off\", matching RemoteKeysView\n- [ ] scripts/check-mesh-input.sh asserts BOTH modifier rows against mesh-input's MODIFIERS table \u2014 today its awk only reads the one `static let modifiers:` table, so this row could carry an unmappable name forever\n- [ ] xcodebuild -project MeshWatch.xcodeproj -scheme 'MeshWatch Watch App' -destination 'generic/platform=watchOS Simulator' CODE_SIGNING_ALLOWED=NO build succeeds\n\n## Where it stands today \u2014 `missing`\nWatch/RemoteView.swift:1425-1437 \u2014 `private var modifierRow` still does `ForEach([\"cmd\", \"shift\", \"opt\", \"ctrl\"], id: \\.self) { mod in Button(mod) ... }`: spelled-out words, only four entries (no fn), no `.accessibilityLabel`/`.accessibilityValue`. The glyph table it should read lives at Watch/RemoteView.swift:1180-1186 (`static let modifiers` = \u2318/\u21e7/\u2325/\u2303/fn with spoken names) and is consumed only by RemoteKeysView at Watch/RemoteView.swift:1141-1155. scripts/check-mesh-input.sh:93 \u2014 `mods=$(awk '/static let modifiers:/,/^    \\]/' \"$VIEW\" ...)` reads only that one table, so the second row is unasserted.\n\n**What is actually left:** Rewrite RemoteKeyboardView.modifierRow to iterate RemoteKeysView.modifiers (glyph + spoken + held/off), and extend check-mesh-input.sh to also parse the KEYBOARD-view row against MODIFIERS in install/payload/bin/mesh-input.swift:116. The Keys-screen half the issue calls already-done is genuinely done.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "S",
+    "round": "A"
+  },
+  {
+    "n": 7,
+    "title": "Insert the Mac's clipboard into a session, not just the iPhone's",
+    "labels": [
+      "area:watch",
+      "effort:S",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A10, buried-readPhoneClipboard`.\n\n## The problem\nThe watch session screen has \"Insert iPhone clipboard\" but nothing for the Mac's own clipboard \u2014 so copy a path, a URL or a stack trace on the Mac and the wrist cannot paste it back into the agent that needs it. The daemon already serves GET /clipboard, and RemoteControl.pullClipboard() already reads it over both the direct and the relay route; only the button into a session is missing. (The backlog's \"readPhoneClipboard has zero callers\" note is now stale \u2014 AgentLiveView calls store.insertPhoneClipboard(); this is the other direction.)\n\n## Acceptance\n- [ ] AgentLiveView in Watch/WatchViews.swift gains an \"Insert Mac clipboard\" action beside the iPhone one, delivered through the same session send path\n- [ ] It inserts with no trailing newline, like the iPhone path \u2014 the text sits on the prompt line so it can be read before it is sent\n- [ ] It works when the watch is relaying through the phone, and on failure says which of \"the Mac's clipboard is empty\" or \"no answer from <host>\" happened \u2014 never a blank line\n- [ ] A machine whose daemon cannot serve the clipboard hides the button rather than offering one that fails\n\n## Where it stands today \u2014 `missing`\nWatch/WatchViews.swift:1010-1016 \u2014 the Actions section has exactly one clipboard button, `Button { Task { await store.insertPhoneClipboard() } } label: { Label(\"Insert iPhone clipboard\", \u2026) }`; there is no Mac counterpart. `RemoteControl.pullClipboard()` (Watch/RemoteView.swift:381-390) is not buried but is wired only to a viewer, not a sender: its single caller is `Button(\"Read Mac clipboard\")` in RemoteClipboardView at Watch/RemoteView.swift:1327-1331, which assigns to `@State macClipboard` and renders it as Text (Watch/RemoteView.swift:1336-1339). No path sends that text to a session. Note: CHANGELOG.md's Unreleased entry \"Read the Mac's clipboard from the watch \u2026 and drop it into a session\" overstates this \u2014 the drop-into-a-session half does not exist.\n\n**What is actually left:** The \"Insert Mac clipboard\" action in AgentLiveView on the same send path, no trailing newline, relay support, distinct empty-vs-no-answer errors, and hiding it when the daemon lacks the capability.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "S",
+    "round": "A"
+  },
+  {
+    "n": 8,
+    "title": "Keep a Mac awake, controllable and capturable with the lid closed",
+    "labels": [
+      "area:daemon",
+      "effort:XL",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A3`.\n\n## The problem\nClose the MacBook lid and the machine sleeps: sessions stall, the watch shows it offline, and any agent mid-run stops. Even if it stayed awake, a lid-closed Mac with no external display has no framebuffer to grab, so /screen.jpg \u2014 the trackpad preview and Read mode both \u2014 would go blank at exactly the moment the wrist is the only way in. Arya wants to shut the lid and keep working.\n\n## Acceptance\n- [ ] meshd can hold the Mac awake with the lid closed (a managed caffeinate/pmset lifetime it owns), off by default, toggled from Control > Mac > System, with the state reported on /health or /doctor so no client is guessing \u2014 and released by `mesh uninstall` so nothing keeps a Mac awake after the daemon is gone\n- [ ] Proof pasted into the PR: with the hold on and the lid shut, GET /agents still answers and POST /agents/<s>/send still reaches a live mux session 5 minutes later\n- [ ] A written finding records what a real lid-closed Mac returns from /screen.jpg and /displays, and the chosen fix (virtual display, or an explicit no-display state) either serves a real frame or returns a structured error\n- [ ] Watch Read mode and iOS/RemoteScreenView.swift show that named reason (\"this Mac has no display while the lid is shut\") rather than a grey box or an endless spinner\n\n## Where it stands today \u2014 `missing`\nRepo-wide grep for `caffeinate|keepAwake|keep_awake|clamshell|lid closed|lid-closed` across install/, Watch/, iOS/, Shared/, scripts/, docs/ returns zero hits (only pmset uses are the sleep actions at install/payload/meshd/input.ts:188-189). Watch/RemoteView.swift:1294-1307 \u2014 RemoteSystemView offers only Lock/Sleep display/Screen saver/Sleep Mac, no awake toggle. install/payload/meshd/input.ts:254-261 \u2014 `/displays` returns a generic `could not read displays` error, not a named no-display state. Watch/RemoteView.swift:544-555 \u2014 the inspector falls back to `remote.screenError` or \"Fetching screen\u2026\"/\"No screen yet \u2014 still trying\", never a lid-shut reason.\n\n**What is actually left:** All four bullets: the managed caffeinate/pmset lifetime owned by meshd, its state on /health or /doctor, release on `mesh uninstall`, the lid-closed /screen.jpg + /displays finding, and the named reason in Watch Read mode and iOS/RemoteScreenView.swift.",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "XL",
+    "round": "A"
+  },
+  {
+    "n": 9,
+    "title": "Lock the Mac from the wrist and unlock it by typing the password",
+    "labels": [
+      "area:daemon",
+      "effort:L",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A2`.\n\n## The problem\n\"Lock screen\" already works from Control > Mac > System, but once the Mac is locked there is no way back in from the phone or the watch \u2014 you have to walk to the machine. Arya wants the round trip: close the screen remotely, and get a quick password dialog on the phone or watch that opens it again.\n\n## Acceptance\n- [ ] A written verdict lands in docs/ with pasted output from a real macOS 26 machine, recording whether synthetic keystrokes can reach the login window while Secure Input is active \u2014 this is measured, not assumed\n- [ ] If they can: POST /system {action:\"unlock\"} accepts a password that never reaches a log line, a query string, a file on the Mac, or UserDefaults; the phone holds it via Shared/SecureStore.swift (Keychain); entering it while the Mac is locked returns it to the desktop within 10s\n- [ ] If they cannot: the Lock button says so before you tap it (\"you will need the Mac's own keyboard to get back in\") and no dead Unlock button ships\n- [ ] A scripts/check-*.sh fails if a password value can reach a log statement, a URL, or UserDefaults on either side\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/input.ts:187-194 \u2014 `SYSTEM_ACTIONS` contains only displaysleep, sleep, lock, screensaver, shutdown, restart; there is no `unlock`. Watch/RemoteView.swift:1300 \u2014 `Button(\"Lock screen\") { remote.system(\"lock\") }` with no warning text about needing the Mac's own keyboard. Repo-wide grep for `secure input|loginwindow|login window` across *.md/*.swift/*.ts/*.sh returns zero hits, so no docs/ verdict exists. No scripts/check-*.sh asserts password non-leakage (scripts/ listing has no such file).\n\n**What is actually left:** Everything: the measured macOS 26 Secure-Input finding in docs/, then either the unlock route + Keychain-held password + leak-check script, or the honest warning on the Lock button.",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "L",
+    "round": "A"
+  },
+  {
+    "n": 10,
+    "title": "Name the five controls on the watch Control screen",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:A",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A4`.\n\n## The problem\nThe row under the trackpad is five bare glyphs. Asked what the third one did, the person who uses this every day said he could not understand the hand symbol \u2014 and could not say which of the two hands he meant. The glyphs improved recently (gyroscope, padlock), but there is still no text on any of them and no legend anywhere, while one of those buttons holds the Mac's physical mouse button down until it is pressed again.\n\n## Acceptance\n- [ ] Each of the five controls (Click, Air mouse, Drag lock, Type, More) shows a word as well as a glyph \u2014 or a legend/coach that names all five \u2014 fitting a 40mm screen without truncation\n- [ ] Air mouse and Drag lock state their ON state in words, not tint alone: colour washes out outdoors and roughly one man in twelve cannot separate the orange from the blue\n- [ ] Control answers \"what can I do here?\" without entering a mode: a help affordance lists the five controls, the crown's job, the long press into Read, and tap-tap to right-click\n- [ ] Screenshots from both a 40mm and a 49mm simulator in the PR showing no truncation at the largest supported Dynamic Type size\n\n## Where it stands today \u2014 `partial`\nWatch/RemoteView.swift:933-965 \u2014 the five controls are still glyph-only (`primaryClickButton`, `padButton(\"gyroscope\", \u2026)`, `padButton(remote.dragLocked ? \"lock.fill\" : \"lock.open\", \u2026)`, `padButton(\"keyboard\", \"Type\")`, an ellipsis.circle NavigationLink); the words are passed only to `.accessibilityLabel` (Watch/RemoteView.swift:978, 1005-1012), which VoiceOver speaks but nothing draws. DONE half: Watch/RemoteView.swift:866-869 states both ON states in words on the trackpad \u2014 `Text(\"drag held \u2014 tap the lock to release\")` and `Text(\"air mouse \u2014 point your arm\")`. Tap-tap right-click is named at Watch/RemoteView.swift:876 (`Text(\"tap \u00b7 tap-tap right-clicks\")`). No help affordance exists on the Control screen: the only helpSheet is on SessionsView (Watch/WatchViews.swift:765-785) and it names Control Mac/Inspect, not the five controls (grep for `help|legend|coach` in Watch/RemoteView.swift returns only comments).\n\n**What is actually left:** Visible words (or a legend) for all five controls, a \"?\" help affordance on the Control screen itself listing the five plus the crown's job and the long press into Read, and the 40mm/49mm largest-Dynamic-Type screenshots.",
+    "status": "partial",
+    "area": "watch",
+    "effort": "M",
+    "round": "A"
+  },
+  {
+    "n": 11,
+    "title": "One compose surface per session instead of four ways to send text",
+    "labels": [
+      "area:ios",
+      "effort:M",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A8`.\n\n## The problem\n\"Why do we have this many buttons for sending a terminal command?\" The iPhone session screen offers Reply, Command, Paste and a Quick send row \u2014 four separate paths to \"put text into this pane\" \u2014 sitting above fifteen key buttons in two rows. The watch repeats Reply and Enter in both the Actions list and the terminal key bar, so the same action appears twice on one screen.\n\n## Acceptance\n- [ ] SessionPeekScreen in iOS/TerminalView.swift has ONE compose entry point; dictate/type, the natural-language phrase mode, paste and quick commands become modes or chips inside it, not sibling buttons on the card\n- [ ] AgentLiveView in Watch/WatchViews.swift offers each action exactly once \u2014 in the Actions section or in the terminal key bar, never both\n- [ ] Nothing becomes unreachable: every command that could be sent before can still be sent, and sh scripts/check-watch-terminal-wiring.sh still passes\n- [ ] Before/after screenshots of the iOS session screen and the watch Actions list in the PR\n\n## Where it stands today \u2014 `missing`\niOS/TerminalView.swift:609-620 \u2014 Reply, Command and Paste are still three sibling buttons in one HStack (`Button { showingCompose = true }`, `Button { showingPhrase = true }`, `Button { Task { await pasteIntoPane() } }`), each with its own sheet (composeSheet at iOS/TerminalView.swift:680, phrase sheet at iOS/TerminalView.swift:711-744). Quick send is still a fourth, separate card: `presetsCard` at iOS/TerminalView.swift:669-679. On the watch, Reply and Enter still appear twice on one screen: Actions section at Watch/WatchViews.swift:997-1005 and terminal key bar at Watch/WatchViews.swift:1246-1247.\n\n**What is actually left:** All of it \u2014 collapse the iOS card to one compose entry with modes/chips, de-duplicate Reply/Enter on the watch, plus the before/after screenshots.",
+    "status": "missing",
+    "area": "ios",
+    "effort": "M",
+    "round": "A"
+  },
+  {
+    "n": 12,
+    "title": "Snap the terminal back to the newest line after you send anything",
+    "labels": [
+      "area:watch",
+      "effort:S",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A7`.\n\n## The problem\n\"When I press continue, I'm just moving in. I'm again forced to scroll all the way down.\" Scrolling up to read correctly stops the auto-follow (FollowsTail), but sending Continue, Enter or a reply is the clearest possible statement of \"show me what happens next\" \u2014 and nothing re-arms it. So every command is followed by hand-scrolling to the bottom.\n\n## Acceptance\n- [ ] Every send path in AgentLiveView (Continue, Enter, Reply, the terminal key-bar chips, Insert clipboard) re-arms followTail and scrolls the output to the \"tail\" anchor within one poll\n- [ ] Scrolling up still stops the auto-follow, so reading back an error that scrolled past is not taken away\n- [ ] Opening the full terminal from the Output section always lands on the newest line, not wherever the last visit left it\n- [ ] Proof on a real session that prints continuously: scroll up 20 lines, tap Enter, and the newest line is on screen without touching the crown\n\n## Where it stands today \u2014 `missing`\nWatch/WatchViews.swift:885 declares `@State private var followTail = true`; grep across Watch/WatchViews.swift shows it is written in exactly two places, both `.onAppear` (Watch/WatchViews.swift:1179 and 1214). No send path touches it: Continue/Enter/Reply/Insert-clipboard at Watch/WatchViews.swift:992-1016 call `store.send(...)` only, `sendReply` at Watch/WatchViews.swift:1155-1160 only clears the draft, and all sixteen terminal key-bar chips at Watch/WatchViews.swift:1246-1261 call `store.send(key:)` with no re-arm. The follow guard at Watch/WatchViews.swift:1184 and 1216 (`guard followTail else { return }`) therefore stays false after a scroll-up until the sheet is reopened.\n\n**What is actually left:** Re-arm followTail (and scroll to the \"tail\" anchor) from every send path. The one criterion already satisfied is the last-listed one: opening the terminal sheet lands at the newest line, via `.onAppear { followTail = true; proxy.scrollTo(\"tail\", \u2026) }` at Watch/WatchViews.swift:1179/1214.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "S",
+    "round": "A"
+  },
+  {
+    "n": 13,
+    "title": "Use the watch's own gestures, with visible state for each",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:A",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `A13`.\n\n## The problem\n\"Make sure we are maximizing the options we have when it comes to watch \u2014 pressing the button, hold press, and double tap.\" Today exactly one control claims Double Tap (handGestureShortcut(.primaryAction) on the Click button in RemoteView) and exactly one long press exists (the screen preview into Read mode). On the screens that matter most \u2014 the \"Needs you\" row, the live session \u2014 the wrist gesture does nothing, and nothing on screen ever tells you a gesture is available.\n\n## Acceptance\n- [ ] Each primary screen names one Double Tap action and claims it with handGestureShortcut(.primaryAction): Approve on AttentionRow, Continue in AgentLiveView, Click on Control\n- [ ] Every screen with an armed Double Tap shows an indicator saying what it will do, so the gesture is discoverable without documentation\n- [ ] Long press has a documented meaning wherever it is added and keeps its Read-mode meaning on the preview; it never collides with the trackpad's minimumDistance-0 drag\n- [ ] No gesture is the only way to reach an action \u2014 each one also has a visible button. Hand-checked on a Series 9 or later, because the simulator cannot fire Double Tap\n\n## Where it stands today \u2014 `partial`\nDONE: Watch/RemoteView.swift:970-985 \u2014 `primaryClickButton` claims the gesture with `button.handGestureShortcut(.primaryAction)` under `if #available(watchOS 11.0, *)`, and it has a visible button. The Read-mode long press is kept at Watch/RemoteView.swift:805 (`.onLongPressGesture(minimumDuration: 0.4) { enterInspect() }`). NOT DONE: repo-wide grep across Watch/ shows `handGestureShortcut` appears exactly once (Watch/RemoteView.swift:981) and `onLongPressGesture` exactly once (Watch/RemoteView.swift:805). AttentionRow (Watch/WatchViews.swift:362) claims no gesture; AgentLiveView's Continue (Watch/WatchViews.swift:992-996) claims none. Nothing on any screen renders a Double Tap indicator \u2014 the only on-screen gesture text is the trackpad's \"tap \u00b7 tap-tap right-clicks\" (Watch/RemoteView.swift:876), which is about touch, not the wrist gesture.\n\n**What is actually left:** Claim .primaryAction on AttentionRow's Approve and AgentLiveView's Continue, add the visible \"what Double Tap will do\" indicator on each armed screen, and the Series 9+ hand-check.",
+    "status": "partial",
+    "area": "watch",
+    "effort": "M",
+    "round": "A"
+  },
+  {
+    "n": 14,
+    "title": "Wake a sleeping machine from the wrist",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:A",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **A** (control surface & input), items `buried-wake-on-lan`.\n\n## The problem\nThe iPhone has a working \"Wake via <peer>\" button (WakeRow); the watch has no wake affordance at all, even though WatchMeshStore already carries the MAC address for exactly this path and the daemon already serves POST /wake. So a machine that went to sleep is a machine the wrist cannot bring back \u2014 which is precisely the moment the phone is in another room.\n\n## Acceptance\n- [ ] An offline machine's row on the watch (MachinesListView, and its SessionsView) offers Wake when a wake peer is online, following iOS WakeRow's rules exactly \u2014 no MAC, or no peer on the target's subnet, shows the same explanatory sentence rather than a dead button\n- [ ] The watch reaches /wake through an online peer directly when it can and through the phone relay otherwise (adding a WatchCommandKind if one is needed)\n- [ ] After a successful send the row reads \"magic packet sent via <peer> \u2014 waking takes ~30s\", and the machine's row turns green on its own once it answers\n- [ ] sh scripts/check-wol.sh is extended to assert the watch path exists, so this cannot silently regress to phone-only\n\n## Where it stands today \u2014 `missing`\ngrep for `wake|Wake` across Watch/*.swift returns only comments and unrelated text: Watch/WatchMeshStore.swift:418-424 carries the data (`// Carried so the wrist wake path has a MAC to aim at and a subnet to aim it into` \u2026 `mac: health?.mac, ipv4: health?.ipv4, netmask: health?.netmask`), Watch/WatchLink.swift:62 and Watch/WatchMeshStore.swift:574 are about the phone waking. No wake button exists in MachinesListView or SessionsView (Watch/WatchViews.swift:636-650 Monitor section has only Screen peek and Control Mac). Shared/Models.swift:1050-1075 \u2014 `WatchCommandKind` has no `.wake` case. iOS keeps its working WakeRow (iOS/ContentView.swift:353, defined at iOS/ContentView.swift:600). scripts/check-wol.sh asserts only wol.ts packet shape and three server.ts greps \u2014 nothing about a watch path.\n\n**What is actually left:** The watch-side Wake affordance mirroring WakeRow's rules, the direct-then-relay route (likely a new WatchCommandKind), the post-send \"magic packet sent via <peer>\" line, and extending scripts/check-wol.sh to assert the watch path.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "M",
+    "round": "A"
+  },
+  {
+    "n": 15,
+    "title": "Give the watch's Needs-you row Decline, Reply and Stop",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B2`.\n\n## The problem\nFrom the watch's \"Needs you\" row the only thing you can do is press the affirmative. To say no, or to type the extra sentence the agent is asking for, you have to drill into the session \u2014 the same four buttons the notification already offers are missing from the app itself.\n\n## Acceptance\n- [ ] The row offers Approve, Decline, Reply (text entry / dictation) and Stop, routed through the same `AgentNotification.command(for:typed:)` mapping the notification uses (the row in Watch/WatchViews.swift currently sends only `key: \"enter\"`).\n- [ ] A reply typed on the row lands in the session as text with no trailing newline, and a failed send is reported inline on that row rather than mesh-wide.\n- [ ] A row whose event carries `replyable: false` shows no action buttons and says why instead of offering a send that 404s.\n- [ ] check-agent-notifications.swift asserts the row's action set equals AgentNotification.Action.allCases.\n\n## Where it stands today \u2014 `missing`\nWatch/WatchViews.swift:408-434 \u2014 the row's HStack holds exactly one action Button (`store.respondToAgent(host:session:text:nil, key: \"enter\")` at :413-417) plus a chevron NavigationLink into AgentLiveView at :423-433. No Decline, Reply or Stop; no reference to AgentNotification.command(for:typed:) anywhere in WatchViews.swift; no `replyable` gate on the row (Shared/Models.swift:499's LiveSessionPick carries no replyable field either). scripts/check-agent-notifications.swift:49-57 asserts the notification CATEGORY's action set, not the row's.\n\n**What is actually left:** The three missing actions and their routing through AgentNotification.command(for:typed:), text entry/dictation for Reply with no trailing newline, a replyable:false branch that explains instead of offering a send, and the check-agent-notifications.swift assertion that the row's action set equals Action.allCases. The one piece already present is inline failure reporting on the row (WatchViews.swift:441-446, driven by onChange of store.lastError at :450-454).",
+    "status": "missing",
+    "area": "watch",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 16,
+    "title": "Install the Codex hook the way the Claude Code hook is installed",
+    "labels": [
+      "area:agents",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B9, B1, B4`.\n\n## The problem\nCodex sessions never reach the wrist at all. `mesh hooks install` only prints a line telling you to hand-edit ~/.codex/config.toml, and even after you do, everything Codex posts is graded \"info\" with no session, so it never buzzes and never appears in \"Needs you\".\n\n## Acceptance\n- [ ] `mesh hooks install` writes `notify` into ~/.codex/config.toml \u2014 merging around an existing value, backing the file up, idempotent \u2014 and `mesh hooks status` reports Codex next to the Claude Code events.\n- [ ] mesh-codex-notify posts the Codex thread id as `sessionId`, the multiplexer session as `session` when it is inside one, and grades approval-required and turn-failed payloads as `warning` / `error` instead of always `info` (it currently posts one fixed \"Codex turn ended\" line at level info via mesh-event).\n- [ ] A Codex turn that ends waiting on the user produces an event that passes `passesPushGate` and appears in \"Needs you\" on both apps.\n- [ ] check-mesh-hooks.sh covers the config.toml merge and fails if it clobbers an existing `notify`.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/bin/mesh:1181-1184 \u2014 on install it only `console.log`s \"Codex users: add this to ~/.codex/config.toml\" and the notify line; nothing writes the file. mesh:1124 HOOK_EVENTS and :1133-1138 hooksInstalled read ~/.claude/settings.json (mesh:1118) only, so `mesh hooks status` never mentions Codex. install/payload/bin/mesh-codex-notify:20-24 \u2014 posts the fixed `\"Codex turn ended\" \"${*:-turn-ended}\"` through mesh-event with no --level and no sessionId, so mesh-event's default level (info) always applies and no approval/failure grading exists. scripts/check-mesh-hooks.sh only exercises ~/.claude/settings.json merge/remove.\n\n**What is actually left:** All four: a real merging/backing-up/idempotent write of `notify` into ~/.codex/config.toml, Codex reported by `mesh hooks status`, mesh-codex-notify posting the thread id as sessionId + the mux session as session and grading approval-required/turn-failed as warning/error so passesPushGate lets them through, and check-mesh-hooks.sh covering the config.toml merge including the clobber case.",
+    "status": "missing",
+    "area": "agents",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 17,
+    "title": "Let the watch read /events directly instead of only via the phone",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B4, B3, B5`.\n\n## The problem\nWhenever the iPhone app is asleep or out of reach, the watch has no idea any agent is waiting: \"Needs you\" empties and the watch says nothing is waiting, even while it is polling the same Mac directly for stats and sessions.\n\n## Acceptance\n- [ ] WatchMeshStore.refresh() calls MeshClient.events(since:) for every machine it reaches directly and merges those with the relayed events \u2014 today `var events` is `relayed?.events ?? []` and the existing MeshClient.events() has no caller on the watch.\n- [ ] With the iPhone app force-quit and the watch able to reach the Mac, a warning posted by mesh-hook appears in \"Needs you\" within one poll cycle.\n- [ ] The Link diagnostics row says how many events came from the direct path and how many from the phone.\n\n## Where it stands today \u2014 `missing`\nWatch/WatchMeshStore.swift:83 \u2014 `var events: [AgentEvent] { relayed?.events ?? [] }`, the only source feeding needsAttention at :86-91. Watch/WatchMeshStore.swift:365-460 \u2014 refresh() calls healthInfo/stats/agents/panes and usage per machine, never events. Shared/MeshClient.swift:216 `func events(since:)` has exactly one caller in the whole repo: iOS/MeshStore.swift:571. Watch/WatchViews.swift:233-239 \u2014 the Link section renders only `store.linkStatusLine`, no direct/relayed event counts.\n\n**What is actually left:** Everything: a direct MeshClient.events(since:) fetch per reachable machine inside refresh(), a merge with the relayed events behind `events`, and the Link diagnostics row reporting the direct vs. phone split.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 18,
+    "title": "List agent sessions from their transcript stores, not just the mux",
+    "labels": [
+      "area:agents",
+      "effort:L",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B8, B4, B9`.\n\n## The problem\nAgents started anywhere except inside tmux/rmux \u2014 the Codex desktop app, Claude Code in a plain terminal or an IDE \u2014 do not appear in the session list at all, so nothing they ask can ever reach your wrist.\n\n## Acceptance\n- [ ] meshd reads Claude Code's ~/.claude/projects/<encoded-cwd>/<session_id>.jsonl and Codex's ~/.codex/sessions/YYYY/MM/DD/rollout-<ISO>-<threadId>.jsonl (the layout github.com/iAmCorey/Wake documents, and the one install/payload/meshd/codex-state.ts already walks) and includes those sessions in GET /agents with sessionId, cwd and last-activity time.\n- [ ] A row sourced only from a transcript is marked not replyable, so no client offers a button that goes nowhere.\n- [ ] Rollouts are read by tail only \u2014 no file is read whole \u2014 and listing 100 sessions on disk adds under 300 ms to GET /agents.\n- [ ] A check runs the reader against fixture transcripts for both agents and asserts the session ids, cwds and timestamps it extracts.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/server.ts:343-349 \u2014 listAgents is `Promise.all([rmuxSessions(), cmuxSessions()])` and nothing else; rmuxSessions (server.ts:161-188) shells out to the mux, cmuxSessions (server.ts:283-341) walks the cmux tree. No reference to ~/.claude/projects anywhere in install/payload (grep for \".claude\" in install/payload/bin/mesh hits only settings.json at :1118,1172,1275). install/payload/meshd/codex-state.ts:46-70 does walk ~/.codex/sessions/YYYY/MM/DD rollouts, but a repo-wide grep for codex-state / findRollout / readThread finds no importer \u2014 only scripts/check-codex-state.sh:37,64. Nothing in the Agent model (Shared/Models.swift:281-300) carries a replyable flag either.\n\n**What is actually left:** Everything for /agents: a Claude Code ~/.claude/projects/<encoded-cwd>/<session_id>.jsonl reader, wiring codex-state.ts's rollout walk (currently a buried module with zero callers) into listAgents, transcript-sourced rows marked not-replyable with sessionId/cwd/last-activity, tail-only reads under the 300 ms budget, and a fixture check for both agents.\n\n**Depends on:** Match blocked agents by their own session id, not by mux name",
+    "status": "missing",
+    "area": "agents",
+    "effort": "L",
+    "round": "B"
+  },
+  {
+    "n": 19,
+    "title": "Make mesh doctor prove the agent-alert loop, not just the daemon",
+    "labels": [
+      "area:daemon",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B1`.\n\n## The problem\nWhen an agent alert never reaches you there is no way to find out why. Everything reports healthy while the one thing that produces alerts is not registered, is a stale copy, or has not fired in weeks.\n\n## Acceptance\n- [ ] /doctor gains a `hooks` check reporting which Claude Code hook events call mesh-hook, the mesh-hook version installed under ~/.mesh/bin versus the payload's, and the age of the newest line in agent-events.jsonl (doctor.ts currently checks token, input, screen, mux and push, and nothing about hooks).\n- [ ] The check is not ok when no mesh-hook is registered, when the installed mesh-hook is older than the daemon's payload copy, or when no event has arrived in 7 days \u2014 each with a one-line fix.\n- [ ] `mesh doctor` prints the same three facts, and the phone's setup screen surfaces the failure.\n- [ ] check-mesh-doctor.sh covers the not-installed and stale-hook cases.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/doctor.ts:48-90 \u2014 the checks record is exactly { token, input, screen, mux, push }; nothing reads ~/.claude/settings.json, ~/.mesh/bin/mesh-hook or agent-events.jsonl. Routes at doctor.ts:93-97. The only hook reporting lives in the CLI, separately: install/payload/bin/mesh:1133-1151 (`mesh hooks status`), which checks Claude Code events only and knows nothing about mesh-hook versions or event age. scripts/check-mesh-doctor.sh contains no hooks case (grep for \"hooks\" returns nothing).\n\n**What is actually left:** The whole `hooks` check: which Claude Code events call mesh-hook, installed ~/.mesh/bin/mesh-hook version vs the daemon payload's, newest agent-events.jsonl line age, not-ok on none-registered / stale-copy / 7-days-silent each with a one-line fix, `mesh doctor` printing the same three facts, the phone setup screen surfacing it, and check-mesh-doctor.sh covering not-installed and stale-hook.",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 20,
+    "title": "Match blocked agents by their own session id, not by mux name",
+    "labels": [
+      "area:daemon",
+      "effort:M",
+      "round:B",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B4, B1`.\n\n## The problem\nYou open the watch while two or three agents are running and it says \"Nothing waiting on you\" \u2014 even when one of them is sitting on a permission prompt. Any agent started outside a tmux/rmux pane (Claude Code in a worktree, the desktop app) never appears at all.\n\n## Acceptance\n- [ ] GET /agents returns a `sessionId` on every row whose session has posted a hook event carrying one, and the value equals the `session_id` in that session's Claude Code hook payload (today no /agents row ever carries the field, so `matchingAgent` in Shared/Models.swift returns nil for every event that has a sessionId).\n- [ ] With one Claude Code session running and one warning event posted for it, `sessionsNeedingAttention` returns exactly one item on both the phone and the watch.\n- [ ] When an event carries a sessionId and no /agents row on that machine carries any sessionId at all (an older daemon), the join falls back to name matching instead of returning nothing.\n- [ ] A script under scripts/ goes red both when /agents stops emitting sessionId and when the name fallback is removed.\n\n## Where it stands today \u2014 `partial`\ninstall/payload/bin/mesh-hook:145-158 (posts sessionId + cwd on the event); install/payload/meshd/server.ts:672-678,773 (addEvent persists sessionId); Shared/Models.swift:288 (Agent.sessionId), :499 (AgentEvent.sessionId), :548-552 (matchingAgent prefers the id); install/payload/meshd/server.ts:343-349 (listAgents = rmux + cmux rows + sessionStatusFields \u2014 no sessionId key anywhere); grep for sessionId across the repo returns only Models.swift, mesh-hook, server.ts's event type, and scripts/check-live-card.swift's hand-built fixture.\n\n**What is actually left:** The event half is built; the /agents half is not. No /agents row ever carries sessionId (server.ts:343-349, and sessionStatusFields at :735-742 only adds status/lastEventLevel/lastEventISO), so Shared/Models.swift:549-551 returns nil for every hook-posted event that has an id \u2014 the join is currently broken open-loop rather than fixed. The name fallback the acceptance asks for (event has an id, no row on that machine has any) is absent: matchingAgent returns nil instead of falling back. No scripts/ check asserts /agents emits sessionId or that the fallback exists; check-live-card.swift:347-372 only exercises the matcher against fixtures it writes itself.",
+    "status": "partial",
+    "area": "daemon",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 21,
+    "title": "Never offer a terminal key the session cannot accept",
+    "labels": [
+      "area:daemon",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B7`.\n\n## The problem\nOn a cmux session half the keys on the watch key bar do nothing. Page up, Home, End, Backspace and Delete come back as an error instead of an action, so the terminal feels randomly broken depending on which session you opened.\n\n## Acceptance\n- [ ] CMUX_KEYS covers every key in KEY_SEND_KEYS, or each /agents row declares the key set that session accepts (CMUX_KEYS has 8 entries against KEY_SEND_KEYS' 15, and cmuxSend answers the other 7 with a 400).\n- [ ] The watch and iPhone key bars hide or disable any key the selected session does not accept.\n- [ ] Pressing Page up on a cmux session either scrolls it or the chip is not on screen \u2014 it never posts a request that 400s.\n- [ ] check-watch-terminal-wiring.sh asserts the two key maps agree, or that the clients read the declared per-session set.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/server.ts:404-413 \u2014 CMUX_KEYS has 8 entries (enter, ctrl-c, up, down, left, right, tab, escape) against KEY_SEND_KEYS' 15 at :530-546; server.ts:427-429 `const mapped = CMUX_KEYS[key]; if (!mapped) return { ok: false, error: \\`unsupported key: ${key}\\` }` \u2014 backspace, delete, home, end, page-up, page-down and ctrl-d all fail on a cmux session. No per-session key set is declared: Shared/Models.swift:281-300 Agent has no keys field and server.ts:343-349 emits none. Watch/WatchViews.swift:1237-1266 renders every chip unconditionally with no session-type branch. scripts/check-watch-terminal-wiring.sh:38-58 compares KEY_SEND_KEYS to the watch only and never mentions CMUX_KEYS.\n\n**What is actually left:** Either widen CMUX_KEYS to cover KEY_SEND_KEYS or have /agents rows declare the accepted key set; hide/disable unsupported chips on both clients; and add the check-watch-terminal-wiring.sh assertion that the two maps agree (or that clients read the declared set).",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 22,
+    "title": "Register the watch for its own push notifications",
+    "labels": [
+      "area:watch",
+      "effort:L",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B3`.\n\n## The problem\nAlerts land on the iPhone but never on the wrist unless the phone happens to be locked and pocketed. If you are holding the phone, the watch stays silent \u2014 so the one surface the product exists for gets nothing.\n\n## Acceptance\n- [ ] The watch app registers for remote notifications and POSTs its token to /push/register with its own topic; GET /push lists watch devices separately from phone devices (today only iOS/MeshRelayApp.swift calls registerForRemoteNotifications).\n- [ ] push.ts sends each device under the apns-topic that device registered with, instead of the single `com.lecoder.meshwatch` TOPIC constant.\n- [ ] With the iPhone unlocked and in active use, a warning event produces a banner on the watch.\n- [ ] check-mesh-push.sh asserts a per-device topic is used and fails if the single constant comes back.\n\n## Where it stands today \u2014 `missing`\niOS/MeshRelayApp.swift:85 is the only `registerForRemoteNotifications()` in the repo; grep for WKApplication in Watch/ hits only Watch/WatchViews.swift:68-69 (dictation controller). install/payload/meshd/push.ts:16 `const TOPIC = process.env.MESHD_APNS_TOPIC ?? \"com.lecoder.meshwatch\"`, used unconditionally at :154 (`apns-topic: ${opts?.topic ?? TOPIC}`) and reported as one value at :187. push.ts:18 `type DeviceToken = { token; env; addedISO }` \u2014 no topic field; /push/register at push.ts:413-421 stores only token + env. scripts/check-mesh-push.sh:29-33 asserts token validation only, never a topic.\n\n**What is actually left:** All four parts: watch-side registerForRemoteNotifications + POST to /push/register with its own topic, a topic column on DeviceToken so /push can list watch devices separately, per-device apns-topic in the send path instead of the TOPIC constant, and a check-mesh-push.sh assertion that fails when the single constant returns.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "L",
+    "round": "B"
+  },
+  {
+    "n": 23,
+    "title": "Say what the agent is asking permission for",
+    "labels": [
+      "area:agents",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B1`.\n\n## The problem\nWhen an alert does arrive it says \"Claude needs attention\" and nothing else. It never names the command you would be approving, so you cannot decide from the wrist \u2014 you have to open the laptop to find out what you just said yes to.\n\n## Acceptance\n- [ ] For a Claude Code Notification hook, the event body names the tool and its argument, e.g. `Bash: git push --force origin main`. Claude Code's Notification payload carries only `message` (\"Claude needs your permission to use Bash\"), so mesh-hook reads the tail of the file named by `transcript_path` to recover the pending tool call.\n- [ ] `classifyRisk` in Shared/RiskClassifier.swift sees that command text, so a force push renders the destructive red affirmative on the wrist rather than a generic one.\n- [ ] The transcript is read by tail only, never whole, and a missing or unreadable transcript still posts today's event rather than none.\n- [ ] check-mesh-hook.py asserts the title and body produced from a fixture Notification payload plus its transcript.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/bin/mesh-hook:124 \u2014 `body = args.body or pick(doc, \"body\", \"message\", \"prompt\", \"command\", \"transcript_path\")`; that is the ONLY occurrence of the string \"transcript\" in install/payload/bin/ and install/payload/meshd/, so the path is used as literal body text and the file is never opened. mesh-hook:79-95 (event_title) returns the fixed \"Claude needs attention\" for a Notification hook. Shared/RiskClassifier.swift:36-74 exists and is wired (Shared/Models.swift:583 classifyRisk(event.body ?? event.title); Watch/WatchViews.swift:401,413), but only ever sees Claude's generic message. scripts/check-mesh-hook.py has no transcript fixture (no \"transcript\" match).\n\n**What is actually left:** All of it: tail-read the file named by transcript_path in mesh-hook to recover the pending tool call, render it as `Bash: <command>` in the event body so classifyRisk sees real command text, keep the read bounded and non-fatal on a missing/unreadable transcript, and add the check-mesh-hook.py fixture asserting title + body.",
+    "status": "missing",
+    "area": "agents",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 24,
+    "title": "Send the control keys a TUI actually needs",
+    "labels": [
+      "area:daemon",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B7`.\n\n## The problem\nReal terminal work on the wrist stops at the first chord. There is no ctrl-L to redraw a garbled screen, no ctrl-R to search history, no ctrl-Z, no ctrl-U to clear a line and no shift-tab \u2014 so anything with a TUI is effectively read-only from the watch.\n\n## Acceptance\n- [ ] KEY_SEND_KEYS in server.ts gains ctrl-a, ctrl-e, ctrl-l, ctrl-r, ctrl-u, ctrl-w, ctrl-z and shift-tab, each mapped to the correct send-keys literal (it holds 15 keys today, of which only ctrl-c and ctrl-d are chords).\n- [ ] Every new key is reachable from both the watch key bar in Watch/WatchViews.swift and the iPhone terminal.\n- [ ] check-watch-terminal-wiring.sh passes with the widened set and fails when any new key has no button on either client.\n- [ ] ctrl-l sent to a real session over a live daemon redraws the pane, with the output pasted into the PR.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/server.ts:530-546 \u2014 KEY_SEND_KEYS holds exactly 15 entries (enter, ctrl-c, ctrl-d, up, down, left, right, tab, escape, backspace, delete, home, end, page-up, page-down); ctrl-c and ctrl-d are the only chords, and there is no ctrl-a/e/l/r/u/w/z or shift-tab. Watch/WatchViews.swift:1237-1266 \u2014 terminalKeyBar's chips cover enter, ctrl-c, tab, escape, arrows, backspace, page-up/down, home, end, ctrl-d and nothing more. scripts/check-watch-terminal-wiring.sh:38-58 only asserts that every key already in KEY_SEND_KEYS has a watch button, so it stays green with the narrow set.\n\n**What is actually left:** All eight keys in KEY_SEND_KEYS with correct send-keys literals, buttons on both the watch key bar and iOS/TerminalView.swift, the widened check-watch-terminal-wiring.sh assertion, and the live ctrl-l redraw evidence.",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 25,
+    "title": "Show one list of every working session across every machine",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B6, B5`.\n\n## The problem\nNothing on the watch answers \"what is running right now\". You pick a machine, open its sessions, go back, pick the next machine. And sessions that have gone quiet for ten minutes are counted on the watch face but appear on no screen you can tap.\n\n## Acceptance\n- [ ] The watch home has a Sessions section listing every session on every reachable machine with its state chip, newest activity first, each tappable straight into that session.\n- [ ] The sessions `WatchMeshStore.stalledSessions` already computes appear there labelled \"gone quiet\" with how long they have been silent \u2014 that value currently reaches only the complication glance and no view.\n- [ ] With two machines each running two sessions, the list shows four rows without opening a machine.\n\n## Where it stands today \u2014 `missing`\nWatch/WatchViews.swift:120-254 \u2014 MachinesListView's List is: connectionBanner, \"Needs you\" (:134-150), Limits (:152-180), Control (:182-195), then one NavigationLink per machine into SessionsView(host:) (:196-217), then Usage/Events/Link. There is no cross-machine session section anywhere in the file. Watch/WatchMeshStore.swift:478-494 stalledSessions has exactly one consumer, publishGlance at :496-513 (`stalled: stalledSessions.count`, line :509) \u2014 the complication glance, reached by WatchWidgets/WatchGlanceWidget.swift, and no view.\n\n**What is actually left:** The Sessions section itself: every session on every reachable machine, state chip, newest activity first, tappable into that session \u2014 plus surfacing stalledSessions (today a buried computed property that reaches only the complication) as \"gone quiet\" rows with how long they have been silent.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 26,
+    "title": "Show what each session is doing without opening it",
+    "labels": [
+      "area:daemon",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B5`.\n\n## The problem\nThe wrist can tell you an agent is \"working\" but not what it is working on. To get any sense of progress you have to open each session one at a time and read its output.\n\n## Acceptance\n- [ ] GET /agents rows carry a `lastLine` \u2014 the last non-empty line of that session's pane, trimmed to 120 characters \u2014 behind a new capability string so 0.4.x daemons are unaffected.\n- [ ] The watch session rows and the \"Needs you\" rows render it, and it changes within one poll of the session printing a new line.\n- [ ] Building the field for 10 sessions adds under 200 ms to GET /agents, measured against a live daemon and pasted into the PR.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/server.ts:343-349 \u2014 listAgents rows carry only the rmux/cmux fields (server.ts:178-186, :318-330) plus status/lastEventLevel/lastEventISO from sessionStatusFields (:735-742); no lastLine and no pane capture per row. server.ts:27 CAPABILITIES has no such capability string. The only lastLine in the daemon is laContentState's Live Activity payload (server.ts:756), and on the client side it belongs to LiveSessionPick (Shared/Models.swift:515), rendered at Watch/WatchViews.swift:391-399 and iOS/ContentView.swift:758-760 \u2014 derived from the event body, not from the pane.\n\n**What is actually left:** All of it: a lastLine field on /agents rows (last non-empty pane line, 120 chars) behind a new capability string, rendering on the watch session rows and the Needs-you rows, and the sub-200 ms measurement against a live daemon.",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 27,
+    "title": "Stop turn-end events from evicting the question you never answered",
+    "labels": [
+      "area:daemon",
+      "effort:M",
+      "round:B",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B4`.\n\n## The problem\nWith a few agents running at once, the wrist says nothing is waiting even though one agent asked you something twenty minutes ago. Every other agent's finished turn pushes the unanswered question off the end of the feed.\n\n## Acceptance\n- [ ] GET /events returns the newest actionable event (warning / error / needs-input) for every session that has one, no matter how many `info` events were written after it \u2014 today `readEvents` in server.ts ends in `.slice(-100)` across all sessions and mesh-hook is registered on Stop, so info events evict warnings.\n- [ ] After writing 200 `info` events for other sessions, a warning posted before them is still in GET /events and still shows in \"Needs you\".\n- [ ] A check under scripts/ posts 200 info events around one warning to a throwaway daemon (MESHD_PORT=8898) and asserts the warning survives.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/server.ts:681-690 \u2014 readEvents parses the whole JSONL then `return filtered.slice(-100)` across every session, with no per-session retention; served verbatim at server.ts:987 (`GET /events`). install/payload/bin/mesh:1124 \u2014 `const HOOK_EVENTS = [\"Notification\", \"Stop\"]`, so mesh-hook is registered on Stop and every finished turn writes an info event. No script under scripts/ posts info events around a warning (only scripts/check-roundtrip.sh uses port 8898, and it tests replyable payloads at :130-135, not eviction).\n\n**What is actually left:** All of it: per-session retention of the newest actionable (warning/error/needs-input) event in readEvents, and a scripts/ check on a throwaway daemon that posts 200 info events around one warning and asserts the warning survives GET /events.",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 28,
+    "title": "Wire the watch's notification actions at launch, not on first appear",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:B",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **B** (agent integration), items `B2, B3`.\n\n## The problem\nApprove, Reply and Stop on a watch notification look like they do nothing. The answer never reaches the agent and nothing on the wrist says it failed.\n\n## Acceptance\n- [ ] The handler that routes a notification action to `respondToAgent` is installed from `MeshWatchApp.init()` \u2014 the way iOS does it in `MeshRelayApp.init()` \u2014 not from `WatchRootView`'s `onAppear` (all four actions are declared with `options: []`, so watchOS launches the app in the background, no view appears, and the action is dropped into an in-memory `pending` array).\n- [ ] An action delivered before any view appears is executed, not queued; if it genuinely cannot be sent it is persisted and retried at next launch rather than held in memory.\n- [ ] Tapping Approve on the watch with the app not running sends `enter` to the named session and the session's pane echoes it.\n- [ ] A check under scripts/ fails if the wiring moves back inside a SwiftUI `onAppear`.\n\n## Where it stands today \u2014 `partial`\nWatch/MeshWatchApp.swift:7-8 \u2014 `init() { WatchNotifications.shared.activate() }` installs the UNUserNotificationCenter delegate and registers categories at launch (Watch/WatchNotifications.swift:33-36). But Watch/WatchViews.swift:99-106 \u2014 the handler that actually reaches respondToAgent is assigned inside WatchRootView's `.onAppear`. Watch/WatchNotifications.swift:28 (`private var pending: [...]`), :86-90 (falls into `pending` when no handler yet), :52-58 (drain on handler assignment) \u2014 the queue is in memory only, nothing is persisted. scripts/check-watch-terminal-wiring.sh:~14 greps WatchViews.swift for `respondToAgent(host: host, session: session, pane: pane`, i.e. it currently pins the wiring INSIDE the view.\n\n**What is actually left:** Delegate is at launch, handler is not: an action delivered before any view appears still lands in the in-memory `pending` array (WatchNotifications.swift:28) and is lost if the background launch ends before WatchRootView appears. Move the onAgentAction assignment into MeshWatchApp.init(), persist an unsendable action to disk and retry at next launch, and add a scripts/ check that fails on a SwiftUI onAppear \u2014 the existing check asserts the opposite location.",
+    "status": "partial",
+    "area": "watch",
+    "effort": "M",
+    "round": "B"
+  },
+  {
+    "n": 29,
+    "title": "Arm a one-shot Codex resume that survives a daemon restart",
+    "labels": [
+      "area:agents",
+      "effort:M",
+      "round:C",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **C** (Codex auto-resume), items `C1`.\n\n## The problem\nWhen Codex stops at its limit the reset is often hours away, frequently overnight while the phone is asleep or the app has been killed. The only resume that exists today lives in the iPhone app and needs a human to tap a notification, so a reset nobody is awake for is simply missed \u2014 which is the exact case the user described. The machine is the thing that is awake, so the arming belongs on the machine.\n\n## Acceptance\n- [ ] POST /codex/arm {threadId, text} writes the arm under ~/.mesh/ and fires once at resetsAtMs plus a short grace; killing and restarting meshd before the fire time still fires it once.\n- [ ] Arming the same thread twice leaves exactly one arm, and a fired arm is marked spent so it can never fire again for the same reset window.\n- [ ] If at fire time the thread no longer reads stopped=\"limit\" (a human resumed it, or the turn was aborted), nothing is sent and the arm is recorded as skipped with the reason.\n- [ ] GET /codex/arm lists arms with fire time and state; DELETE /codex/arm/{threadId} removes one, and a removed arm never fires.\n\n## Where it stands today \u2014 `missing`\nNo arm store, scheduler, or route exists. install/payload/meshd/ contains only auth/cmux-bridge/codex-state/doctor/files/input/input-linux/kb/pair/push/qr/server/telemetry/wol.ts \u2014 no arm module. Grep for 'resumeArm|armResume|arms.json' across all .ts and .swift returns nothing. The complete route table is install/payload/meshd/server.ts:939-1044 \u2014 no POST/GET /codex/arm, no DELETE /codex/arm/{threadId}. Every setTimeout in the daemon is a request abort timer (install/payload/meshd/server.ts:227,271,385,631,915) or the 900ms initialText delay at :1073; none is a fire-later scheduler. The only ~/.mesh references in server.ts are comments about token and hosts.json (:842, :903) \u2014 nothing writes an arm there. codex-state.ts:151-158 explicitly says acting is out of scope for that file.\n\n**What is actually left:** All of it: the ~/.mesh arm file, the on-boot rehydration that gives restart-survival, the one-shot fire at resetsAtMs+grace, the spent marking, the re-read-before-fire skip when stopped is no longer \"limit\", and the four routes.\n\n**Depends on:** Expose Codex stopped-at-limit threads over a meshd endpoint",
+    "status": "missing",
+    "area": "agents",
+    "effort": "M",
+    "round": "C"
+  },
+  {
+    "n": 30,
+    "title": "Arm and send the same resume for Claude Code",
+    "labels": [
+      "area:agents",
+      "effort:M",
+      "round:C",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **C** (Codex auto-resume), items `C3`.\n\n## The problem\nOnce Claude Code's stop reason is readable, the rescue itself is the arming and sending already built for Codex \u2014 but nothing generalises it, so a Claude Code session that dies at its limit stays dead until the user notices hours later. Claude Code runs inside a pane the daemon can already type into, so the delivery is easier here than for Codex; only the plumbing is missing.\n\n## Acceptance\n- [ ] The arm store and its scheduler take a provider (codex or claude) and run identical one-shot fire, restart-survival and skip logic for both.\n- [ ] A Claude Code session stopped at its limit, armed and then left alone, is working again within a minute of its reset \u2014 verified by the transcript gaining the sent text, not by the request returning ok.\n- [ ] Delivery goes into the pane that session is running in; if that pane is gone the arm records failed with that reason and sends nothing anywhere else.\n- [ ] Phone and watch list Codex and Claude Code arms together in one \"Waiting for reset\" section, each row labelled with its provider.\n\n## Where it stands today \u2014 `missing`\nBoth halves it depends on are absent. No provider-parameterised arm store exists \u2014 there is no arm module anywhere in install/payload/meshd/ and no /codex/arm or /claude/arm in the full route table at install/payload/meshd/server.ts:939-1044 (see issue 2). No Claude stop-reason reader exists (see issue 7). The only send the daemon can do is the pane send-keys at install/payload/meshd/server.ts:1028; nothing maps a Claude session id to the pane it runs in. On the clients there is no 'Waiting for reset' section at all \u2014 the limit UI is iOS/ContentView.swift:902-951 and Watch/WatchViews.swift:153-180, neither of which carries a provider-labelled arm row.\n\n**What is actually left:** All of it, and it is blocked on issues 2 and 7: the provider field threaded through the arm store and scheduler, session-to-pane resolution with a 'pane is gone' failure record, and the combined provider-labelled list on phone and watch.\n\n**Depends on:** Read why a Claude Code session stopped and when it resets, Arm a one-shot Codex resume that survives a daemon restart, Send the resume message into a stopped Codex session",
+    "status": "missing",
+    "area": "agents",
+    "effort": "M",
+    "round": "C"
+  },
+  {
+    "n": 31,
+    "title": "Expose Codex stopped-at-limit threads over a meshd endpoint",
+    "labels": [
+      "area:agents",
+      "effort:M",
+      "round:C",
+      "state:buried"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **C** (Codex auto-resume), items `C1`.\n\n## The problem\nCodex stops mid-task when the session limit is hit, and nothing outside the daemon can tell. meshd already knows how to read why a Codex session stopped and exactly when its limit resets (install/payload/meshd/codex-state.ts, measured against a real stalled session), but the file has zero callers \u2014 so the phone, the watch, and any future scheduler all see nothing. Detection has to become readable before anything can act on it.\n\n## Acceptance\n- [ ] GET /codex/threads returns the most recent Codex threads with threadId, title or cwd, stopped (limit|done|interrupted|running|unknown), resetsAtMs, usedPercent and resumable, all sourced from codex-state.ts rather than a second copy of the parsing.\n- [ ] Against a session actually stopped at its limit, the row reads stopped=\"limit\" with resetsAtMs equal to that rollout's rate_limits.primary.resets_at multiplied by 1000; a finished thread reads stopped=\"done\" with resumable=false.\n- [ ] The endpoint answers in under 2 seconds on a machine with a 26 MB rollout present, and no rollout is ever read whole (tail reads only).\n- [ ] /health capabilities includes \"codexResume\", so an app talking to an older installed daemon can tell the feature is absent instead of reading an empty list as \"nothing is stopped\".\n\n## Where it stands today \u2014 `buried`\ninstall/payload/meshd/codex-state.ts:1-159 (findRollout, readStopReason, readThread, isResumable; TAIL_BYTES=512KB tail-only read at :68 and :88-96; resets_at*1000 at :124). Guarded and passing: scripts/check-codex-state.sh:37,62 \u2014 globbed by scripts/check-all.sh:29 and run in CI at .github/workflows/ci.yml:125; I ran it and it printed 'check-codex-state: OK'. But ZERO callers: server.ts imports are only kb/input/files/push/pair/auth/doctor/wol/telemetry (install/payload/meshd/server.ts:7-15) \u2014 codex-state is never imported. Every route in the daemon is at install/payload/meshd/server.ts:939-1044 (/health, /wake, /stats, /tailnet, /agents, /usage, /events, /kb, /kb/search, /agents/new) plus six regex routes at :1002-1039; there is no /codex/threads. install/payload/meshd/server.ts:27 CAPABILITIES lists 22 strings and 'codexResume' is not among them. Repo-wide grep for 'codex-state' hits only the file itself and its check script.\n\n**What is actually left:** The reader is finished and tested; the exposure is not built. Add a GET /codex/threads route in server.ts that imports readThread/isResumable from codex-state.ts (never a second parser), a way to enumerate recent threads (findRollout only finds one by id \u2014 listing recent rollouts under ~/.codex/sessions/YYYY/MM/DD is not written yet), title-or-cwd extraction, and push \"codexResume\" onto CAPABILITIES at server.ts:27.",
+    "status": "buried",
+    "area": "agents",
+    "effort": "M",
+    "round": "C"
+  },
+  {
+    "n": 32,
+    "title": "Let the user pick and edit the phrase a resume sends",
+    "labels": [
+      "area:ios",
+      "effort:S",
+      "round:C",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **C** (Codex auto-resume), items `C2`.\n\n## The problem\nBoth existing resume paths hardcode the literal text \"continue\\n\" (iOS/MeshStore.swift and Watch/WatchMeshStore.swift). The user asked for a choice \u2014 \"please resume the session\", \"pick up where you left off\", or \"think step by step and please resume the session\" \u2014 and to be able to edit the wording before it is armed, because a bare \"continue\" is not always what restarts a stalled turn.\n\n## Acceptance\n- [ ] The phrase is chosen from those three presets or typed freely, stored per provider, and shown on the arming screen before the user confirms.\n- [ ] The exact text the user chose is what lands in the session \u2014 verified by reading the thread transcript after a resume fires, not by reading the outgoing request.\n- [ ] The watch shows the phrase that will be sent on the armed-resume row, and sending from the watch sends that same phrase.\n- [ ] The existing pinned-session resume path uses the stored phrase instead of the hardcoded \"continue\\n\".\n\n## Where it stands today \u2014 `missing`\nThe literal is still hardcoded in all four send sites: iOS/MeshStore.swift:614 `try await client(for: machine).send(agent: pin.sessionName, text: \"continue\\n\")`; Watch/WatchMeshStore.swift:664 same inside sendToPinned; Watch/WatchMeshStore.swift:676 the queued WatchCommand fallback `text: \"continue\\n\"`; Watch/WatchViews.swift:992 `Button { store.send(text: \"continue\\n\") }`. Grep for the three requested presets ('please resume the session', 'pick up where you left off', 'think step by step') and for 'resumePhrase|resumeText' across all .swift/.ts/.md returns nothing. The persisted pin model carries no phrase \u2014 Shared/Models.swift:420 is `var sessionName: String` and PinnedLimitSession has no text field; the editor at iOS/ContentView.swift:1283-1332 offers only a machine picker and a session-name field.\n\n**What is actually left:** All of it: a phrase field on PinnedLimitSession (Shared/Models.swift:~420), the three presets plus free text in the editor, per-provider persistence through MeshStore.save (iOS/MeshStore.swift:221), relaying it to the watch, and replacing the four hardcoded \"continue\\n\" literals.\n\n**Depends on:** Send the resume message into a stopped Codex session",
+    "status": "missing",
+    "area": "ios",
+    "effort": "S",
+    "round": "C"
+  },
+  {
+    "n": 33,
+    "title": "Read why a Claude Code session stopped and when it resets",
+    "labels": [
+      "area:agents",
+      "effort:L",
+      "round:C",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **C** (Codex auto-resume), items `C3`.\n\n## The problem\nClaude Code hits the same wall as Codex and the user wants the same rescue for it. Nothing in the daemon reads Claude Code state at all \u2014 meshd only sees hook events, and those stop arriving at exactly the moment the session dies, so a limit-stopped Claude Code session is indistinguishable from an idle one.\n\n## Acceptance\n- [ ] A claude-state.ts sits beside codex-state.ts and exports readThread(sessionId) returning the same shape: stopped, resetsAtMs, usedPercent, message, plus an isResumable that is true only for a limit stop with a real reset time.\n- [ ] The transcript path and record shape are taken from the layout the Wake project documents (~/.claude/projects/<slug>/<sessionId>.jsonl) and confirmed against a real transcript on this machine, with the observed field names quoted in a comment.\n- [ ] Against a session that genuinely hit its limit the result is stopped=\"limit\" with a reset time; a finished session reads \"done\" and a Ctrl-C'd one reads \"interrupted\", and neither is resumable.\n- [ ] GET /claude/threads lists them and /health capabilities gains \"claudeResume\".\n\n## Where it stands today \u2014 `missing`\nThere is no claude-state.ts: `find . -name \"*claude-state*\"` returns nothing, and install/payload/meshd/ holds only auth, cmux-bridge, codex-state, doctor, files, input, input-linux, kb, pair, push, qr, server, telemetry, wol. Nothing in the daemon reads a Claude transcript \u2014 grep for '.claude/projects' across all .ts/.swift/.sh/.md returns no hits. No GET /claude/threads in the route table at install/payload/meshd/server.ts:939-1044, and install/payload/meshd/server.ts:27 CAPABILITIES has no 'claudeResume'. The only Claude awareness in the daemon is string sniffing of process/session names for labelling \u2014 install/payload/meshd/server.ts:193, :258, :755 (`source.includes(\"claude\") ? \"claude\" : ...`).\n\n**What is actually left:** All of it: the new install/payload/meshd/claude-state.ts mirroring the CodexStop shape from install/payload/meshd/codex-state.ts:26-34, the transcript-layout confirmation with observed field names quoted, the limit/done/interrupted separation, a fixture check beside scripts/check-codex-state.sh, the /claude/threads route, and the capability string.\n\n**Depends on:** Expose Codex stopped-at-limit threads over a meshd endpoint",
+    "status": "missing",
+    "area": "agents",
+    "effort": "L",
+    "round": "C"
+  },
+  {
+    "n": 34,
+    "title": "Send the resume message into a stopped Codex session",
+    "labels": [
+      "area:agents",
+      "effort:L",
+      "round:C",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **C** (Codex auto-resume), items `C2, C1`.\n\n## The problem\nKnowing a session stopped and knowing when it resets is worthless if nothing can type at Codex. The user's session is running in the Codex desktop application; the only sending meshd does today is send-keys into an rmux/tmux pane, which that app is not. Nothing in the repo delivers a single character to a Codex thread.\n\n## Acceptance\n- [ ] POST /codex/resume {threadId, text} delivers the text to that thread and returns which delivery path it used.\n- [ ] Verified against a real stalled desktop-app thread, not a fixture: within 30 seconds the thread's rollout .jsonl gains a user message whose text equals what was sent, and a follow-up read of the thread reports it running again.\n- [ ] A thread whose delivery target cannot be resolved returns 4xx with a sentence naming what was missing, and under no failure does the daemon type into whatever app happens to be frontmost.\n- [ ] The chosen mechanism (codex CLI resume in a pane, versus activating the desktop app and injecting keystrokes) is written down in docs/ with the exact command or key sequence it sends.\n\n## Where it stands today \u2014 `missing`\nNo POST /codex/resume \u2014 the route table is install/payload/meshd/server.ts:939-1044 and the only send path is the rmux/tmux send-keys route at install/payload/meshd/server.ts:1028 (/agents/{name}/send \u2192 agentSend). Nothing addresses a Codex thread id. Grep for '/codex/resume' across the repo returns nothing. install/payload/bin/mesh-codex-notify is outbound only \u2014 it shells to mesh-event to report 'Codex turn ended' and delivers nothing into a session. docs/ has 20 files and none document a Codex resume mechanism (grep for 'codex' in docs/ hits only native-limits-recipe-2026-07-07.md, GOALS-2026-07-07.md and ci.md, all about usage reading).\n\n**What is actually left:** Everything: the route, the delivery-target resolution, the choice between `codex resume` in a pane and desktop-app keystroke injection, the 4xx-with-a-sentence failure path, the frontmost-app guard, and the docs/ entry recording the exact command or key sequence.\n\n**Depends on:** Expose Codex stopped-at-limit threads over a meshd endpoint",
+    "status": "missing",
+    "area": "agents",
+    "effort": "L",
+    "round": "C"
+  },
+  {
+    "n": 35,
+    "title": "Show armed resumes with a live countdown and a way to cancel",
+    "labels": [
+      "area:ios",
+      "effort:M",
+      "round:C",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **C** (Codex auto-resume), items `C1, C2`.\n\n## The problem\nAn app that types into a paid agent session by itself has to be visible about it. Today nothing shows what is armed, when it will fire, or what it will say, and there is no way to call it off \u2014 so the only options are trusting it blindly or not arming it at all.\n\n## Acceptance\n- [ ] A \"Waiting for reset\" section on iPhone and on the watch lists each armed resume with thread title, machine, a live countdown to fire, and the phrase it will send.\n- [ ] Cancel from either device deletes the arm on the daemon, and the row is gone on the next poll on both devices.\n- [ ] After an arm fires, an agent event records sent, skipped (with the reason), or failed, and it appears in the events list and as a notification.\n- [ ] With no arms present the section is absent entirely, not an empty placeholder box.\n\n## Where it stands today \u2014 `missing`\nThere is nothing to list \u2014 no arm concept exists on the daemon (see issue 2 evidence: no arm module in install/payload/meshd/, no /codex/arm in the route table at install/payload/meshd/server.ts:939-1044). On the clients, grep for 'Waiting for reset' finds one hit, iOS/NotificationManager.swift:585, and it is a fallback string inside blockedBody for a notification body, not a section. The only limit UI is iOS/ContentView.swift:902-951 (SessionLimitsBanner, a read-only 'Session limits' section) and Watch/WatchViews.swift:153-180 (a 'Limits' section with a Continue button), and neither knows about arms, fire times, phrases, or cancel. No agent event kind records sent/skipped/failed for a fired arm.\n\n**What is actually left:** All of it, and it is blocked on issue 2 shipping the arm store first: the 'Waiting for reset' section on both devices, the live countdown, the phrase on the row, delete-through-to-the-daemon cancel, the post-fire agent event, and the absent-when-empty rule.\n\n**Depends on:** Arm a one-shot Codex resume that survives a daemon restart",
+    "status": "missing",
+    "area": "ios",
+    "effort": "M",
+    "round": "C"
+  },
+  {
+    "n": 36,
+    "title": "Surface the limit-reset resume that already ships but is buried",
+    "labels": [
+      "area:ios",
+      "effort:M",
+      "round:C",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **C** (Codex auto-resume), items `C1, built-but-buried: resumePinnedLimit + pre-armed reset notifications`.\n\n## The problem\nA working resume already exists and nobody can find it. resumePinnedLimit and the OS-persisted pre-armed reset notification are fully implemented, but the pin they depend on can only be created in a field buried in iPhone Settings; the watch's Continue button only appears once a pin exists, and the blocked session-limit rows on both devices never mention any of it. A user who hits a limit sees a dead end and concludes the feature is missing.\n\n## Acceptance\n- [ ] Tapping a blocked session-limit row on iPhone opens the pin editor for that provider, pre-filled with the machine and the most likely session name.\n- [ ] With no pin set, the blocked row and the reset notification each say in one sentence what to do about it, instead of the current silence.\n- [ ] The watch shows the same state: the pinned session name when one is set, and a one-line \"Pin a session on iPhone\" when none is.\n- [ ] A fresh install can get from \"limit reached\" to a working armed resume without the user ever opening the Settings tab.\n\n## Where it stands today \u2014 `partial`\nThe resume itself works and is reachable: iOS/MeshStore.swift:602-618 resumePinnedLimit, called from the notification tap at iOS/MeshRelayApp.swift:47; the OS-persisted pre-armed reset notification is iOS/NotificationManager.swift:575-611; the watch Continue button is Watch/WatchViews.swift:170 \u2192 Watch/WatchMeshStore.swift:659-679. DONE \u2014 half of the second bullet: with no pin, the notifications already say what to do, at iOS/NotificationManager.swift:597 (\"Pin a session in iPhone Settings to auto-continue from alerts.\") and iOS/NotificationManager.swift:589 (\"...Pin a session in Settings to resume from alerts.\"). NOT DONE \u2014 bullet 1: the blocked row is a plain non-interactive HStack (iOS/ContentView.swift:906-925) with no Button or NavigationLink; PinnedLimitEditor is instantiated at exactly one place, iOS/ContentView.swift:1201, inside SettingsTab (which begins at iOS/ContentView.swift:1027) under the 'Limit resume pins' header at :1204. NOT DONE \u2014 rest of bullet 2: with no pin the in-app row renders nothing extra, because iOS/ContentView.swift:917 gates on `if row.blocked, let pin = ...`. NOT DONE \u2014 bullet 3: the watch gates identically at Watch/WatchViews.swift:165, so with no pin it shows nothing, and when a pin exists it shows a 'Continue' button but never the pinned session name. NOT DONE \u2014 bullet 4: with the editor only inside SettingsTab, a fresh install cannot reach a working armed resume without opening Settings.\n\n**What is actually left:** Make the blocked SessionLimitsBanner row tappable into PinnedLimitEditor pre-filled with the machine and a guessed session name (iOS/ContentView.swift:906-925); add the no-pin one-liner to the in-app row; on the watch show the pinned session name when set and a 'Pin a session on iPhone' line when not (Watch/WatchViews.swift:164-176); then confirm the Settings tab is no longer on the path.",
+    "status": "partial",
+    "area": "ios",
+    "effort": "M",
+    "round": "C"
+  },
+  {
+    "n": 37,
+    "title": "Add a Homebrew tap and formula for mesh",
+    "labels": [
+      "area:install",
+      "effort:L",
+      "round:D",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D1`.\n\n## The problem\nArya asked for a brew package. Mac users reach for `brew install` first, and today the only path is pasting a curl-pipe-sh into Terminal, which is exactly the moment a cautious friend stops.\n\n## Acceptance\n- [ ] `brew install lesearch-ai/tap/mesh` on a Mac with no prior install puts `mesh` on PATH, installs the meshd payload, starts the launchd service, and `mesh doctor` reports the same checks as a curl install on the same machine.\n- [ ] The formula pins the release tarball URL and its sha256, so a new release is a one-line formula bump \u2014 the step is written down in docs/release-workflow.md.\n- [ ] `brew upgrade mesh` moves a machine from the previous release to the current one, restarts the daemon, and /health reports the new version.\n- [ ] `brew uninstall mesh` followed by `mesh uninstall --yes` leaves no launchd plist, no ~/.mesh and no shell-rc line \u2014 verified by scripts/check-mesh-uninstall.sh passing afterwards.\n\n## Where it stands today \u2014 `missing`\nNo .rb file anywhere (`find . -name '*.rb'` empty); `grep -rn 'brew install|homebrew|lesearch-ai/tap'` finds only unrelated hits \u2014 install/install.sh:142 (`brew install tmux` advice), install/install.sh:545 (a comment describing the shell-rc line as homebrew-shaped), docs/ci.md:33 and .github/workflows/ci.yml:92 (`brew install xcodegen`). No formula, no tap, no docs/release-workflow.md bump step.\n\n**What is actually left:** All four acceptance items. Note this depends on issue 1 (tarball sha256) and issue 2 (a published release URL) \u2014 the formula has nothing to pin until those exist.\n\n**Depends on:** Cut and publish a versioned mesh-install release in one command",
+    "status": "missing",
+    "area": "install",
+    "effort": "L",
+    "round": "D"
+  },
+  {
+    "n": 38,
+    "title": "Add a first-run tutorial that ends in a live setup checklist",
+    "labels": [
+      "area:ios",
+      "effort:L",
+      "round:D",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D4`.\n\n## The problem\nArya asked for clear onboarding and a tutorial-like interface. The app teaches you how to pair (PairMachineView's two steps, the NoMachinesView empty state) and then stops. Nothing tells a new user to run `mesh hooks install` \u2014 without which no agent alert ever reaches the wrist, which is the whole product \u2014 or to allow notifications, or what the Control screen does. The watch's help sheet is a wall of text you have to go looking for.\n\n## Acceptance\n- [ ] After the first machine pairs, the iPhone shows a setup checklist whose rows reflect real state, not prose: permissions (from /doctor), agent hooks registered, notifications authorized, watch app installed \u2014 each row green only when actually true.\n- [ ] The daemon can answer whether the agent hook is registered (a new /doctor check or endpoint), so the hooks row is read from the machine rather than assumed; with hooks missing, tapping the row shows the exact copyable command.\n- [ ] The checklist is reachable afterwards from Settings and shows identical rows; it can always be skipped and never blocks the app.\n- [ ] With every row satisfied, the checklist says so and stops appearing on launch.\n\n## Where it stands today \u2014 `missing`\n`grep -rn 'checklist|onboard|tutorial|firstRun'` over iOS/, Watch/ and Shared/ returns one hit \u2014 a doc comment at iOS/PairMachineView.swift:3. iOS/ContentView.swift:193 shows NoMachinesView and then goes straight to machineList; there is no post-pair checklist and nothing in Settings resembling one. The daemon cannot answer the hooks question: install/payload/meshd/doctor.ts:51-91 defines exactly five checks (token, input, screen, mux, push) and no hooks check, and the full route list across install/payload/meshd/*.ts is /doctor, /doctor/fix, /pair/new, /pair/claim, /health, /cmux, /push, /push/register, /la/token, /push/test \u2014 no hooks endpoint. (install/payload/bin/mesh-self-check:88-94 does test hook posting, but it is a shell script on the machine, unreachable from the phone.)\n\n**What is actually left:** Everything: the checklist UI, the /doctor hooks check or endpoint behind it, the notifications/watch-installed rows, the Settings entry point, and the satisfied-then-stop-appearing behaviour.",
+    "status": "missing",
+    "area": "ios",
+    "effort": "L",
+    "round": "D"
+  },
+  {
+    "n": 39,
+    "title": "Cut and publish a versioned mesh-install release in one command",
+    "labels": [
+      "area:install",
+      "effort:M",
+      "round:D",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D2`.\n\n## The problem\nArya wants to send friends a link that installs the current thing. Today the public installer is v0.4.1 (21 Aug) while this repo ships meshd 0.5.0, so seven endpoints the apps call daily are answered by nothing \u2014 and there is no release command at all: someone has to run the packager by hand and hand-assemble a GitHub release.\n\n## Acceptance\n- [ ] One command (e.g. `sh scripts/release-mesh-install.sh 0.5.0`) packages the payload, writes install.sh with the release URL baked in, writes mesh-install.tgz + mesh-install.tgz.sha256, and creates the tagged release on LeSearch-AI/mesh-install with exactly those three assets; `--dry-run` prints the artifact list and publishes nothing.\n- [ ] On a machine that has never had mesh, `curl -fsSL https://mesh.lesearch.ai/install.sh | sh` finishes and `curl -s http://127.0.0.1:8899/health` reports meshdVersion 0.5.0 (paste the real output, not a fixture).\n- [ ] On a host still on 0.4.1, `mesh upgrade` flips it and `mesh status` shows the new version on that row.\n- [ ] docs/release-workflow.md gains a daemon-release section naming this command, so cutting a payload release is not a memory exercise.\n\n## Where it stands today \u2014 `missing`\nNo scripts/release-mesh-install.sh (only scripts/release-testflight.sh exists in scripts/); `grep -rn 'release-mesh-install|gh release create'` over the repo returns zero hits; docs/release-workflow.md is entirely App Store Connect / TestFlight and has no daemon-release section. install/payload/meshd/server.ts:20 is `const VERSION = \"0.5.0\"` while the published installer is still 0.4.1.\n\n**What is actually left:** Everything: the packaging+tagging+asset-upload command, the --dry-run mode, the clean-machine curl verification, the 0.4.1\u21920.5.0 upgrade proof, and the docs/release-workflow.md daemon section.\n\n**Depends on:** Ship a sha256 next to every packaged release tarball",
+    "status": "missing",
+    "area": "install",
+    "effort": "M",
+    "round": "D"
+  },
+  {
+    "n": 40,
+    "title": "Make bunx and bun add -g a supported install path",
+    "labels": [
+      "area:install",
+      "effort:S",
+      "round:D",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D1`.\n\n## The problem\nArya named bun as a channel he wants. The CLI is already a Bun program, but there is no package to point bun at, so a bun user has no path that is not curl-pipe-sh.\n\n## Acceptance\n- [ ] `bunx <package> setup` on a machine with bun and no mesh runs the wizard end to end.\n- [ ] `bun add -g <package>` puts `mesh` on PATH in a fresh shell and `mesh status` works.\n- [ ] README lists the bun line alongside the curl and brew lines, and all three install the same version.\n- [ ] The post-release runbook checks all published channels (curl, brew, npm, bun) against a clean machine and records which were verified.\n\n## Where it stands today \u2014 `missing`\n`grep -rn 'bunx|bun add -g'` over the repo returns zero hits; no root package.json to point bun at; README.md documents only the curl one-liner. No post-release channel runbook exists (scripts/ has no such file, docs/release-workflow.md is TestFlight-only).\n\n**What is actually left:** All four acceptance items. Blocked on issue 5 \u2014 bunx and `bun add -g` both resolve the same published package.\n\n**Depends on:** Publish the mesh CLI to npm as an installable package",
+    "status": "missing",
+    "area": "install",
+    "effort": "S",
+    "round": "D"
+  },
+  {
+    "n": 41,
+    "title": "Publish the mesh CLI to npm as an installable package",
+    "labels": [
+      "area:install",
+      "effort:L",
+      "round:D",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D1`.\n\n## The problem\nArya asked for npm as a channel. Nothing is published today, and a naive publish would be broken on arrival: install/payload/bin/mesh is a Bun script (`#!/usr/bin/env bun`, Bun.spawnSync, Bun.CryptoHasher, a dynamic .ts import), so Node would fail it with a syntax error.\n\n## Acceptance\n- [ ] `npm install -g <package>` on a machine with no mesh puts `mesh` on PATH and `mesh --help` prints the help \u2014 on a box with no bun it either fetches bun the way install.sh does or fails with a one-line message naming the fix, never a Node stack trace.\n- [ ] `mesh setup` from an npm install walks the same four steps and successfully pairs a phone.\n- [ ] The published tarball contains the meshd payload and bin tools, and `npm view <package> version` equals the release tag from the release command.\n- [ ] Publishing is a step in the same release command, and the docs name (never print) the credential it uses.\n\n## Where it stands today \u2014 `missing`\nThere is no package.json at the repo root (`ls package.json` \u2192 no such file); the only package.json files are install/payload/meshd/package.json (\"private\": true, name \"meshd\") and install/payload/rmux-bridge/package.json. `grep -rn 'npm publish|npm install -g'` over the repo returns zero hits. install/payload/bin/mesh is still Bun-only \u2014 `Bun.spawnSync` (install/payload/bin/mesh:447), `new Bun.CryptoHasher` (:470), `Bun.which`/`Bun.spawn` (:528, :534).\n\n**What is actually left:** All of it: the publishable package, the bun-bootstrap-or-one-line-failure shim for Node boxes, the payload contents, and the publish step in a release command that itself does not exist yet.\n\n**Depends on:** Cut and publish a versioned mesh-install release in one command, Stamp one version across the daemon, CLI and installed tree",
+    "status": "missing",
+    "area": "install",
+    "effort": "L",
+    "round": "D"
+  },
+  {
+    "n": 42,
+    "title": "Rewrite the remote-install doc around a real SSH-only install",
+    "labels": [
+      "area:docs",
+      "effort:M",
+      "round:D",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D3, D4`.\n\n## The problem\n\"Setting up SSH for a new machine\" has no trustworthy answer. The only doc that covers it is from July: it tells you to ssh in and curl from a hardcoded tailnet IP (100.94.221.115:8890) using `--token testtoken` \u2014 the exact placeholder the daemon's own doctor.ts flags as guessable, and the one AGENTS.md says keeps coming back because it is written down.\n\n## Acceptance\n- [ ] No placeholder token from doctor.ts's PLACEHOLDER_TOKENS and no hardcoded IP survives in docs/ or install/; a check script fails the build if one reappears (AGENTS.md's warning paragraph is the only allowed mention).\n- [ ] The headless section is proved by running it against a fresh Linux host: ssh in, one curl from the published release URL, meshd up under systemd --user with linger, still up after a reboot \u2014 the real terminal output is pasted into the PR.\n- [ ] After that install, `mesh pair` on the host plus the code on the phone puts it in the machine list, and `mesh status` from the laptop lists it as reachable.\n- [ ] Every place that prints an install command prints the same string \u2014 README.md, web/index.html, install/README.md, docs/, iOS/PairMachineView.swift:31 and INSTALL_CMD in install/payload/bin/mesh \u2014 enforced by a check.\n\n## Where it stands today \u2014 `missing`\ndocs/mesh-cli-and-remote-install.md still carries the hardcoded tailnet IP and the placeholder token at :60, :68 (`curl -fsSL http://100.94.221.115:8890/install.sh | sh -s -- --token testtoken`), :72 (the ssh one-liner), :81, :83 and :90. docs/PROJECT-STATE-AND-LEARNINGS-2026-07-07.md:26 and :85 repeat both. install/payload/meshd/doctor.ts:28 lists \"testtoken\" in PLACEHOLDER_TOKENS and doctor.ts:36 fails any token matching it \u2014 so the docs prescribe exactly what the daemon flags. No check script guards this (nothing in scripts/ greps for placeholder tokens or hardcoded 100.* IPs). scripts/check-mesh-onboarding.sh:52-54 only checks that the no-TTY `mesh setup` output mentions \"install.sh | sh\" \u2014 it does not compare INSTALL_CMD (install/payload/bin/mesh:1049) against README.md, web/index.html, install/README.md or iOS/PairMachineView.swift:31-32.\n\n**What is actually left:** All four acceptance items: purge the placeholder token and IP, add the guard check, run and paste a real fresh-Linux headless install, and add the one-string install-command consistency check across the six surfaces.",
+    "status": "missing",
+    "area": "docs",
+    "effort": "M",
+    "round": "D"
+  },
+  {
+    "n": 43,
+    "title": "Ship a sha256 next to every packaged release tarball",
+    "labels": [
+      "area:install",
+      "effort:S",
+      "round:D",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D2`.\n\n## The problem\nEvery upgrade prints \"warning: no <url>.sha256 \u2014 this download was NOT integrity-checked\". The packager only ever writes the tarball and a stamped install.sh, so nothing anyone downloads is verified.\n\n## Acceptance\n- [ ] `sh scripts/package-mesh-install.sh /tmp/mesh-install.tgz https://host/dl` also writes /tmp/mesh-install.tgz.sha256, in the `<hex>  <name>` form that verifyDigest() in install/payload/bin/mesh:466 parses (first whitespace-separated field, lowercase hex).\n- [ ] scripts/check-package-mesh-install.sh fails when the .sha256 file is missing, and fails when its digest does not match the tarball it sits next to.\n- [ ] `mesh upgrade --src <url>` against a tarball with a matching .sha256 prints `sha256 ok (\u2026)` instead of the warning.\n- [ ] A deliberately corrupted tarball makes `mesh upgrade --src` abort with a sha256 mismatch and leaves ~/.mesh byte-identical (nothing staged, nothing swapped).\n\n## Where it stands today \u2014 `partial`\ninstall/payload/bin/mesh:466-472 (verifyDigest fetches <url>.sha256, parses first whitespace field lowercased, throws on mismatch), called at install/payload/bin/mesh:504 before extraction; staging is inside MESH_HOME and swapped only after a smoke test (install/payload/bin/mesh:519-559). BUT scripts/package-mesh-install.sh only writes the tarball and the stamped install.sh (no digest anywhere in the file); `grep -rn sha256 scripts/ install/install.sh .github/` returns nothing; scripts/check-package-mesh-install.sh only asserts tar member names.\n\n**What is actually left:** The consumer half is done, the producer half is not built. Add digest emission to scripts/package-mesh-install.sh (writes <OUT>.sha256 in `<hex>  <name>` form), assert its presence and correctness in scripts/check-package-mesh-install.sh, then the `sha256 ok (\u2026)` and abort-on-corruption paths become reachable. Also worth emitting from scripts/serve-installer.sh:23, which calls the packager.",
+    "status": "partial",
+    "area": "install",
+    "effort": "S",
+    "round": "D"
+  },
+  {
+    "n": 44,
+    "title": "Show which option is selected in every mode control",
+    "labels": [
+      "area:ios",
+      "effort:M",
+      "round:D",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D5`.\n\n## The problem\nArya cannot tell which option is currently on. Some controls do it well (the sticky modifier keys tint orange and say \"held\" to VoiceOver), but others are drawn as plain buttons, so after tapping you are guessing which mode you are in.\n\n## Acceptance\n- [ ] An audit lists every option/mode control on the phone and watch (Reader/Raw chip, trackpad-vs-screen chip, display picker, active machine, Control-screen icon row, terminal pane) and each renders its active option with a persistent selected treatment, not a momentary highlight.\n- [ ] Every selected control carries accessibilityAddTraits(.isSelected) or an accessibilityValue, so the state is not colour-only.\n- [ ] Leaving a screen and returning shows the same option still marked selected.\n- [ ] Both builds stay green: the watch and iOS xcodebuild commands from AGENTS.md, plus `sh scripts/check-all.sh`.\n\n## Where it stands today \u2014 `partial`\nDONE for one control: Watch/RemoteView.swift:1153 `.accessibilityValue(remote.sticky.contains(mod.name) ? \"held\" : \"off\")` on the sticky modifier keys. Native SwiftUI Pickers carry selection for free \u2014 iOS/RemoteScreenView.swift:1062 (Display) and iOS/ContentView.swift:1293 (Machine). NOT DONE elsewhere: `grep -rn accessibilityAddTraits iOS Watch Shared` returns 0 hits repo-wide, so nothing uses `.isSelected`. Watch/WatchViews.swift:1242-1245 (Reader/Raw chip) and Watch/RemoteView.swift:989-999 (padModeChip) label and ico the *next* action, not the current mode \u2014 `.accessibilityLabel(padOnly ? \"Show screen preview\" : \"Full trackpad\")` \u2014 so neither renders a selected state at all. iOS/TerminalView.swift:525-529 draws every pane through `FlowButtons(items: panes.map(\\.label))` with no per-item selected treatment; the selection shows only as secondary text at :505-506. No audit document exists.\n\n**What is actually left:** The audit itself, plus selected treatment + `.isSelected`/accessibilityValue on the Reader/Raw chip, the trackpad-vs-screen chip, the Control-screen icon row and the terminal pane chips. Roughly one of the six named controls is correct today.",
+    "status": "partial",
+    "area": "ios",
+    "effort": "M",
+    "round": "D"
+  },
+  {
+    "n": 45,
+    "title": "Sign, notarize and ship the MeshDesktop menu bar app",
+    "labels": [
+      "area:install",
+      "effort:L",
+      "round:D",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `BB-MeshDesktop, D2`.\n\n## The problem\nThe Mac menu bar app is finished and unreachable: CI builds it with CODE_SIGNING_ALLOWED=NO, nothing signs or ships it, and `mesh desktop` on a Mac that does not have it tells the user to run xcodegen and xcodebuild \u2014 instructions aimed at exactly the person this product says will never do that.\n\n## Acceptance\n- [ ] A Developer ID signed and notarized \"LeSearch Mesh.app\" (zip or dmg) is attached to the release, and `spctl -a -vvv` on a freshly downloaded copy reports `accepted, source=Notarized Developer ID`.\n- [ ] Double-clicking it on a Mac that has never seen the repo launches it \u2014 no right-click-Open, no quarantine dialog.\n- [ ] `mesh desktop` on a Mac without the app installs it or prints the download URL, and never mentions xcodebuild (install/payload/bin/mesh:1039).\n- [ ] Building, signing, notarizing and attaching it is part of the release command, not a manual Xcode session.\n\n## Where it stands today \u2014 `missing`\n.github/workflows/ci.yml:116-121 builds scheme MeshDesktop with `CODE_SIGNING_ALLOWED=NO` and nothing more; `grep -rn 'notariz|spctl'` finds only docs/app-store-submission.md:227 (a checklist line about meshd, not MeshDesktop) \u2014 no notarytool, no stapler, no Developer ID anywhere. install/payload/bin/mesh:1033-1042 (cmdDesktop) still dies with \"MeshDesktop is not installed on this Mac.\\n  From the repo: xcodegen generate && xcodebuild -project MeshWatch.xcodeproj -scheme MeshDesktop \u2026\".\n\n**What is actually left:** Signing, notarization, stapling, attaching the artifact to a release, and rewriting cmdDesktop's failure message to install or link the app instead of naming xcodebuild. Also blocked on issue 2 (no release command to attach it to).\n\n**Depends on:** Cut and publish a versioned mesh-install release in one command",
+    "status": "missing",
+    "area": "install",
+    "effort": "L",
+    "round": "D"
+  },
+  {
+    "n": 46,
+    "title": "Stamp one version across the daemon, CLI and installed tree",
+    "labels": [
+      "area:install",
+      "effort:M",
+      "round:D",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D2`.\n\n## The problem\nThere is no single answer to \"what version is this machine on\". meshd says 0.5.0, `mesh version` says 0.1.0, meshd/package.json says 0.1.0, install.sh says nothing, and an installed ~/.mesh records nothing \u2014 so a user cannot tell whether they are behind, and neither can we.\n\n## Acceptance\n- [ ] `mesh version` prints the same string as the meshdVersion in `curl -s 127.0.0.1:8899/health` on the machine it is installed on.\n- [ ] install.sh writes the version it installed to $MESH_HOME/VERSION, and a re-run or `mesh upgrade` rewrites it.\n- [ ] `mesh status` marks a host that is behind the latest published release as `update available (0.4.1 \u2192 0.5.0)`, and the whole command still finishes inside the existing 5s-per-host budget when the release check cannot be reached.\n- [ ] A new scripts/check-version-stamp.sh fails when the CLI VERSION, meshd server.ts VERSION and meshd/package.json version disagree, and it runs in the daemon job of .github/workflows/ci.yml.\n\n## Where it stands today \u2014 `partial`\nDONE: install/payload/bin/mesh:24-27 derives VERSION from the installed tree's meshd/server.ts then the payload's, with no second constant; scripts/check-mesh-version.sh asserts CLI==server.ts, that an installed tree wins over the payload, and that a hardcoded `const VERSION` cannot come back; wired into CI at .github/workflows/ci.yml:63-64. NOT DONE: `grep -n VERSION install/install.sh` returns nothing (no $MESH_HOME/VERSION written on install or upgrade); install/payload/meshd/package.json still says \"version\": \"0.1.0\" against server.ts:20's \"0.5.0\"; `mesh status` (install/payload/bin/mesh:298-305) prints name/address/meshd version/uptime/doctor only \u2014 no release comparison, and `grep -rn 'update available'` finds it only in iOS/ContentView.swift:866 (a capability-gap label, not a release check); scripts/check-version-stamp.sh does not exist.\n\n**What is actually left:** install.sh VERSION stamping, the `update available (old \u2192 new)` column in `mesh status` with a bounded release lookup inside the 5s budget, the package.json version bump, and scripts/check-version-stamp.sh plus its CI wiring. One of four acceptance items is done.\n\n**Depends on:** Cut and publish a versioned mesh-install release in one command",
+    "status": "partial",
+    "area": "install",
+    "effort": "M",
+    "round": "D"
+  },
+  {
+    "n": 47,
+    "title": "Stop reporting VNC as a setup step anywhere",
+    "labels": [
+      "area:install",
+      "effort:S",
+      "round:D",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D3`.\n\n## The problem\nArya asked about setting up VNC for a new machine \u2014 but the product deliberately does not use VNC (screen and input come from meshd over authed HTTP; ROADMAP lists VNC as a non-goal). Meanwhile mesh-self-check probes http://127.0.0.1:6080/vnc.html and prints \"VNC: not configured\", install/README.md documents MESH_VNC_URL, and the iPhone has a per-machine VNC URL field \u2014 so setup output tells a new user there is a step they have failed to do.\n\n## Acceptance\n- [ ] `~/.mesh/bin/mesh-self-check` on a machine with no VNC prints nothing about VNC; the line appears only when MESH_VNC_URL is explicitly set, and a check asserts both halves.\n- [ ] README and the setup docs state in one line that Screen Sharing/VNC is never required and why, so the question has a written answer.\n- [ ] No onboarding surface (mesh setup output, mesh doctor, install/README.md, the iPhone add-machine flow) presents VNC as something to configure; any surviving VNC field is labelled optional and advanced.\n- [ ] `sh scripts/check-all.sh` passes with the VNC probe removed or gated.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/bin/mesh-self-check:9 defaults `VNC_URL=\"${MESH_VNC_URL:-http://127.0.0.1:6080/vnc.html}\"` and :79-84 probes it unconditionally, printing `not configured (\u2026)` on a machine with no VNC. install/README.md:96 documents MESH_VNC_URL as part of self-check output. iOS/ContentView.swift:1127-1130 is the per-machine VNC URL TextField; ContentView.swift:296 and :340 render a `ServiceStatusRow(label: \"VNC\", \u2026)`; ContentView.swift:403 tells the user the check covers VNC; ContentView.swift:899 lets `vncReachable == false` mark a machine as needing attention; iOS/TerminalView.swift:603-606 offers \"Watch screen (VNC)\". ROADMAP.md:63-64 lists VNC as an explicit non-goal, so the code and the roadmap disagree. scripts/check-mesh-self-check.sh contains no VNC assertion (grep returns nothing).\n\n**What is actually left:** Gate the mesh-self-check probe on MESH_VNC_URL being explicitly set and assert both halves in scripts/check-mesh-self-check.sh; drop or demote install/README.md:96; take VNC out of the attention heuristic (ContentView.swift:899) and the setup-checks blurb (:403); label the surviving VNC field advanced; add the one-line \"Screen Sharing is never required\" statement to README/setup docs.",
+    "status": "missing",
+    "area": "install",
+    "effort": "S",
+    "round": "D"
+  },
+  {
+    "n": 48,
+    "title": "Warn when two features get mixed up instead of doing nothing",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:D",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **D** (distribution & packaging), items `D6`.\n\n## The problem\nArya wants the app to speak up when he confuses two features or two buttons. Today the confusable pairs fail silently: Screen peek is a still picture, so tapping it to click does nothing at all and looks broken, while Control Mac is the one that clicks \u2014 and Continue on a session that is not actually waiting sends a bare Return into a live shell with no warning.\n\n## Acceptance\n- [ ] Tapping or dragging on the read-only Screen peek shows an inline hint naming the right control (\"This is a still \u2014 open Control Mac to click\") instead of silently doing nothing.\n- [ ] Sending Continue to a session that is not currently waiting on a human warns first, saying Continue is a bare Return that accepts whatever is highlighted.\n- [ ] Hints are inline and dismissible, never modal alerts, and each hint appears at most once per session so it does not become noise.\n- [ ] A pure helper decides when each hint fires and is covered by a scripts/check-*.swift compiled with -Onone.\n\n## Where it stands today \u2014 `missing`\nScreen peek: Watch/WatchViews.swift:1333-1400 (ScreenPeekView) attaches no tap or drag gesture to the image at all \u2014 only .onAppear, .onChange, .task and a Refresh button \u2014 so a tap still does nothing and produces no hint. The only pointer to the right control is a permanent caption at WatchViews.swift:1385 (\"Read only. Use iPhone for full terminal/VNC.\") and a help-sheet line at WatchViews.swift:779, neither of which is triggered by the confusion and neither of which names Control Mac at the moment of the tap. Continue: Watch/WatchViews.swift:993-999 offers Continue unconditionally, disabled only by `continueBlocked` (WatchViews.swift:917-920, a usage-limit gate) \u2014 there is no not-waiting check and no bare-Return warning. Shared/RiskClassifier.swift:63-74 warns on a different axis (destructive command text), surfaced at iOS/ContentView.swift:769-773. No once-per-session hint machinery exists (`grep -rn 'hint'` finds only the watch gesture hint at RemoteView.swift:424-430 and status hints), and no scripts/check-*.swift covers a hint helper.\n\n**What is actually left:** All four acceptance items: the tap/drag hint on Screen peek, the not-waiting Continue warning, the inline dismissible once-per-session hint mechanism, and the pure helper plus its -Onone check script.",
+    "status": "missing",
+    "area": "watch",
+    "effort": "M",
+    "round": "D"
+  },
+  {
+    "n": 49,
+    "title": "Add a browse lane that captures a page without the Mac's screen",
+    "labels": [
+      "area:daemon",
+      "effort:L",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E5`.\n\n## The problem\nReading a web page today means capturing the Mac's screen \u2014 whatever the browser happens to be showing, at whatever window size, cropped to the window. A browse lane renders the page itself, so it can be full-page and text-first, and it works on a headless Linux box where screen capture never will. The constraint is that meshd ships with zero runtime dependencies and the roadmap keeps it that way, so a browser engine must never enter the default install.\n\n## Acceptance\n- [ ] POST /browse {url} returns a full-page PNG plus the page's extracted text, driven by a browser the daemon does not bundle; with no browser present the route answers 501 and names the single command that installs one.\n- [ ] `browse` appears in CAPABILITIES only when that browser is actually present, so clients hide the lane instead of offering something that fails.\n- [ ] The default install adds no runtime dependency: meshd's package.json still declares none and `bun install` still installs nothing.\n- [ ] URLs are http/https only and validated exactly the way POST /open validates them, with the same error shape.\n\n## Where it stands today \u2014 `missing`\nNo /browse route: install/payload/meshd/input.ts:409-482 and install/payload/meshd/server.ts have none; install/payload/meshd/server.ts:27 CAPABILITIES has no `browse`; grep for puppeteer/playwright/chromium/headless across install/payload/meshd/ returns only unrelated comments (files.ts:1, cmux-bridge.ts:37). The zero-dependency invariant currently holds \u2014 install/payload/meshd/package.json declares no dependencies key at all\n\n**What is actually left:** All four criteria. The URL validation to copy verbatim is at install/payload/meshd/input.ts:456-465 (POST /open: new URL() parse, http:/https: only, 400 shape).",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "L",
+    "round": "E"
+  },
+  {
+    "n": 50,
+    "title": "Capture from a long-lived SCStream, not a process per frame",
+    "labels": [
+      "area:capture",
+      "effort:L",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E9, E10`.\n\n## The problem\nEvery single frame costs a screencapture process launch plus one or two sips re-encodes. That is the ceiling on how live \"live\" can ever be, no matter how good the transport gets, and it is why the remote screen feels like a slideshow rather than a screen.\n\n## Acceptance\n- [ ] mesh-input gains a streaming mode that holds one ScreenCaptureKit session for a display (or a window) and emits length-prefixed JPEG/PNG frames on stdout on demand.\n- [ ] meshd's capture path uses the helper when it supports streaming and falls back to screencapture otherwise; /screen.jpg's response shape, headers and units are unchanged either way.\n- [ ] The session is torn down after a bounded idle period so nothing holds a capture session \u2014 and its recording indicator \u2014 open indefinitely.\n- [ ] A missing Screen Recording grant surfaces as the same doctor-style error the current path gives, never as the silent wallpaper frame screencapture returns.\n\n## Where it stands today \u2014 `missing`\ngrep for SCStream / ScreenCaptureKit across install/ returns zero hits; install/payload/bin/mesh-input.swift:35,82 parses only --check and --displays (no streaming mode); install/payload/meshd/input.ts:359, :370 and :389 each spawn a fresh /usr/sbin/screencapture per request and :397/:400 add one or two /usr/bin/sips re-encodes on top\n\n**What is actually left:** All four criteria. Note mesh-input already asks for the Screen Recording grant (mesh-input.swift:43 CGRequestScreenCaptureAccess) so the doctor-style error path has somewhere to hook.",
+    "status": "missing",
+    "area": "capture",
+    "effort": "L",
+    "round": "E"
+  },
+  {
+    "n": 51,
+    "title": "Consume the frame stream on the phone, with a polling fallback",
+    "labels": [
+      "area:ios",
+      "effort:M",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E9`.\n\n## The problem\nThe stream is worth nothing until a client uses it. The phone's remote screen is built around a 350ms poll loop, and its staleness rule, its \"Reconnecting\u2026\" retry and its zoom re-request all hang off that loop, so switching transports has to keep every one of those behaviours intact.\n\n## Acceptance\n- [ ] RemoteScreenModel opens the stream when screenStream is advertised and applies each part, updating lastFrameAt so the existing 8-second staleness rule and the input block still work.\n- [ ] A dropped stream reconnects once and then falls back to the 350ms poll; the picture never goes permanently blank and the overlay says which mode it is in.\n- [ ] Changing zoom, pan or display re-opens the stream on the new rect within one frame instead of waiting out a poll interval.\n- [ ] Against a daemon without screenStream the current polling behaviour is unchanged.\n\n## Where it stands today \u2014 `missing`\nBlocked on issue 10 (no /screen.mjpg). iOS/RemoteScreenView.swift:145-149 is still the 350ms poll loop (`while !Task.isCancelled { await self?.refreshScreen(); try? await Task.sleep(for: .milliseconds(350)) }`); the staleness rule hangs off lastFrameAt set in apply() at iOS/RemoteScreenView.swift:255-257; no stream client, no transport-mode overlay text, and no reconnect-then-fall-back path exists in the file\n\n**What is actually left:** All four criteria.\n\n**Depends on:** Stream frames over one connection instead of re-polling",
+    "status": "missing",
+    "area": "ios",
+    "effort": "M",
+    "round": "E"
+  },
+  {
+    "n": 52,
+    "title": "Follow the frontmost window as it moves and changes",
+    "labels": [
+      "area:capture",
+      "effort:M",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E10`.\n\n## The problem\nOnce you have framed a region, the Mac moves on without you: an agent opens a new window, you switch apps, a window is dragged to the other screen \u2014 and the watch keeps staring at the rectangle you framed minutes ago. There is no mode that says \"show me whatever I am working in right now\".\n\n## Acceptance\n- [ ] A Follow toggle: while it is on, the capture rect re-reads the front window's frame on each poll and moves with it, including when the front window is on a different display.\n- [ ] Panning or zooming by hand turns Follow off immediately and the UI says it did, so the view never fights the finger.\n- [ ] A change of front window does not blank the picture \u2014 the previous frame stays on screen until the new one lands.\n- [ ] With Follow off, capture is byte-identical to the window or display ROI it was turned on from.\n\n## Where it stands today \u2014 `missing`\nNo Follow toggle anywhere: grep -i follow across iOS/, Watch/ and Shared/ hits only iOS/RemoteScreenView.swift:410-429 followPointer(), which nudges pan so the POINTER stays in view \u2014 it never re-reads a window frame and has no user-facing toggle (called only from :395, :402, :502). No front-window query exists to poll (install/payload/meshd/input.ts:409-482 has no /windows). The capture rect follows zoom/pan only: iOS/RemoteScreenView.swift:209-211, Watch/RemoteView.swift:469-476\n\n**What is actually left:** All four criteria, blocked on issue 3.\n\n**Depends on:** Report the Mac's windows and their frames over /windows",
+    "status": "missing",
+    "area": "capture",
+    "effort": "M",
+    "round": "E"
+  },
+  {
+    "n": 53,
+    "title": "Make the window the default region of interest",
+    "labels": [
+      "area:capture",
+      "effort:L",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E3, E10`.\n\n## The problem\nEvery capture starts as a whole display, so the first thing you do on the wrist or the phone is spend ten seconds zooming and panning to the one window you actually care about \u2014 and you do it again the next time you open the screen. The sketch is machine, then display, then window, then region, with the window as the default place you land.\n\n## Acceptance\n- [ ] Screen & control offers a window list fed by /windows; picking one sets the capture rect to that window's frame and names the window in the title.\n- [ ] Zoom and pan then operate inside the window's rect and clamp to it, and one control returns to the whole display, which behaves exactly as it does today.\n- [ ] Taps map to the right pixels while a window ROI is active: the pointer lands under the finger at zoom 1 and at maximum zoom, asserted by running the shipped mapping the way check-inspect-crop.sh does rather than by describing it.\n- [ ] Where /windows is absent (older daemon, or Linux) the window control is hidden entirely and display-level behaviour is unchanged.\n\n## Where it stands today \u2014 `missing`\nDepends on /windows, which does not exist (install/payload/meshd/server.ts:27, install/payload/meshd/input.ts:409-482). No window list in either client: grep for \"window\" in iOS/RemoteScreenView.swift returns only the snap menu at :1069-1077 and comments; in Watch/RemoteView.swift only snap buttons at :1205-1234 and the \"Windows\" key-shortcut label at :1063. Capture rect is always display-relative: iOS/RemoteScreenView.swift:50 frameRect initialised to the unit rect, :194 reset to the unit rect on every display change, :209-211 the requested region comes from visibleRect(zoom:pan:) over the whole display, never a window frame\n\n**What is actually left:** All four criteria, and it is blocked on issue 3.\n\n**Depends on:** Report the Mac's windows and their frames over /windows",
+    "status": "missing",
+    "area": "capture",
+    "effort": "L",
+    "round": "E"
+  },
+  {
+    "n": 54,
+    "title": "Offer to open the dev server an agent just started",
+    "labels": [
+      "area:daemon",
+      "effort:M",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E6`.\n\n## The problem\nAn agent starts a dev server on the Mac and prints http://localhost:5173. On the wrist that is a piece of text: the machine can already open a URL (the openUrl capability, POST /open), but nothing notices a server came up and nothing offers the tap. You end up walking to the Mac to look at what the agent built.\n\n## Acceptance\n- [ ] GET /ports lists locally listening TCP ports with the owning process name and command, LISTEN sockets only \u2014 connected clients are never listed.\n- [ ] The implementation contains no kill or signal path and never uses the `lsof -ti :PORT` form, which matches clients as well as listeners and once SIGKILLed the running meshd; a check asserts both, alongside scripts/check-bridge-kill-scope.sh.\n- [ ] When a watched session's output contains a localhost URL whose port appears in that list, the app offers two one-tap actions: open it on the machine (POST /open) and open it in the phone's browser.\n- [ ] Ports that were already listening before the session started, and meshd's own port, are never offered.\n\n## Where it stands today \u2014 `missing`\nNo /ports route: install/payload/meshd/input.ts:409-482 and install/payload/meshd/server.ts routing carry none, and CAPABILITIES (server.ts:27) has no `ports`. No localhost-URL detection in any client: grep for \"localhost\" across iOS/*.swift, Watch/*.swift and Shared/*.swift returns zero hits. The open half exists and is reachable \u2014 Shared/MeshClient.swift:429-440 openURL gated on the openUrl capability, Watch/WatchMeshStore.swift:754 canOpenOnMac, Watch/WatchViews.swift:516 \u2014 but nothing feeds it a detected port\n\n**What is actually left:** All four criteria. scripts/check-bridge-kill-scope.sh:41-44 already asserts the safe `lsof -ti tcp:<port> -sTCP:LISTEN` form for install/payload/bin/start-cmux-bridge-inner.zsh:17, so the companion check for a new /ports implementation has a template to follow.",
+    "status": "missing",
+    "area": "daemon",
+    "effort": "M",
+    "round": "E"
+  },
+  {
+    "n": 55,
+    "title": "Read text off the screen with Vision OCR",
+    "labels": [
+      "area:capture",
+      "effort:L",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E4`.\n\n## The problem\nReading an error message, a diff or a log line off the Mac's screen on a 45mm watch means zooming into a picture and panning across it a word at a time. The words are already in the pixels and nothing extracts them, so the wrist can only ever show a photograph of text.\n\n## Acceptance\n- [ ] A helper mode (mesh-input --ocr <image> or equivalent) runs VNRecognizeTextRequest at accurate recognition level and returns JSON lines, each with text, confidence, and a bounding box normalized to the image.\n- [ ] GET /screen.text takes the same display and x/y/w/h params as /screen.jpg and returns those lines for exactly that region; `ocr` is added to CAPABILITIES and Linux answers 404 like the other capture routes.\n- [ ] A check runs the helper against a committed PNG of known text and asserts the recognized strings, so it passes on CI with no window server and no Screen Recording grant.\n- [ ] A region containing no text returns {ok:true, lines:[]} rather than an error, and a missing Screen Recording grant is reported as an error rather than as an empty result.\n\n## Where it stands today \u2014 `missing`\nNo OCR anywhere: grep -i for VNRecognizeText, \"import Vision\", screen.text and ocr across install/, Shared/, iOS/, Watch/ and scripts/ returns zero implementation hits (only Shared/DaemonCapabilities.swift:54 \"Sharp screen text\" and an unrelated openssl -nocrypt in scripts/check-mesh-push.sh); install/payload/bin/mesh-input.swift:35,82 parses only --check and --displays; install/payload/meshd/input.ts:409-482 has no /screen.text route; install/payload/meshd/server.ts:27 CAPABILITIES has no `ocr`\n\n**What is actually left:** All four criteria: the helper mode, the /screen.text route sharing parseCaptureParams (input.ts:283-309) and the Linux 404 shape, the capability string, the committed-PNG check, and the empty-region vs missing-grant distinction.",
+    "status": "missing",
+    "area": "capture",
+    "effort": "L",
+    "round": "E"
+  },
+  {
+    "n": 56,
+    "title": "Read x-mesh-rect on iOS instead of guessing the crop from aspect",
+    "labels": [
+      "area:ios",
+      "effort:M",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E1, E2`.\n\n## The problem\nOn the phone, zooming into the Mac sometimes sharpens and sometimes silently does nothing, with no message either way. iOS/RemoteScreenView.swift asks for a region with screenImage (bytes only) and then infers whether the daemon actually cropped by comparing the picture's aspect to the display's (servedLooksLikeCrop / cropIsDistinguishable). Any region whose shape is close to the display's is declared indistinguishable and the crop is not even requested (line 217) \u2014 so on an iPad, or a phone whose screen surface matches the Mac's proportions, region capture is off and text never gets clearer. MeshClient.screenFrame already returns the daemon's own answer.\n\n## Acceptance\n- [ ] RemoteScreenModel.refreshScreen calls screenFrame and sets frameRect from the returned rect; servedLooksLikeCrop, cropIsDistinguishable and relativeGap are deleted, not kept as a fallback.\n- [ ] Zooming past 1.05x against a 0.5.0 daemon requests a region at every container/display aspect combination, including a container aspect exactly equal to the display's \u2014 the case that is silently skipped today.\n- [ ] A check runs the shipped decision and fails if a frame with no x-mesh-rect header is ever drawn as a crop, or if a frame with one is ever zoomed a second time.\n- [ ] A daemon that declines the crop still draws the full frame with client-side zoom, and a tap still places the pointer under the finger at any zoom.\n\n## Where it stands today \u2014 `missing`\niOS/RemoteScreenView.swift:227-229 (refreshScreen still calls client.screenImage(display:width:rect:quality:), not screenFrame); iOS/RemoteScreenView.swift:217 (`if let rect = requested, !cropIsDistinguishable(rect) { requested = nil }` \u2014 the silent skip); iOS/RemoteScreenView.swift:249-253 (apply() sets frameRect from servedLooksLikeCrop(servedAspect:requested:) instead of a header); iOS/RemoteScreenView.swift:269-273 servedLooksLikeCrop, :278-282 cropIsDistinguishable, :284-287 relativeGap all still present; iOS/RemoteScreenView.swift:263-265 comment concedes \"the header is not available here\"; Shared/MeshClient.swift:199-204 screenFrame exists and parses the header but has zero callers on iOS (grep screenFrame across iOS/ returns nothing)\n\n**What is actually left:** Everything. screenFrame + servedRect() already exist in Shared/MeshClient.swift:158-204 and are ready to use \u2014 this is a client rewiring plus deleting the three inference helpers, then the two checks (no header \u21d2 never drawn as crop; header \u21d2 never zoomed twice) and the tap-mapping assertion.",
+    "status": "missing",
+    "area": "ios",
+    "effort": "M",
+    "round": "E"
+  },
+  {
+    "n": 57,
+    "title": "Report the Mac's windows and their frames over /windows",
+    "labels": [
+      "area:capture",
+      "effort:M",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E3, E10`.\n\n## The problem\nThe capture hierarchy stops at the display: you can ask for a machine and a screen, then you are aiming a rectangle by hand. There is no way to say \"show me the Claude Code window\". mesh-input already reads window position and size through Accessibility (frontmostWindow, windowFrame, displayContaining in install/payload/bin/mesh-input.swift:288-332) but only ever uses them to snap the front window \u2014 nothing can ask what windows exist and where they are.\n\n## Acceptance\n- [ ] mesh-input --windows prints JSON per window: app name, bundle id, title, display index, and the frame normalized 0\u20261 within that display, with the front window flagged and minimized or off-screen windows excluded.\n- [ ] GET /windows returns that list, answers 404 with a clear message on Linux the way /displays does, and `windows` is added to meshd's CAPABILITIES array.\n- [ ] Frames use the same normalized, top-left-origin units /screen.jpg?x=&y=&w=&h= takes, so a window from the list can be passed straight back as a capture rect with no conversion in any client.\n- [ ] A check spawns a throwaway daemon and asserts the route's contract \u2014 unit normalization against a synthetic display arrangement, the Linux error shape, and the capability string \u2014 without needing a window server.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/server.ts:27 (CAPABILITIES lists 22 strings; `windows` is not among them); install/payload/meshd/input.ts:409-482 (handleInput routes /input, /clipboard, /desktop, /displays, /screen.jpg, /open, /apps, /system, /volume \u2014 no /windows); install/payload/bin/mesh-input.swift:35,82 (only --check and --displays flags are parsed; no --windows); install/payload/bin/mesh-input.swift:288-332 (frontmostWindow, workArea, windowFrame, displayContaining all exist) but their only caller is placeWindow at :334-365, reached solely via the \"window\" command at :405; install/payload/meshd/input.ts:226-240 listApps returns name/bundleID/front only \u2014 no titles, no frames, no display index\n\n**What is actually left:** The whole route. The Accessibility reads are already written and permission-free (mesh-input.swift:286-287 notes AX costs no extra grant) \u2014 needs a --windows JSON emitter with title/bundle id/display index/0\u20261 top-left-origin frame + front flag + minimized exclusion, a /windows route mirroring /displays' Linux 404 shape (input.ts:440-443, :254), the capability string, and the hermetic contract check.",
+    "status": "missing",
+    "area": "capture",
+    "effort": "M",
+    "round": "E"
+  },
+  {
+    "n": 58,
+    "title": "Send the daemon's served rect through the phone relay",
+    "labels": [
+      "area:capture",
+      "effort:M",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E1, E2`.\n\n## The problem\nWhen the watch is off the Tailnet it gets the Mac's screen through the iPhone. The phone already asks the Mac for the exact rectangle the watch is looking at, but it hands the watch bare JPEG bytes and throws away the x-mesh-rect header that says which rectangle came back. The watch therefore cannot tell a crop from a whole screen, so today it deliberately stops asking for one on the relay route (Watch/RemoteView.swift:469-476) and goes back to magnifying a 600px downsample. Off-tailnet, zooming into the Mac still shows mush \u2014 the exact complaint region capture was built to fix.\n\n## Acceptance\n- [ ] MeshSnapshot carries the served rect (nil = whole display), populated in iOS/MeshStore.swift from MeshClient.screenFrame's x-mesh-rect header instead of screenImage's bare bytes.\n- [ ] In Inspect over the relay the watch sends its visibleRegion and draws the reply through frameTransform(servedRect:zoom:pan:), so a served crop renders at 1x with zero pan \u2014 the rule the direct path already passes in scripts/check-inspect-crop.sh, extended to cover the relay path.\n- [ ] A relayed frame stays under the 262,144-byte WCSession message cap at every zoom level; a check computes the worst case (a 6x crop of a 6K display at the relay's width/quality clamp) and fails if it would exceed the cap.\n- [ ] Against a daemon without the screenRegion capability the relay sends no rect and the watch behaves exactly as it does today: full frame, client-side zoom, and never a crop it only inferred.\n\n## Where it stands today \u2014 `missing`\nShared/Models.swift:724-740 (MeshSnapshot has screenHost/screenFetchedISO/screenJPEGData/screenError \u2014 no servedRect field); iOS/MeshStore.swift:465-468 (relay build calls client.screenImage(...), the bare-bytes entry point, not screenFrame); Shared/MeshClient.swift:148-151 (screenImage discards the rect by returning only .data); Watch/RemoteView.swift:469-476 (relay branch calls store.requestScreen(host:display:) with no rect, comment: \"No rect on the relay: the phone hands over bytes and drops the headers\"); Watch/RemoteView.swift:715 (servedRect returns nil whenever remote.screen == nil, i.e. always on the relay); scripts/check-inspect-crop.sh:20-22 (asserts only against input.ts, MeshClient.swift, Watch/RemoteView.swift \u2014 never MeshSnapshot or the relay path); no 262144-byte worst-case check exists (grep for 262144 hits only iOS/MeshStore.swift:462, Watch/WatchMeshStore.swift:549 and scripts/check-watch-scrollback.swift, all about scrollback/comment text)\n\n**What is actually left:** All four criteria. Note the UPLINK half is already plumbed but unused: Shared/Models.swift:1096-1103 gives WatchCommand a rect/width/quality for screenPeek, and iOS/MeshStore.swift:933-938 stores them into watchedScreenRect which iOS/MeshStore.swift:467 does pass to the daemon \u2014 but Watch/RemoteView.swift:476 never populates it, so that plumbing is dead. Still to build: a servedRect field on MeshSnapshot populated from screenFrame's x-mesh-rect, the watch sending visibleRegion on the relay and drawing through frameTransform(servedRect:), a WCSession byte-cap check for the worst-case 6x crop, and the no-screenRegion fallback.",
+    "status": "missing",
+    "area": "capture",
+    "effort": "M",
+    "round": "E"
+  },
+  {
+    "n": 59,
+    "title": "Serve small text regions as PNG instead of JPEG",
+    "labels": [
+      "area:capture",
+      "effort:M",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E8`.\n\n## The problem\nEvery capture is shot as JPEG and re-encoded by sips (install/payload/meshd/input.ts:339-400). JPEG chroma subsampling and ringing land hardest on high-contrast glyphs \u2014 exactly the 9pt terminal text you zoomed in to read \u2014 so even a native-pixel crop arrives with fuzzy letters. There is no way to ask for a lossless frame.\n\n## Acceptance\n- [ ] /screen.jpg accepts fmt=png: the daemon shoots -t png, skips the JPEG re-encode, and returns content-type image/png (both the content type and the temp file extension are hardcoded to jpeg today and must follow the format).\n- [ ] Clients request PNG only below a documented megapixel ceiling and fall back to JPEG above it; against a daemon without the capability nothing about today's requests changes.\n- [ ] The capability string is advertised in CAPABILITIES and has a DaemonGap row naming the symptom (\"small text stays slightly fuzzy however far you zoom\").\n- [ ] A check asserts a PNG response for fmt=png, a JPEG response without it, and that content-type and file extension agree in both cases.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/input.ts:283-309 parseCaptureParams reads display/width/q/x/y/w/h only \u2014 no fmt; install/payload/meshd/input.ts:345 the temp path extension is hardcoded `.jpg`; :346 headers are hardcoded \"content-type\": \"image/jpeg\"; :348-349 and :359 every screencapture spawn passes \"-t\",\"jpg\"; :399-401 the sips re-encode is hardcoded to format jpeg; install/payload/meshd/server.ts:27 CAPABILITIES has no PNG capability; Shared/DaemonCapabilities.swift:52-74 has no matching DaemonGap row; Shared/MeshClient.swift:174-193 screenImageQuery sends no fmt param\n\n**What is actually left:** All four criteria.",
+    "status": "missing",
+    "area": "capture",
+    "effort": "M",
+    "round": "E"
+  },
+  {
+    "n": 60,
+    "title": "Stream frames over one connection instead of re-polling",
+    "labels": [
+      "area:capture",
+      "effort:L",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E9`.\n\n## The problem\nThe phone asks for a brand new frame every 350ms (iOS/RemoteScreenView.swift:145-149). Each request spawns screencapture plus one or two sips processes on the Mac and pays a full round trip \u2014 and Tailscale silently degrades to a DERP relay at roughly half a second per round trip, so the picture visibly lags the pointer and the Mac burns CPU on process launches.\n\n## Acceptance\n- [ ] GET /screen.mjpg streams multipart/x-mixed-replace frames using the same display, rect, width, quality and format params as /screen.jpg, each part carrying its own x-mesh-rect header.\n- [ ] Capture stops within one frame of the client disconnecting; a check opens the stream, aborts it, and asserts no screencapture process and no capture loop survives.\n- [ ] Frame pacing is decided server-side and bounded, and consecutive identical frames are skipped rather than re-sent.\n- [ ] `screenStream` is advertised in CAPABILITIES and the existing /screen.jpg polling route is left untouched so old clients are unaffected.\n\n## Where it stands today \u2014 `missing`\ngrep -i for mjpg, multipart/x-mixed-replace and screenStream across install/, iOS/, Watch/, Shared/ and scripts/ returns zero hits; install/payload/meshd/input.ts:409-482 handleInput has no /screen.mjpg; install/payload/meshd/server.ts:27 CAPABILITIES has no `screenStream`; capture is one-shot per request (install/payload/meshd/input.ts:339-407, spawning /usr/sbin/screencapture at :359/:370/:389 and sips at :397/:400 per call)\n\n**What is actually left:** All four criteria.",
+    "status": "missing",
+    "area": "capture",
+    "effort": "L",
+    "round": "E"
+  },
+  {
+    "n": 61,
+    "title": "Swipe between screens with a live thumbnail pager",
+    "labels": [
+      "area:capture",
+      "effort:M",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E10`.\n\n## The problem\nOn a multi-display Mac you pick a screen from a numbered chip on the watch, or a Picker buried in a settings sheet on the phone (iOS/RemoteScreenView.swift:1060). A number does not tell you which screen is which, so you switch, look, and switch back.\n\n## Acceptance\n- [ ] Both apps show one page per display, swipeable on the control surface itself rather than inside a sheet, each page showing that display's own live frame.\n- [ ] Each page is labelled with the display's name from /displays, with the main display marked.\n- [ ] Switching pages repoints screen capture, pointer moveTo and window snap together, so the screen you are looking at is always the one you are driving.\n- [ ] A single-display machine shows no pager and no extra chrome.\n\n## Where it stands today \u2014 `missing`\niOS/RemoteScreenView.swift:1060-1066 \u2014 the display chooser is still a Picker inside the ellipsis Menu, labelled with d.label + \" (main)\"; Watch/RemoteView.swift:446 and :732-745 \u2014 displayPicker is an HStack of Buttons rendering Text(\"\\(display.index)\"), i.e. numbered chips, no thumbnails; no swipeable pager exists in either app (TabView appears only once repo-wide, iOS/ContentView.swift:18, for the app's root tabs)\n\n**What is actually left:** The pager itself \u2014 one page per display showing that display's own live frame, swipeable on the control surface, labelled from /displays. Two of the four criteria already hold incidentally: switching repoints capture, pointer and window snap together (Watch/RemoteView.swift:730-745, iOS/RemoteScreenView.swift:1060-1066), and a single-display machine already shows no chooser (Watch/RemoteView.swift:446, iOS/RemoteScreenView.swift:1060).",
+    "status": "missing",
+    "area": "capture",
+    "effort": "M",
+    "round": "E"
+  },
+  {
+    "n": 62,
+    "title": "Turn a captured region into readable text on the wrist",
+    "labels": [
+      "area:watch",
+      "effort:M",
+      "round:E",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **E** (capture hierarchy), items `E7`.\n\n## The problem\nThe terminal already has a Reader mode that wraps every line to the watch's width; the Mac's screen has nothing like it. Once you have framed a region you are still reading an image, so you pan sideways to finish a sentence. Separately the app currently tells users that the Reader capability is about screen capture speed, which sends anyone chasing the wrong problem.\n\n## Acceptance\n- [ ] Inspect gains a Text toggle that replaces the picture with the region's OCR lines, wrapped to the screen width and scrollable by the crown, with no horizontal panning.\n- [ ] Text mode covers exactly the region currently framed and refreshes when that region changes.\n- [ ] Where the ocr capability is missing the toggle is hidden and DaemonCapabilities names the symptom in the user's words, not the capability string.\n- [ ] The captureJoin row in DaemonCapabilities.expected stops claiming \"Faster screen capture\" and \"frames arrive slower\" and describes what it actually is: Reader mode unwrapping soft-wrapped terminal lines.\n\n## Where it stands today \u2014 `missing`\nBlocked on issue 7 \u2014 no ocr capability (install/payload/meshd/server.ts:27) and no /screen.text (install/payload/meshd/input.ts:409-482). The watch inspector at Watch/RemoteView.swift:519-560 draws only Image(uiImage: shot) with no text mode and no toggle. The last criterion is independently unmet and verifiable today: Shared/DaemonCapabilities.swift:71-73 still reads DaemonGap(capability: \"captureJoin\", feature: \"Faster screen capture\", symptom: \"Overlapping screen requests each pay full price, so frames arrive slower.\")\n\n**What is actually left:** All four criteria. The captureJoin copy fix at Shared/DaemonCapabilities.swift:71-73 is a standalone two-line change that does not need the OCR work \u2014 the daemon flag it describes is actually reader-mode line unwrapping (Shared/MeshClient.swift:225-231: `join` unwraps soft-wrapped lines via capture-pane -J, `plain` strips box-drawing glyphs).\n\n**Depends on:** Read text off the screen with Vision OCR",
+    "status": "missing",
+    "area": "watch",
+    "effort": "M",
+    "round": "E"
+  },
+  {
+    "n": 63,
+    "title": "Check one version across app, daemon, changelog and release",
+    "labels": [
+      "area:ci",
+      "effort:S",
+      "round:F",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F3`.\n\n## The problem\nThe version lives in four places \u2014 MARKETING_VERSION in project.yml, `const VERSION` in meshd/server.ts, the top section of CHANGELOG.md, and the mesh-install release tag \u2014 and only one pair is currently checked (scripts/check-mesh-version.sh, added 27 Aug, covers CLI vs payload). Any of the others can drift silently, which is exactly how the fleet ended up two numbers behind.\n\n## Acceptance\n- [ ] `sh scripts/check-version-coherence.sh` passes on this tree, and fails when MARKETING_VERSION alone is edited to 0.5.1.\n- [ ] It fails when CHANGELOG.md has neither an `[Unreleased]` section nor a section matching MARKETING_VERSION.\n- [ ] It runs in CI's daemon job with no network; the comparison against the published mesh-install release is behind a flag so offline runs stay green.\n\n## Where it stands today \u2014 `partial`\nscripts/check-version-coherence.sh does not exist. One pair of the four is checked: scripts/check-mesh-version.sh:31-33 reads `const VERSION` out of install/payload/meshd/server.ts (line 20, \"0.5.0\") and asserts `mesh version` reports it, with a revert guard against a hardcoded CLI constant at scripts/check-mesh-version.sh:53-57; it runs in CI at .github/workflows/ci.yml:63-64. The other three are unguarded: project.yml:10 (MARKETING_VERSION: \"0.5.0\"), CHANGELOG.md:10 ([Unreleased], with no `## [0.5.0]` section \u2014 the newest released one is CHANGELOG.md:92 `## [0.4.0]`), and the mesh-install tag (published v0.4.1). Note scripts/check-mesh-version.sh:21 SKIPs when bun is absent, which ties it to issue 3.\n\n**What is actually left:** Write check-version-coherence.sh covering MARKETING_VERSION, server.ts VERSION and the CHANGELOG section; make it fail on a lone MARKETING_VERSION bump and on a CHANGELOG with neither [Unreleased] nor a matching section; put the published-release comparison behind a network flag; add it to the daemon job.",
+    "status": "partial",
+    "area": "ci",
+    "effort": "S",
+    "round": "F"
+  },
+  {
+    "n": 64,
+    "title": "Decide what version follows the 1.0 already on TestFlight",
+    "labels": [
+      "area:docs",
+      "effort:S",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F3`.\n\n## The problem\nApp Store Connect already holds prerelease version 1.0 (build 202608241803, uploaded 24 Aug) while project.yml now says 0.5.0. The next upload therefore reads as a downgrade and testers see two version lineages side by side in TestFlight, with no way to tell which is newer.\n\n## Acceptance\n- [ ] A decision is recorded in the version table of docs/updating.md: either 0.5.x continues and the stray 1.0 is explained, or the number moves to 1.x and 0.5.0 is retired.\n- [ ] After the next upload, `asc builds list --app 6803438426` shows the new build under the intended prerelease version and no older lineage sorts above it.\n- [ ] project.yml, meshd/server.ts and CHANGELOG all carry that same number.\n\n## Where it stands today \u2014 `missing`\ndocs/updating.md:126-138 does hold a version table, but it lists only 0.5.0 / build stamp / 0.5.0 / v0.5.0 and says nothing about the prerelease 1.0 sitting in App Store Connect \u2014 grepping docs/updating.md for a standalone `1.0` returns only unrelated hits (line 20 tailnet, line 80 tester counts). The only 1.0 mention anywhere nearby is docs/release-workflow.md:139, and that is about duplicate build numbers, not the lineage decision. The third criterion also fails today: project.yml:10 and install/payload/meshd/server.ts:20 are both 0.5.0, but CHANGELOG.md has no `## [0.5.0]` section at all (CHANGELOG.md:10 is [Unreleased]; CHANGELOG.md:92 is [0.4.0]).\n\n**What is actually left:** Record the decision in docs/updating.md's version table, cut the matching CHANGELOG section, and verify the next upload lands under the intended prerelease version.",
+    "status": "missing",
+    "area": "docs",
+    "effort": "S",
+    "round": "F"
+  },
+  {
+    "n": 65,
+    "title": "Fail CI when a self-check skips instead of running",
+    "labels": [
+      "area:ci",
+      "effort:M",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F1`.\n\n## The problem\n19 SKIP exits across scripts/check-*.sh (no bun, no tmux, no python3, not macOS, port 8898 already busy) print a line and exit 0, so the suite reports \"All self-checks passed\" when the live-daemon checks \u2014 check-roundtrip, check-daemon-050, check-token-rotate, check-mesh-upgrade \u2014 never executed. A green CI badge cannot currently be distinguished from a suite that ran half of itself.\n\n## Acceptance\n- [ ] `MESH_CHECKS_STRICT=1 sh scripts/check-all.sh` exits non-zero and names every check that reported SKIP.\n- [ ] Both CI jobs set that variable and install what those checks need (bun, tmux); the run log for a green build contains zero `SKIP` lines.\n- [ ] Removing `tmux` from PATH makes the strict run fail with the check named, while the default (non-strict) run still skips politely for local use.\n\n## Where it stands today \u2014 `missing`\nNo occurrence of MESH_CHECKS_STRICT (or any *_STRICT var) anywhere under scripts/ or .github/ \u2014 grep returns zero hits. scripts/check-all.sh:29-32 runs each check and treats any exit 0 as a pass, then prints 'All self-checks passed.' at scripts/check-all.sh:36. 28 SKIP lines across scripts/check-*.sh still `exit 0`, including the live-daemon ones: scripts/check-roundtrip.sh:15-20 (no bun / no tmux / port busy), scripts/check-daemon-050.sh:25-31 (no bun / no tmux / not Darwin / port busy), scripts/check-token-rotate.sh:41-42, scripts/check-mesh-upgrade.sh:23. Neither CI job in .github/workflows/ci.yml sets an env var or installs tmux.\n\n**What is actually left:** All of it: the strict env var, the SKIP accounting in check-all.sh, and the CI wiring plus tmux install.",
+    "status": "missing",
+    "area": "ci",
+    "effort": "M",
+    "round": "F"
+  },
+  {
+    "n": 66,
+    "title": "Make publishing a daemon release one command",
+    "labels": [
+      "area:install",
+      "effort:M",
+      "round:F",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F2, F3`.\n\n## The problem\nLeSearch-AI/mesh-install has no workflows and no release script \u2014 every release is packaged and uploaded by hand. That is why the fleet ran 0.4.1 for six days against a 0.5.0 repo, and why nothing anywhere noticed. Publishing must be as cheap as committing, or it will keep not happening.\n\n## Acceptance\n- [ ] `sh scripts/release-daemon.sh --dry-run` prints the version, the tag and the exact files it would publish, and changes nothing locally or remotely.\n- [ ] A real run creates the mesh-install release, and its tarball passes `sh scripts/check-package-mesh-install.sh` (no node_modules, no .omc, no lockfiles) with a stamped install.sh that fetches from that release.\n- [ ] A check fails when the latest published mesh-install release version differs from `const VERSION` in install/payload/meshd/server.ts, and names both numbers.\n\n## Where it stands today \u2014 `partial`\nscripts/release-daemon.sh does not exist. What does exist: scripts/package-mesh-install.sh:1-8 builds the payload tarball and, given a SRC_URL, writes a stamped install.sh (scripts/package-mesh-install.sh:35-45) whose default source URL is baked in; scripts/check-package-mesh-install.sh:1-24 unpacks that tarball and asserts the required files are present. The exclusion guard the acceptance names is real but only half-wired: the skip tuple at scripts/package-mesh-install.sh:22 covers node_modules/.omc/bun.lock, yet the check's own assertion at scripts/check-package-mesh-install.sh:25 tests `install/.omx/` \u2014 a name that appears nowhere else in the repo \u2014 so it never actually asserts .omc absence. check-package-mesh-install.sh does run in CI (.github/workflows/ci.yml:81-82).\n\n**What is actually left:** The release script itself (--dry-run and real run, gh release create, asset upload), and the drift check comparing the published mesh-install release version to `const VERSION` in server.ts. Also fix the `.omx` vs `.omc` typo in check-package-mesh-install.sh:25.",
+    "status": "partial",
+    "area": "install",
+    "effort": "M",
+    "round": "F"
+  },
+  {
+    "n": 67,
+    "title": "Make voice-note-to-issues a repeatable command",
+    "labels": [
+      "area:agents",
+      "effort:M",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F5`.\n\n## The problem\nThis round of triage was hand-run by agents reading a transcript. The next batch of spoken asks starts from zero again, and there is nothing that stops the same ask becoming three issues across two rounds.\n\n## Acceptance\n- [ ] One documented command takes a transcript file and emits structured issue drafts (title, problem, acceptance, area, effort, source ids) for review before anything is created in the tracker.\n- [ ] Running it twice on the same transcript creates no duplicate issues \u2014 matched on the source id recorded in each issue body.\n- [ ] docs/ carries the how-to in 10 lines or fewer, including where transcripts live, and it is indexed in docs/README.md so check-docs-index.sh keeps it findable.\n\n## Where it stands today \u2014 `missing`\nNo command, script or doc exists. scripts/ has no transcript- or issue-related entry (full listing is check-*.{sh,swift,py}, package-mesh-install.sh, release-testflight.sh, serve-installer.sh, set-development-team.sh). Grepping docs/, scripts/ and AGENTS.md for 'transcript', 'voice note', 'voice-note' or 'to-issues' hits only unrelated prose: docs/VOICE-INPUT-SPEC.md (speech-to-text transcripts), docs/mesh-cli-and-remote-install.md:120 and scripts/check-token-rotate.sh:5 (tokens leaking into AI session transcripts). docs/README.md's current table (docs/README.md:19-33) lists no such how-to.\n\n**What is actually left:** Everything: the command, the source-id dedupe, the \u226410-line how-to in docs/, and its row in docs/README.md.",
+    "status": "missing",
+    "area": "agents",
+    "effort": "M",
+    "round": "F"
+  },
+  {
+    "n": 68,
+    "title": "Move CHANGELOG and ROADMAP when an issue closes, and check it",
+    "labels": [
+      "area:docs",
+      "effort:M",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F6`.\n\n## The problem\nCHANGELOG's `[Unreleased]` block sat at one entry while roughly 60 commits landed after 0.4.0, and was only caught up by hand on 27 Aug. ROADMAP's \"Now\" section names work with no link to any issue, so nothing tells you whether an item is done, in flight, or forgotten.\n\n## Acceptance\n- [ ] AGENTS.md states the ritual in one short section: the PR that closes an issue adds or extends the CHANGELOG `[Unreleased]` entry and deletes the ROADMAP bullet it just delivered.\n- [ ] Every bullet under ROADMAP \"Now\" carries an issue reference, and `sh scripts/check-changelog.sh` fails when one does not.\n- [ ] The same check fails when a released CHANGELOG section is missing for the current MARKETING_VERSION, and it runs in CI.\n\n## Where it stands today \u2014 `missing`\nscripts/check-changelog.sh does not exist (confirmed by ls; scripts/ holds no changelog check). AGENTS.md has no ritual section \u2014 its only CHANGELOG mention is AGENTS.md:209, a bullet listing 'Docs, the landing page in web/, CHANGELOG entries' as safe parallel work. ROADMAP.md:24-35 ('## Now \u2014 beta hardening (0.5)') carries five bullets and not one names an issue. The second half of the third criterion is also live: CHANGELOG.md has no section for the current MARKETING_VERSION (project.yml:10 = 0.5.0; CHANGELOG.md:10 is [Unreleased], CHANGELOG.md:92 is [0.4.0]), so the check would fail on this tree today if it existed.\n\n**What is actually left:** All three: the AGENTS.md ritual section, issue refs on every ROADMAP 'Now' bullet, and check-changelog.sh wired into CI.",
+    "status": "missing",
+    "area": "docs",
+    "effort": "M",
+    "round": "F"
+  },
+  {
+    "n": 69,
+    "title": "Point the public repo's default branch at the code that ships",
+    "labels": [
+      "area:ci",
+      "effort:S",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F1, F2`.\n\n## The problem\naryateja2106/lecoder-watch is PUBLIC and its default branch is `backup/2026-07-02` \u2014 a snapshot from 2 July. A friend sent to the repo reads a July README and a July changelog, and CI never runs on that branch either, so the thing visitors see is gated by nothing.\n\n## Acceptance\n- [ ] `gh repo view aryateja2106/lecoder-watch --json defaultBranchRef` names the current shipping branch (or `main` fast-forwarded to it), and its README/CHANGELOG match this tree.\n- [ ] `.github/workflows/ci.yml` triggers on push to that branch, and one run on it is green.\n- [ ] docs/README.md and AGENTS.md name that branch as the one to work on, so no doc still points at backup/2026-07-02.\n\n## Where it stands today \u2014 `missing`\n`gh repo view aryateja2106/lecoder-watch --json defaultBranchRef` returns {\"defaultBranchRef\":{\"name\":\"backup/2026-07-02\"}}. git branch -r confirms origin/HEAD -> origin/backup/2026-07-02. .github/workflows/ci.yml:4-9 triggers only on feat/**, fix/**, claude/**, codex/** pushes and pull_request \u2014 backup/** is not covered, so no run gates that branch. No doc names a current shipping branch: docs/README.md:6 and docs/README.md:42 only warn that backup/2026-07-02 is stale, and AGENTS.md never names a branch (its rule 2, AGENTS.md:27-34, tells you to check the commit date instead).\n\n**What is actually left:** All three criteria. Move the default branch, add its name to ci.yml triggers, and name it in AGENTS.md + docs/README.md.\n\n**Depends on:** Push the shipping branch and get one green CI run on its tip",
+    "status": "missing",
+    "area": "ci",
+    "effort": "S",
+    "round": "F"
+  },
+  {
+    "n": 70,
+    "title": "Publish 0.5.0 on all three surfaces and prove a friend gets it",
+    "labels": [
+      "area:install",
+      "effort:M",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F2, F3, F4`.\n\n## The problem\nThree published things are behind the repo, in three different ways: `mesh-install` latest release is v0.4.1 (21 Aug) against a 0.5.0 daemon here; the newest TestFlight build is 202608241803 uploaded 24 Aug; and LeSearch-AI/mesh \u2014 where mesh.lesearch.ai/github, /changelog and /roadmap point \u2014 was last pushed 21 Aug at \"0.4\". A friend who follows the links today installs a daemon whose seven newest capabilities the app calls and nothing answers.\n\n## Acceptance\n- [ ] `gh release view --repo LeSearch-AI/mesh-install` shows v0.5.0 as latest, and the tarball it serves carries `const VERSION = \"0.5.0\"` in install/payload/meshd/server.ts.\n- [ ] `asc testflight distribution view --build-id <new build>` shows externalBuildState IN_BETA_TESTING \u2014 not READY_FOR_BETA_SUBMISSION \u2014 so the public join link actually serves it.\n- [ ] LeSearch-AI/mesh main carries this tree's CHANGELOG and ROADMAP, so mesh.lesearch.ai/changelog shows 0.5.0.\n- [ ] Arya updates the phone from TestFlight with no cable, the watch app reports the same version, and `mesh version` on two machines reports 0.5.0.\n\n## Where it stands today \u2014 `missing`\n`gh release view --repo LeSearch-AI/mesh-install --json tagName,publishedAt` returns {\"tagName\":\"v0.4.1\",\"publishedAt\":\"2026-08-21T08:33:18Z\"} while install/payload/meshd/server.ts:20 is `const VERSION = \"0.5.0\";` \u2014 the six-day gap the issue describes is still open. install/payload/bin/mesh:435 and :1048 both point installs at that same latest release, so the published tarball is what every new machine gets. CHANGELOG.md:10 is still `## [Unreleased]` with the 0.5.0 work in it and CHANGELOG.md:92 is `## [0.4.0] \u2014 2026-08-21`, so nothing 0.5.0-shaped has been cut for LeSearch-AI/mesh to mirror.\n\n**What is actually left:** All four: cut the mesh-install v0.5.0 release, upload and promote a TestFlight build to IN_BETA_TESTING, push CHANGELOG/ROADMAP to LeSearch-AI/mesh, and verify on device + two machines.\n\n**Depends on:** Push the shipping branch and get one green CI run on its tip, Decide what version follows the 1.0 already on TestFlight",
+    "status": "missing",
+    "area": "install",
+    "effort": "M",
+    "round": "F"
+  },
+  {
+    "n": 71,
+    "title": "Push the shipping branch and get one green CI run on its tip",
+    "labels": [
+      "area:ci",
+      "effort:S",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F1`.\n\n## The problem\n\"All tests pass\" is currently a claim from one laptop. 168 commits sit only on this Mac (origin/backup/2026-07-02..HEAD), and GitHub Actions has never run on this tip. Locally `sh scripts/check-all.sh` exits 0 as of 2026-08-27, so the risk is not that it is red \u2014 it is that nobody else can see it.\n\n## Acceptance\n- [ ] `git push origin feat/product-notes-2026-08-26` completes and starts a GitHub Actions run on that head SHA (ci.yml already triggers on feat/**).\n- [ ] Both jobs \u2014 `daemon` (ubuntu) and `apps` (macos-15) \u2014 conclude `success` on that SHA, and the run URL is recorded on the issue.\n- [ ] Anything that fails on CI but passed locally is fixed on the branch; no check is deleted, disabled or excluded to get green.\n\n## Where it stands today \u2014 `missing`\ngit ls-remote --heads origin lists 15 refs and none is refs/heads/feat/product-notes-2026-08-26 (only backup/2026-07-02, feat/apns-push, launch/1.0, etc.); local HEAD = f58f5cf5fc0f6337998bf5b42b4241a2a6e21bfd with 170 commits in origin/backup/2026-07-02..HEAD; `gh run list --repo aryateja2106/lecoder-watch` shows the newest run at 2026-08-24 on claude/lesearch-mesh-menubar-533676, nothing on this branch. The trigger that would fire it does exist: .github/workflows/ci.yml:6 ('feat/**').\n\n**What is actually left:** Everything. Push the branch, watch both jobs (ci.yml daemon job at line ~19, apps job at line ~90), fix anything CI-only, and record the run URL.",
+    "status": "missing",
+    "area": "ci",
+    "effort": "S",
+    "round": "F"
+  },
+  {
+    "n": 72,
+    "title": "Say from mesh doctor when a newer daemon is available",
+    "labels": [
+      "area:install",
+      "effort:M",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F3`.\n\n## The problem\nNothing on a machine tells you it is behind. `mesh upgrade` exists, but you have to already suspect you need it; `mesh doctor` reports setup truth and says nothing about currency, and the only \"update available\" hint anywhere is in the iOS app, and only when a capability that build calls is missing (Shared/DaemonCapabilities.swift).\n\n## Acceptance\n- [ ] With a stubbed release source reporting a higher version, `mesh doctor` prints one line naming installed \u2192 available plus the exact upgrade command, and its exit code is unchanged.\n- [ ] With the network unreachable, doctor prints no extra line, adds at most 2 seconds, and still exits 0.\n- [ ] A self-check drives both paths against a local stub with no internet, and runs in CI.\n\n## Where it stands today \u2014 `missing`\ninstall/payload/meshd/doctor.ts:95 returns `{ ok, host, platform, version: info.version, bind, prompted, checks }` \u2014 the installed version and nothing about currency; the only 'latest' string in that file is a reinstall URL inside a token fix hint at doctor.ts:56. The CLI printer at install/payload/bin/mesh:317-322 prints `meshd <version> on <bind>` plus per-check rows and adds no availability line. install/payload/bin/mesh:435 knows the release URL (DEFAULT_SRC) but only cmdUpgrade uses it. scripts/check-mesh-doctor.sh contains no 'available'/'newer'/'latest' assertion. The nearest existing behaviour is app-side and capability-based, not version-based: Shared/DaemonCapabilities.swift (checked by scripts/check-daemon-gaps.sh:27-36 against the CAPABILITIES array at install/payload/meshd/server.ts:27).\n\n**What is actually left:** All three: the doctor line with installed \u2192 available and the upgrade command, the offline-safe timeout path, and a self-check driving both against a local stub.",
+    "status": "missing",
+    "area": "install",
+    "effort": "M",
+    "round": "F"
+  },
+  {
+    "n": 73,
+    "title": "Ship the Mac menu bar app instead of asking people to build it",
+    "labels": [
+      "area:install",
+      "effort:L",
+      "round:F",
+      "state:partial"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `built-but-buried: MeshDesktop menu bar app, F2`.\n\n## The problem\nMeshDesktop builds in CI on every push and is written up in the changelog as shipped, but nobody outside this Mac can run it: `mesh desktop` (install/payload/bin/mesh) tells you to run xcodebuild and copy \"LeSearch Mesh.app\" into /Applications, and install.sh never places it. For the non-technical user the product is aimed at, the permissions window and the native pairing QR do not exist.\n\n## Acceptance\n- [ ] A machine that only ran the curl installer, with no Xcode present, can run `mesh desktop` and get the menu bar app.\n- [ ] The shipped app is Developer-ID signed and notarized: `spctl -a -vvv \"/Applications/LeSearch Mesh.app\"` accepts it on a machine that never built it.\n- [ ] `mesh uninstall` removes it, and the existing install/uninstall parity check covers the app bundle and its login item.\n- [ ] The app's version matches the daemon it ships beside (same MARKETING_VERSION), verified by the version coherence check.\n\n## Where it stands today \u2014 `partial`\nThe app is real and CI-built: MeshDesktop/ holds MeshDesktopApp.swift, LocalDaemon.swift, PermissionsView.swift, PairView.swift, and .github/workflows/ci.yml:116-118 builds the MeshDesktop scheme on every push. `mesh desktop` is wired into the CLI (install/payload/bin/mesh:1496 dispatch, help row at :1321) and opens the app by bundle id when present (install/payload/bin/mesh:1038). But the shipping half is absent exactly as described: install/payload/bin/mesh:1039-1041 dies with 'MeshDesktop is not installed on this Mac' and tells you to run xcodegen + xcodebuild and copy the bundle into /Applications; install/install.sh has zero matches for 'desktop', 'MeshDesktop' or 'LeSearch Mesh.app' (grep -c returns 0), so the curl installer never places it. scripts/check-mesh-uninstall.sh (90 lines) mentions neither 'Applications' nor 'bundle', so uninstall parity does not cover the app or a login item. No notarization or signing step exists anywhere in the repo.\n\n**What is actually left:** Ship the bundle in the installer payload, Developer-ID sign and notarize it, extend the uninstall parity check to the app bundle and login item, and cover its MARKETING_VERSION in the (not-yet-written) version coherence check.\n\n**Depends on:** Make publishing a daemon release one command",
+    "status": "partial",
+    "area": "install",
+    "effort": "L",
+    "round": "F"
+  },
+  {
+    "n": 74,
+    "title": "Turn this backlog into tracked issues with labels and a template",
+    "labels": [
+      "area:docs",
+      "effort:M",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F5`.\n\n## The problem\nEvery ask lives in voice notes and markdown files. The public repo has Issues enabled and holds zero issues, so nothing can be assigned, closed, counted or linked from a commit \u2014 and the same asks keep being re-litigated from transcripts.\n\n## Acceptance\n- [ ] The tracker is chosen and named in one line of AGENTS.md (GitHub Issues on aryateja2106/lecoder-watch unless Arya picks Linear).\n- [ ] Every item in the 2026-08-26/27 backlog exists as exactly one issue carrying an area label (watch, ios, daemon, install, agents, capture, docs, ci), a problem statement in the user's terms, and testable acceptance criteria.\n- [ ] `.github/ISSUE_TEMPLATE/` holds a form that will not submit without a problem statement and at least one acceptance criterion.\n- [ ] `gh issue list --label area:watch` returns the watch items and nothing else.\n\n## Where it stands today \u2014 `missing`\n`find .github -type f` returns exactly one file: .github/workflows/ci.yml. There is no .github/ISSUE_TEMPLATE directory and no form. AGENTS.md names no tracker \u2014 grepping it for 'tracker', 'Issues' or 'Linear' returns nothing (the only 'issue'-adjacent hits are unrelated). The backlog still lives as markdown at the repo root (ROADMAP.md, PROGRESS.md, HANDOFF.md) and in docs/.\n\n**What is actually left:** All four criteria: pick and name the tracker in AGENTS.md, create the area labels, file the 2026-08-26/27 items, and add the issue form.",
+    "status": "missing",
+    "area": "docs",
+    "effort": "M",
+    "round": "F"
+  },
+  {
+    "n": 75,
+    "title": "Write down what we have, what is buried, and what is planned",
+    "labels": [
+      "area:docs",
+      "effort:M",
+      "round:F",
+      "state:missing"
+    ],
+    "body": "> Auto-drafted from a spoken backlog on 2026-08-27, then graded against the code.\n> Source: round **F** (process & release), items `F7`.\n\n## The problem\nNobody can answer \"does it already do X?\" without reading code. Nine items in this triage round turned out to be built but unreachable in the UI, and the reflex when that is unclear is to clone another reference project rather than surface what exists. README's \"What is, and is not, true yet\" covers the network story, not the feature inventory.\n\n## Acceptance\n- [ ] docs/what-we-have.md lists every capability meshd advertises in its CAPABILITIES array and every app surface, each marked shipped-and-reachable, built-but-buried, or planned, with the file that proves the verdict.\n- [ ] A check fails when CAPABILITIES contains an entry the doc does not mention, following the check-daemon-gaps.sh pattern, and runs in CI.\n- [ ] AGENTS.md gains one rule: before cloning a reference repo, record in that doc what is being taken from it and why (Wake, for session transcript locations, is the first entry).\n- [ ] The doc is listed in docs/README.md's current table so check-docs-index.sh keeps it linked.\n\n## Where it stands today \u2014 `missing`\ndocs/what-we-have.md does not exist, and grepping docs/*.md for 'what-we-have' or 'CAPABILITIES' returns nothing \u2014 no doc enumerates the 22 entries in the CAPABILITIES array at install/payload/meshd/server.ts:27. docs/README.md's current table (docs/README.md:19-33) has no row for it, so check-docs-index.sh (scripts/check-docs-index.sh:19-24, which enforces that every docs/*.md is indexed) has nothing to keep findable. AGENTS.md carries no rule about recording what is taken from a cloned reference repo \u2014 no 'Wake' or 'clone' hit in the file. The pattern the check should follow does exist and works: scripts/check-daemon-gaps.sh:27-36 already parses that same CAPABILITIES array.\n\n**What is actually left:** All four: write the inventory doc, add the CAPABILITIES-coverage check on the check-daemon-gaps.sh pattern and put it in CI, add the AGENTS.md clone rule, and add the docs/README.md row.",
+    "status": "missing",
+    "area": "docs",
+    "effort": "M",
+    "round": "F"
+  }
+]

@@ -63,6 +63,12 @@ jobs:
       - name: check-mesh-version.sh
         run: sh scripts/check-mesh-version.sh
 
+      - name: check-paste-epipe.sh
+        run: sh scripts/check-paste-epipe.sh
+
+      - name: check-mesh-uninstall.sh
+        run: sh scripts/check-mesh-uninstall.sh
+
       - name: check-token-rotate.sh
         run: sh scripts/check-token-rotate.sh
 
