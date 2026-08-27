@@ -54,3 +54,47 @@ grep -q '"doctor"' "$ROOT/install/payload/meshd/server.ts" || {
   exit 1
 }
 echo "check-mesh-doctor: server.ts wired"
+
+# The CLI side, which nothing tested and which was broken. `mesh doctor --fix` is the
+# only thing that makes macOS raise the real Accessibility and Screen Recording dialogs
+# — TCC only ever prompts from the process that wants the grant — so a --fix that
+# quietly does a GET tells a new user to approve a permission nothing has asked for.
+#
+# It read the flag out of `flags`, but parse() only writes there for flags that TAKE a
+# value; a bare --fix lands in `bools`. So `"fix" in flags` was always false from the
+# command line, while the setup wizard's direct call with { fix: "" } worked — which is
+# why it looked fine in the one place anybody exercised it.
+#
+# Asserted by watching which method actually arrives, not by reading the source.
+CLI="$ROOT/install/payload/bin/mesh"
+LOG="$TMP/methods.log"
+/usr/bin/python3 - "$TMP" <<'PY' 2>"$LOG" &
+import http.server, socketserver, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def _r(self):
+        sys.stderr.write("%s %s\n" % (self.command, self.path)); sys.stderr.flush()
+        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
+        self.wfile.write(b'{"ok":true,"checks":[],"total":0}')
+    do_GET = do_POST = _r
+    def log_message(self, *a): pass
+socketserver.TCPServer(("127.0.0.1", 8893), H).serve_forever()
+PY
+STUB=$!
+i=0
+while [ "$i" -lt 40 ]; do
+  curl -sf -m 1 "http://127.0.0.1:8893/doctor" >/dev/null 2>&1 && break
+  i=$((i + 1))
+done
+
+printf '{"default":"probe","hosts":{"probe":{"ip":"127.0.0.1","port":8893,"token":"t"}}}\n' \
+  > "$TMP/hosts.json"
+MESH_HOME="$TMP" bun "$CLI" doctor       >/dev/null 2>&1 || true
+MESH_HOME="$TMP" bun "$CLI" doctor --fix >/dev/null 2>&1 || true
+kill "$STUB" 2>/dev/null || true
+wait "$STUB" 2>/dev/null || true
+
+grep -q '^GET /doctor$' "$LOG" \
+  || { echo "FAIL: check-mesh-doctor: plain \`mesh doctor\` did not GET /doctor (saw: $(tr '\n' ';' < "$LOG"))"; exit 1; }
+grep -q '^POST /doctor/fix$' "$LOG" \
+  || { echo "FAIL: check-mesh-doctor: \`mesh doctor --fix\` never reached POST /doctor/fix, so no permission dialog can appear (saw: $(tr '\n' ';' < "$LOG"))"; exit 1; }
+echo "check-mesh-doctor: CLI --fix reaches POST /doctor/fix"

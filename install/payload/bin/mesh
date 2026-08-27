@@ -309,9 +309,15 @@ async function cmdStatus(cfg: Config) {
 // /doctor/fix, which makes macOS show the real Accessibility and Screen Recording
 // dialogs on that machine — the honest version of "a proper permission dialog",
 // since TCC only ever prompts from the process that needs the grant.
-async function cmdDoctor(flags: Record<string, string>, cfg: Config) {
+async function cmdDoctor(flags: Record<string, string>, cfg: Config, bools: Set<string> = new Set()) {
   const h = resolveHost(hostOf(flags), cfg);
-  const fix = "fix" in flags;
+  // `--fix` typed on the command line lands in `bools`, not `flags`: parse() only writes
+  // to `flags` for the flags that take a value. Reading `flags` alone meant `mesh doctor
+  // --fix` quietly did a GET — so the Accessibility and Screen Recording dialogs this
+  // command exists to raise never appeared, and the user was told to approve something
+  // nothing had asked them for. The setup wizard calls this directly with { fix: "" },
+  // so both spellings have to keep working.
+  const fix = "fix" in flags || bools.has("fix");
   const r = await api(h, fix ? "POST" : "GET", fix ? "/doctor/fix" : "/doctor");
   out(() => {
     console.log(`${h.name}: meshd ${r.version} on ${r.bind} (${r.platform})${r.ok ? " — all good" : ""}`);
@@ -1520,7 +1526,7 @@ async function main() {
     case "health": return cmdHealth(flags, cfg);
     case "status": return cmdStatus(cfg);
     case "upgrade": case "update": return cmdUpgrade(flags, bools, cfg);
-    case "doctor": return cmdDoctor(flags, cfg);
+    case "doctor": return cmdDoctor(flags, cfg, bools);
     case "events": return cmdEvents(flags, cfg);
     case "uninstall": return cmdUninstall(bools, cfg);
     default: die(`unknown command: ${cmd}  (try: mesh help)`);
