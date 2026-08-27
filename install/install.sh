@@ -722,14 +722,37 @@ validate_payload
 #
 # A DIFFERENT version still installs: for someone whose `mesh` is too old to run
 # `mesh upgrade`, this one-liner is the upgrade path, and refusing would strand them.
+#
+# And matching versions are NOT enough on their own. Re-running the one-liner is also the
+# documented repair — it is what someone does when a machine has vanished from their phone,
+# because it reinstalls the service and restarts it. Skipping on version alone answered
+# "nothing to do" to a person staring at a dead daemon, which is the single worst moment to
+# say it. So the machine also has to be ANSWERING before we decline to do anything: same
+# version AND a live daemon means there is genuinely nothing to repair; same version and
+# silence means repair is exactly what was asked for.
+daemon_answering() {
+  probe_port="${MESHD_PORT:-$MESHD_DEFAULT_PORT}"
+  # Any HTTP status at all proves something is listening and speaking. 000 is curl for
+  # "nothing there". /health needs no token over loopback, but even a 401 would do.
+  # `|| printf '000'` would be wrong here and was: curl ALREADY prints 000 when it cannot
+  # connect, and still exits non-zero, so the fallback appended a second one and the test
+  # compared "000000" against "000" — every dead daemon read as alive.
+  probe_code=$(curl -s -o /dev/null -w '%{http_code}' -m 3 \
+    "http://127.0.0.1:${probe_port}/health" 2>/dev/null || true)
+  [ -n "$probe_code" ] && [ "$probe_code" != "000" ]
+}
+
 INSTALLED_VERSION=$(tree_version "$MESH_HOME/meshd/server.ts")
 PAYLOAD_VERSION=$(tree_version "$PAYLOAD_DIR/meshd/server.ts")
 if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" = "$PAYLOAD_VERSION" ] \
-   && [ "$DO_UPGRADE" != "1" ] && [ "$DO_FORCE" != "1" ]; then
-  log "meshd $INSTALLED_VERSION is already installed at $MESH_HOME — nothing to do."
+   && [ "$DO_UPGRADE" != "1" ] && [ "$DO_FORCE" != "1" ] && daemon_answering; then
+  log "meshd $INSTALLED_VERSION is already installed at $MESH_HOME and answering — nothing to do."
   log "  check it:     $MESH_HOME/bin/mesh doctor"
   log "  reinstall:    re-run with --force"
   exit 0
+fi
+if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" = "$PAYLOAD_VERSION" ]; then
+  log "meshd $INSTALLED_VERSION is installed but not answering — reinstalling to repair it"
 fi
 if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" != "$PAYLOAD_VERSION" ]; then
   log "Upgrading in place: meshd $INSTALLED_VERSION → ${PAYLOAD_VERSION:-unknown} (token and config preserved)"
