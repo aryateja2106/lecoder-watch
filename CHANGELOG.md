@@ -9,6 +9,18 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Fixed
+- **`mesh doctor --fix` never asked macOS for anything.** A bare `--fix` was parsed
+  into a bucket the command never looked at, so the one invocation that exists to
+  raise Accessibility and Screen Recording dialogs quietly did a GET instead. The
+  setup wizard still worked; anyone following the docs during first setup did not.
+
+## [0.5.0] — 2026-08-27
+
+Daemon and apps now share marketing version 0.5.0. `mesh-install` v0.5.0 is the
+public payload — `mesh version` reads that number from the daemon on the machine,
+not a stale constant in the CLI.
+
 ### Added
 - **A Mac menu bar app: every permission in one window.** LeSearch Mesh now sits in the
   menu bar — a filled dot while this machine's daemon is answering, hollow when it

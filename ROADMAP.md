@@ -26,22 +26,18 @@ every capability is one module and a small `server.ts` patch; every claim gets a
 Every item below is finished code that no user is running. Until these clear, building
 more features adds nothing a person can touch, and no feedback can come back.
 
-- **Publish `mesh-install` v0.5.0.** The fleet installs whatever that repo last released,
-  which is **v0.4.1 from 21 Aug**. Its `/health` has no `capabilities` field at all, so
-  seven capabilities the apps call every day are answered by nothing — and it still ships
-  the `lsof -ti :PORT | xargs kill -9` that SIGKILLs the daemon whenever an interactive
-  shell starts. **Every new user currently installs a daemon that dies when they open a
-  terminal.** The 0.5.0 payload is built and smoke-tested: 22 capabilities, daemon boots,
-  `mesh version` agrees with it.
-- **Give `mesh.lesearch.ai` a DNS record.** It has none. The install command in the
-  README, on the website, and in the launch drafts cannot resolve for anybody — ten
-  references across four files, all dead. One Cloudflare CNAME to `cname.vercel-dns.com`,
-  DNS-only, fixes all ten. The site itself is already deployed and healthy at
-  `lesearch-mesh-web.vercel.app`.
+- **Give `mesh.lesearch.ai` a DNS record.** Vercel already serves the site (alias
+  `mesh.lesearch.ai` → `lesearch-mesh-web`) and the hostname still does not resolve.
+  One Cloudflare CNAME, name `mesh`, target `cname.vercel-dns.com`, **DNS only**
+  (gray cloud — same as `www` and `lecoder`), fixes the README, the website, and
+  `curl https://mesh.lesearch.ai/install.sh`. Do not orange-cloud it: that double-proxies
+  Vercel and breaks TLS.
 - **Submit the latest build for Beta App Review.** Uploading is not publishing: external
   testers — everyone holding the public link — only receive a build after review. The
   Aug 21 and Aug 24 builds are both sitting at `READY_FOR_BETA_SUBMISSION`, so the newest
   build a friend can install is from **20 Aug**. See [`docs/updating.md`](docs/updating.md).
+  `mesh-install` **v0.5.0 is published** (27 Aug); machines update with `mesh upgrade`
+  or a fresh curl of the GitHub release. Phones do not.
 
 ## Now — beta hardening (0.5)
 
