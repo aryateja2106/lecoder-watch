@@ -22,27 +22,45 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ok=1
 bad() { echo "FAIL: check-bridge-kill-scope.sh: $1"; ok=0; }
 
-# Every script that force-kills by port. Add files here; never add exceptions.
-for rel in install/payload/bin/start-cmux-bridge-inner.zsh install/payload/hooks/cmux-bridge.zsh; do
-  f="$ROOT/$rel"
-  [ -f "$f" ] || { bad "$rel is missing"; continue; }
+# Discover, rather than list. The previous version named two files by hand; one of them
+# was later deleted and the other was the only thing still covered, so a new script with
+# the same defect would have been invisible. Anything shipped in the payload that kills
+# by port is in scope.
+files="$(find "$ROOT/install/payload" -type f \( -name '*.sh' -o -name '*.zsh' -o -perm -u+x \) 2>/dev/null | sort -u)"
+[ -n "$files" ] || bad "found no payload scripts to scan — the search itself is broken"
 
-  # No `kill -9` line may select processes by port without restricting to the listener.
-  # Comments are stripped first — the explanation of this very bug says "kill -9" and
-  # would otherwise report itself as the bug.
-  unscoped="$(grep -v '^[[:space:]]*#' "$f" | grep 'kill -9' | grep -v 'sTCP:LISTEN' || true)"
+scanned=0
+for f in $files; do
+  case "$f" in *.ts|*.swift|*.json|*.md) continue ;; esac
+  grep -q 'lsof' "$f" 2>/dev/null || continue
+  rel="${f#$ROOT/}"
+  scanned=$((scanned + 1))
+
+  # Strip comments before judging, or the paragraph explaining this very bug reports
+  # itself. Trailing comments too: `kill -9 $pid  # only the listener, honest` used to
+  # launder an unscoped kill straight past a whole-line-only filter.
+  body="$(sed -e 's/[[:space:]]#.*$//' -e 's/^[[:space:]]*#.*$//' "$f")"
+
+  # Every spelling of SIGKILL, not just `kill -9`. `kill -KILL`, `kill -s KILL` and
+  # `kill -SIGKILL` are the same instruction and were all invisible before.
+  unscoped="$(printf '%s\n' "$body" \
+    | grep -E 'kill[[:space:]]+(-9|-KILL|-SIGKILL|-s[[:space:]]+(KILL|SIGKILL|9))' \
+    | grep -v 'sTCP:LISTEN' || true)"
   if [ -n "$unscoped" ]; then
     bad "$rel force-kills by port without -sTCP:LISTEN, which also kills every client of that port — meshd is one:"
     printf '    %s\n' "$unscoped"
   fi
 
-  # The scoped form must actually be there, so deleting the kill outright (or renaming
-  # the flag) cannot read as success.
-  grep -q 'lsof -ti "tcp:' "$f" \
-    || bad "$rel no longer selects the port owner with lsof -ti tcp:<port>"
-  grep -q -- '-sTCP:LISTEN' "$f" \
-    || bad "$rel no longer restricts its kill to the listening process"
+  # Where a kill exists at all, the scoped selector must be present, so deleting the
+  # restriction (or renaming the flag) cannot read as success.
+  if printf '%s\n' "$body" | grep -qE 'kill[[:space:]]+(-9|-KILL|-SIGKILL|-s[[:space:]]+(KILL|SIGKILL|9))'; then
+    printf '%s\n' "$body" | grep -q 'lsof -ti "tcp:' \
+      || bad "$rel no longer selects the port owner with lsof -ti tcp:<port>"
+    printf '%s\n' "$body" | grep -q -- '-sTCP:LISTEN' \
+      || bad "$rel no longer restricts its kill to the listening process"
+  fi
 done
+[ "$scanned" -gt 0 ] || bad "scanned 0 payload scripts that touch lsof — this check has stopped checking anything"
 
 [ "$ok" -eq 1 ] || exit 1
 echo "check-bridge-kill-scope: OK (the bridge starter kills only the port's listener, never meshd)"

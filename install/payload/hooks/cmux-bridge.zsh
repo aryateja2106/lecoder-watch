@@ -8,6 +8,7 @@ start_cmux_bridge() {
   local mesh_home="${MESH_HOME:-$HOME/.mesh}"
   local cmux_port="${CMUX_PORT:-9160}"
   local log="/tmp/cmux-bridge.log"
+  local stamp="${TMPDIR:-/tmp}/.cmux-bridge-restart"
 
   # Healthy means THE BRIDGE ANSWERS. It used to mean "cmux currently has at least one
   # window open", which is not a property of the bridge at all — it is a property of a
@@ -21,11 +22,17 @@ start_cmux_bridge() {
     return 0
   fi
 
-  # Someone already holds the port and is presumably still booting. Two shells opened a
-  # second apart must not fight over it.
+  # Something holds the port but is not answering: either still booting, or wedged.
+  # Shooting it immediately lets a burst of shells kill a bridge that is merely starting;
+  # never shooting it leaves a wedged one there forever — an unconditional early return
+  # here made the kill below unreachable, because it selects by the very same predicate.
+  # So: at most one restart attempt per minute, shared across every shell.
   if lsof -ti "tcp:${port}" -sTCP:LISTEN >/dev/null 2>&1; then
-    return 0
+    if [ -f "$stamp" ] && [ -z "$(find "$stamp" -mmin +1 2>/dev/null)" ]; then
+      return 0
+    fi
   fi
+  : > "$stamp" 2>/dev/null || true
 
   # -sTCP:LISTEN is load-bearing. `lsof -i :PORT` matches a socket with that port on
   # EITHER end, so the bare form also listed every client CONNECTED to the bridge —

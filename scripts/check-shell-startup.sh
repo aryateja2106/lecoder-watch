@@ -61,6 +61,73 @@ case "$ELAPSED_MS" in
     ;;
 esac
 
+# ---- the wedged-listener path, which the case above structurally cannot see ----
+# `curl -m 1` only costs its full timeout when something ACCEPTS the connection and then
+# never answers. The probe above deliberately uses a FREE port, where connect fails
+# instantly (62ms measured) — so on its own it would pass a hook that blocks a full
+# second on every shell. This case stands up a listener that accepts and says nothing,
+# which is what a wedged bridge looks like.
+if command -v python3 >/dev/null 2>&1; then
+  WPORT=""
+  for candidate in 8941 8942 8943 8944 8945; do
+    if ! lsof -ti "tcp:$candidate" -sTCP:LISTEN >/dev/null 2>&1; then WPORT="$candidate"; break; fi
+  done
+  if [ -z "$WPORT" ]; then
+    note "SKIP (wedged case) — no free port to stand a listener on"
+  else
+    python3 -c "
+import socket, time
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('127.0.0.1', $WPORT)); s.listen(8); s.settimeout(0.2)
+# HOLD every accepted connection. Dropping it lets CPython garbage-collect and CLOSE the
+# socket, so curl gets an instant EOF instead of hanging — this measured 66ms instead of
+# the ~1000ms it is supposed to reproduce, i.e. the check silently tested nothing.
+held = []
+end = time.time() + 30
+while time.time() < end:
+    try:
+        conn, _ = s.accept()
+        held.append(conn)     # accepted, and deliberately never answered
+    except Exception:
+        pass
+" >/dev/null 2>&1 &
+    LPID=$!
+    sleep 1
+
+    # A private TMPDIR so the hook's restart stamp cannot be pre-warmed by a real shell
+    # on this machine — a fresh stamp would send it down the early-return and measure
+    # nothing.
+    WTMP="$(mktemp -d)"
+    WEDGED_MS="$(zsh -f -c '
+      nohup()     { : }
+      launchctl() { : }
+      export TMPDIR="'"$WTMP"'"
+      export CMUX_BRIDGE_PORT="'"$WPORT"'"
+      source "'"$HOOK"'" 2>/dev/null
+      typeset -F SECONDS=0
+      start_cmux_bridge >/dev/null 2>&1 || true
+      printf "%.0f" $(( SECONDS * 1000 ))
+    ' 2>/dev/null || echo "99999")"
+    kill "$LPID" 2>/dev/null || true
+    wait "$LPID" 2>/dev/null || true
+    rm -rf "$WTMP"
+
+    WEDGED_BUDGET_MS=2500
+    case "$WEDGED_MS" in
+      ''|*[!0-9]*) bad "could not time the wedged-listener path (got: '$WEDGED_MS')" ;;
+      *)
+        if [ "$WEDGED_MS" -gt "$WEDGED_BUDGET_MS" ]; then
+          bad "a wedged bridge costs ${WEDGED_MS}ms per shell (budget ${WEDGED_BUDGET_MS}ms)"
+        else
+          note "a wedged bridge (accepts, never answers) costs ${WEDGED_MS}ms (budget ${WEDGED_BUDGET_MS}ms)"
+        fi
+        ;;
+    esac
+  fi
+else
+  note "SKIP (wedged case) — no python3 to stand a listener on"
+fi
+
 # The specific wrong question, kept out by name. Whether cmux has windows open — or is
 # running at all — says nothing about whether the bridge is healthy, and conflating them
 # is what made the timeout unreachable.
