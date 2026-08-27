@@ -85,6 +85,19 @@ awk '/func scroll\(/,/^}/' "$SRC" | grep -q 'settle:' \
 awk '/func pressKey\(|func typeText\(/,/^}/' "$SRC" | grep -q 'settle: keyFence' \
   || { echo "FAIL: key/text events no longer settle — a dropped pair sticks a modifier"; fail=1; }
 
+# --- sticky modifier chips ---
+# The watch's Keyboard screen shows ⌘⇧⌥⌃ instead of the words, because spelled out they
+# wrapped mid-word inside a 40mm chip ("cm d", "shi ft"). A glyph is only safe if the
+# NAME behind it is one the Mac can map — a pretty chip wired to an unknown modifier is
+# a key that silently does nothing, and nothing on screen would say so.
+mods=$(awk '/static let modifiers:/,/^    \]/' "$VIEW" | sed -n 's/.*("\([a-z]*\)",.*/\1/p')
+[ -n "$mods" ] || { echo "FAIL: the watch no longer declares its sticky modifiers"; fail=1; }
+awk '/^let MODIFIERS/,/^\]/' "$SRC" | grep -oE '"[a-z]+"' | tr -d '"' | sort -u > "$TMP/known-mods"
+for m in $mods; do
+  grep -qx "$m" "$TMP/known-mods" \
+    || { echo "FAIL: the Keyboard screen offers modifier \"$m\", which mesh-input cannot map"; fail=1; }
+done
+
 [ "$fail" -eq 0 ] || exit 1
 
 printf 'OK: mesh-input compiles; %s keys, %s media, %s window, %s system all mapped\n' \

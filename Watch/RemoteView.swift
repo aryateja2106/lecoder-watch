@@ -1134,13 +1134,23 @@ struct RemoteKeysView: View {
             }
             Section("Hold for next key") {
                 HStack(spacing: 4) {
-                    ForEach(["cmd", "shift", "opt", "ctrl"], id: \.self) { mod in
-                        Button(mod) {
-                            if remote.sticky.contains(mod) { remote.sticky.remove(mod) } else { remote.sticky.insert(mod) }
+                    // The glyphs, not the words. Spelled out, "cmd" and "shift" wrapped
+                    // mid-word inside a 40mm chip — the row read "cm d / shi ft / opt /
+                    // ctrl", which is unreadable and looks broken. ⌘⇧⌥⌃ are the symbols
+                    // already printed on the keyboard these keys live on, they are one
+                    // glyph wide so nothing can wrap, and they are what a Mac user is
+                    // looking for when reading a shortcut back.
+                    ForEach(Self.modifiers, id: \.name) { mod in
+                        Button(mod.glyph) {
+                            if remote.sticky.contains(mod.name) { remote.sticky.remove(mod.name) }
+                            else { remote.sticky.insert(mod.name) }
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
-                        .tint(remote.sticky.contains(mod) ? .orange : nil)
+                        .tint(remote.sticky.contains(mod.name) ? .orange : nil)
+                        // The glyph carries no meaning to VoiceOver, so the word does.
+                        .accessibilityLabel(mod.spoken)
+                        .accessibilityValue(remote.sticky.contains(mod.name) ? "held" : "off")
                     }
                 }
             }
@@ -1157,6 +1167,23 @@ struct RemoteKeysView: View {
         }
         .navigationTitle("Keyboard")
     }
+
+    /// The sticky modifiers, as the glyph on the keycap plus the word VoiceOver says.
+    ///
+    /// `name` is the wire value and must stay one of the strings MODIFIERS accepts in
+    /// install/payload/bin/mesh-input.swift — cmd, shift, opt, ctrl, fn. A glyph that
+    /// looks right but carries a name the Mac cannot map is a key that silently does
+    /// nothing, so check-mesh-input asserts these against the helper's own table.
+    ///
+    /// fn keeps its letters: Apple prints "fn" on the key itself (the globe is a
+    /// different, newer thing), and two characters cannot wrap.
+    static let modifiers: [(name: String, glyph: String, spoken: String)] = [
+        ("cmd",   "⌘",  "Command"),
+        ("shift", "⇧",  "Shift"),
+        ("opt",   "⌥",  "Option"),
+        ("ctrl",  "⌃",  "Control"),
+        ("fn",    "fn", "Function"),
+    ]
 
     private func keyButton(_ key: String, _ symbol: String) -> some View {
         Button { remote.key(key) } label: { Image(systemName: symbol).font(.caption) }
