@@ -28,13 +28,44 @@ WANT="$(tr -d '\000' < "$SERVER" | sed -n 's/^[[:space:]]*const VERSION[[:space:
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# A stub that answers /health, so the "already installed" path can be exercised without a
+# real daemon. The gate deliberately requires a LIVE daemon, not just matching versions —
+# see below — so a check with nothing listening would only ever test the repair path.
+# 8890, not 8891: that one is a CRM this developer runs, and a check must never fight a
+# real service for a port. The other checks in this repo sit on 8892-8896.
+PROBE_PORT=8890
+PY3=""
+for c in python3 /usr/bin/python3; do command -v "$c" >/dev/null 2>&1 && { PY3="$c"; break; }; done
+STUB=""
+start_stub() {
+  [ -n "$PY3" ] || return 1
+  # `python3 -m http.server` rather than an inline server: the gate accepts ANY HTTP status
+  # as proof that something is listening, so a 404 from the stdlib module is as good as a
+  # 200 from a hand-rolled handler, and there is nothing here to get wrong.
+  "$PY3" -m http.server "$PROBE_PORT" --bind 127.0.0.1 >/dev/null 2>&1 &
+  STUB=$!
+  i=0
+  while [ "$i" -lt 60 ]; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' -m 1 "http://127.0.0.1:$PROBE_PORT/health" 2>/dev/null || true)
+    [ -n "$code" ] && [ "$code" != "000" ] && return 0
+    sleep 0.2
+    i=$((i + 1))
+  done
+  kill "$STUB" 2>/dev/null || true
+  STUB=""
+  return 1
+}
+
+stop_stub() { if [ -n "$STUB" ]; then kill "$STUB" 2>/dev/null || true; wait "$STUB" 2>/dev/null || true; STUB=""; fi; return 0; }
+trap 'stop_stub; rm -rf "$TMP"' EXIT
+
 # `--only tools` keeps this off the network: no bun bootstrap, no daemon, no services.
 run_install() {
   sb="$1"; shift
   mkdir -p "$sb"
   # `|| true` matters: under `set -e` a failing install aborts this whole check before it
   # can say what went wrong, so a caught bug looks like a broken test rather than a report.
-  ( cd "$ROOT/install" && HOME="$sb" MESH_HOME="$sb/.mesh" \
+  ( cd "$ROOT/install" && HOME="$sb" MESH_HOME="$sb/.mesh" MESHD_PORT="$PROBE_PORT" \
       sh "$INSTALL" --prefix "$sb/.mesh" --only tools --no-start "$@" ) >"$sb/out.log" 2>&1 \
     && printf 0 > "$sb/exit" || printf '%s' "$?" > "$sb/exit"
 }
@@ -44,7 +75,14 @@ fake_install() {   # $1 = sandbox, $2 = version to pretend is installed
   printf 'const VERSION = "%s";\n' "$2" > "$1/.mesh/meshd/server.ts"
 }
 
-# 1. Same version already there: say so, change nothing, exit clean.
+# 1. Same version already there AND the daemon is answering: say so, change nothing.
+if ! start_stub; then
+  if [ -z "$PY3" ]; then
+    echo "check-install-idempotent: NOTE — skip case not exercised, no python3 for the /health stub"
+  else
+    echo "check-install-idempotent: NOTE — skip case not exercised, could not bind 127.0.0.1:$PROBE_PORT"
+  fi
+else
 A="$TMP/same"
 fake_install "$A" "$WANT"
 run_install "$A"
@@ -54,13 +92,28 @@ grep -qi 'already installed' "$A/out.log" \
 [ ! -d "$A/.mesh/bin" ] \
   || bad "it skipped but still wrote bin/ — on macOS that costs the user their Accessibility grant"
 
-# 2. --force is the way through.
+# 2. --force is the way through, even with a healthy daemon.
 B="$TMP/force"
 fake_install "$B" "$WANT"
 run_install "$B" --force
 grep -qi 'already installed' "$B/out.log" \
   && bad "--force was ignored — there is no way to deliberately reinstall"
 [ -d "$B/.mesh/bin" ] || bad "--force did not actually install anything"
+fi
+stop_stub
+
+# 1b. Same version, but the daemon is DEAD. Re-running the one-liner is the documented
+#     repair — it reinstalls the service and restarts it — so this must NOT be skipped.
+#     Skipping on version alone answered "nothing to do" to somebody staring at a machine
+#     that had vanished from their phone, which is the worst possible moment for it.
+R="$TMP/repair"
+fake_install "$R" "$WANT"
+run_install "$R"
+grep -qi 'nothing to do' "$R/out.log" \
+  && bad "a DEAD daemon at the same version was told 'nothing to do' — the one-liner is the repair path and it just refused to repair"
+[ -d "$R/.mesh/bin" ] \
+  || bad "a dead daemon at the same version was not reinstalled, so nothing restarted it"
+
 
 # 3. An older install must still upgrade. This one-liner IS the upgrade path for anyone
 #    whose `mesh` predates `mesh upgrade`.
@@ -98,4 +151,5 @@ else
 fi
 
 [ "$ok" -eq 1 ] || exit 1
-echo "check-install-idempotent: OK (same version skips, --force overrides, older upgrades, unset SHELL survives)"
+echo "check-install-idempotent: OK (live daemon skips, dead one is repaired, --force overrides, older upgrades, unset SHELL survives)"
+exit 0

@@ -9,6 +9,18 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-08-27 (installer only)
+
+### Fixed
+- **Re-running the install command repairs a dead machine again.** 0.5.1 added a check
+  that skips reinstalling when the same version is already there — which is right when
+  everything is working, and exactly wrong when it isn't. Re-running the one-liner is
+  also the documented repair: it reinstalls the service and restarts it, and it is what
+  you reach for when a machine has vanished from your phone. It was answering *"already
+  installed — nothing to do"* to somebody staring at a dead daemon. It now skips only
+  when the daemon is both the same version **and answering**; silence means repair is
+  precisely what was asked for.
+
 ## [0.5.1] — 2026-08-27 (daemon only)
 
 ### Fixed
