@@ -16,7 +16,7 @@ project context every spec is written against.
 
 ---
 
-## The five rules that have actually cost days
+## The rules that have actually cost days
 
 **1. Verify by running, not by building.** Three features have shipped correct and
 completely dead: one because no hook was ever registered, one because event hostnames never
@@ -57,6 +57,47 @@ MESHD_PORT=8898 MESHD_HOST=127.0.0.1 MESHD_TOKEN=throwaway \
   bun run install/payload/meshd/server.ts
 ```
 
+**6. The shipped payload is not the payload in this repo.** Users — including the author —
+run whatever `mesh-install` last released, and that is usually behind. Measured on
+2026-08-27: `mesh-install` latest was **v0.4.1 (21 Aug)** while this repo's daemon was
+**0.5.0**, so seven capabilities the Swift actively calls (`screenRegion`, `power`,
+`paste`, `openUrl`, `laPush`, `sessionStatus`, `captureJoin`) were answered by nothing on
+every machine in the fleet, and the installed `mesh-hook` was a 152-line build against
+182 lines here. A whole week of "the watch cannot show readable text" was a daemon a
+version behind, not app code. Before debugging any daemon-side behaviour against a real
+machine, ask what it is actually running:
+
+```sh
+curl -s http://127.0.0.1:8899/health | python3 -m json.tool | head -20
+```
+
+An old daemon does not refuse a new parameter. It answers **200 with the old shape**,
+which is indistinguishable from the feature being broken.
+
+**7. This shell is zsh, and zsh does not word-split unquoted variables.** In bash,
+`dest="-destination id=X"; xcodebuild $dest` passes two arguments; in zsh it passes one.
+`xcodebuild` could not parse it, silently fell back to "first of multiple matching
+destinations", built for a **device** instead of the simulator, and printed
+`** BUILD SUCCEEDED **`. The verification screenshot that followed was of a stale
+simulator binary, and the conclusion drawn from it was wrong. Pass multi-word arguments
+literally, or use an array:
+
+```sh
+DEPS=(Shared/Models.swift Shared/LimitHelpers.swift)
+swiftc -Onone -o /tmp/check scripts/check-x.swift "${DEPS[@]}"
+```
+
+**8. `lsof -i :PORT` matches that port on EITHER end.** It is not "who owns this port", it
+is "who is talking on this port" — so `lsof -ti ":$port" | xargs kill -9` kills the
+listener *and every client connected to it*. The cmux-bridge starter did exactly that, on
+every interactive shell, and meshd is one of those clients because `/agents` queries the
+bridge. Opening a terminal could `kill -9` the user's running daemon. When the intent is
+"replace the server", always:
+
+```sh
+lsof -ti "tcp:$port" -sTCP:LISTEN
+```
+
 Secrets: real tokens live in `~/.mesh/hosts.json` and `~/.mesh/token`. Read them into a
 shell variable; never print one, never paste one into a file, and never write a literal
 token into code or docs. **There is no such thing as `testtoken`** — it was a real
@@ -66,6 +107,10 @@ down in this file. It is not written down any more.
 ---
 
 ## Where things are
+
+Everything under `docs/` is indexed in **[docs/README.md](docs/README.md)**, split into
+what is still true and what is a dated snapshot. Five of those files name branches and
+next steps that were correct in June and July and are wrong now; the index says which.
 
 | Path | What it is |
 |---|---|
