@@ -136,6 +136,15 @@ def main():
         raw = pick(doc, "session", "cwd", "workspace")
         if raw:
             session = os.path.basename(raw.rstrip("/")) or raw
+    # The identity the AGENT owns, which no multiplexer is involved in. Claude Code puts
+    # `session_id` on every hook payload and Codex puts one on its own; we were throwing
+    # it away and then trying to guess an identity from tmux, which is why a desktop-app
+    # or worktree session was never matched to anything and the wrist reported that
+    # nothing was waiting. `cwd` rides along purely as a label a human recognises — it is
+    # not an identity, because two sessions can share one.
+    session_id = pick(doc, "session_id", "sessionId")
+    cwd = pick(doc, "cwd", "workspace")
+
     payload_doc = {
         "source": args.source,
         "title": title,
@@ -144,6 +153,10 @@ def main():
         "level": args.level or event_level(args.source, doc),
         "replyable": replyable,
     }
+    if session_id:
+        payload_doc["sessionId"] = session_id
+    if cwd:
+        payload_doc["cwd"] = cwd
     if pane:
         payload_doc["pane"] = pane
     if args.dry_run:

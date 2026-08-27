@@ -669,6 +669,13 @@ type AgentEvent = {
   // Exact mux pane (#S:#I.#P) the event came from; a reply sent with this as the
   // pane target lands in the agent's pane even when another pane is active.
   pane?: string;
+  // The identity the AGENT owns — Claude Code's session_id, Codex's thread id — which
+  // exists whether or not the session is inside a multiplexer. `session` above is only
+  // ever what the hook could resolve locally, and outside a pane that is a directory,
+  // which matches nothing the client can list. Optional so older producers are unchanged.
+  sessionId?: string;
+  // The agent's working directory. A label, never an identity: two sessions can share it.
+  cwd?: string;
 };
 
 async function readEvents(since?: string | null): Promise<AgentEvent[]> {
@@ -763,6 +770,8 @@ async function addEvent(input: any): Promise<AgentEvent> {
     createdISO: input.createdISO ? String(input.createdISO) : now,
     replyable: typeof input.replyable === "boolean" ? input.replyable : undefined,
     pane: input.pane ? String(input.pane) : undefined,
+    sessionId: input.sessionId ? String(input.sessionId).slice(0, 200) : undefined,
+    cwd: input.cwd ? String(input.cwd).slice(0, 500) : undefined,
   };
   // The directory the events actually live in — not ~/.mesh unconditionally, which
   // both touched the real home under a redirected MESHD_EVENTS_PATH and failed to

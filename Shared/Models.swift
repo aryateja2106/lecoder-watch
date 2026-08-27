@@ -282,6 +282,10 @@ struct TailnetSnapshot: Codable, Hashable {
 struct Agent: Codable, Hashable, Identifiable {
     var id: String { name }
     var name: String
+    /// The agent's own session id, when the daemon could learn one. Matching on this
+    /// instead of `name` is what lets a session that is not a multiplexer pane be found.
+    /// Optional: a plain rmux session has no such id and is still matched by name.
+    var sessionId: String?
     var title: String?
     var windows: Int
     var createdISO: String?
@@ -481,6 +485,22 @@ struct AgentEvent: Codable, Hashable, Identifiable {
     var replyable: Bool?
     /// meshd 0.4.2+: the exact `session:window.pane` for pane-precise replies.
     var pane: String?
+    /// The identity the AGENT gave us, independent of any multiplexer — Claude Code's
+    /// `session_id`, a UUID present on every hook payload.
+    ///
+    /// `session` above is whatever mesh-hook could resolve, which outside a mux pane is
+    /// the working directory. That never equals a name `/agents` lists, so the join that
+    /// decides "is anything waiting on you" silently found nothing. Measured live: 83
+    /// events carrying worktree paths against agents named watch-shell-21068 and
+    /// watch-shell-292 — the wrist said nothing was waiting while a warning sat unread.
+    ///
+    /// Optional so an older daemon's rows, and rows already written to
+    /// agent-events.jsonl, still decode.
+    var sessionId: String?
+    /// Where the agent is working. Not an identity — two sessions can share a cwd — but
+    /// it is the only human-readable label a non-mux session has, so the row can say
+    /// "feat-x" instead of a UUID.
+    var cwd: String?
 }
 
 // MARK: - The live card
@@ -511,6 +531,27 @@ struct LiveSessionPick: Hashable {
 /// session being open — `mesh-hook` posts one the moment an agent asks a question.
 /// A session that has since produced a newer, calmer event is dropped: the question
 /// was answered, and a stale "needs you" row is worse than none.
+/// The agent a given event is about.
+///
+/// Identity first, name second, and never both at once. `session` is whatever mesh-hook
+/// could resolve; outside a multiplexer pane that is the working directory, which never
+/// equals a name `/agents` lists. Requiring `agent.name == session` therefore dropped
+/// every desktop-app and worktree session on the floor — measured live as 83 unread
+/// events against two mux-named agents, with the wrist reporting nothing waiting.
+///
+/// The order matters in both directions:
+///  - An event that carries an id is answered ONLY by the agent with that id. Falling
+///    back to the name when the ids disagree would attach a question to the wrong
+///    session, which is worse than showing nothing: the reply would go somewhere else.
+///  - An event with no id at all keeps the original behaviour exactly, because a plain
+///    rmux session reports its mux name and has no agent id to offer.
+func matchingAgent(for event: AgentEvent, session: String, in machine: MachineSnapshot) -> Agent? {
+    if let id = event.sessionId, !id.isEmpty {
+        return machine.agents.first { $0.sessionId == id }
+    }
+    return machine.agents.first { $0.name == session }
+}
+
 func sessionsNeedingAttention(from snapshot: MeshSnapshot) -> [LiveSessionPick] {
     var latestByKey: [String: AgentEvent] = [:]
     for event in snapshot.events ?? [] {
@@ -530,7 +571,7 @@ func sessionsNeedingAttention(from snapshot: MeshSnapshot) -> [LiveSessionPick] 
         // exact match finds nothing and the whole list stays silently empty. Observed
         // live before this line existed.
         guard let machine = snapshotMachineMatching(eventHost, in: snapshot.machines),
-              let agent = machine.agents.first(where: { $0.name == session }) else { return nil }
+              let agent = matchingAgent(for: event, session: session, in: machine) else { return nil }
         // Report the host the app knows, so the row, the reply and the deep link all
         // address the same machine.
         let line = String((event.body ?? event.title).prefix(80))

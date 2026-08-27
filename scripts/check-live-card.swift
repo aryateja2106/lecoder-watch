@@ -15,13 +15,19 @@ struct CheckLiveCard {
         checkBlockedSince()
         checkRiskReachesTheRow()
         checkFleetLine()
+        checkNonMuxSessionStillNeedsYou()
+        checkMuxNameStillMatchesWithoutIds()
+        checkWrongIdDoesNotMatch()
         print("check-live-card: OK")
     }
 
     // MARK: Fixtures
 
-    static func agent(_ name: String, attached: Bool = true, type: String? = "claude") -> Agent {
-        Agent(name: name, windows: 1, attached: attached, agentType: type)
+    static func agent(_ name: String, attached: Bool = true, type: String? = "claude",
+                      sessionId: String? = nil) -> Agent {
+        var a = Agent(name: name, windows: 1, attached: attached, agentType: type)
+        a.sessionId = sessionId
+        return a
     }
 
     static func machine(_ host: String, _ agents: [Agent]) -> MachineSnapshot {
@@ -29,9 +35,11 @@ struct CheckLiveCard {
     }
 
     static func event(_ host: String, _ session: String, level: String, title: String = "t", body: String? = nil,
-                      at iso: String = "2026-08-20T10:00:00Z") -> AgentEvent {
-        AgentEvent(id: "\(host)-\(session)-\(iso)", host: host, source: "claude", session: session,
-                   level: level, title: title, body: body, createdISO: iso)
+                      at iso: String = "2026-08-20T10:00:00Z", sessionId: String? = nil) -> AgentEvent {
+        var e = AgentEvent(id: "\(host)-\(session)-\(iso)", host: host, source: "claude", session: session,
+                           level: level, title: title, body: body, createdISO: iso)
+        e.sessionId = sessionId
+        return e
     }
 
     static func snapshot(_ machines: [MachineSnapshot],
@@ -319,5 +327,51 @@ struct CheckLiveCard {
             watchedHost: "studio", watchedAgent: "api", watchedOutput: ["building…"],
         )
         assert(liveSessionPick(from: snap)?.session == "web", "blocked outranks watched")
+    }
+
+    // The case that actually happens, and that every fixture above quietly avoided by
+    // making the event's session equal to the agent's name.
+    //
+    // Claude Code run outside a multiplexer — the desktop app, or any worktree — makes
+    // mesh-hook fall back to the working directory, while /agents only ever lists
+    // multiplexer session names. Measured on a live machine: 83 events whose session was
+    // a full worktree path, against agents named "watch-shell-21068" and
+    // "watch-shell-292". Nothing matched, so the wrist said "Nothing waiting on you"
+    // while a warning sat unread in the log.
+    //
+    // The join key has to be the identity the AGENT supplies, not one the multiplexer
+    // happens to own.
+    static func checkNonMuxSessionStillNeedsYou() {
+        let id = "2e1c3cd0-7885-484d-8ab9-0d9b42e45866"
+        let snap = snapshot(
+            [machine("studio", [agent("watch-shell-21068", sessionId: id)])],
+            events: [event("studio", "/Users/a/Projects/thing/.worktrees/feat-x",
+                           level: "warning", title: "Claude needs attention", sessionId: id)],
+        )
+        assert(liveSessionPick(from: snap) != nil,
+               "an event whose session is a path must still surface when the agent id matches")
+    }
+
+    // And the old shape has to keep working, because a session started inside rmux still
+    // reports its mux name and carries no agent id at all.
+    static func checkMuxNameStillMatchesWithoutIds() {
+        let snap = snapshot(
+            [machine("studio", [agent("api")])],
+            events: [event("studio", "api", level: "warning", title: "needs you")],
+        )
+        assert(liveSessionPick(from: snap)?.session == "api",
+               "a mux-named session with no ids anywhere must still match by name")
+    }
+
+    // Two ids must not be confused for one. A mismatched id is a different session, and
+    // falling back to the name here would re-introduce the bug in reverse.
+    static func checkWrongIdDoesNotMatch() {
+        let snap = snapshot(
+            [machine("studio", [agent("watch-shell-1", sessionId: "aaaa")])],
+            events: [event("studio", "/Users/a/somewhere-else",
+                           level: "warning", title: "t", sessionId: "bbbb")],
+        )
+        assert(liveSessionPick(from: snap) == nil,
+               "an event carrying a different session id must not adopt an unrelated agent")
     }
 }
