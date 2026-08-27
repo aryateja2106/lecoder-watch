@@ -51,6 +51,40 @@ for kind in keys media window system; do
     fail=1
   fi
 done
+# --- event pacing ---
+# The helper used to usleep(1200) after EVERY posted event, cursor moves included. At
+# MAX_EVENTS=200 that is 240ms of pure sleep in one batch, which was most of "the mouse
+# is slow and laggy" — while still being far too short to stop the WindowServer dropping
+# a mouseUp posted right behind its mouseDown, which is why clicks landed only sometimes.
+# Both halves of that regression are cheap to reintroduce and impossible to see in a
+# build, so both are asserted here.
+if grep -qE '^\s*usleep\([0-9_]+\)\s*$' "$SRC"; then
+  echo "FAIL: mesh-input posts with an unconditional usleep again — that paces cursor moves too"
+  fail=1
+fi
+grep -q 'func post(_ event: CGEvent?, settle: UInt32 = 0)' "$SRC" \
+  || { echo "FAIL: post() no longer takes a per-event settle defaulting to none"; fail=1; }
+
+# A click needs a real fence between its down and its up, not a token one.
+fence="$(sed -n 's/^let clickFence: UInt32 = \([0-9_]*\).*/\1/p' "$SRC" | tr -d '_')"
+[ -n "$fence" ] || { echo "FAIL: clickFence is gone — a click has nothing separating down from up"; fail=1; }
+if [ -n "$fence" ] && [ "$fence" -lt 20000 ]; then
+  echo "FAIL: clickFence is ${fence}us; under ~20ms the WindowServer drops the mouseUp"
+  fail=1
+fi
+awk '/func click\(/,/^}/' "$SRC" | grep -q 'settle: clickFence' \
+  || { echo "FAIL: click() does not use clickFence"; fail=1; }
+
+# Position updates must NOT pace — that is the whole latency win.
+awk '/func moveCursor\(/,/^}/' "$SRC" | grep -q 'settle:' \
+  && { echo "FAIL: moveCursor pauses after each move; that is the 240ms batch back"; fail=1; }
+awk '/func scroll\(/,/^}/' "$SRC" | grep -q 'settle:' \
+  && { echo "FAIL: scroll pauses after each event; scrolls supersede and need no fence"; fail=1; }
+
+# Keys must still pace: half a dropped down/up pair is a stuck modifier.
+awk '/func pressKey\(|func typeText\(/,/^}/' "$SRC" | grep -q 'settle: keyFence' \
+  || { echo "FAIL: key/text events no longer settle — a dropped pair sticks a modifier"; fail=1; }
+
 [ "$fail" -eq 0 ] || exit 1
 
 printf 'OK: mesh-input compiles; %s keys, %s media, %s window, %s system all mapped\n' \

@@ -121,9 +121,36 @@ let MODIFIERS: [String: (key: CGKeyCode, flag: CGEventFlags)] = [
     "fn": (63, .maskSecondaryFn),
 ]
 
-func post(_ event: CGEvent?) {
+/// How long to wait after posting an event before posting the next one.
+///
+/// This used to be a flat 1.2ms after EVERY event, cursor moves included. A full batch
+/// is 200 events (MAX_EVENTS in meshd's input.ts), so a busy drag spent 240ms asleep
+/// before its last event landed, on top of the watch's own ~40ms flush. That is most of
+/// what "the mouse is slow and laggy" actually was.
+///
+/// It was also wrong in the other direction exactly where it mattered. A mouseUp posted
+/// immediately behind its own mouseDown gets dropped by the WindowServer, and 1.2ms is
+/// nowhere near enough separation to stop that — which is why clicks landed only some
+/// of the time, and why the answer is not simply "sleep less".
+///
+/// So the pause is chosen per event now instead of applied to all of them:
+///
+///  - Position updates (moves, scrolls) get none. They supersede one another, and every
+///    move we send is absolute, so a dropped intermediate is invisible while pacing it
+///    costs the whole batch.
+///  - Key, text and media events keep the old 1.2ms. Losing half of a down/up pair there
+///    leaves a stuck modifier or a missing character, and nothing on that path was ever
+///    reported as slow.
+///  - A click gets a real fence between its down and its up.
+///
+/// Both numbers are knobs on purpose. This is a timing race against another process's
+/// event queue, and the right values are whichever ones hold up on real hardware.
+let clickFence: UInt32 = 50_000   // µs inside a click, between its down and its up
+let keyFence: UInt32   = 1_200    // µs after a key, text or media event
+
+func post(_ event: CGEvent?, settle: UInt32 = 0) {
     event?.post(tap: .cghidEventTap)
-    usleep(1200)   // events posted back-to-back are occasionally dropped by the WindowServer
+    if settle > 0 { usleep(settle) }
 }
 
 func cursor() -> CGPoint { CGEvent(source: nil)?.location ?? .zero }
@@ -165,7 +192,7 @@ func click(_ button: CGMouseButton, count: Int) {
             let event = CGEvent(mouseEventSource: source, mouseType: type,
                                 mouseCursorPosition: point, mouseButton: button)
             event?.setIntegerValueField(.mouseEventClickState, value: Int64(n))
-            post(event)
+            post(event, settle: clickFence)
         }
     }
 }
@@ -176,7 +203,7 @@ func hold(_ down: Bool) {
     leftIsDown = down
     post(CGEvent(mouseEventSource: source,
                  mouseType: down ? .leftMouseDown : .leftMouseUp,
-                 mouseCursorPosition: point, mouseButton: .left))
+                 mouseCursorPosition: point, mouseButton: .left), settle: keyFence)
 }
 
 func scroll(dx: Int32, dy: Int32) {
@@ -194,18 +221,18 @@ func pressKey(_ name: String, mods: [String]) {
         accumulated.formUnion(mod.flag)
         let event = CGEvent(keyboardEventSource: source, virtualKey: mod.key, keyDown: true)
         event?.flags = accumulated
-        post(event)
+        post(event, settle: keyFence)
     }
     for isDown in [true, false] {
         let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: isDown)
         event?.flags = allFlags
-        post(event)
+        post(event, settle: keyFence)
     }
     for mod in held.reversed() {
         accumulated.subtract(mod.flag)
         let event = CGEvent(keyboardEventSource: source, virtualKey: mod.key, keyDown: false)
         event?.flags = accumulated
-        post(event)
+        post(event, settle: keyFence)
     }
 }
 
@@ -235,7 +262,7 @@ func pressMedia(_ name: String) {
                                        subtype: 8,
                                        data1: Int((code << 16) | (state << 8)),
                                        data2: -1)
-        post(event?.cgEvent)
+        post(event?.cgEvent, settle: keyFence)
     }
 }
 
@@ -248,7 +275,7 @@ func typeText(_ text: String) {
         for isDown in [true, false] {
             let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: isDown)
             event?.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: &chunk)
-            post(event)
+            post(event, settle: keyFence)
         }
     }
 }
