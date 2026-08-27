@@ -10,11 +10,21 @@ import {
   statSync, readdirSync, renameSync, rmSync, copyFileSync, chmodSync,
 } from "fs";
 
-const VERSION = "0.1.0";
 const MESH_HOME = process.env.MESH_HOME || join(homedir(), ".mesh");
 const HOSTS_FILE = join(MESH_HOME, "hosts.json");
 const TOKEN_FILE = join(MESH_HOME, "token");
 const TIMEOUT_MS = 5000;
+
+// The CLI and meshd ship as one payload, so there is one version — and it lives in
+// meshd/server.ts. This used to be a second constant, which drifted: `mesh --version`
+// said 0.1.0 while the daemon beside it was 0.5.0, so the one command a user runs to
+// answer "am I up to date?" lied. Read the installed tree first (that is what is
+// actually running), then the payload we were unpacked from, and only then give up.
+// `treeVersion` is a hoisted function declaration, so calling it here is fine.
+const VERSION =
+  treeVersion(join(MESH_HOME, "meshd", "server.ts")) ||
+  treeVersion(join(import.meta.dir, "..", "meshd", "server.ts")) ||
+  "unknown";
 
 // ---------- config ----------
 

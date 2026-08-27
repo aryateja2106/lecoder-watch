@@ -60,6 +60,9 @@ jobs:
       - name: check-mesh-upgrade.sh
         run: sh scripts/check-mesh-upgrade.sh
 
+      - name: check-mesh-version.sh
+        run: sh scripts/check-mesh-version.sh
+
       - name: check-token-rotate.sh
         run: sh scripts/check-token-rotate.sh
 
