@@ -19,6 +19,75 @@ each entry as you ship the slice, not at release time.
   also prints the pairing QR natively, so putting a new phone on the mesh no longer
   means finding a terminal. Start it at login from the same menu. `mesh desktop` opens
   it from the command line.
+- **The app tells you when your daemon is too old for it.** Every feature this build
+  needs is declared in one place with the symptom you would see if the machine were
+  missing it, and a machine that answers `/health` without them now says **update
+  available** instead of reading healthy. It used to check for three capabilities that
+  every daemon since April already had, so an entire fleet running last month's daemon
+  reported perfect health while seven features quietly did nothing.
+- **Codex tells us why it stopped, and when it can start again.** The daemon can now
+  read a Codex session's own rollout and report whether it finished, was interrupted,
+  or ran into the usage limit — and for the limit, the exact moment the window resets.
+  This is the reading half of resuming a rate-limited session automatically; nothing
+  yet types at a session, deliberately.
+- **Read the Mac's clipboard from the watch.** Alongside the iPhone's clipboard, the
+  watch can pull whatever you last copied on the Mac and drop it into a session.
+
+### Fixed
+- **The watch stops walking away holding the Mac's mouse button down.** Leaving the
+  remote screen mid-drag left the button pressed on the real machine, so the next thing
+  you touched on the Mac got selected, dragged or dropped. Leaving now releases the
+  drag and disarms the air mouse.
+- **The two hand icons nobody could tell apart.** The air-mouse toggle and the drag
+  lock both drew a hand. They are now a gyroscope and a padlock that visibly opens and
+  closes, so the control row says what state you are in instead of asking you to
+  remember.
+- **Modifier keys wear their own glyphs.** Command, shift, option and control show ⌘ ⇧
+  ⌥ ⌃ on the watch keyboard, and `fn` sits with them — you no longer read the word and
+  translate it.
+- **The terminal stops yanking your scroll-back away.** Sending a command scrolled you
+  back to the bottom, so following a long Claude Code or tmux session meant scrolling
+  down again after every keystroke. iOS also stopped auto-capitalising and
+  smart-quoting shell commands, which had been silently rewriting what you typed.
+- **A screen you can actually read.** Zoom re-requests the region at the Mac's own
+  resolution instead of stretching the pixels it already had, and Read and Control mode
+  now look different enough to tell apart at a glance.
+- **One alert per limit, with a title that agrees with its own body.** A usage-limit
+  alert could fire repeatedly for the same limit, under a heading that contradicted
+  the text beneath it.
+- **The drag that never moved, and two clicks with nowhere to go.** On the iPhone's
+  remote screen a drag could register as a press with no motion, and two of the control
+  buttons were wired to nothing.
+- **Input stops sleeping a quarter of a second into every batch.** Every posted event
+  waited 1.2 ms whether or not anything needed it, which on a batch of typed text added
+  up to roughly 240 ms of dead time. Only the events that genuinely need settling — the
+  gap inside a click, and keystrokes — pay for it now, and the click's fence is longer
+  than it was, so the clicks that used to be dropped land.
+- **Opening a terminal could kill the daemon.** The cmux bridge starter selected
+  processes to kill by port alone, and `lsof -i :PORT` matches anything talking on that
+  port — including meshd, which holds a client connection to the bridge. Any
+  interactive shell could therefore SIGKILL the live daemon. It now kills only the
+  listener.
+- **`mesh version` stops lying about what is installed.** The CLI carried its own
+  version constant, which had drifted to `0.1.0` while the daemon beside it was
+  `0.5.0` — so the one command you run to answer "am I up to date?" was four minor
+  versions out. It now reads the version from the daemon actually installed on the
+  machine.
+- **Telemetry can no longer wedge a Claude Code turn.** `mesh-hook` exits non-zero when
+  it cannot read a token, and it is registered on `Stop`, where Claude Code treats a
+  non-zero exit as a *blocking* error — so a rotated token or a moved `MESH_HOME` did
+  not just lose a notification, it made the session refuse to finish. A telemetry hook
+  has no opinion about whether an agent may proceed, and now cannot express one.
+- **Agent identities stop 404-ing in the URL.** Any session whose name was not a bare
+  multiplexer name — a worktree path, anything containing `/` — produced a malformed
+  URL and failed before the daemon ever looked the session up. The watch still said
+  "Sent".
+- **"Nothing waiting on you" while 83 questions waited.** The join that decides whether
+  an agent needs you compared a name the hook invented against a name the multiplexer
+  owns, so outside a tmux pane — which is how the desktop app and every worktree
+  session runs — nothing ever matched. Worse, the same empty result then cleared the
+  phone's banner, making a real question look answered. Sessions are now keyed on the
+  id the agent itself reports.
 
 ## [0.4.0] — 2026-08-21
 
