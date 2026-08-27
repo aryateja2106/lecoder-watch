@@ -5,7 +5,7 @@ set -u
 HOST="${MESHD_HOST:-127.0.0.1}"
 PORT="${MESHD_PORT:-8899}"
 BRIDGE_HOST="${BRIDGE_HOST:-127.0.0.1}"
-BRIDGE_PORT="${PORT:-7820}"
+BRIDGE_PORT="${BRIDGE_PORT:-7820}"
 VNC_URL="${MESH_VNC_URL:-http://127.0.0.1:6080/vnc.html}"
 TOKEN="${MESHD_TOKEN:-}"
 TOKEN_FILE="${MESH_HOME:-$HOME/.mesh}/token"
@@ -14,22 +14,33 @@ if [ -z "$TOKEN" ] && [ -r "$TOKEN_FILE" ]; then
   TOKEN=$(sed -n '1p' "$TOKEN_FILE")
 fi
 
-auth=""
-if [ -n "$TOKEN" ]; then
-  auth="-H Authorization: Bearer $TOKEN"
-fi
+# Never build curl arguments in a string. `auth="-H Authorization: Bearer $TOKEN"` used
+# unquoted split into FOUR words under /bin/sh: `-H`, `Authorization:` (an empty header,
+# which deletes it), and then `Bearer` and the token itself — both of which curl treated as
+# URLs and reported by name. So no probe was ever authenticated, and the machine's bearer
+# token was written verbatim into a world-readable file in /tmp and printed to the terminal.
+# Reproduced: `curl: (6) Could not resolve host: <the real token>`.
+# A wrapper passes the header as one argument and cannot be split, whatever the token holds.
+mcurl() {
+  if [ -n "$TOKEN" ]; then
+    curl -H "Authorization: Bearer $TOKEN" "$@"
+  else
+    curl "$@"
+  fi
+}
 
 http_code() {
-  # shellcheck disable=SC2086
-  curl -s -o /dev/null -w '%{http_code}' $auth "$1"
+  mcurl -s -o /dev/null -w '%{http_code}' "$1"
 }
 
 printf 'meshd: '
-# shellcheck disable=SC2086
-if curl -fsS $auth "http://$HOST:$PORT/health" 2>/tmp/mesh-health.err; then
+health_err=$(mktemp "${TMPDIR:-/tmp}/mesh-health.XXXXXX")
+if mcurl -fsS "http://$HOST:$PORT/health" 2>"$health_err"; then
   printf '\n'
+  rm -f "$health_err"
 else
-  cat /tmp/mesh-health.err
+  cat "$health_err"
+  rm -f "$health_err"
   exit 1
 fi
 
@@ -53,8 +64,7 @@ fi
 
 printf 'tailnet: '
 tailnet_body=$(mktemp "${TMPDIR:-/tmp}/mesh-tailnet.XXXXXX")
-# shellcheck disable=SC2086
-code=$(curl -s -o "$tailnet_body" -w '%{http_code}' $auth "http://$HOST:$PORT/tailnet")
+code=$(mcurl -s -o "$tailnet_body" -w '%{http_code}' "http://$HOST:$PORT/tailnet")
 if [ "$code" = "200" ] && grep '"ok":true' "$tailnet_body" >/dev/null 2>&1; then
   printf 'active\n'
 else
