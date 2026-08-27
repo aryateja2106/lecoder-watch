@@ -61,7 +61,43 @@ echo "==> LeSearch Mesh $VERSION, build $BUILD"
 # Going backwards is allowed by App Store Connect and punished by iOS: a tester on a
 # HIGHER pre-release version reads this one as older and may be asked to delete and
 # reinstall, which wipes the app's Keychain and un-pairs every machine they had.
-HIGHEST="$(asc testflight pre-release list --app "$APP_ID" 2>/dev/null \
+# App Store Connect list endpoints do hang — measured 2026-08-27, this exact call sat
+# for five minutes and a 60s probe returned zero bytes. Without a bound, one Apple-side
+# hiccup wedges the whole release on a single line of output and looks like a hung build.
+# POSIX rather than `timeout`, which is not on a stock macOS.
+run_bounded() {
+  _secs="$1"; shift
+  _tmp="$(mktemp)"
+  "$@" >"$_tmp" 2>/dev/null &
+  _pid=$!
+  _i=0
+  while kill -0 "$_pid" 2>/dev/null && [ "$_i" -lt "$_secs" ]; do sleep 1; _i=$((_i + 1)); done
+  if kill -0 "$_pid" 2>/dev/null; then
+    kill "$_pid" 2>/dev/null; wait "$_pid" 2>/dev/null
+    rm -f "$_tmp"; return 124
+  fi
+  wait "$_pid" 2>/dev/null
+  cat "$_tmp"; rm -f "$_tmp"; return 0
+}
+
+PRERELEASE_JSON="$(run_bounded 90 asc testflight pre-release list --app "$APP_ID")" || {
+  echo "FAIL: App Store Connect did not answer within 90s, so the highest existing"
+  echo "      pre-release version could not be read."
+  echo ""
+  echo "      That check is not cosmetic: uploading a version LOWER than one already on"
+  echo "      TestFlight makes iOS treat this build as older, and testers get asked to"
+  echo "      delete and reinstall — which wipes the app Keychain and un-pairs every"
+  echo "      machine they had. Shipping blind is the one thing worth refusing here."
+  echo ""
+  echo "      Re-run when App Store Connect responds. If you have confirmed in the"
+  echo "      TestFlight UI that $VERSION is not lower than what is already there:"
+  echo "          MESH_SKIP_VERSION_CHECK=1 sh scripts/release-testflight-asc.sh"
+  [ "${MESH_SKIP_VERSION_CHECK:-}" = "1" ] || exit 1
+  echo "      MESH_SKIP_VERSION_CHECK=1 set — continuing without the check."
+  PRERELEASE_JSON=""
+}
+
+HIGHEST="$(printf '%s' "$PRERELEASE_JSON" \
   | /usr/bin/python3 -c 'import sys,json
 try: d=json.load(sys.stdin)
 except Exception: sys.exit()
