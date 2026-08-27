@@ -49,6 +49,7 @@ Options:
   --without LIST   Install everything except these components.
   --prefix DIR     Install location (default: \$MESH_HOME or ~/.mesh).
   --no-start       Install but do not launch services.
+  --force          Reinstall even if this machine already runs the same version.
   --upgrade        Fetch the latest and reinstall in place, preserving the existing
   --update         token and config (same as re-running install; clearer intent).
   --list           Show what is installed under the prefix, then exit.
@@ -551,6 +552,12 @@ setup_path() {
   want_component tools || return 0
   case ":${PATH}:" in *":$MESH_HOME/bin:"*) return 0;; esac   # already usable
   PATH_LINE="eval \"\$($MESH_HOME/bin/mesh shellenv)\""
+  # ${SHELL} and not ${SHELL:-} killed the install on any box where SHELL is unset —
+  # a Docker container, a cron job, a non-login ssh, which is to say most of the headless
+  # Linux this is meant to run on. Under `set -u` the expansion is fatal, and it fires at
+  # the very end, after everything is installed, so it reads as "the install failed" when
+  # in fact only the PATH line was left unwritten.
+  case "${SHELL:-}" in "") PATH_STATE="manual"; return 0;; esac
   case "${SHELL##*/}" in
     zsh)  PATH_RC="$HOME/.zshrc";;
     bash) PATH_RC="$HOME/.bashrc";;
@@ -622,10 +629,23 @@ do_uninstall() {
   if [ -n "$removed" ]; then log "Removed:$removed"; else log "Nothing to remove under $MESH_HOME"; fi
 }
 
+# The version a meshd tree reports, read out of its own source.
+#
+# `tr -d '\000'` is not decoration. The published 0.4.1 server.ts carries two NUL bytes,
+# which makes `file` call it "data" and makes grep and sed silently refuse to match a
+# single line of it. A version check that greps this file finds nothing and concludes
+# "not installed" on a machine that plainly is.
+tree_version() {
+  [ -f "$1" ] || return 0
+  tr -d '\000' < "$1" 2>/dev/null \
+    | sed -n 's/^[[:space:]]*const VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | head -1
+}
+
 # ---------- arg parsing ----------
 
 TOKEN_FLAG=""; SRC_FLAG=""; ONLY_LIST=""; WITHOUT_LIST=""; USER_FLAG=""
-DO_UNINSTALL="0"; DO_PURGE="0"; DO_LIST="0"; NO_START="0"; DO_UPGRADE="0"
+DO_UNINSTALL="0"; DO_PURGE="0"; DO_LIST="0"; NO_START="0"; DO_UPGRADE="0"; DO_FORCE="0"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -636,6 +656,7 @@ while [ "$#" -gt 0 ]; do
     --without) shift; [ "$#" -gt 0 ] || die "--without requires a value"; WITHOUT_LIST="$1";;
     --prefix) shift; [ "$#" -gt 0 ] || die "--prefix requires a value"; MESH_HOME="$1";;
     --no-start) NO_START="1";;
+    --force) DO_FORCE="1";;
     --list) DO_LIST="1";;
     --upgrade|--update) DO_UPGRADE="1";;
     --uninstall) DO_UNINSTALL="1";;
@@ -685,6 +706,31 @@ SRC="${SRC_FLAG:-${MESH_SRC:-}}"
 if [ -z "$SRC" ] && [ "$MESH_SRC_DEFAULT" != "__MESH_SRC__" ]; then SRC="$MESH_SRC_DEFAULT"; fi
 resolve_payload "$SRC"
 validate_payload
+
+# ---------- already running exactly this? ----------
+#
+# The one-liner is the command people have in their shell history and the one printed on
+# the website, so re-running it is the most natural thing in the world. Reinstalling on
+# top of an identical install is not free: bin/ is replaced wholesale, and macOS grants
+# Accessibility per BINARY -- so overwriting an unchanged mesh-input costs the user that
+# grant, and every click and keystroke from their watch silently stops working until they
+# notice and re-approve it. Paying that to install the bytes already on disk is a bad
+# trade nobody chose.
+#
+# A DIFFERENT version still installs: for someone whose `mesh` is too old to run
+# `mesh upgrade`, this one-liner is the upgrade path, and refusing would strand them.
+INSTALLED_VERSION=$(tree_version "$MESH_HOME/meshd/server.ts")
+PAYLOAD_VERSION=$(tree_version "$PAYLOAD_DIR/meshd/server.ts")
+if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" = "$PAYLOAD_VERSION" ] \
+   && [ "$DO_UPGRADE" != "1" ] && [ "$DO_FORCE" != "1" ]; then
+  log "meshd $INSTALLED_VERSION is already installed at $MESH_HOME — nothing to do."
+  log "  check it:     $MESH_HOME/bin/mesh doctor"
+  log "  reinstall:    re-run with --force"
+  exit 0
+fi
+if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" != "$PAYLOAD_VERSION" ]; then
+  log "Upgrading in place: meshd $INSTALLED_VERSION → ${PAYLOAD_VERSION:-unknown} (token and config preserved)"
+fi
 
 if want_component meshd || want_component bridge; then
   ensure_bun

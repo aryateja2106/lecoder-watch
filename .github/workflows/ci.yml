@@ -69,6 +69,9 @@ jobs:
       - name: check-mesh-uninstall.sh
         run: sh scripts/check-mesh-uninstall.sh
 
+      - name: check-install-idempotent.sh
+        run: sh scripts/check-install-idempotent.sh
+
       - name: check-token-rotate.sh
         run: sh scripts/check-token-rotate.sh
 
