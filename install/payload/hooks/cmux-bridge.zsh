@@ -5,35 +5,26 @@ start_cmux_bridge() {
   local cmux_port="${CMUX_PORT:-9160}"
   local log="/tmp/cmux-bridge.log"
 
-  _cmux_bridge_healthy() {
-    curl -sf -X POST "http://127.0.0.1:${port}/cmux" \
-      -H 'content-type: application/json' \
-      -d '{"args":["tree","--all","--json"]}' \
-    | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('data',{}).get('windows',[])))" 2>/dev/null \
-    | grep -qv '^0$'
-  }
+  # ponytail: /health is the whole readiness test. The old gate ALSO required cmux to
+  # report >=1 window, so with the cmux GUI closed it was false forever: every interactive
+  # shell tore the bridge down, respawned it, then blocked ~14s in a 20-round curl+python
+  # poll before giving up — and leaked an EADDRINUSE bun process each time. A bridge
+  # serving zero windows is a healthy bridge with nothing to show. -m 1 so a wedged
+  # bridge costs one second, not a hung prompt.
+  curl -sf -m 1 "http://127.0.0.1:${port}/health" >/dev/null 2>&1 && return 0
 
-  if curl -sf "http://127.0.0.1:${port}/health" >/dev/null 2>&1 && _cmux_bridge_healthy; then
-    return 0
-  fi
   # -sTCP:LISTEN is load-bearing. `lsof -i :PORT` matches a socket with that port on
   # EITHER end, so the bare form also listed every client CONNECTED to the bridge —
   # and meshd is one, because /agents asks the bridge for cmux sessions. Opening any
   # new interactive shell while the bridge looked unhealthy therefore kill -9'd the
   # user's running meshd. Only the process actually holding the port may be replaced.
   lsof -ti "tcp:${port}" -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
-  sleep 0.5
+  sleep 0.5  # ponytail: let the port drain, else the respawn hits EADDRINUSE. Cold path only.
   nohup launchctl asuser "$(id -u)" /bin/zsh -lc \
     "cd '$mesh_home/meshd' && PATH='/Applications/cmux.app/Contents/Resources/bin:/opt/homebrew/bin:/usr/bin:/bin' CMUX_PORT='$cmux_port' exec /opt/homebrew/bin/bun run cmux-bridge.ts >>'$log' 2>&1" \
     >/dev/null 2>&1 &
-  local i=0
-  while [ "$i" -lt 20 ]; do
-    _cmux_bridge_healthy && return 0
-    i=$((i + 1))
-    sleep 0.25
-  done
-  echo "cmux-bridge failed to start; see $log" >&2
-  return 1
+  # ponytail: no wait loop. The prompt does not need a ready bridge — its clients (meshd,
+  # the watch) retry on their own, and the next shell's /health confirms it came up.
 }
 
 if [[ -o interactive ]] && command -v cmux >/dev/null 2>&1; then
