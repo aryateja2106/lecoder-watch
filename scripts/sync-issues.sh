@@ -76,6 +76,9 @@ while [ "$i" -lt "$COUNT" ]; do
   rm -f "$BODYFILE"
   echo "    created: $TITLE"
   created=$((created+1)); i=$((i+1))
+  # GitHub's secondary rate limit on content creation bites at roughly 80/minute, and it
+  # answers with a 403 that reads like a permissions problem rather than a throttle.
+  sleep 1
 done
 rm -f "$EXISTING"
 
