@@ -110,6 +110,18 @@ Then, in App Store Connect → TestFlight → the new build:
 3. **Submit for Beta App Review.** Review is usually hours, occasionally a day.
 4. When it flips to `IN_BETA_TESTING`, testers get a notification automatically.
 
+### One thing to warn testers about right now
+
+App Store Connect still holds a pre-release **1.0** from before the deliberate rename down
+to 0.5.0, and 1.0 is what the four existing testers have installed. iOS reads 0.5.0 as
+*older*, so it may refuse an in-place update and ask for a delete-and-reinstall — which
+wipes the app's Keychain and **un-pairs every machine**. Anyone that happens to needs to
+re-pair (`mesh pair` on the Mac, scan the QR). New testers installing for the first time
+are unaffected.
+
+The alternative was numbering the app past 1.0, which updates cleanly but stops the app
+and the daemon sharing a number. The number won.
+
 ### The link to send people
 
 ```
@@ -127,6 +139,7 @@ landing page and never needs reissuing.
 | Number | Where it lives | Changes when |
 |---|---|---|
 | `0.5.0` | `MARKETING_VERSION` in `project.yml` | a release with user-visible change |
+| `1.0` | a stale pre-release version on App Store Connect | never again — it predates the rename to 0.5.0 |
 | `202608241803` | build number, stamped at upload | every single upload (UTC `YYYYMMDDHHMM`) |
 | `0.5.0` | `const VERSION` in `install/payload/meshd/server.ts` | a daemon release |
 | `v0.5.0` | the `mesh-install` GitHub release tag | a daemon release |
