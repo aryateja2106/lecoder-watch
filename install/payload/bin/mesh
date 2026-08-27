@@ -446,7 +446,14 @@ const BACKUPS_DIR = join(MESH_HOME, "backups");
 const LABEL_PREFIX = process.env.MESH_LABEL_PREFIX || "ai.lesearch";
 const SERVICE_LABEL = `${LABEL_PREFIX}.meshd`;         // launchd (macOS)
 const SERVICE_UNIT = `${LABEL_PREFIX}-meshd.service`;  // systemd --user (Linux)
-const SERVICE_TMUX = `${LABEL_PREFIX}-meshd`;          // tmux fallback session
+// `.replace(/\./g, "_")` is load-bearing. tmux rewrites '.' in a session NAME to '_', and
+// in a TARGET it reads '.' as the session:window.pane separator — so
+// `kill-session -t ai.lesearch-meshd` answers "can't find pane: lesearch-meshd" and kills
+// nothing. The session then survives, the new-session that follows collides with it, and
+// the restart fails. Which made every upgrade after the very first one COSMETIC on any
+// machine without launchd or systemd: new files on disk, the old daemon still serving,
+// and `mesh version` reporting the new one. Observed live going 0.5.0 -> 0.5.1.
+const SERVICE_TMUX = `${LABEL_PREFIX}-meshd`.replace(/\./g, "_");   // tmux fallback session
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

@@ -163,7 +163,10 @@ detect_service_mgr() {
   printf 'tmux'
 }
 
-mux_session()   { printf '%s-%s' "$LABEL_PREFIX" "$1"; }   # tmux session name, label-isolated
+# Dots are stripped because tmux rewrites '.' in a session name to '_' and reads '.' in a
+# target as the session:window.pane separator — so a dotted name can be created and then
+# never killed by the name that created it, and the next start collides with it forever.
+mux_session()   { printf '%s-%s' "$LABEL_PREFIX" "$1" | tr '.' '_'; }   # tmux session name, label-isolated
 launchd_label() { printf '%s.%s' "$LABEL_PREFIX" "$1"; }
 launchd_plist() { printf '%s/Library/LaunchAgents/%s.%s.plist' "$HOME" "$LABEL_PREFIX" "$1"; }
 systemd_unit()  { printf '%s/.config/systemd/user/%s-%s.service' "$HOME" "$LABEL_PREFIX" "$1"; }
