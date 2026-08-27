@@ -62,7 +62,11 @@ count() { [ -f "$1" ] || { echo 0; return; }; grep -c "$2" "$1" 2>/dev/null || t
 # ---- 1. no --yes means nothing is deleted ----
 run_mesh uninstall
 chk "dry run kept ~/.mesh"   "$([ -d "$SB/.mesh" ] && echo y || echo n)" "y"
-chk "dry run kept the plist" "$([ -f "$SB/Library/LaunchAgents/ai.lesearch.meshd.plist" ] && echo y || echo n)" "y"
+# launchd only exists on macOS. On Linux `mesh uninstall` removes the systemd unit and
+# leaves a stray plist exactly where it found it, which is correct behaviour — asserting
+# otherwise made this check fail on the Linux CI runner for a bug that is not there.
+IS_MAC=0; [ "$(uname -s)" = "Darwin" ] && IS_MAC=1
+[ "$IS_MAC" -eq 1 ] && chk "dry run kept the plist" "$([ -f "$SB/Library/LaunchAgents/ai.lesearch.meshd.plist" ] && echo y || echo n)" "y"
 chk "dry run kept the rc"    "$(wc -l < "$SB/.zshrc" | tr -d ' ')" "$(echo "$RC_LINES_BEFORE" | tr -d ' ')"
 grep -q -- "--yes" "$TMP/out" || { echo "FAIL: dry run does not say how to proceed"; fail=1; }
 # It must name what it will delete, or "are you sure" is not informed consent.
@@ -71,7 +75,7 @@ grep -q "\.mesh" "$TMP/out" || { echo "FAIL: dry run does not name ~/.mesh"; fai
 # ---- 2. --yes removes everything of ours ----
 run_mesh uninstall --yes
 chk "removed ~/.mesh"        "$([ -e "$SB/.mesh" ] && echo y || echo n)" "n"
-chk "removed launchd plist"  "$([ -e "$SB/Library/LaunchAgents/ai.lesearch.meshd.plist" ] && echo y || echo n)" "n"
+[ "$IS_MAC" -eq 1 ] && chk "removed launchd plist"  "$([ -e "$SB/Library/LaunchAgents/ai.lesearch.meshd.plist" ] && echo y || echo n)" "n"
 chk "unwired mesh-hook"      "$(count "$SB/.claude/settings.json" 'mesh-hook')" "0"
 chk "dropped PATH line"      "$(count "$SB/.zshrc" 'mesh shellenv')" "0"
 chk "dropped cmux line"      "$(count "$SB/.zshrc" 'cmux-bridge.zsh')" "0"
