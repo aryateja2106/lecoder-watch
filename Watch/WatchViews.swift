@@ -133,8 +133,12 @@ struct MachinesListView: View {
             // costing you time right now.
             if !store.hasNoMachines, !store.needsAttention.isEmpty {
                 Section {
-                    ForEach(store.needsAttention, id: \.self) { item in
-                        AttentionRow(item: item)
+                    ForEach(Array(store.needsAttention.enumerated()), id: \.element) { index, item in
+                        // Only the topmost row claims Double Tap. `.primaryAction` is a
+                        // per-screen singleton — if three blocked agents all claimed it,
+                        // which one a pinch answers is the system's guess, and guessing
+                        // wrong here presses Return in the wrong live shell.
+                        AttentionRow(item: item, isPrimary: index == 0)
                     }
                 } header: {
                     Label("Needs you", systemImage: "exclamationmark.bubble.fill")
@@ -362,11 +366,46 @@ struct MachinesListView: View {
 private struct AttentionRow: View {
     @EnvironmentObject var store: WatchMeshStore
     let item: LiveSessionPick
+    /// Whether this row owns the screen's Double Tap. See the call site: exactly one row
+    /// may, so the gesture is never ambiguous about which agent it answers.
+    var isPrimary = false
     @State private var answered = false
     /// This row's own copy of the failure, not the store's — `lastError` is
     /// mesh-wide, and three blocked agents all showing one machine's error is worse
     /// than none of them showing it.
     @State private var failure: String?
+
+    /// Extracted so the Double Tap opt-in can be applied conditionally — a `ViewBuilder`
+    /// if/else is the only way to add a modifier under `#available` without duplicating
+    /// the whole button.
+    @ViewBuilder
+    private var answerButton: some View {
+        let button = Button(answered ? "Sent" : item.risk.verb) {
+            failure = nil
+            answered = true
+            store.respondToAgent(host: item.host, session: item.session,
+                                 text: nil, key: "enter")
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(item.risk.isDestructive ? .red : .orange)
+        .controlSize(.small)
+        .disabled(answered)
+        .frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight)
+        // Without a label, AssistiveTouch's pinch-to-next announces this as its title
+        // alone — "Run", with no clue which agent it answers. The point of the row is
+        // that you can act on it without looking closely.
+        .accessibilityLabel(answered
+                            ? "Answer sent to \(item.session)"
+                            : "\(item.risk.verb) — \(item.session) on \(item.host)")
+
+        // Double Tap (pinch twice) answers the most urgent agent with no hand on the
+        // screen. watchOS 11+ only; the deployment target is 10.0.
+        if #available(watchOS 11.0, *), isPrimary {
+            button.handGestureShortcut(.primaryAction)
+        } else {
+            button
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -410,17 +449,7 @@ private struct AttentionRow: View {
                 // presses Return in a live shell. It gets a full-height target, and
                 // `respondToAgent` now reports what actually happened rather than
                 // leaving "Sent" as an unbacked claim.
-                Button(answered ? "Sent" : item.risk.verb) {
-                    failure = nil
-                    answered = true
-                    store.respondToAgent(host: item.host, session: item.session,
-                                         text: nil, key: "enter")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(item.risk.isDestructive ? .red : .orange)
-                .controlSize(.small)
-                .disabled(answered)
-                .frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight)
+                answerButton
 
                 NavigationLink {
                     AgentLiveView(host: item.host, agent: item.session).environmentObject(store)
