@@ -300,6 +300,11 @@ private struct MachineDetailView: View {
                     if let version = m.meshdVersion {
                         StatRow(label: "meshd version", value: version)
                     }
+                    // Everything the app asked this daemon for and did not get. It goes
+                    // directly under the version because the version alone never told
+                    // anyone anything: "meshd 0.4.1" is only a fact, and the fact that
+                    // matters is that seven features are switched off behind it.
+                    DaemonUpdateSection(capabilities: m.capabilities)
                     if let machine = store.machines.first(where: { $0.host == m.host }) {
                         StatRow(label: "meshd endpoints", value: machine.baseURLs.map(\.absoluteString).joined(separator: " or "))
                     }
@@ -543,6 +548,45 @@ private struct MachinePowerSection: View {
         Task { @MainActor in
             failure = await store.systemAction(item.action, on: machine)
             running = nil
+        }
+    }
+}
+
+/// The features this machine's daemon is too old to serve, and the one command that
+/// fixes it.
+///
+/// This is the answer to a real week of confusion: the screen on the watch was
+/// unreadable, the app was blamed, and the app was innocent — the daemon on the machine
+/// was a version behind and had been silently ignoring every request for a sharp crop.
+/// An old daemon does not fail loudly. It answers 200 with the old shape of the answer,
+/// which is indistinguishable from the feature simply not working.
+///
+/// Silent when there is nothing to say, and silent before the machine has been polled:
+/// a warning that cries wolf on healthy machines is a warning nobody reads on the one
+/// that needs it.
+private struct DaemonUpdateSection: View {
+    let capabilities: [String]?
+
+    var body: some View {
+        let gaps = DaemonCapabilities.gaps(in: capabilities)
+        if !gaps.isEmpty, let headline = DaemonCapabilities.headline(gapCount: gaps.count) {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(headline, systemImage: "arrow.down.circle.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.orange)
+                ForEach(gaps, id: \.capability) { gap in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(gap.feature).font(.caption2.weight(.medium))
+                        Text(gap.symptom)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text("Run this on that machine — it upgrades in place and keeps the token and pairing:")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                CopyableCommand(text: DaemonCapabilities.upgradeCommand)
+            }
         }
     }
 }
@@ -815,6 +859,11 @@ private func machineSummary(_ machine: MachineSnapshot) -> String {
     let version = machine.meshdVersion.map { "meshd \($0)" } ?? "meshd active"
     if machine.authError != nil { return "\(version) · token needed" }
     let bridge = machine.bridgeReachable == true ? "bridge" : "no bridge"
+    // An out-of-date daemon earns the last slot ahead of "hooks". The row used to read
+    // "meshd 0.4.1 · no bridge · hooks" on a daemon missing seven capabilities, which
+    // is a sentence that says everything is fine while nothing is.
+    let gaps = DaemonCapabilities.gaps(in: machine.capabilities).count
+    if gaps > 0 { return "\(version) · \(bridge) · update available" }
     let hooks = hasCap(machine, "events") == true ? "hooks" : "needs update"
     return "\(version) · \(bridge) · \(hooks)"
 }
@@ -828,8 +877,18 @@ private func capDetail(_ machine: MachineSnapshot, _ cap: String) -> String {
     hasCap(machine, cap) == true ? "active" : "update needed"
 }
 
+/// Whether this machine's daemon is behind what the app needs.
+///
+/// This used to name three capabilities — events, newPane, tailscale — and it went
+/// blind the moment a fourth was added. Every daemon since has had all three, so the
+/// function answered "up to date" for a fleet that was a whole minor version behind and
+/// missing seven of the features the app was actively calling. Nobody was warned; the
+/// symptom people saw instead was an unreadable screen on their watch.
+///
+/// So the list lives in exactly one place now (Shared/DaemonCapabilities.swift), and a
+/// new capability starts warning the day it starts being used.
 private func needsUpdate(_ machine: MachineSnapshot) -> Bool {
-    machine.reachable && (hasCap(machine, "events") != true || hasCap(machine, "newPane") != true || hasCap(machine, "tailscale") != true)
+    machine.reachable && !DaemonCapabilities.gaps(in: machine.capabilities).isEmpty
 }
 
 private func needsBridge(_ machine: MachineSnapshot) -> Bool {

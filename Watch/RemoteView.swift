@@ -1261,10 +1261,13 @@ struct RemoteClipboardView: View {
     @ObservedObject var remote: RemoteControl
     @State private var macClipboard: String?
     @State private var loading = false
+    @State private var phoneClipboard: String?
+    @State private var phoneProblem: String?
+    @State private var loadingPhone = false
 
     var body: some View {
         List {
-            Section {
+            Section("Mac") {
                 Button("Read Mac clipboard") {
                     loading = true
                     Task {
@@ -1276,6 +1279,38 @@ struct RemoteClipboardView: View {
                     ProgressView()
                 } else if let macClipboard {
                     Text(macClipboard.isEmpty ? "(empty)" : macClipboard)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            // The other direction, which the screen offered no way to ask for even
+            // though the phone has answered this exact request since the relay learned
+            // `readPhoneClipboard`. Copying a URL or a key on the phone and reading it
+            // on the wrist is the common case; there is no scribble surface wide enough
+            // to retype either.
+            Section("iPhone") {
+                Button("Read iPhone clipboard") {
+                    loadingPhone = true
+                    phoneProblem = nil
+                    Task {
+                        switch await WatchMeshStore.phoneClipboardText() {
+                        case .text(let text): phoneClipboard = text
+                        case .problem(let why): phoneProblem = why; phoneClipboard = nil
+                        }
+                        loadingPhone = false
+                    }
+                }
+                if loadingPhone {
+                    ProgressView()
+                } else if let phoneProblem {
+                    // iOS only hands a pasteboard to a foreground app, so "empty" and
+                    // "you're not looking at the phone" are different answers and must
+                    // never both render as a blank line.
+                    Text(phoneProblem)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                } else if let phoneClipboard {
+                    Text(phoneClipboard)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

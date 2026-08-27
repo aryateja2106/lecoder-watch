@@ -695,33 +695,55 @@ final class WatchMeshStore: ObservableObject {
     func insertPhoneClipboard() async -> Bool {
         guard watching != nil else { return false }
         lastError = nil
-        let ack = await WatchLink.shared.acknowledge(
-            WatchCommand(kind: .readPhoneClipboard, host: nil, agent: nil, text: nil, key: nil))
-        func refuse(_ why: String) -> Bool {
+        switch await Self.phoneClipboardText() {
+        case .problem(let why):
             lastError = why
             WKInterfaceDevice.current().play(.failure)
             return false
+        case .text(let text):
+            send(text: text)
+            return true
         }
+    }
+
+    /// The iPhone's clipboard, or the honest reason it could not be read.
+    ///
+    /// Static, and free of `watching`, because the wrist needs this from two places
+    /// that share no state: the terminal, where the text lands in the prompt, and the
+    /// Clipboard screen, where you only want to look at it. It was written for the
+    /// first and reachable from neither — the terminal never grew a button, so a fully
+    /// implemented feature sat here with no caller at all while the Clipboard screen
+    /// offered the Mac's clipboard and not the phone's.
+    enum PhoneClipboard {
+        case text(String)
+        /// A sentence for the wrist, never an empty string: "the clipboard is empty"
+        /// and "iOS won't share it while the app is in the background" are different
+        /// facts and both render blank if they share a representation.
+        case problem(String)
+    }
+
+    static func phoneClipboardText() async -> PhoneClipboard {
+        let ack = await WatchLink.shared.acknowledge(
+            WatchCommand(kind: .readPhoneClipboard, host: nil, agent: nil, text: nil, key: nil))
         switch ack {
         case .failed(let why):
-            return refuse("clipboard — \(why)")
+            return .problem("clipboard — \(why)")
         case .queued:
-            return refuse("open LeSearch Mesh on your iPhone once, then try again")
+            return .problem("open LeSearch Mesh on your iPhone once, then try again")
         case .delivered(let data):
             guard let data, let text = try? JSONDecoder().decode(String.self, from: data) else {
                 // No payload: either an older phone build that does not know this
                 // command, or one that could not read its own pasteboard from the
                 // background. Both have the same fix.
-                return refuse("open LeSearch Mesh on your iPhone once — it can only read its clipboard while open")
+                return .problem("open LeSearch Mesh on your iPhone once — it can only read its clipboard while open")
             }
-            if text.hasPrefix(Self.clipboardErrorPrefix) {
-                let why = String(text.dropFirst(Self.clipboardErrorPrefix.count))
+            if text.hasPrefix(clipboardErrorPrefix) {
+                let why = String(text.dropFirst(clipboardErrorPrefix.count))
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                return refuse(why.isEmpty ? "the iPhone could not read its clipboard" : why)
+                return .problem(why.isEmpty ? "the iPhone could not read its clipboard" : why)
             }
-            guard !text.isEmpty else { return refuse("the iPhone's clipboard is empty") }
-            send(text: text)
-            return true
+            guard !text.isEmpty else { return .problem("the iPhone's clipboard is empty") }
+            return .text(text)
         }
     }
 
