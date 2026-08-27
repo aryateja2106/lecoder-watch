@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LeSearch Mesh — answer your coding agents from your wrist</title>
-<meta name="description" content="Your machines and the AI coding agents running on them, on your iPhone and Apple Watch. An agent stops to ask permission, your wrist buzzes, you tap Continue. Local-first: no cloud, no account.">
+<meta name="description" content="Your coding agent stalls on one permission question and waits until you walk back to the machine. LeSearch Mesh puts that question on your wrist and your answer back in the real session. Local-first: no cloud, no account, no relay of ours.">
 <link rel="icon" href="/appicon.png">
 <meta name="theme-color" content="#191919">
 <meta property="og:title" content="LeSearch Mesh — answer your coding agents from your wrist">
-<meta property="og:description" content="Install one daemon on your Mac. Pair with an 8-character code. Then run your machines and your agents from your iPhone and Apple Watch. No cloud, no account.">
+<meta property="og:description" content="An agent that ran for an hour, stopped on one yes/no, and waited. Answer it from your wrist in three seconds. One daemon on your Mac, an 8-character pairing code, and no server of ours in the path.">
 <meta property="og:image" content="https://mesh.lesearch.ai/appicon.png">
 <meta property="og:url" content="https://mesh.lesearch.ai/">
 <meta property="og:type" content="website">
@@ -281,13 +281,13 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 
 <div class="wrap hero">
   <span class="eyebrow"><span class="dot"></span>Free TestFlight beta · iPhone + Apple Watch</span>
-  <h1>Your agents stop and ask. You answer from your wrist.</h1>
+  <h1>Your agent has been waiting forty minutes for you to say yes.</h1>
   <p class="lede">
-    Coding agents run for hours and then freeze on one question — <em>can I force-push?</em>,
-    <em>overwrite this file?</em> — and sit there until you walk back to the machine.
-    LeSearch Mesh puts every machine you own, and every agent running on it, on your
-    iPhone and Apple&nbsp;Watch. The moment one blocks, your wrist buzzes. You tap
-    <strong>Continue</strong>. It carries on.
+    It ran for an hour, hit one question — <em>can I force-push?</em>, <em>overwrite this
+    file?</em> — and has been sitting there ever since. Not working. Not failing. Waiting
+    for a human who walked away. LeSearch&nbsp;Mesh puts that question on your wrist the
+    second it lands, and puts your answer back in the real session.
+    <strong>Three seconds instead of the rest of the afternoon.</strong>
   </p>
 
   <div class="cta">
@@ -318,7 +318,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 <section id="moment">
   <div class="wrap">
     <span class="kicker">The whole point</span>
-    <h2>Three seconds instead of twenty minutes.</h2>
+    <h2>The whole loop, from blocked to moving.</h2>
     <p class="sub">This is the loop the app exists for. Everything else is in service of it.</p>
 
     <div class="beats">
@@ -355,6 +355,44 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
   </div>
 </section>
 
+<section id="local">
+  <div class="wrap">
+    <span class="kicker">Local-first, and it matters</span>
+    <h2>There is no cloud in the middle.</h2>
+    <p class="sub">
+      The comparable tools relay your sessions through their servers. That is the easy way
+      to build this, and it means your terminal output, your prompts and your source code
+      pass through somebody else's machine.
+    </p>
+
+    <div class="claims">
+      <div class="claim">
+        <div class="k">Where your data goes</div>
+        <div class="v">Phone → your machine, directly, over your own private network.
+          We run no relay, so your terminal output and your code never reach us. The one
+          thing that does is a daily count from the daemon — version, platform, uptime —
+          which you can switch off. <a href="/privacy">The exact payload</a>.</div>
+      </div>
+      <div class="claim">
+        <div class="k">What an account costs you</div>
+        <div class="v">There is no account. No email, no OAuth, no team seat.
+          Pairing is a code your own machine printed.</div>
+      </div>
+      <div class="claim">
+        <div class="k">How access is gated</div>
+        <div class="v">A per-machine bearer token, minted by that machine, plus whatever
+          network you already trust — your Tailscale ACL or your LAN. Nothing is
+          port-forwarded and nothing is exposed to the public internet.</div>
+      </div>
+      <div class="claim">
+        <div class="k">If this project disappears</div>
+        <div class="v">The daemon keeps running and the source stays public. It is your
+          machine, your token, and a plain HTTP API you can curl.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="shots">
   <div class="wrap">
     <span class="kicker">What it looks like</span>
@@ -385,6 +423,63 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     </div>
   </div>
 </section>
+
+
+<section id="wrist">
+  <div class="wrap">
+    <span class="kicker">On your wrist</span>
+    <h2>Built watch-first, not watch-also.</h2>
+    <p class="sub">
+      Most tools in this space treat the watch as a notification mirror. Here it is the
+      primary surface, and the phone is the thing that keeps it fed.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <span class="tag">Complication</span>
+        <h3>A count on your watch face</h3>
+        <p>How many agents are waiting on you, all day, in every accessory family. When
+           nothing is waiting it shows how much of your mesh is up — and it tells you when
+           the reading has gone stale instead of quietly lying.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Notifications</span>
+        <h3>Answerable, not just readable</h3>
+        <p>Continue, Stop, or dictate a Reply straight from the notification. The reply is
+           typed into the real session on the real machine — and once the task is done,
+           the banner takes itself down.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Live Activity</span>
+        <h3>Lock Screen and Dynamic Island</h3>
+        <p>The one session that actually needs you, live on the Lock Screen and in the
+           Smart Stack — with how much of your fleet is online next to it. Blocked always
+           outranks merely busy.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Terminal</span>
+        <h3>A real terminal, on a watch</h3>
+        <p>Crown to scroll, auto-follow at the tail, a key bar for the characters a watch
+           keyboard will not give you, and full VoiceOver.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Mac control</span>
+        <h3>Mouse, keyboard, screen</h3>
+        <p>Drive the Mac itself across multiple displays — trackpad-style pointer with
+           pinch-to-zoom, sticky modifiers so ⌘⇧4 works, paste both ways, and a live
+           screen view — when answering a question is not enough.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Machines</span>
+        <h3>htop for everything you own</h3>
+        <p>CPU, memory, disk, load and top processes for every paired machine. Wake a
+           sleeping box over LAN from its neighbour. <code style="font-size:12px">mesh status</code>
+           shows the whole fleet in one screen.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 
 <section id="how">
   <div class="wrap">
@@ -447,99 +542,6 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
   </div>
 </section>
 
-<section id="wrist">
-  <div class="wrap">
-    <span class="kicker">On your wrist</span>
-    <h2>Built watch-first, not watch-also.</h2>
-    <p class="sub">
-      Most tools in this space treat the watch as a notification mirror. Here it is the
-      primary surface, and the phone is the thing that keeps it fed.
-    </p>
-
-    <div class="grid">
-      <div class="card">
-        <span class="tag">Complication</span>
-        <h3>A count on your watch face</h3>
-        <p>How many agents are waiting on you, all day, in every accessory family. When
-           nothing is waiting it shows how much of your mesh is up — and it tells you when
-           the reading has gone stale instead of quietly lying.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Notifications</span>
-        <h3>Answerable, not just readable</h3>
-        <p>Continue, Stop, or dictate a Reply straight from the notification. The reply is
-           typed into the real session on the real machine — and once the task is done,
-           the banner takes itself down.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Live Activity</span>
-        <h3>Lock Screen and Dynamic Island</h3>
-        <p>The one session that actually needs you, live on the Lock Screen and in the
-           Smart Stack — with how much of your fleet is online next to it. Blocked always
-           outranks merely busy.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Terminal</span>
-        <h3>A real terminal, on a watch</h3>
-        <p>Crown to scroll, auto-follow at the tail, a key bar for the characters a watch
-           keyboard will not give you, and full VoiceOver.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Mac control</span>
-        <h3>Mouse, keyboard, screen</h3>
-        <p>Drive the Mac itself across multiple displays — trackpad-style pointer with
-           pinch-to-zoom, sticky modifiers so ⌘⇧4 works, paste both ways, and a live
-           screen view — when answering a question is not enough.</p>
-      </div>
-      <div class="card">
-        <span class="tag">Machines</span>
-        <h3>htop for everything you own</h3>
-        <p>CPU, memory, disk, load and top processes for every paired machine. Wake a
-           sleeping box over LAN from its neighbour. <code style="font-size:12px">mesh status</code>
-           shows the whole fleet in one screen.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="local">
-  <div class="wrap">
-    <span class="kicker">Local-first, and it matters</span>
-    <h2>There is no cloud in the middle.</h2>
-    <p class="sub">
-      The comparable tools relay your sessions through their servers. That is the easy way
-      to build this, and it means your terminal output, your prompts and your source code
-      pass through somebody else's machine.
-    </p>
-
-    <div class="claims">
-      <div class="claim">
-        <div class="k">Where your data goes</div>
-        <div class="v">Phone → your machine, directly, over your own private network.
-          We run no relay, so your terminal output and your code never reach us. The one
-          thing that does is a daily count from the daemon — version, platform, uptime —
-          which you can switch off. <a href="/privacy">The exact payload</a>.</div>
-      </div>
-      <div class="claim">
-        <div class="k">What an account costs you</div>
-        <div class="v">There is no account. No email, no OAuth, no team seat.
-          Pairing is a code your own machine printed.</div>
-      </div>
-      <div class="claim">
-        <div class="k">How access is gated</div>
-        <div class="v">A per-machine bearer token, minted by that machine, plus whatever
-          network you already trust — your Tailscale ACL or your LAN. Nothing is
-          port-forwarded and nothing is exposed to the public internet.</div>
-      </div>
-      <div class="claim">
-        <div class="k">If this project disappears</div>
-        <div class="v">The daemon keeps running and the source stays public. It is your
-          machine, your token, and a plain HTTP API you can curl.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section id="faq">
   <div class="wrap">
     <span class="kicker">Questions</span>
@@ -597,8 +599,9 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 </section>
 
 <div class="wrap final">
-  <h2>Stop walking back to the machine.</h2>
-  <p class="sub">Free while it is in beta. Takes about two minutes to set up.</p>
+  <h2>Nothing should wait on you for forty minutes.</h2>
+  <p class="sub">Two minutes to set up. Free while it is in beta, and there is no account to
+    create — pairing is a code your own machine prints.</p>
   <div class="cta">
     <a class="btn btn-primary" href="https://testflight.apple.com/join/pVYPTxc7">Join the TestFlight →</a>
     <a class="btn btn-ghost" href="#how">See the setup</a>
