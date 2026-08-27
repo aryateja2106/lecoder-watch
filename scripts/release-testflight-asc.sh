@@ -107,8 +107,8 @@ PRERELEASE_JSON="$(run_bounded 90 asc testflight pre-release list --app "$APP_ID
   echo "      delete and reinstall — which wipes the app Keychain and un-pairs every"
   echo "      machine they had. Shipping blind is the one thing worth refusing here."
   echo ""
-  echo "      Re-run when App Store Connect responds. If you have confirmed in the"
-  echo "      TestFlight UI that $VERSION is not lower than what is already there:"
+  echo "      Clear the cause above, then re-run. If you have instead confirmed by hand in"
+  echo "      the TestFlight UI that $VERSION is not lower than what is already there:"
   echo "          MESH_SKIP_VERSION_CHECK=1 sh scripts/release-testflight-asc.sh"
   [ "${MESH_SKIP_VERSION_CHECK:-}" = "1" ] || exit 1
   echo "      MESH_SKIP_VERSION_CHECK=1 set — continuing without the check."
