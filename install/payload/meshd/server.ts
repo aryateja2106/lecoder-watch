@@ -43,10 +43,21 @@ async function sh(cmd: string): Promise<string> {
 /// sh() with nothing discarded — for the paths that must FALL BACK on failure
 /// (bracketed paste, sized new-session) instead of pretending it worked.
 async function shChecked(cmd: string, stdin?: string): Promise<{ out: string; err: string; code: number }> {
+  // stdin is handed over as one buffer rather than written into a pipe ourselves. Writing
+  // it by hand is what killed the daemon: a child that exits without draining the pipe
+  // makes the write fail with EPIPE, and on a FileSink that arrives OUT OF BAND — not on
+  // the returned promise — so neither a try/catch here nor the `.catch()` at the paste call
+  // site can see it, and the process exits. Measured: this function returned {code:1}
+  // normally, execution continued, and only then did bun print "EPIPE: broken pipe, send"
+  // and die. rmux 0.3.1 does not accept `-` as stdin, so it is always the child that leaves
+  // early; under ~400 KB the payload fits the kernel pipe buffer and survives, ~1 MB kills
+  // it. One tap of the phone's paste button with a big clipboard took the Mac off the mesh.
+  // Handing bun the whole buffer makes the broken pipe bun's to absorb: verified surviving
+  // 8 MB, while `cat` still round-trips 2 MB byte-exact and exit codes still surface.
   const p = Bun.spawn(["/bin/sh", "-c", cmd], {
-    stdin: stdin === undefined ? "ignore" : "pipe", stdout: "pipe", stderr: "pipe",
+    stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin),
+    stdout: "pipe", stderr: "pipe",
   });
-  if (stdin !== undefined) { p.stdin.write(stdin); p.stdin.end(); }
   const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
   return { out, err: err.trim(), code: await p.exited };
 }
@@ -577,8 +588,18 @@ async function agentSend(name: string, text?: string, key?: string, pane?: strin
       }
     }
     if (!delivered) {
-      const hex = Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")).join(" ");
-      await sh(`${MUX} send-keys -t ${target} -H -- ${hex}`);
+      // Sent in chunks, because the whole thing does not fit in one command line. Hex
+      // triples the byte count and ARG_MAX is about a megabyte, so a single send-keys
+      // died with "E2BIG: argument list too long" on roughly 300 KB of text — which a
+      // copied log clears easily. 8 KB per chunk is ~24 KB of argument, comfortably
+      // under the limit on every platform we run on, and the chunks are sent in order
+      // so the pane sees the text exactly as it was written.
+      const bytes = new TextEncoder().encode(text);
+      const CHUNK = 8192;
+      for (let i = 0; i < bytes.length; i += CHUNK) {
+        const hex = Array.from(bytes.subarray(i, i + CHUNK), (b) => b.toString(16).padStart(2, "0")).join(" ");
+        await sh(`${MUX} send-keys -t ${target} -H -- ${hex}`);
+      }
     }
   }
   if (sendKey) await sh(`${MUX} send-keys -t ${target} ${sendKey}`);
