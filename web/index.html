@@ -25,12 +25,19 @@
   --ink:#e9e9e7; --ink-2:#9b9b9b; --ink-3:#6b6b6b;
   --ok:#4ade80; --danger:#ef4444;
   --mono:'JetBrains Mono','Fira Code','SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  /* Prose is set in the reader's own system face — no second webfont to download.
+     Mono stays on the terminal chrome, where it means "this is a shell", not on
+     paragraphs, where it only costs ~18% width per character and wraps the copy
+     to shreds on a 375px screen. */
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,'Helvetica Neue',Arial,sans-serif;
   --radius:8px; --wrap:1040px;
 }
 *{box-sizing:border-box}
+/* Everything that is meant to read as a terminal keeps the mono face. */
+.brand,.eyebrow,.term,.term-head,.term-title,.term-body,.cmd,code,pre,kbd{font-family:var(--mono)}
 html{color-scheme:dark}
 @media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
   font-size:15.5px;line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:clip}
 /* hero atmosphere — monochrome white glow + fading terminal dot-grid, no color gradients */
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
@@ -51,10 +58,11 @@ a{color:inherit}
 header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
   background:rgba(25,25,25,.85);border-bottom:1px solid var(--line)}
 .nav{display:flex;align-items:center;gap:16px;height:60px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;text-decoration:none;font-size:15px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;text-decoration:none;font-size:15px;min-height:44px}
 .brand img{width:28px;height:28px;background:transparent;padding:0;filter:invert(.92)}
 .nav .spacer{flex:1}
-.nav a.link{color:var(--ink-2);text-decoration:none;font-size:13.5px}
+.nav a.link{color:var(--ink-2);text-decoration:none;font-size:13.5px;
+  display:inline-flex;align-items:center;min-height:44px}
 .nav a.link:hover{color:var(--ink)}
 @media(max-width:760px){.nav a.link.hide-sm{display:none}}
 @media(max-width:480px){.nav{gap:10px}.nav .btn{padding:9px 12px;font-size:13px}
@@ -62,7 +70,8 @@ header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
 
 /* ---- buttons ---- */
 .btn{display:inline-flex;align-items:center;gap:8px;border-radius:var(--radius);padding:11px 18px;
-  font-size:14px;font-weight:600;text-decoration:none;border:1px solid transparent;white-space:nowrap;font-family:var(--mono)}
+  font-size:14px;font-weight:600;text-decoration:none;border:1px solid transparent;white-space:nowrap;font-family:var(--mono);
+  min-height:44px}
 .btn-primary{background:var(--ink);color:var(--bg);
   box-shadow:0 0 0 1px rgba(255,255,255,.06),0 10px 30px -16px rgba(233,233,231,.3)}
 .btn-primary:hover{background:#fff;
@@ -207,7 +216,11 @@ details code{font-size:12.5px;background:var(--panel);border:1px solid var(--lin
 .req{font-size:12px;color:var(--ink-3);border:1px solid var(--line-2);border-radius:999px;padding:5px 13px}
 
 footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);font-size:13px}
-.foot{display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+/* Apple's minimum touch target is 44px. These were 18-30px: reachable with a mouse,
+   a coin toss with a thumb. Padding grows the hit box without moving the type. */
+.foot{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.foot a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px}
+.copy{min-height:44px;min-width:44px}
 .foot a{color:var(--ink-3);text-decoration:none}
 .foot a:hover{color:var(--ink-2)}
 .foot .spacer{flex:1}
