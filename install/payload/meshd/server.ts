@@ -17,7 +17,7 @@ import { initTelemetry } from "./telemetry";
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 // 0.5.0 additions, all additive so a 0.4.x daemon and a 0.5 app (or the reverse)
 // keep working: screenRegion (rect+quality on /screen.jpg), openUrl (POST /open),
 // power (shutdown/restart on /system, results now truthful), laPush (POST /la/token
@@ -884,12 +884,58 @@ function authed(req: Request, server?: any): boolean {
 }
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+/**
+ * Every NAME this machine legitimately answers to.
+ *
+ * This set is why 0.5.0 broke phones that had worked for months. hostAllowed() compared
+ * the Host header against localIPs() — a set of IP ADDRESSES — so addressing a machine by
+ * its address worked and addressing it by its name never could. The iOS client stores a
+ * machine as `[ip, host]` and tries both, and Tailscale MagicDNS makes the BARE SHORT NAME
+ * the natural thing to have stored, because it resolves. The FQDN passed the `.ts.net`
+ * test; the short name it resolves FROM did not. Measured on one machine where all three
+ * are the same machine:
+ *
+ *     Host: 100.94.221.115                        -> 200
+ *     Host: arya-macbook-pro.tailaddf1e.ts.net    -> 200
+ *     Host: arya-macbook-pro                      -> 421   <- the one a phone sends
+ *
+ * Letting a name in is not a hole. The guard exists to stop DNS rebinding — a hostile site
+ * resolving its own domain to 127.0.0.1 so the victim's browser talks to this daemon under
+ * `Host: evil.example`. An attacker cannot make a browser send THIS machine's name, because
+ * a browser only sends a Host it navigated to, and that name resolves nowhere except on the
+ * user's own tailnet.
+ *
+ * Refreshed on a timer, never per request: `tailscale status --json` costs ~100ms, and
+ * letting an unauthenticated header trigger a subprocess is a second problem.
+ */
+let OWN_NAMES: Set<string> = new Set();
+async function refreshOwnNames(): Promise<void> {
+  const names = new Set<string>();
+  const add = (v: unknown) => {
+    const n = String(v ?? "").toLowerCase().replace(/\.$/, "").trim();
+    if (!n) return;
+    names.add(n);
+    names.add(n.replace(/\.local$/, ""));
+    names.add(n.split(".")[0]);        // the MagicDNS short label
+  };
+  add(os.hostname());
+  try {
+    const raw = JSON.parse(await sh(`tailscale status --json 2>/dev/null`));
+    add(raw?.Self?.HostName);
+    add(raw?.Self?.DNSName);
+  } catch { /* no tailscale here: the hostname alone still has to work */ }
+  names.delete("");
+  OWN_NAMES = names;
+}
+
 function hostAllowed(req: Request): boolean {
   const raw = req.headers.get("host");
   if (!raw) return true; // no Host = not a browser; the auth gate still applies
   const host = raw.replace(/:\d+$/, "").toLowerCase();
   if (LOOPBACK_HOSTS.has(host)) return true;
   if (/\.ts\.net$/.test(host)) return true;   // tailscale MagicDNS
+  if (OWN_NAMES.has(host)) return true;         // this machine, addressed by name
   return localIPs().has(host);                  // this machine's own IPs (incl. tailscale)
 }
 
@@ -1109,3 +1155,8 @@ initTelemetry(VERSION);
 // index just means rows start as idle/working until events arrive.
 readEvents().then((events) => { for (const e of events) noteSessionEvent(e); }).catch(() => {});
 muxSupportsJoin().catch(() => {});
+// The names this machine answers to, for the Host guard. Refreshed because Tailscale can
+// come up after meshd does — otherwise a reboot where the daemon wins the race would leave
+// every phone on this machine's name locked out until someone restarted it by hand.
+refreshOwnNames().catch(() => {});
+setInterval(() => { refreshOwnNames().catch(() => {}); }, 5 * 60_000).unref?.();
