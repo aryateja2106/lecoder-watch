@@ -1,39 +1,48 @@
 # Source from ~/.zshrc — bridge must start in the current shell (not a background subshell).
+#
+# This runs on EVERY interactive shell, so it has one hard budget: it must be
+# imperceptible. It used to cost 14.4 seconds, measured, for the reason in
+# `_cmux_bridge_healthy` below.
 start_cmux_bridge() {
   local port="${CMUX_BRIDGE_PORT:-8901}"
   local mesh_home="${MESH_HOME:-$HOME/.mesh}"
   local cmux_port="${CMUX_PORT:-9160}"
   local log="/tmp/cmux-bridge.log"
 
-  _cmux_bridge_healthy() {
-    curl -sf -X POST "http://127.0.0.1:${port}/cmux" \
-      -H 'content-type: application/json' \
-      -d '{"args":["tree","--all","--json"]}' \
-    | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('data',{}).get('windows',[])))" 2>/dev/null \
-    | grep -qv '^0$'
-  }
-
-  if curl -sf "http://127.0.0.1:${port}/health" >/dev/null 2>&1 && _cmux_bridge_healthy; then
+  # Healthy means THE BRIDGE ANSWERS. It used to mean "cmux currently has at least one
+  # window open", which is not a property of the bridge at all — it is a property of a
+  # separate desktop app. With cmux.app closed the bridge correctly answers /health and
+  # correctly returns 502 from /cmux ("connect to cmux.sock: connection refused"), the
+  # old gate read that as broken, and so every interactive shell kill -9'd a perfectly
+  # working bridge and then sat through a 20 x 0.25s retry loop that could never
+  # succeed, because restarting the bridge cannot start cmux. 14.4s per shell, for a
+  # question that had no right answer.
+  if curl -sf -m 1 "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
     return 0
   fi
+
+  # Someone already holds the port and is presumably still booting. Two shells opened a
+  # second apart must not fight over it.
+  if lsof -ti "tcp:${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+    return 0
+  fi
+
   # -sTCP:LISTEN is load-bearing. `lsof -i :PORT` matches a socket with that port on
   # EITHER end, so the bare form also listed every client CONNECTED to the bridge —
   # and meshd is one, because /agents asks the bridge for cmux sessions. Opening any
   # new interactive shell while the bridge looked unhealthy therefore kill -9'd the
   # user's running meshd. Only the process actually holding the port may be replaced.
   lsof -ti "tcp:${port}" -sTCP:LISTEN | xargs kill -9 2>/dev/null || true
-  sleep 0.5
   nohup launchctl asuser "$(id -u)" /bin/zsh -lc \
     "cd '$mesh_home/meshd' && PATH='/Applications/cmux.app/Contents/Resources/bin:/opt/homebrew/bin:/usr/bin:/bin' CMUX_PORT='$cmux_port' exec /opt/homebrew/bin/bun run cmux-bridge.ts >>'$log' 2>&1" \
     >/dev/null 2>&1 &
-  local i=0
-  while [ "$i" -lt 20 ]; do
-    _cmux_bridge_healthy && return 0
-    i=$((i + 1))
-    sleep 0.25
-  done
-  echo "cmux-bridge failed to start; see $log" >&2
-  return 1
+  # Detach, or zsh prints "[4] 2109" at the prompt and "[4] + killed ..." later —
+  # job-control noise in the user's terminal for a daemon they did not launch.
+  disown 2>/dev/null || true
+
+  # Deliberately no wait loop. A shell must never block on a daemon coming up: if the
+  # bridge is broken, `mesh doctor` is where you find out, not the prompt.
+  return 0
 }
 
 if [[ -o interactive ]] && command -v cmux >/dev/null 2>&1; then

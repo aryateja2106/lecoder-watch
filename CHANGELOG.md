@@ -9,6 +9,17 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Fixed
+- **Opening a terminal is no longer slow.** Every new interactive shell was taking about
+  14.5 seconds, essentially all of it inside the cmux-bridge startup hook that the
+  installer adds to your shell profile. The hook decided the bridge was broken by asking
+  whether the cmux *app* currently had a window open — which it is not the bridge's job to
+  know. With cmux closed, a perfectly healthy bridge was declared dead, killed, and waited
+  on through a retry loop that could never succeed, on every single shell. It now asks the
+  bridge whether *the bridge* is answering, never blocks the shell waiting for a daemon,
+  and no longer prints stray job-control lines like `[4] + killed` at your prompt.
+  Measured: **14.5s → 0.12s**.
+
 ## [0.5.1] — 2026-08-27 (iPhone and Watch app)
 
 ### Fixed

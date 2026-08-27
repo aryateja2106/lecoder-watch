@@ -81,8 +81,26 @@ run_bounded() {
 }
 
 PRERELEASE_JSON="$(run_bounded 90 asc testflight pre-release list --app "$APP_ID")" || {
-  echo "FAIL: App Store Connect did not answer within 90s, so the highest existing"
-  echo "      pre-release version could not be read."
+  echo "FAIL: could not read the highest existing pre-release version within 90s."
+  echo ""
+  # Two very different causes look identical from here, and guessing wrong sends you to
+  # Apple's status page for an hour over a dialog on your own screen. Ask.
+  if curl -s -o /dev/null -m 15 "https://api.appstoreconnect.apple.com/v1/apps" 2>/dev/null; then
+    echo "      App Store Connect itself IS reachable, so this is almost certainly local:"
+    echo "      \`brew upgrade asc\` re-signs the binary, which invalidates the macOS"
+    echo "      Keychain ACL on the stored API key. Every asc call that decrypts the key"
+    echo "      then waits on a \"asc wants to use your confidential information\" dialog"
+    echo "      that a non-interactive shell can never answer."
+    if pgrep -qf SecurityAgent 2>/dev/null; then
+      echo "      SecurityAgent is running right now — there is a dialog waiting for you."
+    fi
+    echo ""
+    echo "      Fix, once: run \`asc auth status && asc apps list --limit 1\` in a real"
+    echo "      terminal and choose ALWAYS ALLOW. Then re-run this script."
+  else
+    echo "      App Store Connect is not reachable from here either — this one really is"
+    echo "      Apple. Try again later."
+  fi
   echo ""
   echo "      That check is not cosmetic: uploading a version LOWER than one already on"
   echo "      TestFlight makes iOS treat this build as older, and testers get asked to"

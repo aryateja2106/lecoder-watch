@@ -1,7 +1,7 @@
 # Shipping to TestFlight / App Store
 
 The repeatable path for this app and the next one. Tooling: [`asc`](https://github.com/rorkai/App-Store-Connect-CLI)
-(`brew upgrade asc`, currently 4.6.0) plus `scripts/release-testflight.sh`.
+(`brew upgrade asc`, currently 4.9.4) plus `scripts/release-testflight.sh`.
 
 ## Why not sideload
 
@@ -186,6 +186,33 @@ asc testflight groups list --app <APP_ID>
 - Release notes come from the top section of `CHANGELOG.md`.
 
 ## Gotchas already paid for
+
+### Upgrading `asc` makes every release hang until you click a Keychain dialog
+
+`brew upgrade asc` gives the binary a new code signature, and that **invalidates the
+macOS Keychain ACL** on the stored API key. Every `asc` call that decrypts the key then
+raises *"asc wants to use your confidential information stored in ... in your keychain"*.
+
+In an interactive terminal you click it and move on. In a non-interactive one — a script,
+CI, an agent session — nothing can answer, and the command hangs **forever** with no
+output and no error.
+
+Measured 2026-08-27: `asc` went 4.6.0 → 4.9.4 at 16:17; releases started hanging at 16:20.
+It looked exactly like App Store Connect being down. It was not — `curl
+https://api.appstoreconnect.apple.com/v1/apps` answered 401 in 0.8s throughout.
+
+How to tell them apart in ten seconds:
+
+```bash
+asc auth status                 # instant even when broken: reads metadata, no key decrypt
+sample $(pgrep -n asc) 3        # hung call: SecItemCopyMatching -> CSSM_DecryptDataFinal -> mach_msg
+pgrep -lf SecurityAgent         # a dialog is waiting for a click
+```
+
+The fix is one click: run any `asc` command **from a real terminal** and choose
+**Always Allow**. Do that immediately after every `brew upgrade asc`, before a release.
+
+
 
 - **Every app extension needs `CFBundleDisplayName` in its Info.plist** or processing
   fails with **90360**, once per extension. `INFOPLIST_KEY_CFBundleDisplayName` does
