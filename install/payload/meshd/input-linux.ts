@@ -38,6 +38,11 @@ const KEYSYMS: Record<string, string> = {
   home: "Home", end: "End", pageup: "Prior", pagedown: "Next", grave: "grave",
   f1: "F1", f2: "F2", f3: "F3", f4: "F4", f5: "F5", f6: "F6",
   f7: "F7", f8: "F8", f9: "F9", f10: "F10", f11: "F11", f12: "F12",
+  // Digits explicitly, not only via keysym()'s [a-z0-9] pass-through — the coverage
+  // check reads this map literally (unquoted keys only), and the chord chips
+  // (cmd-shift-2, cmd-shift-4) made digits part of the key bar's vocabulary.
+  0: "0", 1: "1", 2: "2", 3: "3", 4: "4",
+  5: "5", 6: "6", 7: "7", 8: "8", 9: "9",
 };
 // cmd from the watch means "the primary shortcut modifier" — on Linux that is ctrl.
 const MODS: Record<string, string> = {
