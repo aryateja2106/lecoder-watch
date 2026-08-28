@@ -220,6 +220,10 @@ struct NewSessionSheet: View {
     @State private var busy = false
     @State private var browsing = false
     @State private var compact = false
+    /// Set when `create()` fails. The sheet used to dismiss unconditionally on tap,
+    /// which made a failed launch look identical to a successful one — this keeps the
+    /// form on screen with the reason and a way to try again.
+    @State private var errorMessage: String?
 
     // Common launchers; "shell" means just a plain rmux session.
     private let presets = ["shell", "claude", "codex", "pi", "agy", "bun", "python3"]
@@ -265,6 +269,17 @@ struct NewSessionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let errorMessage {
+                    Section {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            Button("Retry") { Task { await create() } }
+                                .buttonStyle(.bordered)
+                                .disabled(busy)
+                        }
+                    }
+                }
                 Section("Session name") {
                     TextField("e.g. build-watch", text: $name.shellSafe)
                         .autocorrectionDisabled()
@@ -318,8 +333,19 @@ struct NewSessionSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") { Task { await create() } }
-                        .disabled(busy)
+                    Button {
+                        Task { await create() }
+                    } label: {
+                        if busy {
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                Text("Starting session…")
+                            }
+                        } else {
+                            Text("Create")
+                        }
+                    }
+                    .disabled(busy)
                 }
             }
             .onAppear {
@@ -337,15 +363,22 @@ struct NewSessionSheet: View {
 
     private func create() async {
         busy = true
-        defer { busy = false }
-        await store.newSession(on: machine,
+        errorMessage = nil
+        let ok = await store.newSession(on: machine,
                                name: sessionName,
                                cmd: launchCommand,
                                cwd: cwd.trimmingCharacters(in: .whitespacesAndNewlines),
                                initialText: initialText,
                                cols: compact ? 80 : nil,
                                rows: compact ? 24 : nil)
-        dismiss()
+        busy = false
+        if ok {
+            dismiss()
+        } else {
+            // `store.fail(...)` on the failure path just set this; surfaced here so the
+            // sheet says exactly what MeshStore knows, not a generic "something failed".
+            errorMessage = store.lastError?.message ?? "Couldn't start the session."
+        }
     }
 }
 

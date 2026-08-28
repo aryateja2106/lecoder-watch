@@ -728,14 +728,21 @@ final class MeshStore: ObservableObject {
     // MARK: Sessions
 
     /// Create a new rmux session on a machine, then refresh so it appears in the list.
+    /// Returns whether it actually landed — `@discardableResult` so the fire-and-forget
+    /// callers (the watch relay's `.newAgent` command) are unaffected, while a caller
+    /// with a sheet on screen (`NewSessionSheet`) can keep that sheet open and show the
+    /// failure inline instead of dismissing on the strength of having tried.
+    @discardableResult
     func newSession(on machine: Machine, name: String, cmd: String?, cwd: String? = nil, initialText: String? = nil,
-                    cols: Int? = nil, rows: Int? = nil) async {
+                    cols: Int? = nil, rows: Int? = nil) async -> Bool {
         do {
             try await client(for: machine).newSession(name: name, cmd: cmd, cwd: cwd, initialText: initialText,
                                                       cols: cols, rows: rows)
             await refresh()
+            return true
         } catch {
             fail("create session failed: \(Self.describe(error))")
+            return false
         }
     }
 
