@@ -444,6 +444,20 @@ struct FsListing: Codable, Hashable {
     var rows: [FsEntry] { entries ?? [] }
 }
 
+/// What `FileBrowserView` shows: `entries` with dotfiles/dotfolders removed unless
+/// `showHidden`, then a case-insensitive substring match of `query` against the
+/// name. A free function rather than a view computed property so a
+/// `scripts/check-*.swift` can exercise it without linking SwiftUI. The daemon has
+/// no query param and does not filter dotfiles — both are client-side.
+func filterFsEntries(_ entries: [FsEntry], showHidden: Bool, query: String) -> [FsEntry] {
+    var result = showHidden ? entries : entries.filter { !$0.name.hasPrefix(".") }
+    let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !needle.isEmpty {
+        result = result.filter { $0.name.localizedCaseInsensitiveContains(needle) }
+    }
+    return result
+}
+
 // MARK: - Usage (OpenUsage)
 
 struct UsageLimit: Codable, Hashable, Identifiable {
