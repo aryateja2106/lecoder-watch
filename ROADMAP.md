@@ -26,12 +26,10 @@ every capability is one module and a small `server.ts` patch; every claim gets a
 Every item below is finished code that no user is running. Until these clear, building
 more features adds nothing a person can touch, and no feedback can come back.
 
-- **Give `mesh.lesearch.ai` a DNS record.** Vercel already serves the site (alias
-  `mesh.lesearch.ai` → `lesearch-mesh-web`) and the hostname still does not resolve.
-  One Cloudflare CNAME, name `mesh`, target `cname.vercel-dns.com`, **DNS only**
-  (gray cloud — same as `www` and `lecoder`), fixes the README, the website, and
-  `curl https://mesh.lesearch.ai/install.sh`. Do not orange-cloud it: that double-proxies
-  Vercel and breaks TLS.
+- ~~**Give `mesh.lesearch.ai` a DNS record.**~~ DONE (verified 2026-08-28): the CNAME
+  resolves via public resolvers and `https://mesh.lesearch.ai/install.sh` answers 307 →
+  the GitHub release asset. `scripts/check-links.sh` now guards it in CI, so a regression
+  turns the suite red instead of rotting silently.
 - **Submit the latest build for Beta App Review.** Uploading is not publishing: external
   testers — everyone holding the public link — only receive a build after review. The
   Aug 21 and Aug 24 builds are both sitting at `READY_FOR_BETA_SUBMISSION`, so the newest

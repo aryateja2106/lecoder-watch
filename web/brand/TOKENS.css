@@ -1,0 +1,92 @@
+/*
+ * LeSearch AI / MeshWatch — brand design tokens
+ * ------------------------------------------------
+ * Standalone, importable token sheet. No components, no resets — just the
+ * custom properties. Pair with 'JetBrains Mono' (Google Fonts) for anything
+ * that touches brand surfaces; the mono face is not optional trim here, it
+ * is the typeface the whole identity is built on.
+ *
+ * Theme resolution order (matches the three states an artifact host can be
+ * in — no explicit choice, explicit light, explicit dark):
+ *   1. :root                                        → light (default)
+ *   2. prefers-color-scheme: dark, no light override → dark
+ *   3. [data-theme="dark"] on the root               → dark, explicit
+ *   4. [data-theme="light"] on the root               → light, explicit
+ *
+ * Contrast ratios below are text-vs-page-background (WCAG 2.1), computed
+ * against --lw-bg in each theme. Full derivation + usage rules live at
+ * /brand/index.html.
+ *
+ *   token       dark vs bg   light vs bg   AA tier
+ *   ink         14.46:1      15.71:1       AAA (normal text)
+ *   ink-2        6.33:1       6.76:1       AA (normal text)
+ *   ink-3        3.30:1       4.06:1       AA (large text / UI only)
+ *   ok          10.09:1       4.90:1       AA — dark also clears AAA
+ *   danger       4.67:1       5.42:1       AA (normal text)
+ */
+
+:root {
+  /* surfaces — light (default: an un-stamped root renders this) */
+  --lw-bg:      #f2f2f2;
+  --lw-bg-2:    #eeeeee;
+  --lw-panel:   #ececec;
+  --lw-elev:    #e4e4e4;
+  --lw-hover:   #dcdcdc;
+  --lw-line:    #dcdcdc;
+  --lw-line-2:  #c7c7c7;
+  --lw-line-h:  #a3a3a3;
+
+  /* text */
+  --lw-ink:     #191919;
+  --lw-ink-2:   #545454;
+  --lw-ink-3:   #767676;
+
+  /* semantic accents — reserved for action/status, never decoration */
+  --lw-ok:      #167a3a;  /* affirmative / online / continue */
+  --lw-danger:  #c51111;  /* destructive / blocked / stop */
+
+  /* type */
+  --lw-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* structure */
+  --lw-radius: 8px;
+  --lw-wrap:   1040px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --lw-bg:      #191919;
+    --lw-bg-2:    #202020;
+    --lw-panel:   #1f1f1f;
+    --lw-elev:    #252525;
+    --lw-hover:   #2a2a2a;
+    --lw-line:    #2a2a2a;
+    --lw-line-2:  #373737;
+    --lw-line-h:  #525252;
+
+    --lw-ink:     #e9e9e7;
+    --lw-ink-2:   #9b9b9b;
+    --lw-ink-3:   #6b6b6b;
+
+    --lw-ok:      #4ade80;
+    --lw-danger:  #ef4444;
+  }
+}
+
+:root[data-theme="dark"] {
+  --lw-bg:      #191919;
+  --lw-bg-2:    #202020;
+  --lw-panel:   #1f1f1f;
+  --lw-elev:    #252525;
+  --lw-hover:   #2a2a2a;
+  --lw-line:    #2a2a2a;
+  --lw-line-2:  #373737;
+  --lw-line-h:  #525252;
+
+  --lw-ink:     #e9e9e7;
+  --lw-ink-2:   #9b9b9b;
+  --lw-ink-3:   #6b6b6b;
+
+  --lw-ok:      #4ade80;
+  --lw-danger:  #ef4444;
+}
