@@ -53,6 +53,13 @@ each entry as you ship the slice, not at release time.
   an instruction that only fails when iOS replays it onto a live screen. Releasing to
   TestFlight now refuses to proceed if the app cannot survive being opened.
 
+## [0.5.3] — unreleased (installer only)
+
+### Fixed
+- **Opening a terminal is no longer slow** — the 14.5s → 0.12s cmux-bridge hook fix
+  above ships to every machine in this release; the published 0.5.2 tarball was cut
+  hours before the fix landed and still carries the old hook.
+
 ## [0.5.2] — 2026-08-27 (installer only)
 
 ### Fixed
