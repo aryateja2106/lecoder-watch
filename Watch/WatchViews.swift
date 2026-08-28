@@ -479,7 +479,7 @@ private func statusColor(_ snap: MachineSnapshot) -> Color {
 }
 
 private func watchSessionSubtitle(_ agent: Agent, route: String) -> String {
-    let kind = agent.isCmux ? "cmux" : "\(agent.windows) pane\(agent.windows == 1 ? "" : "s")"
+    let kind = agent.kindLabel
     return "\(kind)\(agent.attached ? " · live" : "") · \(route)"
 }
 

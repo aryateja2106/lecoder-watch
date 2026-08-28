@@ -64,7 +64,7 @@ struct TerminalTab: View {
                                         Image(systemName: "terminal.fill")
                                         VStack(alignment: .leading) {
                                             Text(agent.displayName)
-                                            Text([agent.isCmux ? "cmux" : nil, agent.agentType ?? "shell", agent.memLabel].compactMap { $0 }.joined(separator: " · "))
+                                            Text([agent.isMuxGuest ? agent.kindLabel : nil, agent.agentType ?? "shell", agent.memLabel].compactMap { $0 }.joined(separator: " · "))
                                                 .font(.caption).foregroundStyle(.secondary)
                                         }
                                         Spacer()
@@ -75,7 +75,7 @@ struct TerminalTab: View {
                                     }
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    if !agent.isCmux {
+                                    if !agent.isMuxGuest {
                                         Button(role: .destructive) {
                                             Task { await store.kill(on: m, name: agent.name) }
                                         } label: {
@@ -407,6 +407,9 @@ private struct SessionPeekScreen: View {
     /// that shows the same thing for both is the reason "updated 14:02" used to be a
     /// lie told every two seconds.
     @State private var unreachable = false
+    /// Why the last keystroke did not land, in the daemon's own words. Cleared by the
+    /// next send that succeeds, so it describes the present and not a solved problem.
+    @State private var inputRefusal: String?
     @State private var openingLink: LinkTarget?
     /// Links the session printed — a dev server, a PR, an auth callback. Computed once
     /// per poll rather than per body pass: scanning is cheap, but not once a scroll.
@@ -433,7 +436,7 @@ private struct SessionPeekScreen: View {
     private var state: SessionState { sessionState(lines: output, attached: session.attached) }
 
     private var sessionKind: String {
-        session.isCmux ? "cmux" : "\(session.windows) pane\(session.windows == 1 ? "" : "s")"
+        session.kindLabel
     }
 
     private var continueBlocked: Bool {
@@ -536,7 +539,7 @@ private struct SessionPeekScreen: View {
     private var paneCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label(session.isCmux ? "Surface" : "Pane", systemImage: "rectangle.split.2x1")
+                Label(session.isCmux ? "Surface" : session.isHerdr ? "herdr pane" : "Pane", systemImage: "rectangle.split.2x1")
                     .font(.headline)
                 Spacer()
                 Text(activePane?.label ?? "session")
@@ -574,9 +577,21 @@ private struct SessionPeekScreen: View {
                 Spacer()
                 if loading { ProgressView().controlSize(.small) }
             }
+            if let inputRefusal {
+                Label("Input refused · \(inputRefusal)", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Group {
                 if visibleLines.isEmpty {
-                    Text("No output yet. Tap refresh or open the terminal.")
+                    // "No output yet" is only true when the session answered. A session
+                    // the daemon could not read at all is a different sentence, and
+                    // printing the reassuring one over a vanished pane is what made the
+                    // terminal look merely quiet.
+                    Text(unreachable
+                         ? "\(machine.host) isn't answering — this is not an empty session."
+                         : "No output yet. Tap refresh or open the terminal.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
@@ -620,7 +635,7 @@ private struct SessionPeekScreen: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(session.isCmux)
+            .disabled(session.isMuxGuest)
             // meshd's own remote desktop, opened knowing which session you came from —
             // which is what lets its paste go into this pane instead of into whatever
             // the Mac happens to have focused. Needs no VNC server installed anywhere.
@@ -650,7 +665,7 @@ private struct SessionPeekScreen: View {
                     Label("Paste", systemImage: "doc.on.clipboard")
                 }
                 .disabled(!UIPasteboard.general.hasStrings)
-                if !session.isCmux {
+                if !session.isMuxGuest {
                     Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
                 }
                 if activePane != nil && !session.isCmux {
@@ -672,7 +687,7 @@ private struct SessionPeekScreen: View {
             .buttonStyle(.bordered)
             .labelStyle(.iconOnly)
             // rmux supports the full key set; cmux surfaces only take the row above.
-            if !session.isCmux {
+            if !session.isMuxGuest {
                 HStack {
                     Button { Task { await send(key: "page-up") } } label: { Label("Page up", systemImage: "arrow.up.to.line") }
                     Button { Task { await send(key: "page-down") } } label: { Label("Page down", systemImage: "arrow.down.to.line") }
@@ -683,7 +698,7 @@ private struct SessionPeekScreen: View {
                 .buttonStyle(.bordered)
                 .labelStyle(.iconOnly)
             }
-            if !session.isCmux {
+            if !session.isMuxGuest {
                 Button(role: .destructive) {
                     Task {
                         await store.kill(on: machine, name: session.name)
@@ -814,8 +829,18 @@ private struct SessionPeekScreen: View {
         }
     }
 
+    /// A refused keystroke has to say so. `try?` here meant the daemon could answer
+    /// "pane not found" and the screen would look exactly like a delivered key — the
+    /// half of the dead-terminal report that no daemon fix could have reached.
     private func send(text: String? = nil, key: String? = nil) async {
-        try? await client.send(agent: session.name, text: text, key: key, pane: selectedPane)
+        do {
+            try await client.send(agent: session.name, text: text, key: key, pane: selectedPane)
+            inputRefusal = nil
+        } catch let error as MeshClient.MeshError {
+            inputRefusal = error.reason ?? "the machine refused the input"
+        } catch {
+            inputRefusal = "the machine could not be reached"
+        }
         try? await Task.sleep(for: .milliseconds(350))
         await refresh()
     }

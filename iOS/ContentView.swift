@@ -372,7 +372,7 @@ private struct MachineDetailView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(a.displayName)
                             SessionStateBadge(state: a.displayState(latestEvent: latestEvent(for: a.name)))
-                            Text(a.isCmux ? "cmux" : "\(a.windows) pane\(a.windows == 1 ? "" : "s")")
+                            Text(a.kindLabel)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -759,7 +759,9 @@ private struct MachineSetupSection: View {
             error = nil
         } catch {
             // An older daemon has no /doctor route; say so instead of showing a raw 404.
-            if case MeshClient.MeshError.http(404) = error {
+            // Matched on the status, not the case: meshd answers an unknown route with
+            // `{"error":"not found"}`, which now arrives as .refused.
+            if (error as? MeshClient.MeshError)?.statusCode == 404 {
                 self.error = "This machine's daemon predates setup checks. Reinstall to update it."
             } else {
                 self.error = "Couldn't reach \(machineShortName(machine.host))."

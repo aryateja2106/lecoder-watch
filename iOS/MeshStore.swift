@@ -1214,16 +1214,20 @@ final class MeshStore: ObservableObject {
             // daemon never claimed it could do this. Say which thing is missing —
             // "unsupported" alone sends people looking at the wrong end.
             case .unsupported(let capability): return "this agent has no \(capability) support"
+            // The daemon's own sentence, which names the thing that went wrong —
+            // "pane w9:p2 not found" instead of the "HTTP 400" it used to collapse to.
+            case .refused(_, let why): return why
             }
         }
         return error.localizedDescription
     }
 
+    /// Asked of `statusCode`, not of one case: a 401 carrying meshd's
+    /// `{"error":"unauthorized"}` body arrives as .refused, and matching only .http
+    /// would drop the token prompt exactly when the token is the problem.
     private nonisolated static func isAuthError(_ error: Error) -> Bool {
-        if case MeshClient.MeshError.http(let code) = error {
-            return code == 401 || code == 403
-        }
-        return false
+        guard let code = (error as? MeshClient.MeshError)?.statusCode else { return false }
+        return code == 401 || code == 403
     }
 
     private nonisolated static func probe(_ urlString: String?) async -> (ok: Bool, error: String?) {
