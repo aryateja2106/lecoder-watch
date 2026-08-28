@@ -5,10 +5,21 @@
 #   sh scripts/release-testflight-asc.sh --external      # …and to the public link, via Beta App Review
 #   sh scripts/release-testflight-asc.sh --dry-run       # say what it would do, touch nothing
 #
+# Four gates stop this script, each one because something already shipped past its absence.
+# All four have an escape hatch, all four are meant to be awkward enough that clearing one
+# is a decision rather than a reflex:
+#
+#   MESH_ALLOW_DIRTY=1               ship from a tree with uncommitted changes
+#   MESH_ALLOW_VERSION_DOWNGRADE=1   ship a version LOWER than one already on TestFlight
+#   MESH_SKIP_VERSION_CHECK=1        ship when App Store Connect will not answer at all
+#   (the smoke test has no hatch: it runs with MESH_SMOKE_REQUIRED=1, so "no simulator
+#    here" fails instead of passing. Release from a machine with a current Xcode.)
+#
 # Uses `asc`, which holds the App Store Connect credentials in the system keychain. That
 # is not a preference: asc never prints the issuer id, and raw `xcodebuild` refuses
-# `-authenticationKeyPath` without `-authenticationKeyIssuerID` beside it. Hence
-# scripts/release-testflight.sh needs ASC_ISSUER_ID passed in and this one needs nothing.
+# `-authenticationKeyPath` without `-authenticationKeyIssuerID` beside it. The retired
+# xcodebuild path needed ASC_ISSUER_ID passed in; this one needs nothing.
+# scripts/release-testflight.sh is now a shim that execs into here.
 #
 # ---------------------------------------------------------------------------
 # THE TRAP THIS SCRIPT EXISTS TO REMOVE
@@ -174,14 +185,32 @@ fi
 echo "==> regenerating the Xcode project"
 xcodegen generate >/dev/null
 
-echo "==> self-checks"
-sh "$ROOT/scripts/check-all.sh" >/dev/null || { echo "FAIL: check-all.sh is red — not shipping"; exit 1; }
-echo "    all self-checks passed"
-
-# 0.5.0 passed every check above and still could not show a text field without dying.
-# A build that has not been launched has not been tested, so launch it before shipping it.
-echo "==> smoke test (launches the app on a simulator)"
-sh "$ROOT/scripts/check-ios-smoke.sh" || { echo "FAIL: the app did not survive being launched — not shipping"; exit 1; }
+# check-all.sh's loop already runs scripts/check-ios-smoke.sh. This script used to ALSO
+# invoke it separately, which meant two xcodebuild test runs against the same simulator in
+# the same release — and the second one gets its runner killed before it connects, which
+# check-ios-smoke.sh reports as INCONCLUSIVE and exits 1 on. A release that fails on its own
+# duplicate gate teaches you to re-run until it passes, which is how a real failure gets
+# waved through. One run, inside check-all.
+#
+# MESH_SMOKE_REQUIRED=1 is the other half: 0.5.0 passed every check in scripts/ and still
+# could not show a text field without dying, and a smoke test that SKIPS on a machine with
+# no simulator exits 0 exactly like one that passed. On a release machine that skip is not
+# a fact about coverage, it is a missing gate — so here it is a failure.
+echo "==> self-checks (smoke test REQUIRED — the app must actually launch)"
+export MESH_SMOKE_REQUIRED=1
+CHECKLOG="$(mktemp -t mesh-release-checks)"
+if sh "$ROOT/scripts/check-all.sh" >"$CHECKLOG" 2>&1; then
+  grep -E '^check-ios-smoke:' "$CHECKLOG" | sed 's/^/    /' || true
+  rm -f "$CHECKLOG"
+else
+  echo "FAIL: check-all.sh is red — not shipping"
+  # The failure used to go to /dev/null, so the operator was told a gate failed and not
+  # which one. Print enough to act on without opening a second terminal.
+  tail -40 "$CHECKLOG" | sed 's/^/    /'
+  echo "    full log: $CHECKLOG"
+  exit 1
+fi
+echo "    all self-checks passed, and the app survived being launched"
 
 echo "==> archive + upload (this takes a few minutes)"
 OUT="$(asc publish testflight --app "$APP_ID" \
@@ -206,10 +235,48 @@ for g in d.get("data",[]):
     if (a.get("name") or "").lower()==want.lower(): print(g.get("id")); break' "$1"
 }
 
+# `asc publish testflight --group` exits 0 whether or not the build actually landed in the
+# group, and the obvious way to confirm it LIES: `asc builds groups list --build-id` is
+# marked experimental and has reported zero groups for a build that was demonstrably in one
+# (docs/release-workflow.md). So ask the GROUP what builds it holds — that query is
+# authoritative — and refuse to call the release finished until this build is in the answer.
+# A build in zero groups reaches nobody while every list view shows it healthy. That is not
+# hypothetical: it has happened twice, and both times the first report came from a person
+# saying "I can't find the update", days later.
+assert_in_group() {
+  _gid="$1"; _label="$2"
+  _json="$(run_bounded 90 asc testflight groups links view --group-id "$_gid" --type builds)" || {
+    echo "FAIL: could not confirm within 90s that build $BUILD_ID is in the $_label group."
+    echo "      Unconfirmed is not the same as fine — check by hand before telling anyone it shipped:"
+    echo "          asc testflight groups links view --group-id $_gid --type builds"
+    exit 1
+  }
+  _rc=0
+  printf '%s' "$_json" | /usr/bin/python3 -c 'import sys,json
+want=sys.argv[1]
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(2)
+sys.exit(0 if want in [b.get("id") for b in d.get("data",[])] else 1)' "$BUILD_ID" || _rc=$?
+  if [ "$_rc" -eq 0 ]; then
+    echo "    confirmed: the $_label group holds build $BUILD_ID"
+    return 0
+  fi
+  if [ "$_rc" -eq 2 ]; then
+    echo "FAIL: the $_label group's build list came back unreadable, so membership is UNPROVEN."
+  else
+    echo "FAIL: build $BUILD_ID is NOT in the $_label group — it reaches nobody, and every"
+    echo "      list view will still show it as a healthy VALID build."
+  fi
+  echo "      Distribute it by hand (no rebuild, no re-upload):"
+  echo "          asc publish testflight --app $APP_ID --build $BUILD_ID --group $_gid --notify"
+  exit 1
+}
+
 INTERNAL_ID="$(group_id Internal)"
 [ -n "$INTERNAL_ID" ] || { echo "FAIL: no TestFlight group named 'Internal'"; exit 1; }
 echo "==> adding to the internal group (installable immediately, no review)"
 asc publish testflight --app "$APP_ID" --build "$BUILD_ID" --group "$INTERNAL_ID" --notify --output json >/dev/null
+assert_in_group "$INTERNAL_ID" "internal"
 echo "    done — it will appear in your TestFlight once processing finishes"
 
 # What to Test comes from CHANGELOG's Unreleased block, which is written as each slice
@@ -239,6 +306,7 @@ if [ "$EXTERNAL" -eq 1 ]; then
   [ -n "$BETA_ID" ] || { echo "FAIL: no TestFlight group named 'Beta'"; exit 1; }
   echo "==> adding to the public group and submitting for Beta App Review"
   asc publish testflight --app "$APP_ID" --build "$BUILD_ID" --group "$BETA_ID" --notify --output json >/dev/null
+  assert_in_group "$BETA_ID" "public (Beta)"
   asc testflight review submit --build-id "$BUILD_ID" --confirm >/dev/null
   echo "    submitted — usually hours. Expect questions: the app injects keystrokes and"
   echo "    sets NSAllowsArbitraryLoads. The reviewer notes on file already explain both."
@@ -252,3 +320,54 @@ print("    internal:", a.get("internalBuildState"))
 print("    external:", a.get("externalBuildState"))' 2>/dev/null || true
 echo "    build id: $BUILD_ID"
 echo "    public link: https://testflight.apple.com/join/pVYPTxc7"
+
+# An internal-only release leaves the PUBLIC link serving whatever it served before. That
+# gap is invisible from every list view — they all show the newest build, healthy, VALID,
+# regardless of who can install it — and it is not small: measured 2026-08-27, the public
+# link had been handing out a build from 20 August for a week while release after release
+# "succeeded". The person who runs this script is also the only person who can close it,
+# so the script has to say so on the way out, last, where it cannot be scrolled past.
+if [ "$EXTERNAL" -ne 1 ]; then
+  PUBLIC_BUILD=""
+  CANDIDATES="$(run_bounded 60 asc builds list --app "$APP_ID" 2>/dev/null \
+    | /usr/bin/python3 -c 'import sys,json
+try: d=json.load(sys.stdin)
+except Exception: sys.exit()
+rows=[]
+for b in d.get("data",[]):
+    a=b.get("attributes",{}) or {}
+    if b.get("id"): rows.append((a.get("uploadedDate") or "", b["id"], a.get("version") or "?"))
+rows.sort(reverse=True)
+for _,i,v in rows[:8]: print("%s:%s" % (i,v))' 2>/dev/null || true)"
+  for cand in $CANDIDATES; do
+    cid="${cand%%:*}"
+    cnum="${cand#*:}"
+    if [ "$cid" = "$BUILD_ID" ]; then continue; fi
+    state="$(run_bounded 30 asc testflight distribution view --build-id "$cid" 2>/dev/null \
+      | /usr/bin/python3 -c 'import sys,json
+try: print(json.load(sys.stdin)["data"][0]["attributes"].get("externalBuildState",""))
+except Exception: pass' 2>/dev/null || true)"
+    if [ "$state" = "IN_BETA_TESTING" ]; then PUBLIC_BUILD="$cnum"; break; fi
+  done
+
+  echo ""
+  echo "  ###################################################################"
+  echo "  #  THE PUBLIC LINK IS NOW BEHIND. Build $BUILD is INTERNAL ONLY.  "
+  if [ -n "$PUBLIC_BUILD" ]; then
+    echo "  #  Anyone with https://testflight.apple.com/join/pVYPTxc7 still"
+    echo "  #  gets build $PUBLIC_BUILD — not the one you just shipped."
+  else
+    echo "  #  Could not read which build the public link currently serves;"
+    echo "  #  what is certain is that it is not this one. Check TestFlight."
+  fi
+  echo "  #"
+  echo "  #  External testers only ever see a build that is IN_BETA_TESTING,"
+  echo "  #  which needs Beta App Review. Uploading is not publishing."
+  echo "  #"
+  echo "  #  To hand this build to them:"
+  echo "  #      sh scripts/release-testflight-asc.sh --external"
+  echo "  #  (or distribute THIS build without rebuilding:"
+  echo "  #      asc publish testflight --app $APP_ID --build $BUILD_ID --group <Beta group id> --notify"
+  echo "  #      asc testflight review submit --build-id $BUILD_ID --confirm)"
+  echo "  ###################################################################"
+fi

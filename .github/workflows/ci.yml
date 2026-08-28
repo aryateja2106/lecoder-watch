@@ -5,7 +5,14 @@ on:
     branches:
       # main is where the shipping work actually lands, and it was not in this list — so
       # the branch everything gets pushed to was the one branch CI never ran on.
+      #
+      # backup/** is the same hole one layer down: the repo's declared PR base is
+      # backup/2026-07-02, and it matched none of the patterns here. A base branch with no
+      # CI is worse than an untested feature branch — it is what every PR gets compared and
+      # merged into, so a break landing there is invisible until it is everywhere.
       - 'main'
+      - 'backup/**'
+      - 'release/**'
       - 'feat/**'
       - 'fix/**'
       - 'claude/**'
@@ -96,10 +103,26 @@ jobs:
       - name: check-mesh-hook.py
         run: python3 scripts/check-mesh-hook.py
 
+      # The install one-liner and the TestFlight link are the whole front door, and both have
+      # rotted silently before — mesh.lesearch.ai once had no DNS at all while the README
+      # kept telling people to curl it. MESH_LINKS_REQUIRED=1 because a GitHub runner with no
+      # network is a broken runner, never a laptop on a plane: offline must fail here, not skip.
+      - name: check-links.sh (the published install + TestFlight links resolve)
+        run: MESH_LINKS_REQUIRED=1 sh scripts/check-links.sh
+
   apps:
     name: apps (Xcode)
     runs-on: macos-15
     timeout-minutes: 45
+    env:
+      # scripts/check-ios-smoke.sh exits 0 with a SKIP when the machine has no simulator new
+      # enough to install the app. On a laptop that is honest. Here it is a lie by omission:
+      # a green `apps` job would mean "the app was never launched" and read as "the app is
+      # fine" — the exact shape of the 0.5.0 release, where every static check passed while
+      # the app died on every screen with a text field. Strict mode turns that skip into a
+      # failure, so if the runner image ever loses its iOS simulators, CI says so loudly
+      # instead of quietly stopping doing the one check that runs the code.
+      MESH_SMOKE_REQUIRED: '1'
     steps:
       - uses: actions/checkout@v4
 
@@ -120,12 +143,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      # Static checks cannot see a UIKit appearance invocation that only throws when
-      # replayed onto a live view: 0.5.0 shipped one, every screen with a TextField died,
-      # and every check in scripts/ stayed green. This one runs the app.
-      - name: Smoke test MeshWatch (launches the app)
-        run: sh scripts/check-ios-smoke.sh
-
       - name: Build MeshWatch Watch App
         run: |
           xcodebuild -project MeshWatch.xcodeproj -scheme "MeshWatch Watch App" \
@@ -142,5 +159,13 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Run self-checks
+      # This runs check-ios-smoke.sh too — check-all.sh's loop picks up every
+      # scripts/check-*.sh. There used to be a separate "Smoke test MeshWatch" step above as
+      # well, which meant TWO xcodebuild test runs against the same simulator in one job. The
+      # second one gets its test runner killed before it connects, which check-ios-smoke.sh
+      # correctly refuses to call either a pass or a failure (INCONCLUSIVE, exit 1) — so the
+      # duplicate produced red builds that were nothing but the duplication, and the cure for
+      # those is re-running until green, which is how a real crash gets waved through.
+      # One invocation. Static checks and the launch, in the one place that owns both.
+      - name: Run self-checks (includes the smoke test that launches the app)
         run: sh scripts/check-all.sh

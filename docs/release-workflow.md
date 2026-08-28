@@ -1,7 +1,8 @@
 # Shipping to TestFlight / App Store
 
 The repeatable path for this app and the next one. Tooling: [`asc`](https://github.com/rorkai/App-Store-Connect-CLI)
-(`brew upgrade asc`, currently 4.9.4) plus `scripts/release-testflight.sh`.
+(`brew upgrade asc`, currently 4.9.4) plus **`scripts/release-testflight-asc.sh`**, which is
+the only supported way to put a build in front of anyone.
 
 ## Why not sideload
 
@@ -73,8 +74,41 @@ sh scripts/release-testflight-asc.sh --external   # …and to the public link, v
 ```
 
 `--dry-run` prints what it would do and touches nothing. It regenerates the project, runs
-`check-all.sh`, archives Release, uploads, **adds the build to a group**, and writes
+`check-all.sh` (which includes the smoke test that launches the app), archives Release,
+uploads, **adds the build to a group and then proves it is in that group**, and writes
 *What to Test* from `CHANGELOG.md`'s Unreleased block.
+
+### The four gates, and the four escape hatches
+
+Each gate is here because something already shipped past its absence. Each hatch exists so a
+deliberate exception is possible, and each is deliberately awkward enough to be a decision
+rather than a reflex. **None of them should appear in a script or an alias.**
+
+| Gate | What stops the release | Hatch |
+|---|---|---|
+| **Clean tree** | `git status --porcelain` is non-empty | `MESH_ALLOW_DIRTY=1` |
+| **No version downgrade** | App Store Connect already holds a *higher* marketing version | `MESH_ALLOW_VERSION_DOWNGRADE=1` |
+| **Version check ran at all** | App Store Connect would not answer within 90s | `MESH_SKIP_VERSION_CHECK=1` |
+| **The app launches** | `check-ios-smoke.sh` failed **or skipped** | none — release from a machine with a current Xcode |
+
+- **Clean tree.** An uncommitted tree means the binary testers install was built from source
+  that exists on one laptop: no diff to read, no revert to make, and no way to tell whether
+  a fix you are looking at is even in the build people have.
+- **No version downgrade.** This one used to print `WARNING` and upload anyway. That is
+  precisely how the 1.0 → 0.5.0 rename went out: the script *saw* the downgrade, said so,
+  and shipped it — and a warning inside a hundred lines of release output is a thing nobody
+  reads. Every tester had to delete and reinstall, which wipes the Keychain, which un-paired
+  every machine they had added. There is no undo. It is now `exit 1`.
+- **The app launches.** The script exports `MESH_SMOKE_REQUIRED=1` for its check run, so
+  `check-ios-smoke.sh` cannot report "no simulator here" as exit 0 the way it may on a
+  laptop. There is intentionally no hatch: a release that has not launched the app is the
+  thing that produced 0.5.0.
+
+The smoke test runs **once**, inside `check-all.sh`. The script used to also invoke it
+separately, which meant two `xcodebuild test` runs against the same simulator; the second
+gets its runner killed before it connects and is reported `INCONCLUSIVE` (exit 1). A release
+that fails on its own duplicate gate teaches you to re-run until it passes, which is how a
+real failure gets waved through. Do not add the second invocation back.
 
 ### The trap the script exists to remove
 
@@ -106,6 +140,18 @@ asc testflight groups links view --group-id "$GROUP_ID" --type builds
 **`asc builds groups list --build-id` is marked experimental and reported zero groups for a
 build that was demonstrably in one.** Use `groups links view` above; it is authoritative.
 
+**The script now runs that query itself and fails on the answer.** `asc publish testflight
+--group` exits 0 whether or not the build landed in the group, so after each distribution
+`release-testflight-asc.sh` asks the *group* what builds it holds and refuses to call the
+release finished unless this build id is in the reply — including an unreadable reply, which
+is unproven, not fine. This replaced a best-effort `|| true` state print. The zero-group
+trap has caught this project twice, and both times the first report came from a person
+saying "I can't find the update", days later.
+
+**Run without `--external` and the script ends with a loud banner** naming the build the
+public link is still serving, because an internal-only release leaves that link exactly
+where it was and every list view will keep showing the newest build as healthy regardless.
+
 Other things that are true and not obvious:
 
 - `asc testflight review submit --build-id <ID> --confirm` submits for Beta App Review from
@@ -116,7 +162,14 @@ Other things that are true and not obvious:
 - **Never let the marketing version go backwards.** App Store Connect allows it and iOS
   punishes it: a tester on a higher version reads the new build as older and may be asked
   to delete and reinstall, which wipes the Keychain and un-pairs every machine they had
-  added. The script warns when it detects this. See [updating.md](updating.md).
+  added. The script **stops** when it detects this (it used to only warn — see the gate
+  table above). See [updating.md](updating.md).
+- **The published links are checked too.** `scripts/check-links.sh` fetches the install
+  one-liner and the TestFlight join link — plus every `install`/`testflight.apple.com` URL
+  in `README.md` and `docs/updating.md`, so new ones are covered without anyone remembering
+  — and fails on anything that is not 2xx/3xx. It skips when the machine is offline, unless
+  `MESH_LINKS_REQUIRED=1` (which CI sets) makes offline a failure. `mesh.lesearch.ai` once
+  had no DNS at all while the README kept telling people to `curl` it.
 
 ### The build must survive being launched
 
@@ -134,34 +187,38 @@ was grepping for that exact line and *requiring* it.
 The rule that follows: **a check that greps for a mechanism proves intent, not
 behaviour.** Anything that can only fail at runtime needs something that runs.
 
-If the machine has no iOS simulator new enough to install the app, the check says so and
-exits 0 — a runner that cannot test this reports "not covered here", never a false green.
-Run the release from a machine with a current Xcode.
+Run by hand it still exits 0 with a SKIP when the machine has no iOS 26+ simulator — a
+laptop that cannot test this reports "not covered here", never a false green. **In every
+place where the green tick is read as "the app was launched", that skip is a failure
+instead**: `MESH_SMOKE_REQUIRED=1` is set by the release script and by CI's `apps` job. On
+success the check prints the simulator name and runtime it ran on.
 
-### The older paths
+### The older paths (retired — do not use)
 
-The `xcodebuild` script (needs the issuer id explicitly):
+**`scripts/release-testflight.sh` is a shim.** It prints why it was retired and `exec`s
+`release-testflight-asc.sh` with the same arguments, so the name still works and lands on
+the gated path. What it used to do had **no group assignment** (the zero-group trap in its
+purest form — the build reached nobody), **no version check** (the 1.0 → 0.5.0 downgrade
+that un-paired every tester), and **no smoke test** (0.5.0 shipped unlaunchable). Three
+holes in a second implementation of the same job was not worth fixing twice; deleting the
+file would have sent muscle memory and older runbooks to "No such file", which teaches
+nothing.
 
-```bash
-ASC_KEY_ID=Y4MR7X24UL ASC_ISSUER_ID=<uuid> sh scripts/release-testflight.sh
-```
+**Never upload with `--upload-only` by hand.** That flag is what puts a build in zero
+groups: it processes, goes `VALID`, and is installable by nobody while every list view shows
+it healthy. `release-testflight-asc.sh` uses it *internally* and then immediately adds the
+build to a group and verifies the membership — the flag is only safe as one half of that
+pair. A raw `asc publish testflight … --upload-only` used to be documented here as an
+alternative path; it is not one, and it is the single command most likely to produce a
+release nobody can install.
 
-or `asc`, which already holds the credentials in the keychain and needs no issuer id:
+Two facts worth keeping from that era: `asc` holds the issuer id in the keychain and never
+prints it, so `xcodebuild` invoked directly cannot use `-authenticationKeyPath` (it demands
+`-authenticationKeyIssuerID` alongside) — plain `-allowProvisioningUpdates` works instead,
+covered by Xcode's signed-in account, which is what probe archives use. And the watch app is
+embedded in the iOS app, so **one upload ships both**.
 
-```bash
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer asc publish testflight --app 6803438426 --project MeshWatch.xcodeproj --scheme MeshWatch --version 0.2.0 --build-number "$(date +%Y%m%d%H%M)" --configuration Release --upload-only --wait --output json
-```
-
-`asc` holds the issuer id in the keychain and never prints it, so `xcodebuild` invoked
-directly cannot use `-authenticationKeyPath` (it demands `-authenticationKeyIssuerID`
-alongside). Plain `-allowProvisioningUpdates` works instead — Xcode's signed-in account
-covers it — which is what `scripts/release-testflight.sh` and the probe archives use.
-
-Which runs the self-checks, archives Release, and exports straight to App Store
-Connect. Build numbers are a UTC timestamp because App Store Connect refuses a reused
-one. The watch app is embedded in the iOS app, so **one upload ships both**.
-
-Then:
+To inspect state:
 
 ```bash
 asc builds list --app <APP_ID>          # processing takes ~5-15 min
