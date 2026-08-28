@@ -57,19 +57,19 @@ installer `v0.5.2` (`gh release list -R LeSearch-AI/mesh-install`), `mesh.lesear
 5. **Repo-name sprawl:** private `aryateja2106/lecoder-watch`, public `LeSearch-AI/mesh`, installer `LeSearch-AI/mesh-install`, plus `LeSearch-AI/meshwatch` from an earlier clean-slate push. Four names for one product. Nothing breaks, but a visitor cannot tell which is canonical.
 6. **Version drift is unguarded.** App is 0.5.1, daemon is 0.5.3. `scripts/check-mesh-version.sh` only enforces CLI == daemon, not app == daemon; `docs/backlog.md:150` grades "Check one version across app, daemon, changelog and release" as `partial`.
 
-### 1.4 Decision: reject `MeshWatch by LeSearch AI`
+### 1.4 Decision — OVERRIDDEN by the owner, 2026-08-28: the product is `MeshWatch`
 
-Recommended answer: **stay `LeSearch Mesh`**, with App Store subtitle
-`Your Mac, from your wrist`.
+This section originally recommended staying `LeSearch Mesh` (20/20 strings agreed, the
+ASC record matched, a rename costs a review cycle). The owner heard that case in the
+spec interview and decided the other way: **MeshWatch, published by LeSearch AI** —
+the watch-first identity is the wedge nobody else owns, and the binary, bundle id and
+URL scheme already said meshwatch. `CONTEXT.md`'s Names section is the canonical record.
 
-- 20 of 20 user-facing strings already say `LeSearch Mesh`. `MeshWatch` appears in **zero**
-  of them.
-- The ASC record `6803438426` is already titled `LeSearch Mesh`; renaming forces new
-  metadata through review and costs a launch day for no user benefit.
-- `MeshWatch` names the smallest surface. The phone terminal and full Mac GUI control are
-  half the wedge (§2); a watch-only name argues against the product.
-- The rename is not free at any level: `com.lecoder.*` and `meshwatch://` are pinned debt
-  by prior decision, so a rename produces *more* inconsistency, not less.
+The in-repo rename shipped the same night (`a0b8c5d`, 19 files, both builds green, zero
+survivors). What the original recommendation predicted still holds and is now simply the
+bill: the ASC record `6803438426` must be renamed to `MeshWatch` (metadata through
+review — owner action), and the App Store subtitle should carry the phone half of the
+story: `Your Mac, from your wrist`.
 
 ---
 
@@ -339,9 +339,9 @@ Mac"* in those words, and request prior approval for demo mode on the **first** 
    first reviews. Charging nothing forever trains the list that this is a hobby.
 
 2. **App Store name: `LeSearch Mesh` or `MeshWatch by LeSearch AI`?**
-   → **`LeSearch Mesh`.** §1.4. Twenty user-facing strings, the ASC record, the domain and
-   the README already agree; `MeshWatch` appears in none of them and names the smallest
-   surface. Add the subtitle `Your Mac, from your wrist`.
+   → **DECIDED by the owner 2026-08-28: `MeshWatch`** (see §1.4 — the recommendation
+   here argued the other way and was overridden). Repo rename shipped in `a0b8c5d`;
+   the ASC rename is an owner action. Subtitle: `Your Mac, from your wrist`.
 
 3. **Do the bundle ids stay `com.lecoder.*`?**
    → **Yes, forever, and out of scope for any branding pass.** Already decided at
@@ -349,17 +349,21 @@ Mac"* in those words, and request prior approval for demo mode on the **first** 
    TestFlight link, every tester re-invited, every machine re-paired, and dead push.
 
 4. **Which of #105-114 make launch week?**
-   → **Two: #109 (modifier chords) and the measure-only half of #107 (latency +
-   spinner).** Everything else is out. #108/#110/#112/#113/#114 are epics or contested
-   races; #106 and #111 are day-8. State this in the issues so the list stops implying a
-   week's scope.
+   → **DECIDED by the owner 2026-08-28: "most of the above", built overnight.** Shipped
+   the same night on this branch, each behind its own green gate: #105 (in-app QR),
+   #106 (folder search, PR #115), #107 (latency measured — the 989ms is a hardcoded
+   900ms daemon sleep, filed as #117 — plus the progress UI), #109 (modifier chords),
+   and the herdr-visibility subset of #108 (PR #116). Still out: full #108 epic, #110,
+   #111, #112, #113, #114.
 
 5. **#105 asks for an in-app QR scanner. `MEMORY.md:49-55` says that was deliberately
    rejected. Which one is the current decision?**
-   → **Keep the system-Camera flow, and close #105 with the reasoning.** The pre-filled
-   sheet plus a human comparing the code against the terminal *is* the verification layer;
-   auto-claiming on scan deletes it, and adds a camera permission prompt to a first-run
-   path that currently has none. If the extra tap really costs conversion, the fix is
+   → **RESOLVED 2026-08-28: both, because the memory's real objection was auto-claim,
+   not the camera.** The shipped scanner (`b5a2f38`) pre-fills the fields and stops;
+   the human still compares the code against the terminal and taps Pair — the
+   verification layer survives intact. Camera permission is asked only when the user
+   taps Scan, never on the first-run path. The paragraph below records the original
+   reasoning; if conversion data ever argues for auto-claim, the fix is
    better copy on the pair sheet, not a scanner. **This is the one place where a filed
    issue contradicts a recorded decision — resolve it in writing today.**
 

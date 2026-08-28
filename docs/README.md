@@ -17,6 +17,8 @@ those three.
 
 | Doc | Read it when | Notes |
 |---|---|---|
+| [PRODUCT-SPEC-V1.md](PRODUCT-SPEC-V1.md) | Deciding what to build or ship next | The consolidated launch spec, 2026-08-28. §1.4 and the open-decision answers record where the owner overrode its recommendations — the DECIDED/RESOLVED markers are the current truth. |
+| [playbooks/](playbooks/README.md) | Before touching Xcode, simulators, devices, releases, asc, or the daemon from any agent harness | Six imperative playbooks; every trap in them was paid for at least once here. |
 | [mac-remote-control.md](mac-remote-control.md) | Touching pointer, keyboard, media, windows or power | The control surface, end to end. Referenced from CONTEXT.md. |
 | [mesh-cli-and-remote-install.md](mesh-cli-and-remote-install.md) | Adding a machine, the `mesh` CLI, upgrade/uninstall | Start here for anything installer-shaped. |
 | [release-workflow.md](release-workflow.md) | Cutting a release | See the warning below — the fleet lags the repo. |
