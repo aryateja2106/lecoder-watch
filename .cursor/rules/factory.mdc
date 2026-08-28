@@ -1,0 +1,63 @@
+---
+description: Factory policy for this repo — queue semantics, gates, and the rules no run may break. Always applied.
+alwaysApply: true
+---
+
+# Factory policy (cursor-agent)
+
+This repository runs a [software factory](https://github.com/addyosmani/factory). Read
+`AGENTS.md` for the project brief, then `docs/factory/CONTRACT.md` and
+`docs/factory/CHARTER.md` before changing anything. For first-time setup and the local dry
+run, follow `docs/factory/README.md`.
+
+The contract is shared with Claude Code and Codex. **If this adapter and the contract
+disagree, the contract wins.** Use the repo-scoped skills under `.cursor/skills/` for
+factory workflows; they are thin pointers to the canonical workflows in `.claude/skills/`,
+so there is one implementation, not three.
+
+## The queue is GitHub, not this file
+
+Live state is GitHub issue labels (`factory:*`) plus `factory-handoff:v1` issue comments.
+`docs/factory/QUEUE.md` is a snapshot for humans and audit — an unmerged snapshot is never
+the handoff between runs.
+
+## The gate
+
+```sh
+./.claude/scripts/gates.sh fast   # shared-model compile + published-link check (~40s)
+./.claude/scripts/gates.sh full   # + sh scripts/check-all.sh  (MINUTES — runs xcodebuild)
+./.claude/scripts/gates.sh deep   # + auth surface + architecture assertions
+```
+
+Quote the final `FACTORY_GATES:` line verbatim and never report a result that contradicts
+it. `RED` and `MISCONFIGURED` both block; a *required* gate that could not run is
+`MISCONFIGURED`, never green.
+
+`full` is a pre-PR gate, not a loop gate — it drives `xcodebuild` against a simulator.
+
+## Non-negotiable
+
+1. **Never merge**, and never push `main`. GitHub branch protection is the enforcement
+   boundary.
+2. **Never edit factory policy** — `docs/factory/CHARTER.md`, `.factory/gates.conf`,
+   `.claude/scripts/gates.sh`, `AGENTS.md` — unless the human asks in this session.
+3. **Never modify an existing `scripts/check-*`** in an unattended run. Adding a new one is
+   encouraged.
+4. **Verification uses a fresh context.** The writer never grades its own work. If no
+   independent context is available in this harness, stop before opening anything but a
+   draft PR and say so.
+5. **Claim one live issue per run** by winning the deterministic remote-branch claim
+   described in the contract, then move `factory:ready-to-implement` to
+   `factory:in-progress`.
+
+Stop and hand back when the charter's `STOP_IF` fires — in particular when more than two
+items already await review, or when proving the change needs a physical iPhone or Watch.
+
+## Harness gap you must compensate for by hand
+
+Claude Code enforces the merge guard with a `PreToolUse` hook
+(`.claude/hooks/block-merge.sh`, wired in `.claude/settings.json`), and Codex loads the same
+script through `.codex/hooks.json`. **cursor-agent has no committed repository-hook
+equivalent**, so in this harness that guard is documentation, not enforcement. Do not treat
+the absence of a block as permission. The repository-side ruleset on the default branch is
+the only real boundary in every harness.
