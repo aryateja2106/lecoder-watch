@@ -45,6 +45,20 @@ for a in "$@"; do
   esac
 done
 
+# A release must be reproducible from a commit. An uncommitted tree means the binary that
+# reaches testers was built from source that exists on exactly one laptop: when it misbehaves
+# there is no diff to read, no revert to make, and no way to tell whether the fix you are
+# looking at is even in the build people have. Escape hatch, deliberately awkward to type:
+#   MESH_ALLOW_DIRTY=1 sh scripts/release-testflight-asc.sh
+if [ "${MESH_ALLOW_DIRTY:-}" != "1" ] && [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  echo "FAIL: the working tree has uncommitted changes — refusing to ship an unreproducible build."
+  git status --short | sed 's/^/    /'
+  echo ""
+  echo "      Commit (or stash) first. If you truly mean to ship this tree as it stands:"
+  echo "          MESH_ALLOW_DIRTY=1 sh scripts/release-testflight-asc.sh"
+  exit 1
+fi
+
 command -v asc >/dev/null 2>&1 || { echo "FAIL: asc is not installed (brew install asc)"; exit 1; }
 asc auth status >/dev/null 2>&1 || { echo "FAIL: asc is not authenticated — run: asc doctor"; exit 1; }
 
@@ -127,9 +141,26 @@ print(max(vs, key=key) if vs else "")' 2>/dev/null || true)"
 if [ -n "$HIGHEST" ] && [ "$HIGHEST" != "$VERSION" ]; then
   NEWER="$(printf '%s\n%s\n' "$HIGHEST" "$VERSION" | sort -V | tail -1)"
   if [ "$NEWER" = "$HIGHEST" ]; then
-    echo "    WARNING: App Store Connect already holds $HIGHEST, which is newer than $VERSION."
-    echo "             Testers on $HIGHEST may have to delete and reinstall to take $VERSION,"
-    echo "             and that wipes the Keychain — every machine they paired is un-paired."
+    # This used to print WARNING and ship anyway. It is the reason the 1.0 → 0.5.0 rename
+    # went out: the script SAW the downgrade, said so, and uploaded it regardless — and a
+    # warning inside a hundred lines of release output is a thing nobody reads. Every tester
+    # on the higher version had to delete and reinstall, which wipes the app Keychain, which
+    # un-pairs every machine they had added. There is no undo for that; a stop is the only
+    # honest response, and this is a place where "it warned you" costs more than a false stop.
+    echo "FAIL: App Store Connect already holds $HIGHEST, which is NEWER than $VERSION."
+    echo "      Shipping $VERSION now is a version DOWNGRADE."
+    echo ""
+    echo "      iOS reads a lower pre-release version as older: testers on $HIGHEST are asked"
+    echo "      to delete and reinstall to take it, and deleting the app wipes its Keychain —"
+    echo "      every machine they paired is gone, and they have to pair them all again."
+    echo "      That is exactly what the 1.0 → 0.5.0 rename did to every tester at once."
+    echo ""
+    echo "      Fix MARKETING_VERSION in project.yml to something above $HIGHEST, or, if you"
+    echo "      have genuinely decided the downgrade is worth what it costs testers:"
+    echo "          MESH_ALLOW_VERSION_DOWNGRADE=1 sh scripts/release-testflight-asc.sh"
+    [ "${MESH_ALLOW_VERSION_DOWNGRADE:-}" = "1" ] || exit 1
+    echo ""
+    echo "      MESH_ALLOW_VERSION_DOWNGRADE=1 set — shipping the downgrade on purpose."
   fi
 fi
 

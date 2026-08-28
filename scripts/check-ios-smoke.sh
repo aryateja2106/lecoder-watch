@@ -8,8 +8,14 @@
 # window, and replaying a UITextInputTraits setter onto a UITextField throws. Nothing
 # that reads source can see that. Only running it can.
 #
-# Skips loudly (exit 0) when there is no simulator new enough to run the app, so CI on a
-# runner with an older Xcode reports "not covered here" rather than a false green.
+# Skips loudly (exit 0) when there is no simulator new enough to run the app, so a
+# developer machine with an older Xcode reports "not covered here" rather than a false green.
+#
+# MESH_SMOKE_REQUIRED=1 turns every one of those skips into a failure. Set it wherever the
+# green tick is being read as "the app was launched" — CI's macOS job, the release script.
+# A skip is honest on a laptop and a lie in a release gate: "no simulator here" and "the app
+# runs" produce the same exit 0, and 0.5.0 is what that costs. Nothing about the default
+# path changes; the strictness is opt-in by the caller that needs it.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,9 +23,32 @@ cd "$ROOT"
 
 note() { echo "check-ios-smoke: $1"; }
 
+# One place decides what "cannot run here" means, so a skip path added later cannot forget
+# to honour the strict flag — that is the whole failure this guard is for.
+skip() {
+  if [ "${MESH_SMOKE_REQUIRED:-}" = "1" ]; then
+    note "FAIL: the smoke test was REQUIRED (MESH_SMOKE_REQUIRED=1) and DID NOT RUN."
+    note "      $1"
+    note "      The app was never launched, so nothing here says it can open. Do not read"
+    note "      a green suite around this as evidence — that is the exact shape of 0.5.0,"
+    note "      which shipped an app that died on every screen with a text field while"
+    note "      every check in scripts/ passed."
+    note "      Run this on a machine with a current Xcode and an iOS ${MIN_MAJOR}+ simulator."
+    exit 1
+  fi
+  note "SKIP — $1"
+  note "      This check is a release gate; run it somewhere with a current Xcode before shipping."
+  note "      Set MESH_SMOKE_REQUIRED=1 to make this skip a failure instead."
+  exit 0
+}
+
 MIN_MAJOR=26   # the app's deployment target; older runtimes cannot install it at all
 
-udid=$(xcrun simctl list devices available -j 2>/dev/null | python3 -c '
+command -v xcrun >/dev/null 2>&1 \
+  || skip "xcrun is not on PATH — there is no Xcode on this machine to launch the app with."
+
+# Prints "udid|name|iOS X.Y" for the newest usable iPhone simulator, or nothing.
+sim=$(xcrun simctl list devices available -j 2>/dev/null | python3 -c '
 import json, sys
 try:
     devices = json.load(sys.stdin)["devices"]
@@ -44,17 +73,20 @@ for runtime, devs in devices.items():
         if "iPhone" not in dev.get("deviceTypeIdentifier", ""):
             continue
         if best is None or version > best[0]:
-            best = (version, dev["udid"], dev["name"], runtime)
-print(best[1] if best else "")
+            best = (version, dev["udid"], dev["name"])
+print("%s|%s|iOS %s" % (best[1], best[2], ".".join(str(x) for x in best[0])) if best else "")
 ' 2>/dev/null || true)
 
-if [ -z "$udid" ]; then
-  note "SKIP — no available iOS ${MIN_MAJOR}+ iPhone simulator on this machine, so the app cannot be launched here."
-  note "      This check is a release gate; run it somewhere with a current Xcode before shipping."
-  exit 0
+if [ -z "$sim" ]; then
+  skip "no available iOS ${MIN_MAJOR}+ iPhone simulator on this machine, so the app cannot be launched here."
 fi
 
-note "running UI smoke tests on simulator $udid"
+udid="${sim%%|*}"
+rest="${sim#*|}"
+SIM_NAME="${rest%%|*}"
+SIM_RUNTIME="${rest#*|}"
+
+note "running UI smoke tests on $SIM_NAME ($SIM_RUNTIME), simulator $udid"
 xcodegen generate >/dev/null 2>&1 || { note "FAIL: xcodegen could not generate the project"; exit 1; }
 
 log=$(mktemp -t mesh-ios-smoke)
@@ -62,7 +94,11 @@ if xcodebuild test \
      -project MeshWatch.xcodeproj -scheme "MeshWatch" \
      -destination "id=$udid" -derivedDataPath build/Smoke >"$log" 2>&1; then
   grep -E "Test Case .*passed" "$log" | sed 's/^/  /'
+  # Name the device and the runtime in the PASS line, not only in the "running" line above.
+  # A log tail that says only "OK" cannot answer "on what?" months later, and the answer
+  # decides whether the pass covers the OS your testers are actually on.
   note "OK — the app launches, every tab renders, and a text field can appear"
+  note "     ran on: $SIM_NAME · $SIM_RUNTIME · $udid"
   rm -f "$log"
   exit 0
 fi
