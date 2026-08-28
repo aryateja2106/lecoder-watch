@@ -625,7 +625,7 @@ struct SessionsView: View {
             }
             if snap?.authError != nil {
                 Section("Fix") {
-                    Text("Open LeSearch Mesh on your iPhone and copy the install command for this machine.")
+                    Text("Open MeshWatch on your iPhone and copy the install command for this machine.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text("Then refresh the watch.")
@@ -772,7 +772,7 @@ struct SessionsView: View {
                     helpLine("Open terminal", "The full screen of a session, with the key bar. Turn the Digital Crown to scroll back.")
                     helpLine("Reader / Raw", "The first chip in the key bar. Reader wraps every line to the screen — best for questions, prose and errors. Raw keeps the Mac's own line breaks and lets you drag sideways — best for diffs and tables.")
                     helpLine("Reply", "Type or dictate text, then send it. Nothing is sent until you tap Send.")
-                    helpLine("Insert iPhone clipboard", "Types whatever is on your iPhone's clipboard into the session, so a URL or a key never has to be scribbled. Your iPhone must be open on LeSearch Mesh at the time.")
+                    helpLine("Insert iPhone clipboard", "Types whatever is on your iPhone's clipboard into the session, so a URL or a key never has to be scribbled. Your iPhone must be open on MeshWatch at the time.")
                     helpLine("Open on Mac", "Appears when an agent has printed a link. Opens it in the Mac's own browser.")
                     helpLine("Key bar", "Enter, arrows, Tab, Escape, Page up/down, Home, End, Backspace and Ctrl-D — enough to drive a full-screen program. Text size lives under the … chip at the end.")
                     helpLine("Interrupt", "Ctrl-C, to stop whatever is running.")
@@ -798,9 +798,9 @@ struct SessionsView: View {
     private var supportsInput: Bool { snap?.capabilities?.contains("input") ?? false }
 
     private var emptySessionHint: String {
-        if snap?.authError != nil { return "Open LeSearch Mesh on your iPhone, fix the token, then refresh." }
+        if snap?.authError != nil { return "Open MeshWatch on your iPhone, fix the token, then refresh." }
         if snap?.reachable == true { return "Start Shell, Claude, or Codex below." }
-        return "Open LeSearch Mesh on your iPhone, or refresh when the Mac is nearby."
+        return "Open MeshWatch on your iPhone, or refresh when the Mac is nearby."
     }
 
     private func openNewSession(cmd: String?, initialText: String? = nil) {

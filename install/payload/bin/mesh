@@ -420,7 +420,7 @@ async function cmdPair(flags: Record<string, string>, cfg: Config) {
     if (qr) console.log(qr);
     // No QR on this install (no qr.ts) — the deep link itself is still the fallback.
     else { console.log(`    Link      ${url}`); console.log(""); }
-    console.log(`  Open LeSearch Mesh on your iPhone -> Machines -> Add machine,`);
+    console.log(`  Open MeshWatch on your iPhone -> Machines -> Add machine,`);
     console.log(`  and enter those two. Expires in ${Math.round(r.ttlSec / 60)} minutes, one use.`);
     console.log("");
     if (!address) console.log("  No address found. Pass one: mesh pair --address <ip>");
@@ -1088,7 +1088,7 @@ function cmdDesktop() {
   if (runOk(["open", "-b", "com.lecoder.meshdesktop"])) return;
   die("MeshDesktop is not installed on this Mac.\n"
     + "  From the repo: xcodegen generate && xcodebuild -project MeshWatch.xcodeproj -scheme MeshDesktop -destination 'platform=macOS' build\n"
-    + "  then copy the built LeSearch Mesh.app into /Applications and re-run 'mesh desktop'.");
+    + "  then copy the built MeshWatch.app into /Applications and re-run 'mesh desktop'.");
 }
 
 function cmdShellenv() {
@@ -1149,7 +1149,7 @@ async function cmdSetup(cfg: Config) {
   console.log(`  3/4  Pairing your phone.`);
   await cmdPair({}, cfg);
   console.log(`       Open the Camera app on your iPhone, point it at the square above, tap the banner.`);
-  console.log(`       (No QR? Type the code into LeSearch Mesh → Machines → Add machine.)`);
+  console.log(`       (No QR? Type the code into MeshWatch → Machines → Add machine.)`);
   if (tty) prompt("       Press Enter once the phone shows this machine…");
 
   // 4 — the fleet, so the last thing on screen is the truth.

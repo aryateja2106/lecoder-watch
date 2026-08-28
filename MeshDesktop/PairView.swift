@@ -95,7 +95,7 @@ struct PairView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Text("Point the iPhone's Camera app at the square and tap the banner. No QR reader? Open LeSearch Mesh → Machines → Add machine and type the code. It works once.")
+            Text("Point the iPhone's Camera app at the square and tap the banner. No QR reader? Open MeshWatch → Machines → Add machine and type the code. It works once.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

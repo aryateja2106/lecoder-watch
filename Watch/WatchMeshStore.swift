@@ -326,7 +326,7 @@ final class WatchMeshStore: ObservableObject {
     var emptyStateReason: (title: String, detail: String) {
         if let count = phoneReplyMachineCount, count == 0 {
             return ("No machines paired",
-                    "Your iPhone answered but has nothing paired yet. Open LeSearch Mesh on your iPhone and pair a machine.")
+                    "Your iPhone answered but has nothing paired yet. Open MeshWatch on your iPhone and pair a machine.")
         }
         if lastPhoneReplyAt != nil {
             return ("Nothing to show yet", phoneLinkNote ?? "Your iPhone answered but sent no machines.")
@@ -336,7 +336,7 @@ final class WatchMeshStore: ObservableObject {
         switch connectionState {
         case .offline:
             return ("iPhone not reachable",
-                    "Keep your iPhone nearby and unlocked, then open LeSearch Mesh on it once. The watch reaches your machines through the phone.")
+                    "Keep your iPhone nearby and unlocked, then open MeshWatch on it once. The watch reaches your machines through the phone.")
         default:
             return ("Connecting…", "Reaching your iPhone. Keep it nearby and unlocked.")
         }
@@ -729,13 +729,13 @@ final class WatchMeshStore: ObservableObject {
         case .failed(let why):
             return .problem("clipboard — \(why)")
         case .queued:
-            return .problem("open LeSearch Mesh on your iPhone once, then try again")
+            return .problem("open MeshWatch on your iPhone once, then try again")
         case .delivered(let data):
             guard let data, let text = try? JSONDecoder().decode(String.self, from: data) else {
                 // No payload: either an older phone build that does not know this
                 // command, or one that could not read its own pasteboard from the
                 // background. Both have the same fix.
-                return .problem("open LeSearch Mesh on your iPhone once — it can only read its clipboard while open")
+                return .problem("open MeshWatch on your iPhone once — it can only read its clipboard while open")
             }
             if text.hasPrefix(clipboardErrorPrefix) {
                 let why = String(text.dropFirst(clipboardErrorPrefix.count))

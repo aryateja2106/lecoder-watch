@@ -61,7 +61,7 @@ targets:
     info:
       path: Generated/iOS-Info.plist
       properties:
-        CFBundleDisplayName: LeSearch Mesh
+        CFBundleDisplayName: MeshWatch
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
@@ -75,9 +75,9 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSLocalNetworkUsageDescription: "LeSearch Mesh connects to your machines over your private network."
+        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
-        NSFaceIDUsageDescription: "Unlock LeSearch Mesh so only you can reach your machines."
+        NSFaceIDUsageDescription: "Unlock MeshWatch so only you can reach your machines."
         UIBackgroundModes:
           - fetch
         BGTaskSchedulerPermittedIdentifiers:
@@ -117,7 +117,7 @@ targets:
       properties:
         # No Dock icon, no main window: the menu bar item is the whole app.
         LSUIElement: true
-        CFBundleDisplayName: LeSearch Mesh
+        CFBundleDisplayName: MeshWatch
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     settings:
@@ -125,7 +125,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshdesktop
         # `mesh desktop` opens it by bundle id, but the name on disk is the one the CLI
         # tells you to drag into /Applications, so it has to match.
-        PRODUCT_NAME: LeSearch Mesh
+        PRODUCT_NAME: MeshWatch
         # No sandbox entitlement on purpose: this app talks to 127.0.0.1:8899 and hands
         # System Settings deep links to NSWorkspace. A sandbox would block both to
         # protect the user from an app that only ever calls their own machine.
@@ -138,7 +138,7 @@ targets:
     info:
       path: MeshWatchWidgets/Info.plist
       properties:
-        CFBundleDisplayName: LeSearch Mesh Sessions
+        CFBundleDisplayName: MeshWatch Sessions
         # Extensions must match the parent app's version or App Store Connect
         # rejects the upload — xcodegen defaults them to 1.0 unless told.
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -166,7 +166,7 @@ targets:
     info:
       path: Generated/Watch-Info.plist
       properties:
-        CFBundleDisplayName: LeSearch Mesh
+        CFBundleDisplayName: MeshWatch
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
@@ -174,7 +174,7 @@ targets:
         WKCompanionAppBundleIdentifier: com.lecoder.meshwatch
         # The watch dials meshd directly (f3e88d0), so it needs its own Local
         # Network grant — the phone's does not carry over.
-        NSLocalNetworkUsageDescription: "LeSearch Mesh connects to your machines over your private network."
+        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
@@ -196,7 +196,7 @@ targets:
     info:
       path: WatchWidgets/Info.plist
       properties:
-        CFBundleDisplayName: Agents waiting
+        CFBundleDisplayName: MeshWatch
         # Extensions must match the parent app's version or App Store Connect
         # rejects the upload — xcodegen defaults them to 1.0 unless told.
         CFBundleShortVersionString: $(MARKETING_VERSION)

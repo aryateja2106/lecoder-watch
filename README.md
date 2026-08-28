@@ -1,4 +1,4 @@
-# LeSearch Mesh
+# MeshWatch
 
 **Use your Mac from your wrist.**
 
