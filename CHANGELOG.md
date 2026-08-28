@@ -10,6 +10,15 @@ each entry as you ship the slice, not at release time.
 ## [Unreleased]
 
 ### Fixed
+- **Pair again and Remove machine now live on the machine's own screen.** The screen
+  that diagnosed "token rejected" told you to pair again while the only pairing form
+  hid behind the + button two screens away — a dead end at exactly the moment you
+  needed the cure. Every machine screen now has **Pair again** (opens the pairing form
+  with that machine's address filled in) and **Remove machine**, whatever state the
+  machine is in. The machine list gets swipe-to-remove too.
+- **Removing a machine now sticks.** Pairing adopts every machine the paired Mac knows
+  about, which silently resurrected anything you had deleted — the un-removable ghost
+  machine. A removed machine now stays removed until you deliberately pair it again.
 - **Opening a terminal is no longer slow.** Every new interactive shell was taking about
   14.5 seconds, essentially all of it inside the cmux-bridge startup hook that the
   installer adds to your shell profile. The hook decided the bridge was broken by asking
@@ -19,10 +28,6 @@ each entry as you ship the slice, not at release time.
   bridge whether *the bridge* is answering, never blocks the shell waiting for a daemon,
   and no longer prints stray job-control lines like `[4] + killed` at your prompt.
   Measured: **14.5s → 0.12s**.
-
-## [0.5.1] — 2026-08-27 (iPhone and Watch app)
-
-### Fixed
 - **The app closed itself on any screen with a text box.** 0.5.0 turned off iOS smart
   punctuation app-wide, so that typing `--flag` into a command did not arrive at the
   shell as `–flag`. It did that through the UIKit appearance proxy — and iOS replays a
