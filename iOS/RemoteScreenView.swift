@@ -483,13 +483,48 @@ final class RemoteScreenModel: ObservableObject {
         if mods.contains(mod) { mods.remove(mod) } else { mods.insert(mod) }
     }
 
+    /// Modifier order on the wire, outermost first — the same order meshd canonicalizes
+    /// to. `mods` is a Set and has no order of its own, so without this the identical
+    /// pair of taps could send ["cmd","shift"] one time and ["shift","cmd"] the next,
+    /// and the Mac would press two different sequences for one gesture. Unknown names
+    /// sort last rather than being filtered out: a modifier this list has not heard of
+    /// is meshd's to refuse out loud, not ours to swallow.
+    private static let modifierOrder = ["cmd", "ctrl", "option", "shift", "fn"]
+    private var orderedMods: [String] {
+        mods.sorted {
+            (Self.modifierOrder.firstIndex(of: $0) ?? .max, $0)
+                < (Self.modifierOrder.firstIndex(of: $1) ?? .max, $1)
+        }
+    }
+
+    /// The characters this screen can press as a real key: the single-character half of
+    /// mesh-input's KEYCODES table, which check-mesh-chords asserts the two still agree
+    /// on. A character missing from the Mac's table is a chord that silently does
+    /// nothing, so anything outside this set stays text.
+    static let chordableCharacters = Set(#"abcdefghijklmnopqrstuvwxyz0123456789-=[];',./\`"#)
+
     func pressKey(_ key: String) {
-        send([.key(key, Array(mods))])
+        send([.key(key, orderedMods)])
         mods.removeAll()          // sticky until a real key, so ⌘⇧4 works
     }
 
+    /// A held modifier plus a typed character means a chord, not a character.
+    ///
+    /// This is the only way to reach ⌘A, ⌘⇧4 or any other lettered chord from the phone:
+    /// the key bar carries escapes and arrows, never letters or digits, and `text` types
+    /// *into* whatever has focus with the modifiers discarded. So "tap ⌘, type 4, Send"
+    /// used to put a literal 4 on the Mac's screen and quietly throw the ⌘ away — the
+    /// chord arriving as a plain keypress, which is issue #109 in one gesture.
     func type(_ text: String) {
         guard !text.isEmpty else { return }
+        if !mods.isEmpty, text.count == 1, let c = text.lowercased().first,
+           Self.chordableCharacters.contains(c) {
+            pressKey(String(c))
+            return
+        }
+        // Held modifiers and a whole sentence cannot both be honoured. Say which one won
+        // instead of dropping the modifiers where nobody can see it happen.
+        if !mods.isEmpty { flash("Sent as text — modifiers only apply to a single key") }
         send([.text(text)])
         mods.removeAll()
     }
@@ -965,10 +1000,23 @@ struct RemoteScreenView: View {
     private static let specials = [("esc", "escape"), ("tab", "tab"), ("↩", "return"), ("⌫", "delete"),
                                    ("space", "space"),
                                    ("↑", "up"), ("↓", "down"), ("←", "left"), ("→", "right")]
-    /// The launcher chords spelled out. Sticky modifiers already make them *possible*
-    /// (tap ⌥, tap space); one labelled button is what makes them findable.
-    private static let chords: [(String, String, [String])] = [("⌘space", "space", ["cmd"]),
-                                                               ("⌥space", "space", ["option"])]
+    /// The chords worth a labelled button of their own. ⌘space and ⌥space are the two
+    /// launchers, and they are the first thing anyone tries on a screen that claims to
+    /// remote-control a Mac. ⌘⇧2 and ⌘⇧4 were not reachable *at all* before: this bar
+    /// has no digits, and typing "4" with ⌘⇧ held sent the character, not the chord.
+    private static let chords: [(String, String, [String])] = [
+        ("⌘space", "space", ["cmd"]),
+        ("⌥space", "space", ["option"]),
+        ("⌘⇧2", "2", ["cmd", "shift"]),
+        ("⌘⇧4", "4", ["cmd", "shift"]),
+    ]
+    /// Glyph keycaps are unreadable to VoiceOver — "⌘⇧4" is announced as three symbols
+    /// nobody can act on. Every chip says its own name out loud instead.
+    private static let spokenModifiers = ["cmd": "Command", "ctrl": "Control",
+                                          "option": "Option", "shift": "Shift", "fn": "Function"]
+    private static func spoken(_ key: String, _ mods: [String]) -> String {
+        (mods.map { spokenModifiers[$0] ?? $0 } + [key]).joined(separator: " ")
+    }
 
     private var keyboardPane: some View {
         VStack(spacing: 8) {
@@ -994,6 +1042,7 @@ struct RemoteScreenView: View {
                     ForEach(Self.chords, id: \.0) { label, key, mods in
                         Button(label) { remote.send([.key(key, mods)]) }
                             .buttonStyle(.bordered).controlSize(.small)
+                            .accessibilityLabel(Self.spoken(key, mods))
                     }
                 }
                 .padding(.horizontal, 12)
