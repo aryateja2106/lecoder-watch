@@ -193,6 +193,21 @@ func mergingPairedHosts(_ existing: [Machine], _ paired: [PairedHost]) -> [Machi
     return out
 }
 
+/// Which of a pairing's fleet entries are allowed in, given the hosts the user has
+/// deliberately removed. Pairing adopts the paired machine's whole `hosts.json`, so a
+/// machine deleted on the phone would otherwise resurrect on the very next pair —
+/// including the pair the user performs to fix an unrelated token, which makes deletion
+/// feel broken. The machine being explicitly paired always comes through (pairing it IS
+/// the un-remove gesture); every other fleet entry stays out if its name or address is
+/// in `removed`. `removed` holds lowercased names and addresses.
+func filteringRemovedHosts(_ hosts: [PairedHost], removed: Set<String>,
+                           pairedHost: String, pairedAddress: String) -> [PairedHost] {
+    hosts.filter { entry in
+        if hostNamesMatch(entry.host, pairedHost) || entry.ip == pairedAddress { return true }
+        return !removed.contains(entry.host.lowercased()) && !removed.contains(entry.ip.lowercased())
+    }
+}
+
 // MARK: - Stats (htop-style)
 
 struct MemInfo: Codable, Hashable {

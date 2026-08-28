@@ -10,6 +10,7 @@ struct CheckPairing {
         checkAllHosts()
         checkMerge()
         checkHostMatching()
+        checkTombstones()
         print("check-pairing: OK")
     }
 
@@ -50,6 +51,46 @@ struct CheckPairing {
             fleet: [host("studio", "100.1.1.1", "self-token"), host("halfdone", "100.3.3.3", "")],
         )
         assert(partial.allHosts.count == 1, "a tokenless host is dropped, not added broken")
+    }
+
+    // Pairing adopts the paired machine's whole hosts.json, so without tombstones a
+    // machine the user deleted resurrects on the very next pair — observed live as an
+    // un-removable "my-mac" zombie row. The filter has to hold the line both ways:
+    // removed stays removed across unrelated pairs, and explicitly pairing the removed
+    // machine itself brings it back.
+    static func checkTombstones() {
+        let fleet = [host("studio", "100.1.1.1", "t1"),
+                     host("pi", "100.2.2.2", "t2"),
+                     host("my-mac", "100.3.3.3", "t3")]
+
+        // A host removed by name must not come back from an unrelated pairing…
+        let byName = filteringRemovedHosts(fleet, removed: ["my-mac"],
+                                           pairedHost: "studio", pairedAddress: "100.1.1.1")
+        assert(byName.map(\.host) == ["studio", "pi"], "a removed host must not resurrect")
+
+        // …nor when only its address was tombstoned (manual adds may lack a stable name).
+        let byIP = filteringRemovedHosts(fleet, removed: ["100.3.3.3"],
+                                         pairedHost: "studio", pairedAddress: "100.1.1.1")
+        assert(byIP.map(\.host) == ["studio", "pi"], "a removed address must not resurrect")
+
+        // Tombstones are stored lowercased; hosts arrive as the daemon spells them.
+        let cased = filteringRemovedHosts([host("My-Mac", "100.3.3.3", "t3")], removed: ["my-mac"],
+                                          pairedHost: "studio", pairedAddress: "100.1.1.1")
+        assert(cased.isEmpty, "tombstone matching is case-insensitive")
+
+        // Explicitly pairing the removed machine is the un-remove gesture — by name…
+        let unremoved = filteringRemovedHosts(fleet, removed: ["my-mac"],
+                                              pairedHost: "my-mac", pairedAddress: "100.3.3.3")
+        assert(unremoved.count == 3, "pairing a machine overrides its own tombstone")
+
+        // …and by the address the phone actually dialed, even under a fresh name.
+        let redialed = filteringRemovedHosts(fleet, removed: ["my-mac", "100.3.3.3"],
+                                             pairedHost: "renamed-mac", pairedAddress: "100.3.3.3")
+        assert(redialed.contains { $0.ip == "100.3.3.3" }, "dialed address overrides its tombstone")
+
+        // No tombstones: everything flows through untouched.
+        assert(filteringRemovedHosts(fleet, removed: [],
+                                     pairedHost: "studio", pairedAddress: "100.1.1.1").count == 3)
     }
 
     // The name in an APNs payload is whatever `os.hostname()` says on that machine.

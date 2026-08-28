@@ -247,6 +247,13 @@ private struct MachinesTab: View {
                                     .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
                             }
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                store.removeMachine(host: m.host)
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
@@ -259,10 +266,17 @@ private struct MachinesTab: View {
 /// section below it, both saying "green", and neither being where you wanted to go.
 private struct MachineDetailView: View {
     @EnvironmentObject var store: MeshStore
+    @Environment(\.dismiss) private var dismiss
     let host: String
+    @State private var repairing = false
+    @State private var confirmingRemoval = false
 
     private var snapshot: MachineSnapshot? {
         store.snapshot?.machines.first { $0.host == host }
+    }
+
+    private var config: Machine? {
+        store.machines.first { $0.host == host }
     }
 
     /// The newest event this phone holds for a session on this machine, so a row can
@@ -286,7 +300,7 @@ private struct MachineDetailView: View {
                     ServiceStatusRow(label: "auth", ok: m.authError == nil, detail: m.authError ?? "active")
                     if m.authError != nil {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("This machine rotated its token. Run mesh pair on it and pair again — that replaces the saved token in place.")
+                            Text("This machine rotated its token. Run mesh pair on it, then tap Pair again below and enter the code it prints — that replaces the saved token in place.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             CopyableCommand(text: "mesh pair")
@@ -408,10 +422,43 @@ private struct MachineDetailView: View {
             } else {
                 Text("No reading for this machine yet.").foregroundStyle(.secondary)
             }
+            // Always present, whatever state the machine is in. The screen above
+            // diagnoses "token rejected" and used to tell the user to "pair again"
+            // while the only pairing UI lived behind a + button two screens away —
+            // the diagnosis and the cure have to be in the same place.
+            Section {
+                Button {
+                    repairing = true
+                } label: {
+                    Label("Pair again", systemImage: "qrcode.viewfinder")
+                }
+                Button(role: .destructive) {
+                    confirmingRemoval = true
+                } label: {
+                    Label("Remove machine", systemImage: "trash")
+                }
+            } footer: {
+                Text("Pairing the same machine replaces its saved token in place. Removing only forgets it on this phone — and it stays forgotten until you pair it again.")
+            }
         }
         .navigationTitle(machineShortName(host))
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await store.refresh() }
+        .sheet(isPresented: $repairing) {
+            PairMachineView(prefill: config.map {
+                MeshStore.PairTarget(address: $0.ip, port: $0.port, code: "")
+            })
+            .environmentObject(store)
+        }
+        .confirmationDialog("Remove \(machineShortName(host))?",
+                            isPresented: $confirmingRemoval, titleVisibility: .visible) {
+            Button("Remove machine", role: .destructive) {
+                store.removeMachine(host: host)
+                dismiss()
+            }
+        } message: {
+            Text("The machine itself is untouched. Pair it again any time to bring it back.")
+        }
     }
 }
 
@@ -857,7 +904,7 @@ private func machineShortName(_ host: String) -> String {
 private func machineSummary(_ machine: MachineSnapshot) -> String {
     guard machine.reachable else { return machine.error ?? "unreachable" }
     let version = machine.meshdVersion.map { "meshd \($0)" } ?? "meshd active"
-    if machine.authError != nil { return "\(version) · token needed" }
+    if machine.authError != nil { return "\(version) · token rejected — pair again" }
     let bridge = machine.bridgeReachable == true ? "bridge" : "no bridge"
     // An out-of-date daemon earns the last slot ahead of "hooks". The row used to read
     // "meshd 0.4.1 · no bridge · hooks" on a daemon missing seven capabilities, which

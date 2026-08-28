@@ -47,6 +47,7 @@ final class MeshStore: ObservableObject {
     private let pinnedLimitsKey = "mesh.pinnedLimits.v1"
     private let netIdentityKey = "mesh.netIdentity.v1"
     private let capabilitiesKey = "mesh.capabilities.v1"
+    private let removedHostsKey = "mesh.removedHosts.v1"
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
@@ -176,8 +177,38 @@ final class MeshStore: ObservableObject {
         UserDefaults.standard.set(data, forKey: capabilitiesKey)
     }
 
+    /// Hosts the user deliberately removed, kept so a later pairing's fleet import does
+    /// not resurrect them (pairing adopts the paired machine's whole hosts.json).
+    /// Lowercased names and addresses; not secret, so UserDefaults is the right place.
+    private var removedHosts: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: removedHostsKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue).sorted(), forKey: removedHostsKey) }
+    }
+
+    private func tombstone(_ machine: Machine) {
+        var set = removedHosts
+        if !machine.host.isEmpty { set.insert(machine.host.lowercased()) }
+        if !machine.ip.isEmpty { set.insert(machine.ip.lowercased()) }
+        removedHosts = set
+    }
+
     func deleteMachines(atOffsets offsets: IndexSet) {
+        for i in offsets { tombstone(machines[i]) }
         machines.remove(atOffsets: offsets)
+        save()
+    }
+
+    /// Removal from the machine list or detail screen, where there is no IndexSet.
+    /// Local only — the machine itself is untouched — and remembered, so the row does
+    /// not reappear from the next pairing's fleet.
+    func removeMachine(host: String) {
+        guard let index = machines.firstIndex(where: { $0.host == host })
+            ?? machines.firstIndex(where: { hostNamesMatch($0.host, host) }) else { return }
+        tombstone(machines[index])
+        machines.remove(at: index)
+        // Drop the stale snapshot row too; waiting for the next poll to erase a machine
+        // the user just deleted reads as the delete not working.
+        snapshot?.machines.removeAll { $0.host == host }
         save()
     }
 
@@ -186,8 +217,21 @@ final class MeshStore: ObservableObject {
     @discardableResult
     func pair(address: String, port: Int, code: String) async throws -> [PairedHost] {
         let result = try await MeshClient.claimPair(address: address, port: port, code: code)
-        let hosts = result.allHosts
-        guard !hosts.isEmpty else { throw MeshClient.MeshError.decode }
+        guard !result.allHosts.isEmpty else { throw MeshClient.MeshError.decode }
+        // Pairing this machine is the un-remove gesture: its identifiers leave the
+        // tombstone set so it can be removed and re-added forever. Every OTHER fleet
+        // entry still respects a deliberate removal — without this, deleting a stale
+        // machine is silently undone by the next pairing.
+        var tombstones = removedHosts
+        tombstones.remove(result.host.lowercased())
+        tombstones.remove(address.lowercased())
+        for entry in result.allHosts where hostNamesMatch(entry.host, result.host) || entry.ip == address {
+            tombstones.remove(entry.host.lowercased())
+            tombstones.remove(entry.ip.lowercased())
+        }
+        removedHosts = tombstones
+        let hosts = filteringRemovedHosts(result.allHosts, removed: tombstones,
+                                          pairedHost: result.host, pairedAddress: address)
         machines = mergingPairedHosts(machines, hosts)
         save()
         // The highest-intent moment in the app: they just connected a machine, so
@@ -310,7 +354,7 @@ final class MeshStore: ObservableObject {
                     guard machine.isConfigured else {
                         return MachineSnapshot(
                             host: machine.host, config: machine, reachable: false, agents: [],
-                            error: "not paired yet — use Pair a machine, or paste this machine's token below")
+                            error: "not paired yet — open this machine and tap Pair")
                     }
                     // Seeded from the last poll so the very first call of this pass is
                     // already capability-correct, then replaced by whatever /health
