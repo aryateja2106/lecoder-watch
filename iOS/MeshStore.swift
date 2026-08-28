@@ -947,10 +947,11 @@ final class MeshStore: ObservableObject {
     }
 
     /// Set by a `meshwatch://pair?h=<addr>&p=<port>&c=<code>` link — the QR that
-    /// `mesh pair` prints. Scanning it with the system Camera lands here with every
-    /// field filled; no in-app scanner, no camera permission. The user still sees
-    /// the code and taps Pair themselves — that confirmation against what the
-    /// terminal printed is the verification step, so the claim is never automatic.
+    /// `mesh pair` prints, whether the system Camera handed it off or the in-app
+    /// scanner (`PairingScannerSheet`) read it directly. Either way it lands here with
+    /// every field filled, not paired: the user still sees the code and taps Pair
+    /// themselves — that confirmation against what the terminal printed is the
+    /// verification step, so the claim is never automatic.
     @Published var deepLinkPair: PairTarget?
 
     struct PairTarget: Identifiable, Hashable {
@@ -961,21 +962,15 @@ final class MeshStore: ObservableObject {
     }
 
     /// `meshwatch://session/<host>/<session>` or `meshwatch://pair?h=&p=&c=`.
-    /// Anything else is ignored rather than guessed at.
+    /// Anything else is ignored rather than guessed at. The pairing half defers to
+    /// `parsePairingLink`, the same parser the in-app QR scanner uses, so a link
+    /// handed off by the system Camera and one read straight off the frame agree.
     func open(url: URL) -> Bool {
-        guard url.scheme == "meshwatch" else { return false }
-        if url.host == "pair" {
-            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
-            guard let address = value("h")?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !address.isEmpty,
-                  let code = value("c"), normalizedPairingCode(code).count >= 6 else { return false }
-            deepLinkPair = PairTarget(address: address,
-                                      port: Int(value("p") ?? "") ?? 8899,
-                                      code: code)
+        if let link = parsePairingLink(url) {
+            deepLinkPair = PairTarget(address: link.address, port: link.port, code: link.code)
             return true
         }
-        guard url.host == "session" else { return false }
+        guard url.scheme == "meshwatch", url.host == "session" else { return false }
         let parts = url.path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return false }
         deepLinkSession = SessionTarget(host: parts[0], session: parts[1])

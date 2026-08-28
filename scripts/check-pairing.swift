@@ -12,6 +12,7 @@ struct CheckPairing {
         checkHostMatching()
         checkTombstones()
         checkBridgeAddress()
+        checkPairingLinkParsing()
         print("check-pairing: OK")
     }
 
@@ -179,5 +180,38 @@ struct CheckPairing {
         // Idempotent — pairing twice must not grow the list.
         let once = mergingPairedHosts(existing, [host("studio", "100.1.1.1", "x")])
         assert(mergingPairedHosts(once, [host("studio", "100.1.1.1", "x")]) == once)
+    }
+
+    // The in-app QR scanner and the system-Camera deep link both funnel through
+    // parsePairingLink; if this drifts from what mesh pair actually prints, one path
+    // silently accepts a link the other rejects.
+    static func checkPairingLinkParsing() {
+        // A full link, port and all.
+        let valid = parsePairingLink(URL(string: "meshwatch://pair?h=100.1.1.1&p=8899&c=K7M4-QP2X")!)
+        assert(valid?.address == "100.1.1.1")
+        assert(valid?.port == 8899)
+        assert(valid?.code == "K7M4-QP2X", "the raw code is kept as scanned; normalization happens at pairing time")
+
+        // No port in the query: falls back to meshd's default.
+        let noPort = parsePairingLink(URL(string: "meshwatch://pair?h=100.1.1.1&c=K7M4QP2X")!)
+        assert(noPort?.port == 8899, "a missing port must not make the link unusable")
+
+        // Missing code entirely.
+        assert(parsePairingLink(URL(string: "meshwatch://pair?h=100.1.1.1")!) == nil, "no code means no link")
+
+        // Code present but too short once normalized — punctuation doesn't count
+        // toward the length, so "AB-1" is really 3 characters, not 4.
+        assert(parsePairingLink(URL(string: "meshwatch://pair?h=100.1.1.1&c=AB-1")!) == nil, "a short code is not a link")
+
+        // Missing address entirely.
+        assert(parsePairingLink(URL(string: "meshwatch://pair?c=K7M4QP2X")!) == nil, "no address means no link")
+
+        // Garbage: a QR that happens to encode some other URL entirely.
+        assert(parsePairingLink(URL(string: "https://example.com/not-a-pairing-link")!) == nil,
+               "the wrong scheme is not a pairing link")
+
+        // A meshwatch:// link, but the session kind, not pair.
+        assert(parsePairingLink(URL(string: "meshwatch://session/studio/abc123")!) == nil,
+               "a session link is not a pairing link")
     }
 }

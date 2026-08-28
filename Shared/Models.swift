@@ -135,6 +135,32 @@ func normalizedPairingCode(_ input: String) -> String {
     input.uppercased().filter { $0.isASCII && ($0.isNumber || ($0.isLetter && $0.isUppercase)) }
 }
 
+/// A `meshwatch://pair?h=&p=&c=` link, parsed. The three fields `mesh pair`'s QR
+/// encodes, and nothing else — pairing itself still needs a human tap.
+struct PairingLink: Hashable {
+    var address: String
+    var port: Int
+    var code: String
+}
+
+/// One parser for one link format, shared by every way a pairing QR reaches the app:
+/// the system Camera handing off the URL, and the in-app scanner reading the same code
+/// directly off the frame. Both must agree on what counts as a valid link, or a QR that
+/// the in-app scanner accepts and the deep link handler rejects (or the reverse) is a
+/// pairing flow that works differently depending on which camera happened to read it.
+///
+/// `h` is required and non-empty; `c` must normalize to at least 6 characters (mirrors
+/// `canPair` in `PairMachineView`); `p` defaults to meshd's default port.
+func parsePairingLink(_ url: URL) -> PairingLink? {
+    guard url.scheme == "meshwatch", url.host == "pair" else { return nil }
+    let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+    guard let address = value("h")?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !address.isEmpty,
+          let code = value("c"), normalizedPairingCode(code).count >= 6 else { return nil }
+    return PairingLink(address: address, port: Int(value("p") ?? "") ?? 8899, code: code)
+}
+
 /// `machineMatching` over snapshots rather than configs — same rules, and they have to
 /// stay the same rules, so both defer to `hostNamesMatch`.
 func snapshotMachineMatching(_ name: String, in machines: [MachineSnapshot]) -> MachineSnapshot? {

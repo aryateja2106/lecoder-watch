@@ -78,6 +78,7 @@ targets:
         NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSFaceIDUsageDescription: "Unlock MeshWatch so only you can reach your machines."
+        NSCameraUsageDescription: "Scan a machine's pairing QR code."
         UIBackgroundModes:
           - fetch
         BGTaskSchedulerPermittedIdentifiers:
