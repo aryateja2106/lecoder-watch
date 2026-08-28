@@ -178,7 +178,8 @@ private struct NewSessionSheet: View {
     @State private var command = ""
     @State private var taskAgent = "claude"
     @State private var taskText = ""
-    @State private var busy = false
+    @State private var isCreating = false
+    @State private var creationError: String?
 
     // Common launchers; "shell" means just a plain rmux session.
     private let presets = ["shell", "claude", "codex", "agy", "bun", "python3"]
@@ -232,25 +233,56 @@ private struct NewSessionSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                if let creationError {
+                    Section {
+                        Label(creationError, systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Button {
+                            Task { await createSession() }
+                        } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                        }
+                    }
+                }
             }
             .navigationTitle("New on \(machine.host)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isCreating)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        busy = true
-                        Task {
-                            await store.newSession(on: machine, name: sessionName, cmd: launchCommand, initialText: initialText)
-                            busy = false
-                            dismiss()
+                    Button {
+                        Task { await createSession() }
+                    } label: {
+                        if isCreating {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.small)
+                                Text("Starting session…")
+                            }
+                        } else {
+                            Text("Create")
                         }
                     }
-                    .disabled(busy)
+                    .disabled(isCreating)
                 }
             }
+        }
+    }
+
+    /// Fires the create call, keeps the sheet open with a retry affordance on
+    /// failure (the old code dismissed unconditionally, hiding create failures),
+    /// and dismisses on success same as before.
+    private func createSession() async {
+        isCreating = true
+        creationError = nil
+        let ok = await store.newSession(on: machine, name: sessionName, cmd: launchCommand, initialText: initialText)
+        isCreating = false
+        if ok {
+            dismiss()
+        } else {
+            creationError = store.lastError ?? "Couldn't start the session. Check the connection and try again."
         }
     }
 }

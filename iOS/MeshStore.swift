@@ -260,12 +260,17 @@ final class MeshStore: ObservableObject {
     // MARK: Sessions
 
     /// Create a new rmux session on a machine, then refresh so it appears in the list.
-    func newSession(on machine: Machine, name: String, cmd: String?, initialText: String? = nil) async {
+    /// Returns false (with `lastError` set) on failure so the sheet can show a retry
+    /// state instead of dismissing as if it worked.
+    @discardableResult
+    func newSession(on machine: Machine, name: String, cmd: String?, initialText: String? = nil) async -> Bool {
         do {
             try await MeshClient(machine: machine).newSession(name: name, cmd: cmd, initialText: initialText)
             await refresh()
+            return true
         } catch {
             lastError = "create session failed: \(error)"
+            return false
         }
     }
 
