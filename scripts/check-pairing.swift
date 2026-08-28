@@ -11,6 +11,7 @@ struct CheckPairing {
         checkMerge()
         checkHostMatching()
         checkTombstones()
+        checkBridgeAddress()
         print("check-pairing: OK")
     }
 
@@ -91,6 +92,28 @@ struct CheckPairing {
         // No tombstones: everything flows through untouched.
         assert(filteringRemovedHosts(fleet, removed: [],
                                      pairedHost: "studio", pairedAddress: "100.1.1.1").count == 3)
+    }
+
+    // The terminal died on "http://Aryas-MacBook-Pro:7820 — hostname could not be
+    // found" while every meshd probe reached the same machine by IP: the bridge and
+    // VNC fallbacks dialed addresses.LAST (the bare name) instead of the numeric
+    // address. A phone without MagicDNS can never resolve the name.
+    static func checkBridgeAddress() {
+        let paired = Machine(host: "Aryas-MacBook-Pro", ip: "100.94.221.115", port: 8899, token: "t")
+        assert(paired.resolvedBridge == "http://100.94.221.115:7820",
+               "bridge dials the numeric address, not the bare hostname")
+        assert(paired.resolvedVNC.hasPrefix("http://100.94.221.115:6080"),
+               "VNC dials the numeric address, not the bare hostname")
+
+        // A hand-added machine may have no ip yet — the name is then the only address.
+        let manual = Machine(host: "studio", ip: "", port: 8899, token: "t")
+        assert(manual.resolvedBridge == "http://studio:7820",
+               "with no ip the name is still better than nothing")
+
+        // An explicitly stored bridge URL always wins over any fallback.
+        var custom = paired
+        custom.bridgeURL = "https://mac.tail.ts.net"
+        assert(custom.resolvedBridge == "https://mac.tail.ts.net")
     }
 
     // The name in an APNs payload is whatever `os.hostname()` says on that machine.

@@ -55,7 +55,10 @@ struct Machine: Codable, Identifiable, Hashable {
     var resolvedBridge: String? {
         if let b = bridgeURL, !b.isEmpty { return b }
         // rmux-bridge runs on every mesh machine at tailnet IP:7820 (http+ws).
-        return addresses.last.map { "http://\($0):7820" }
+        // `addresses` is [ip, host]: dial the NUMERIC address first, not the bare
+        // hostname — a phone without MagicDNS answers "hostname could not be found"
+        // for the name while the IP works, and the terminal died on exactly that.
+        return addresses.first.map { "http://\($0):7820" }
     }
 
     /// meshd's own remote desktop: polls /screen.jpg, posts /input. Needs no VNC
@@ -68,7 +71,8 @@ struct Machine: Codable, Identifiable, Hashable {
 
     var resolvedVNC: String {
         if let v = vncURL, !v.isEmpty { return v }
-        let address = addresses.last ?? ip
+        // Numeric address first, same reason as `resolvedBridge`.
+        let address = addresses.first ?? ip
         return "http://\(address):6080/vnc.html?autoconnect=1&resize=scale"
     }
 

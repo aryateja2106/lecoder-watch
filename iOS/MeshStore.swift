@@ -193,8 +193,12 @@ final class MeshStore: ObservableObject {
     }
 
     func deleteMachines(atOffsets offsets: IndexSet) {
+        let removed = Set(offsets.map { machines[$0].host })
         for i in offsets { tombstone(machines[i]) }
         machines.remove(atOffsets: offsets)
+        // Same ghost problem as removeMachine: an in-flight poll can write the row
+        // back moments later, so the visible snapshot must forget it too.
+        snapshot?.machines.removeAll { removed.contains($0.host) }
         save()
     }
 
@@ -202,10 +206,17 @@ final class MeshStore: ObservableObject {
     /// Local only — the machine itself is untouched — and remembered, so the row does
     /// not reappear from the next pairing's fleet.
     func removeMachine(host: String) {
-        guard let index = machines.firstIndex(where: { $0.host == host })
-            ?? machines.firstIndex(where: { hostNamesMatch($0.host, host) }) else { return }
-        tombstone(machines[index])
-        machines.remove(at: index)
+        // The row being removed may be a ghost a stale poll wrote back after the
+        // config was already deleted. Removal must never be a silent no-op: strip the
+        // snapshot row and record the tombstone even when there is no config row left.
+        var set = removedHosts
+        set.insert(host.lowercased())
+        removedHosts = set
+        if let index = machines.firstIndex(where: { $0.host == host })
+            ?? machines.firstIndex(where: { hostNamesMatch($0.host, host) }) {
+            tombstone(machines[index])
+            machines.remove(at: index)
+        }
         // Drop the stale snapshot row too; waiting for the next poll to erase a machine
         // the user just deleted reads as the delete not working.
         snapshot?.machines.removeAll { $0.host == host }
@@ -545,6 +556,13 @@ final class MeshStore: ObservableObject {
         }
         await refreshEvents(from: targets)
 
+        // This poll captured `targets = machines` up to ~16s ago (a dead host takes
+        // that long to fail /health while the timer fires every 8s), and the user may
+        // have removed a machine since. Writing the stale row back resurrects it on
+        // screen — the "I deleted it and it came again" bug — so the snapshot keeps
+        // only rows the machine list still owns.
+        let liveHosts = Set(machines.map { $0.host })
+        let ordered = ordered.filter { liveHosts.contains($0.host) }
         let now = ISO8601DateFormatter().string(from: Date())
         let snap = MeshSnapshot(updatedISO: now,
                                 machines: ordered,
