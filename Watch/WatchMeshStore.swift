@@ -126,11 +126,12 @@ final class WatchMeshStore: ObservableObject {
         return snap.reachable && snap.authError == nil
     }
 
+    /// Asked of `statusCode`, not of one case: a 401 carrying meshd's
+    /// `{"error":"unauthorized"}` body arrives as .refused, and matching only .http
+    /// would drop the token prompt exactly when the token is the problem.
     private nonisolated static func isAuthError(_ error: Error) -> Bool {
-        if case MeshClient.MeshError.http(let code) = error {
-            return code == 401 || code == 403
-        }
-        return false
+        guard let code = (error as? MeshClient.MeshError)?.statusCode else { return false }
+        return code == 401 || code == 403
     }
 
     // MARK: Capabilities

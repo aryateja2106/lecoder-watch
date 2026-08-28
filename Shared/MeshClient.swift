@@ -37,6 +37,42 @@ struct MeshClient {
         /// The daemon did not advertise the named capability, so the call was
         /// refused client-side rather than sent to a route that does not exist.
         case unsupported(String)
+        /// The daemon answered non-2xx with a reason in its `error` field. Kept as
+        /// text because "pane w9:p2 not found" tells the user what to do and a bare
+        /// 400 does not — the refusal used to be thrown away with the body.
+        ///
+        /// The status travels WITH the reason rather than replacing it: meshd answers
+        /// 401 as `{"error":"unauthorized"}`, so a refusal that dropped the code would
+        /// have made every expired token look like an ordinary failure and silently
+        /// taken the "run mesh pair" prompt off the screen.
+        case refused(Int, String)
+
+        var statusCode: Int? {
+            switch self {
+            case .http(let code), .refused(let code, _): return code
+            case .badURL, .decode, .unsupported: return nil
+            }
+        }
+
+        var reason: String? {
+            switch self {
+            case .refused(_, let why): return why
+            case .unsupported(let cap): return "this machine's daemon is too old for \(cap)"
+            case .http(let code): return "the machine answered \(code)"
+            case .badURL, .decode: return nil
+            }
+        }
+    }
+
+    /// The `error` string out of a daemon refusal body, or nil when the body is not
+    /// one (an HTML proxy page, an empty 502). Trimmed to one line so a stray stack
+    /// trace cannot push the rest of the screen off.
+    static func daemonReason(in data: Data) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let why = obj["error"] as? String else { return nil }
+        let line = why.split(separator: "\n").first.map(String.init) ?? why
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : String(trimmed.prefix(200))
     }
 
     private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
@@ -66,7 +102,11 @@ struct MeshClient {
             do {
                 let (data, resp) = try await URLSession.shared.data(for: req)
                 if let http = resp as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                    throw MeshError.http(http.statusCode)
+                    // The daemon puts its reason in the body of every refusal it
+                    // authors. Throwing the status alone reduced "herdr pane not
+                    // found" and "unsupported key" to an indistinguishable 400.
+                    throw Self.daemonReason(in: data)
+                        .map { MeshError.refused(http.statusCode, $0) } ?? MeshError.http(http.statusCode)
                 }
                 return (data, resp as? HTTPURLResponse)
             } catch {

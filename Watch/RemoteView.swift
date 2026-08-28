@@ -323,10 +323,15 @@ final class RemoteControl: ObservableObject {
             screen = frame.data
             screenRect = frame.rect
             screenError = nil
-        } catch MeshClient.MeshError.http(let code) where code == 401 || code == 403 {
-            screenError = "token rejected — re-pair this machine on your iPhone"
-        } catch MeshClient.MeshError.http(let code) {
-            screenError = "the Mac answered \(code) — check Screen Recording in System Settings"
+        // Switched off `statusCode` because meshd puts a reason in the body of its
+        // refusals, so 401 now arrives as .refused and a `case .http` alone stopped
+        // matching it — which would have replaced "re-pair this machine" with the
+        // generic no-answer line at the one moment it is wrong.
+        } catch let error as MeshClient.MeshError where error.statusCode != nil {
+            let code = error.statusCode!
+            screenError = code == 401 || code == 403
+                ? "token rejected — re-pair this machine on your iPhone"
+                : "the Mac answered \(code) — check Screen Recording in System Settings"
         } catch {
             screenError = "no answer from \(machine.host)"
         }

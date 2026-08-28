@@ -350,6 +350,21 @@ struct Agent: Codable, Hashable, Identifiable {
 
     var displayName: String { title?.isEmpty == false ? title! : name }
     var isCmux: Bool { name.hasPrefix("cmux:") }
+    /// meshd 0.5.4+ ("herdr"): a pane of the herdr multiplexer, named `herdr:<pane_id>`.
+    var isHerdr: Bool { name.hasPrefix("herdr:") }
+
+    /// What kind of thing this row is, in one word the multiplexer would recognise.
+    /// A herdr pane that says "1 pane" reads as an rmux session, and the whole point
+    /// of listing it is that you can tell where it lives.
+    var kindLabel: String {
+        if isCmux { return "cmux" }
+        if isHerdr { return "herdr" }
+        return "\(windows) pane\(windows == 1 ? "" : "s")"
+    }
+
+    /// Neither cmux nor herdr takes the full rmux key set, and neither can be split or
+    /// killed over the wire. One question, asked in every place that used `!isCmux`.
+    var isMuxGuest: Bool { isCmux || isHerdr }
 }
 
 struct AgentOutput: Codable, Hashable {

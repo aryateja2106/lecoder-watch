@@ -13,18 +13,22 @@ import { isAuthorized } from "./auth";
 import { handleDoctor, tokenWeakness } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
+import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount } from "./herdr";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.5.3";
+const VERSION = "0.5.4";
 // 0.5.0 additions, all additive so a 0.4.x daemon and a 0.5 app (or the reverse)
 // keep working: screenRegion (rect+quality on /screen.jpg), openUrl (POST /open),
 // power (shutdown/restart on /system, results now truthful), laPush (POST /la/token
 // + Live Activity pushes), sessionStatus (status fields on /agents rows), paste
 // (bracketed multiline paste on /agents/<s>/send), captureJoin (join=1/plain=1 on
 // the output route). Clients must gate new behavior on these strings, not on version.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin"];
+// 0.5.4 adds "herdr": panes of the herdr multiplexer are enumerated, peekable and
+// keyable under `herdr:<pane_id>` names. Clients gate the herdr row label and its
+// reduced key set on this string, not on version.
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -123,15 +127,16 @@ async function topProcs(): Promise<any[]> {
   }).filter((p) => p.pid > 0);
 }
 async function getStats() {
-  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount] = await Promise.all([
+  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount, herdrCount] = await Promise.all([
     IS_MAC ? macCpuPct() : linuxCpuPct(),
     IS_MAC ? macMem() : linuxMem(),
     disk(),
     topProcs(),
     rmuxSessions().then((s) => s.length).catch(() => 0),
     cmuxSessions().then((s) => s.length).catch(() => 0),
+    herdrPaneCount().catch(() => 0),
   ]);
-  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount };
+  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount + herdrCount };
 }
 
 // ---------- agents (rmux) ----------
@@ -351,12 +356,24 @@ async function cmuxSessions(): Promise<any[]> {
   return sessions;
 }
 
+/// herdr reports pane ids, not pids, so the subtree walk it needs is the same one the
+/// rmux lane does — one ps snapshot, shared across every pane, rather than a ps per row.
+async function listHerdr(): Promise<any[]> {
+  try {
+    const table = await procTable();
+    return await herdrSessions((pids) => sumSubtrees(pids, table));
+  } catch {
+    // A machine without herdr must still get its rmux and cmux rows.
+    return [];
+  }
+}
+
 async function listAgents() {
-  const [rmux, cmux] = await Promise.all([rmuxSessions(), cmuxSessions()]);
+  const [rmux, cmux, herdr] = await Promise.all([rmuxSessions(), cmuxSessions(), listHerdr()]);
   // Additive per-row status from the event index — old clients never look at the
   // extra keys, new clients stop deriving "is it stuck?" from pane heuristics.
   const now = Date.now();
-  return [...rmux, ...cmux].map((s) => ({ ...s, ...sessionStatusFields(s.name, Boolean(s.attached), now) }));
+  return [...rmux, ...cmux, ...herdr].map((s) => ({ ...s, ...sessionStatusFields(s.name, Boolean(s.attached), now) }));
 }
 
 async function cmuxPanes(name: string) {
@@ -389,6 +406,11 @@ async function cmuxPanes(name: string) {
   };
 }
 
+/// `null` when the surface does not resolve, so the route can 404 it. This used to
+/// return an empty line array either way: a surface that had gone away read exactly
+/// like a surface sitting at a blank prompt, and the phone printed "No output yet" over
+/// a session that no longer existed. Measured on the live daemon before the fix —
+/// GET /agents/cmux:no-such-ref/output answered 200 {"lines":[]}.
 async function cmuxOutput(name: string, lines: number) {
   const ref = cmuxSurfaceRef(name);
   try {
@@ -407,8 +429,12 @@ async function cmuxOutput(name: string, lines: number) {
       return { name, lines: arr.slice(-lines) };
     }
   } catch { /* fall through */ }
-  const out = await sh(`${await cmuxEnvPrefix()}${CMUX} read-screen --surface ${shq(ref)} --lines ${Math.max(1, lines)} 2>/dev/null`);
-  const arr = out.split("\n").map(cleanCmuxLine).filter((l) => l.trim().length > 0);
+  // shChecked, not sh: the exit code is the only thing that separates "this surface is
+  // gone" from "this surface is quiet", and sh() discards it along with stderr.
+  const r = await shChecked(`${await cmuxEnvPrefix()}${CMUX} read-screen --surface ${shq(ref)} --lines ${Math.max(1, lines)}`)
+    .catch(() => ({ out: "", err: "", code: 1 }));
+  if (r.code !== 0) return null;
+  const arr = r.out.split("\n").map(cleanCmuxLine).filter((l) => l.trim().length > 0);
   return { name, lines: arr.slice(-lines) };
 }
 
@@ -431,20 +457,29 @@ async function cmuxSend(name: string, text?: string, key?: string): Promise<{ ok
     body: JSON.stringify({ args }),
   }).then((r) => r.ok);
 
+  // Both fallbacks used to be fire-and-forget: when the bridge was down AND the CLI
+  // failed, this still answered ok:true and the phone showed a sent keystroke that
+  // reached nothing. Measured on the live daemon before the fix — POST to
+  // /agents/cmux:no-such-ref/send answered 200 {"ok":true}.
   if (text) {
     if (await bridgeArgs(["send", "--surface", ref, text]).catch(() => false)) return { ok: true };
-    await sh(`${await cmuxEnvPrefix()}${CMUX} send --surface ${shq(ref)} ${shq(text)}`);
+    const r = await shChecked(`${await cmuxEnvPrefix()}${CMUX} send --surface ${shq(ref)} ${shq(text)}`)
+      .catch(() => ({ out: "", err: "", code: 1 }));
+    if (r.code !== 0) return { ok: false, error: r.err || "session not addressable" };
   }
   if (key) {
     const mapped = CMUX_KEYS[key];
     if (!mapped) return { ok: false, error: `unsupported key: ${key}` };
     if (await bridgeArgs(["send-key", "--surface", ref, mapped]).catch(() => false)) return { ok: true };
-    await sh(`${await cmuxEnvPrefix()}${CMUX} send-key --surface ${shq(ref)} ${mapped}`);
+    const r = await shChecked(`${await cmuxEnvPrefix()}${CMUX} send-key --surface ${shq(ref)} ${mapped}`)
+      .catch(() => ({ out: "", err: "", code: 1 }));
+    if (r.code !== 0) return { ok: false, error: r.err || "session not addressable" };
   }
   return { ok: true };
 }
 
 async function agentPanes(name: string) {
+  if (isHerdrAgent(name)) return herdrPanes(name);
   if (isCmuxAgent(name)) return cmuxPanes(name);
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
@@ -487,6 +522,10 @@ function plainLine(line: string): string {
 }
 
 async function agentOutput(name: string, lines: number, pane?: string, join = false, plain = false) {
+  if (isHerdrAgent(name)) {
+    const res = await herdrOutput(name, lines, join);
+    return plain && res ? { ...res, lines: res.lines.map(plainLine) } : res;
+  }
   if (isCmuxAgent(name)) {
     const res = await cmuxOutput(name, lines);
     // cmux read-screen has no join concept; plain still applies.
@@ -503,6 +542,7 @@ async function agentOutput(name: string, lines: number, pane?: string, join = fa
 }
 const INFRA = new Set(["meshd", "rmux-bridge"]); // never killable over the wire
 async function agentKill(name: string): Promise<{ ok: boolean; error?: string }> {
+  if (isHerdrAgent(name)) return { ok: false, error: "herdr panes cannot be closed from meshd" };
   if (isCmuxAgent(name)) return { ok: false, error: "cmux sessions cannot be killed from meshd" };
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
@@ -512,12 +552,14 @@ async function agentKill(name: string): Promise<{ ok: boolean; error?: string }>
   return { ok: true };
 }
 async function agentKillPane(name: string, paneId: string): Promise<{ ok: boolean; error?: string }> {
+  if (isHerdrAgent(name)) return { ok: false, error: "herdr panes cannot be closed from meshd" };
   if (isCmuxAgent(name)) return { ok: false, error: "cmux panes cannot be killed from meshd" };
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
   await sh(`${MUX} kill-pane -t ${shq(paneId)}`);
   return { ok: true };
 }
 async function agentNewPane(name: string, dir?: string, cwd?: string): Promise<{ ok: boolean; error?: string }> {
+  if (isHerdrAgent(name)) return { ok: false, error: "herdr panes do not support splitting via meshd" };
   if (isCmuxAgent(name)) return { ok: false, error: "cmux sessions do not support new panes via meshd" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
     return { ok: false, error: "no such session" };
@@ -557,6 +599,9 @@ const KEY_SEND_KEYS: Record<string, string> = {
 };
 
 async function agentSend(name: string, text?: string, key?: string, pane?: string, paste?: boolean): Promise<{ ok: boolean; error?: string }> {
+  // herdr's send-text is already a literal write, so a pasted paragraph needs no
+  // bracketed-paste dance: `paste` collapses into the same call.
+  if (isHerdrAgent(name)) return herdrSend(name, text, key);
   if (isCmuxAgent(name)) return cmuxSend(name, text, key);
   const hasText = typeof text === "string" && text.length > 0;
   const hasKey = typeof key === "string" && key.length > 0;
