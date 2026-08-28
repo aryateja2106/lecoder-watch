@@ -64,7 +64,7 @@ fi
 # The canonical four. These are what a stranger types, in the order they meet them.
 # Kept in mktemp rather than the repo: release-testflight-asc.sh refuses to ship from a
 # dirty tree, and a scratch file dropped in $ROOT would make this check cause that refusal.
-URLS="$(mktemp -t mesh-check-links)"
+URLS="$(mktemp "${TMPDIR:-/tmp}/mesh-check-links.XXXXXX")"
 trap 'rm -f "$URLS"' EXIT
 cat > "$URLS" <<'EOF'
 https://mesh.lesearch.ai/install.sh

@@ -562,10 +562,10 @@ final class MeshStore: ObservableObject {
         // screen — the "I deleted it and it came again" bug — so the snapshot keeps
         // only rows the machine list still owns.
         let liveHosts = Set(machines.map { $0.host })
-        let ordered = ordered.filter { liveHosts.contains($0.host) }
+        let liveOrdered = ordered.filter { liveHosts.contains($0.host) }
         let now = ISO8601DateFormatter().string(from: Date())
         let snap = MeshSnapshot(updatedISO: now,
-                                machines: ordered,
+                                machines: liveOrdered,
                                 usage: usage,
                                 quickCommands: quickCommands,
                                 events: events,
