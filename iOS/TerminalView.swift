@@ -424,6 +424,9 @@ private struct SessionPeekScreen: View {
     /// Links the session printed — a dev server, a PR, an auth callback. Computed once
     /// per poll rather than per body pass: scanning is cheap, but not once a scroll.
     @State private var links: [URL] = []
+    /// When the user last drove this session (key, text, paste). The poll loop reads
+    /// it to decide between the 500ms interactive cadence and the 2s ambient one.
+    @State private var lastInteraction = Date.distantPast
 
     /// The store's constructor, never a bare `MeshClient(machine:)`: one built without
     /// capabilities silently switches every 0.5.0 feature off.
@@ -488,9 +491,18 @@ private struct SessionPeekScreen: View {
             }
         }
         .task(id: session.name) {
+            // Adaptive cadence: 500ms while the user is actively driving this session
+            // (a key, a paste, a reply within the last 10s), 2s otherwise, and no
+            // fetches at all while the app is backgrounded. The fast lane is what makes
+            // a sent keystroke's echo feel attached to the finger; the 10s decay is the
+            // battery guard — reading output hands-off is a 2s activity, typing is not.
             while !Task.isCancelled {
-                await refresh()
-                try? await Task.sleep(for: .seconds(2))
+                let parked = UIApplication.shared.applicationState == .background
+                if !parked {
+                    await refresh()
+                }
+                let fast = !parked && Date().timeIntervalSince(lastInteraction) < 10
+                try? await Task.sleep(for: .milliseconds(fast ? 500 : 2000))
             }
         }
         .sheet(isPresented: $showingCompose) { composeSheet }
@@ -901,6 +913,7 @@ private struct SessionPeekScreen: View {
     /// "pane not found" and the screen would look exactly like a delivered key — the
     /// half of the dead-terminal report that no daemon fix could have reached.
     private func send(text: String? = nil, key: String? = nil) async {
+        lastInteraction = Date()
         do {
             try await client.send(agent: session.name, text: text, key: key, pane: selectedPane)
             inputRefusal = nil
@@ -918,7 +931,16 @@ private struct SessionPeekScreen: View {
     /// behavior from the same call, so there is nothing to branch on here.
     private func pasteIntoPane() async {
         guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
-        try? await client.send(agent: session.name, text: text, pane: selectedPane, paste: true)
+        lastInteraction = Date()
+        // Same contract as send(): a refused paste must say why, not look delivered.
+        do {
+            try await client.send(agent: session.name, text: text, pane: selectedPane, paste: true)
+            inputRefusal = nil
+        } catch let error as MeshClient.MeshError {
+            inputRefusal = error.reason ?? "the machine refused the paste"
+        } catch {
+            inputRefusal = "the machine could not be reached"
+        }
         try? await Task.sleep(for: .milliseconds(350))
         await refresh()
     }
