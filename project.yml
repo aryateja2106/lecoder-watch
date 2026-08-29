@@ -3,11 +3,11 @@ options:
   bundleIdPrefix: com.lecoder.meshwatch
   deploymentTarget:
     iOS: "26.0"
-    watchOS: "26.0"
+    watchOS: "10.0"
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "0.5.1"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     GENERATE_INFOPLIST_FILE: NO
@@ -20,56 +20,196 @@ schemes:
         MeshWatch: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - MeshWatchUITests
   MeshWatch Watch App:
     build:
       targets:
         MeshWatch Watch App: all
     run:
       config: Debug
+  MeshDesktop:
+    build:
+      targets:
+        MeshDesktop: all
+    run:
+      config: Debug
 targets:
+  # Runs the app and puts a text field on screen. Static checks cannot see a UIKit
+  # appearance invocation that only throws when it is replayed onto a live view.
+  MeshWatchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: MeshWatch
+    settings:
+      base:
+        TEST_TARGET_NAME: MeshWatch
+        GENERATE_INFOPLIST_FILE: YES
+
   MeshWatch:
     type: application
     platform: iOS
     sources:
       - path: Shared
       - path: iOS
+      - path: Assets.xcassets
     info:
       path: Generated/iOS-Info.plist
       properties:
         CFBundleDisplayName: MeshWatch
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # Landscape earns its place on exactly one screen: a Mac display is ~1.54
+        # wide, so fitting it into a portrait phone spends 60% of the glass on black
+        # bars. Every other screen here is a list and rotates fine.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private Tailscale network."
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
+        NSFaceIDUsageDescription: "Unlock MeshWatch so only you can reach your machines."
+        NSCameraUsageDescription: "Scan a machine's pairing QR code."
+        UIBackgroundModes:
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.lecoder.meshwatch.refresh
+        NSSupportsLiveActivities: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.lecoder.meshwatch
+            CFBundleURLSchemes:
+              - meshwatch
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch
+        CODE_SIGN_ENTITLEMENTS: iOS/MeshWatch.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        TARGETED_DEVICE_FAMILY: "1,2"
+        TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - target: MeshWatch Watch App
         embed: true
+      - target: MeshWatchWidgets
+        embed: true
+  # The Mac menu bar app: permissions, daemon status, pairing QR. Its sources are
+  # MeshDesktop/ and nothing else — deliberately. Shared/ is written for the phone and
+  # the watch (ActivityKit, WidgetKit, the phone's client), so pulling it in here would
+  # drag half of iOS into a menu bar app to reuse two Codable structs. Those two are
+  # duplicated in MeshDesktop/LocalDaemon.swift instead, with a comment saying why.
+  MeshDesktop:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: MeshDesktop
+    info:
+      path: Generated/Desktop-Info.plist
+      properties:
+        # No Dock icon, no main window: the menu bar item is the whole app.
+        LSUIElement: true
+        CFBundleDisplayName: MeshWatch
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshdesktop
+        # `mesh desktop` opens it by bundle id, but the name on disk is the one the CLI
+        # tells you to drag into /Applications, so it has to match.
+        PRODUCT_NAME: MeshWatch
+        # No sandbox entitlement on purpose: this app talks to 127.0.0.1:8899 and hands
+        # System Settings deep links to NSWorkspace. A sandbox would block both to
+        # protect the user from an app that only ever calls their own machine.
+  MeshWatchWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Shared
+      - path: MeshWatchWidgets
+    info:
+      path: MeshWatchWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: MeshWatch Sessions
+        # Extensions must match the parent app's version or App Store Connect
+        # rejects the upload — xcodegen defaults them to 1.0 unless told.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.widgets
+        # "1" and not "1,2": an iPad-capable target must declare all four orientations
+        # or App Store Connect rejects the build with 90474. Learned the expensive way.
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+    dependencies:
+      - sdk: SwiftUI.framework
+      - sdk: WidgetKit.framework
+      - sdk: ActivityKit.framework
   MeshWatch Watch App:
     type: application
     platform: watchOS
     sources:
       - path: Shared
       - path: Watch
+      - path: Assets.xcassets
     info:
       path: Generated/Watch-Info.plist
       properties:
         CFBundleDisplayName: MeshWatch
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.lecoder.meshwatch
+        # The watch dials meshd directly (f3e88d0), so it needs its own Local
+        # Network grant — the phone's does not carry over.
+        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.watchkitapp
+        CODE_SIGN_ENTITLEMENTS: Watch/MeshWatchWatch.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "4"
+    dependencies:
+      - target: WatchWidgets
+        embed: true
+  WatchWidgets:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - path: Shared
+      - path: WatchWidgets
+    info:
+      path: WatchWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: MeshWatch
+        # Extensions must match the parent app's version or App Store Connect
+        # rejects the upload — xcodegen defaults them to 1.0 unless told.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshwatch.watchkitapp.glance
+        CODE_SIGN_ENTITLEMENTS: WatchWidgets/WatchWidgets.entitlements
+        TARGETED_DEVICE_FAMILY: "4"
+        SKIP_INSTALL: YES
+    dependencies:
+      - sdk: SwiftUI.framework
+      - sdk: WidgetKit.framework

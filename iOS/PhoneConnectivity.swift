@@ -8,7 +8,13 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
     static let shared = PhoneConnectivity()
 
     /// Set by MeshStore so we can service watch commands (send to agent, refresh).
-    var commandHandler: ((WatchCommand) async -> Void)?
+    /// Returns optional payload data for reads the watch is waiting on.
+    var commandHandler: ((WatchCommand) async -> Data?)?
+
+    /// Why the last snapshot did not reach the watch, or nil if it did. Read by the
+    /// phone's own diagnostics — a silent failure here looks exactly like a watch
+    /// that has gone quiet.
+    @Published private(set) var lastPushFailure: String?
 
     private override init() {
         super.init()
@@ -26,8 +32,13 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
         do {
             let data = try JSONEncoder().encode(snapshot)
             try session.updateApplicationContext(["snapshot": data])
+            lastPushFailure = nil
         } catch {
-            // updateApplicationContext throws if called too fast; safe to drop — next tick replaces it.
+            // Called too fast is genuinely safe to drop — the next tick replaces it.
+            // Too LARGE is not: every later snapshot carrying that screenshot fails the
+            // same way, and the watch sits on stale data with no idea why. Keep the
+            // reason so a screen that is not arriving can say something true.
+            lastPushFailure = "\(error.localizedDescription) (\((try? JSONEncoder().encode(snapshot))?.count ?? 0) bytes)"
         }
     }
 
@@ -54,13 +65,15 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
             return
         }
         Task {
-            await commandHandler?(command)
-            replyHandler(["ok": true])
+            let data = await commandHandler?(command)
+            var reply: [String: Any] = ["ok": true]
+            if let data { reply["data"] = data }
+            replyHandler(reply)
         }
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         guard let command = decodeCommand(userInfo) else { return }
-        Task { await commandHandler?(command) }
+        Task { _ = await commandHandler?(command) }
     }
 }

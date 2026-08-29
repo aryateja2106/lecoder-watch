@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"TS=/Applications/Tailscale.app/Contents/MacOS/Tailscale\\nTOK=339d6df59a27274dc2e81bffbd007261\\necho \\\"===reachable over tailnet?===\\\"\\ncurl -s -m5 -o /dev/null -w \\\"sandboxtest meshd 8902:...",
-  "error": "Exit code 7\n===reachable over tailnet?===\nsandboxtest meshd 8902: HTTP 200\n===isolated? (sandboxtest can't read arya's token)===\ncat: /home/arya/.mesh/token: Permission denied\n===teardown via --user --uninstall --purge===\nRemoved: meshd(service) meshd prefix(/home/sandboxtest/.mesh)\nwarning: userdel failed for sandboxtest\n===user gone?===\nuid=1004(sandboxtest) gid=1004(sandboxtest) groups=1004(sandboxtest)\n8902 after teardown: HTTP 000",
-  "timestamp": "2026-06-20T07:03:39.642Z",
-  "retry_count": 1
-}

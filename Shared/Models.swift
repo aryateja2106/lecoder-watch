@@ -4,20 +4,39 @@ import Foundation
 
 /// A machine on the Tailscale mesh that runs `meshd`.
 struct Machine: Codable, Identifiable, Hashable {
-    var id: String { host }
+    /// Stable row identity, and deliberately NOT `host`.
+    ///
+    /// `id` used to be `host`, which the machine editor binds straight to a TextField:
+    /// the row's identity changed on every keystroke while you renamed a machine, and
+    /// two machines added with "Add manually" both claimed the id "new-machine".
+    /// Duplicate or moving ids inside a `ForEach` over bindings are a crash, not a
+    /// cosmetic glitch.
+    ///
+    /// Optional so a list written by an older build still decodes — a non-optional
+    /// stored id would fail to decode every pre-existing machine, and the `try?` at the
+    /// call site turns that into a silently empty fleet. `MeshStore.load()` stamps any
+    /// machine that arrives without one, so the fallback below is only ever used for the
+    /// instant between decode and stamp; it is derived from `host` rather than fresh so
+    /// that even then it does not change identity on every access.
+    var uid: UUID?
+    var id: String { uid?.uuidString ?? "host:\(host)" }
     var host: String          // display name, e.g. "arya-macbook-pro"
-    var ip: String            // tailscale IP, e.g. "100.94.221.115"
+    var ip: String            // tailscale IP, e.g. "100.100.1.99"
     var port: Int             // meshd port, default 8899
     var token: String         // bearer token
     var bridgeURL: String?    // rmux-bridge base (tailscale-serve https); nil = not deployed
     var vncURL: String?       // noVNC/web VNC URL; nil = http://ip:6080/vnc.html
+    /// Hardware MAC learned from /health, cached so a peer daemon on the same LAN
+    /// can Wake-on-LAN this machine after it goes dark. Optional: old daemons
+    /// don't report one, and the field decodes as nil from pre-existing saves.
+    var macAddress: String?
 
     var addresses: [String] {
         var seen = Set<String>()
         var values = [ip, host]
         #if targetEnvironment(simulator)
         if host.lowercased().contains("mac") {
-            values.append("127.0.0.1")
+            values.insert("127.0.0.1", at: 0)
         }
         #endif
         return values
@@ -36,12 +55,24 @@ struct Machine: Codable, Identifiable, Hashable {
     var resolvedBridge: String? {
         if let b = bridgeURL, !b.isEmpty { return b }
         // rmux-bridge runs on every mesh machine at tailnet IP:7820 (http+ws).
-        return addresses.last.map { "http://\($0):7820" }
+        // `addresses` is [ip, host]: dial the NUMERIC address first, not the bare
+        // hostname — a phone without MagicDNS answers "hostname could not be found"
+        // for the name while the IP works, and the terminal died on exactly that.
+        return addresses.first.map { "http://\($0):7820" }
+    }
+
+    /// meshd's own remote desktop: polls /screen.jpg, posts /input. Needs no VNC
+    /// server, no websockify and no Screen Sharing — unlike `resolvedVNC`, which
+    /// points at a noVNC bridge that has to be installed and running separately.
+    func desktopURL(display: Int? = nil) -> URL? {
+        guard let base = baseURL else { return nil }
+        return URL(string: "/desktop\(display.map { "?display=\($0)" } ?? "")", relativeTo: base)
     }
 
     var resolvedVNC: String {
         if let v = vncURL, !v.isEmpty { return v }
-        let address = addresses.last ?? ip
+        // Numeric address first, same reason as `resolvedBridge`.
+        let address = addresses.first ?? ip
         return "http://\(address):6080/vnc.html?autoconnect=1&resize=scale"
     }
 
@@ -58,12 +89,153 @@ struct Machine: Codable, Identifiable, Hashable {
         return URL(string: s)
     }
 
-    // Dogfood default: current local services use this token; custom machines can use generated tokens.
-    static let defaults: [Machine] = [
-        Machine(host: "arya-macbook-pro", ip: "100.94.221.115", port: 8899, token: "testtoken"),
-        Machine(host: "arya-pi", ip: "100.94.168.17", port: 8899, token: "testtoken"),
-        Machine(host: "dataflowagents", ip: "100.80.10.95", port: 8899, token: "testtoken")
-    ]
+    /// No built-in machines. Three of someone else's tailnet addresses is not a
+    /// starting point, it is a bug report from every user who is not that someone —
+    /// and a shipped token would be a shared secret granting keystroke injection and
+    /// arbitrary shell. An empty list is the honest state: pair a machine (see
+    /// `PairResult`) and the list fills itself.
+    var isConfigured: Bool { !token.isEmpty }
+}
+
+// MARK: - Pairing
+
+/// One machine as `meshd` hands it over during pairing.
+struct PairedHost: Codable, Hashable {
+    var host: String
+    var ip: String
+    var port: Int
+    var token: String
+}
+
+/// The answer to `POST /pair/claim`. Pairing one machine adopts the whole fleet,
+/// because the machine you paired already knows the rest from its `hosts.json`.
+struct PairResult: Codable, Hashable {
+    var ok: Bool
+    var host: String
+    var port: Int
+    var token: String
+    var platform: String?
+    var fleet: [PairedHost]?
+
+    /// The paired machine itself, plus its fleet, deduped — `fleet` already contains
+    /// the self entry when meshd is current, but an older daemon may omit it.
+    var allHosts: [PairedHost] {
+        var out = [PairedHost(host: host, ip: "", port: port, token: token)]
+        var seen = Set<String>()
+        for entry in fleet ?? [] where !entry.ip.isEmpty && seen.insert(entry.ip).inserted {
+            if entry.host == host { out[0] = entry } else { out.append(entry) }
+        }
+        return out.filter { !$0.ip.isEmpty && !$0.token.isEmpty }
+    }
+}
+
+/// A pairing code as the user typed it: case and grouping do not matter, and neither
+/// does a stray space. Mirrors `normalizeCode` in `meshd/pair.ts`.
+func normalizedPairingCode(_ input: String) -> String {
+    input.uppercased().filter { $0.isASCII && ($0.isNumber || ($0.isLetter && $0.isUppercase)) }
+}
+
+/// A `meshwatch://pair?h=&p=&c=` link, parsed. The three fields `mesh pair`'s QR
+/// encodes, and nothing else — pairing itself still needs a human tap.
+struct PairingLink: Hashable {
+    var address: String
+    var port: Int
+    var code: String
+}
+
+/// One parser for one link format, shared by every way a pairing QR reaches the app:
+/// the system Camera handing off the URL, and the in-app scanner reading the same code
+/// directly off the frame. Both must agree on what counts as a valid link, or a QR that
+/// the in-app scanner accepts and the deep link handler rejects (or the reverse) is a
+/// pairing flow that works differently depending on which camera happened to read it.
+///
+/// `h` is required and non-empty; `c` must normalize to at least 6 characters (mirrors
+/// `canPair` in `PairMachineView`); `p` defaults to meshd's default port.
+func parsePairingLink(_ url: URL) -> PairingLink? {
+    guard url.scheme == "meshwatch", url.host == "pair" else { return nil }
+    let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+    guard let address = value("h")?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !address.isEmpty,
+          let code = value("c"), normalizedPairingCode(code).count >= 6 else { return nil }
+    return PairingLink(address: address, port: Int(value("p") ?? "") ?? 8899, code: code)
+}
+
+/// `machineMatching` over snapshots rather than configs — same rules, and they have to
+/// stay the same rules, so both defer to `hostNamesMatch`.
+func snapshotMachineMatching(_ name: String, in machines: [MachineSnapshot]) -> MachineSnapshot? {
+    machines.first { $0.host == name }
+        ?? machines.first { hostNamesMatch($0.host, name) }
+}
+
+/// Do these two names refer to the same machine? Case-insensitive, and tolerant of one
+/// being the leading component of the other (`studio` vs `studio.local`,
+/// `dataflow` vs `dataflowagents`).
+func hostNamesMatch(_ a: String, _ b: String) -> Bool {
+    if a.lowercased() == b.lowercased() { return true }
+    func head(_ value: String) -> String {
+        value.lowercased().split(separator: ".").first.map(String.init) ?? value.lowercased()
+    }
+    let (x, y) = (head(a), head(b))
+    guard !x.isEmpty, !y.isEmpty else { return false }
+    return x == y || x.hasPrefix(y) || y.hasPrefix(x)
+}
+
+/// Find the machine a daemon means by `name`.
+///
+/// The name in an APNs payload comes from `os.hostname()` on that machine, which is not
+/// always what this app has it stored as: a host imported from another machine's
+/// `hosts.json` carries that file's key ("dataflow") while its own daemon says
+/// "dataflowagents", and macOS reports "Aryas-MacBook-Pro.local" where pairing stored
+/// "Aryas-MacBook-Pro". Exact, then case-insensitive, then leading-component prefix.
+///
+/// Deliberately never falls back to "the only machine with a session by that name":
+/// session names are not unique across machines and typing Enter into the wrong box is
+/// worse than doing nothing.
+func machineMatching(_ name: String, in machines: [Machine]) -> Machine? {
+    guard !name.isEmpty else { return nil }
+    return machines.first { $0.host == name }
+        ?? machines.first { hostNamesMatch($0.host, name) }
+}
+
+/// Fold newly paired hosts into the saved list. Identity is the address, because that
+/// is what actually reaches the daemon; a machine renamed on the Mac must update in
+/// place rather than appear twice. An existing entry keeps its user-visible name and
+/// takes the fresh token, so re-pairing is also how you recover from a rotation.
+func mergingPairedHosts(_ existing: [Machine], _ paired: [PairedHost]) -> [Machine] {
+    var out = existing
+    for entry in paired where !entry.ip.isEmpty && !entry.token.isEmpty {
+        if let i = out.firstIndex(where: { $0.ip == entry.ip }) {
+            out[i].token = entry.token
+            out[i].port = entry.port
+        } else if let i = out.firstIndex(where: { $0.host == entry.host }) {
+            out[i].ip = entry.ip
+            out[i].token = entry.token
+            out[i].port = entry.port
+        } else {
+            // Stamp the id here, not on the next launch: a machine paired in this
+            // session would otherwise fall back to a host-derived id, and renaming it
+            // before relaunching would change its identity mid-edit — the bug `uid`
+            // exists to stop.
+            out.append(Machine(uid: UUID(), host: entry.host, ip: entry.ip, port: entry.port, token: entry.token))
+        }
+    }
+    return out
+}
+
+/// Which of a pairing's fleet entries are allowed in, given the hosts the user has
+/// deliberately removed. Pairing adopts the paired machine's whole `hosts.json`, so a
+/// machine deleted on the phone would otherwise resurrect on the very next pair —
+/// including the pair the user performs to fix an unrelated token, which makes deletion
+/// feel broken. The machine being explicitly paired always comes through (pairing it IS
+/// the un-remove gesture); every other fleet entry stays out if its name or address is
+/// in `removed`. `removed` holds lowercased names and addresses.
+func filteringRemovedHosts(_ hosts: [PairedHost], removed: Set<String>,
+                           pairedHost: String, pairedAddress: String) -> [PairedHost] {
+    hosts.filter { entry in
+        if hostNamesMatch(entry.host, pairedHost) || entry.ip == pairedAddress { return true }
+        return !removed.contains(entry.host.lowercased()) && !removed.contains(entry.ip.lowercased())
+    }
 }
 
 // MARK: - Stats (htop-style)
@@ -109,6 +281,47 @@ struct HealthInfo: Codable, Hashable {
     var uptimeSec: Int?
     var meshdVersion: String?
     var capabilities: [String]?
+    /// Primary physical interface MAC (meshd 0.4.0+) — cached for Wake-on-LAN.
+    var mac: String?
+    /// Primary interface IPv4 + netmask (meshd 0.5.0+), cached alongside the MAC so
+    /// a wake peer can be chosen for sharing the sleeping target's subnet — and aim
+    /// the magic packet at that subnet's directed broadcast — instead of picking the
+    /// first reachable peer and spraying 255.255.255.255 into the wrong LAN.
+    var ipv4: String? = nil
+    var netmask: String? = nil
+}
+
+// MARK: - Doctor (setup truth)
+
+/// What `/doctor` reports: each capability tested by exercising it, not by listing an
+/// intention. The phone renders this so a user can see exactly what the Mac still needs
+/// and, for the two macOS grants, tap a button that pops the real system dialog there.
+struct DoctorReport: Codable, Hashable {
+    struct Check: Codable, Hashable {
+        var ok: Bool
+        var detail: String
+        var fix: String?
+    }
+    var ok: Bool
+    var host: String
+    var platform: String
+    var version: String
+    var bind: String
+    var checks: [String: Check]
+
+    /// A stable render order — JSON object key order is not guaranteed, and a setup
+    /// list that reshuffles every refresh is hard to read.
+    static let order = ["token", "input", "screen", "mux", "push"]
+    var orderedChecks: [(name: String, check: Check)] {
+        let known = Self.order.compactMap { name in checks[name].map { (name, $0) } }
+        let extra = checks.keys.filter { !Self.order.contains($0) }.sorted()
+            .compactMap { name in checks[name].map { (name, $0) } }
+        return known + extra
+    }
+    /// Whether this check's fix is a macOS permission the phone can trigger remotely
+    /// (input = Accessibility, screen = Screen Recording). Everything else is a fix the
+    /// user does at a shell, so the button would lie.
+    static func isRemotelyFixable(_ name: String) -> Bool { name == "input" || name == "screen" }
 }
 
 // MARK: - Tailnet
@@ -133,6 +346,11 @@ struct TailnetSnapshot: Codable, Hashable {
 struct Agent: Codable, Hashable, Identifiable {
     var id: String { name }
     var name: String
+    /// The agent's own session id, when the daemon could learn one. Matching on this
+    /// instead of `name` is what lets a session that is not a multiplexer pane be found.
+    /// Optional: a plain rmux session has no such id and is still matched by name.
+    var sessionId: String?
+    var title: String?
     var windows: Int
     var createdISO: String?
     var attached: Bool
@@ -140,12 +358,39 @@ struct Agent: Codable, Hashable, Identifiable {
     var memMB: Double?   // resident memory of this session's process tree
     var cpuPct: Double?  // summed %CPU of this session's process tree
     var panes: [Pane]?    // present when meshd supports pane listing
+    /// meshd 0.5.0+ ("sessionStatus"): daemon-computed per-session status —
+    /// "working" | "waiting" | "error" | "idle". The daemon owns both the event log
+    /// and the process listing, so its verdict beats anything derivable here; absent
+    /// on older daemons, in which case `displayState(latestEvent:)` derives one.
+    var status: String? = nil
+    /// meshd 0.5.0+: level and timestamp of the last event this session produced,
+    /// so a row can show event-derived state without a second /events fetch.
+    var lastEventLevel: String? = nil
+    var lastEventISO: String? = nil
 
     /// "512 MB" / "1.2 GB" — compact memory label, or nil if unknown.
     var memLabel: String? {
         guard let mb = memMB else { return nil }
         return mb >= 1024 ? String(format: "%.1f GB", mb / 1024) : "\(Int(mb)) MB"
     }
+
+    var displayName: String { title?.isEmpty == false ? title! : name }
+    var isCmux: Bool { name.hasPrefix("cmux:") }
+    /// meshd 0.5.4+ ("herdr"): a pane of the herdr multiplexer, named `herdr:<pane_id>`.
+    var isHerdr: Bool { name.hasPrefix("herdr:") }
+
+    /// What kind of thing this row is, in one word the multiplexer would recognise.
+    /// A herdr pane that says "1 pane" reads as an rmux session, and the whole point
+    /// of listing it is that you can tell where it lives.
+    var kindLabel: String {
+        if isCmux { return "cmux" }
+        if isHerdr { return "herdr" }
+        return "\(windows) pane\(windows == 1 ? "" : "s")"
+    }
+
+    /// Neither cmux nor herdr takes the full rmux key set, and neither can be split or
+    /// killed over the wire. One question, asked in every place that used `!isCmux`.
+    var isMuxGuest: Bool { isCmux || isHerdr }
 }
 
 struct AgentOutput: Codable, Hashable {
@@ -174,6 +419,104 @@ struct Pane: Codable, Hashable, Identifiable {
 struct PaneList: Codable, Hashable {
     var name: String
     var panes: [Pane]
+}
+
+// MARK: - Remote files (meshd /fs)
+
+/// One row of `GET /fs`. Field names match `Entry` in meshd's files.ts exactly —
+/// that file is the schema; this is its Swift shadow.
+struct FsEntry: Codable, Hashable, Identifiable {
+    var id: String { path }
+    var name: String
+    var path: String
+    /// "dir" | "file" | "link". Kept a string rather than an enum so an unknown
+    /// future kind decodes as a row instead of failing the whole listing.
+    /// Symlinks are reported, never followed — a listing cannot wander.
+    var kind: String
+    var size: Int
+    var modifiedISO: String?
+
+    var isDirectory: Bool { kind == "dir" }
+    var isSymlink: Bool { kind == "link" }
+    var modified: Date? { parseISO(modifiedISO) }
+}
+
+/// The answer to `GET /fs?path=` — matches `listDirectory` in files.ts. The failure
+/// shape ({ok:false, error}) ships with HTTP 404, which MeshClient turns into a
+/// thrown error before decoding, so the optionals here are tolerance, not routing.
+struct FsListing: Codable, Hashable {
+    var ok: Bool
+    var path: String?
+    /// nil at the filesystem root, where there is nowhere further up.
+    var parent: String?
+    /// The daemon's home directory — the natural "start over" target for a browser.
+    var home: String?
+    var entries: [FsEntry]?
+    var error: String?
+
+    /// Directories first, then case-insensitive by name — the daemon already sorted;
+    /// this just spares every view the nil dance.
+    var rows: [FsEntry] { entries ?? [] }
+}
+
+/// What `FileBrowserView` shows: `entries` with dotfiles/dotfolders removed unless
+/// `showHidden`, then a case-insensitive substring match of `query` against the
+/// name. A free function rather than a view computed property so a
+/// `scripts/check-*.swift` can exercise it without linking SwiftUI. The daemon has
+/// no query param and does not filter dotfiles — both are client-side.
+func filterFsEntries(_ entries: [FsEntry], showHidden: Bool, query: String) -> [FsEntry] {
+    var result = showHidden ? entries : entries.filter { !$0.name.hasPrefix(".") }
+    let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !needle.isEmpty {
+        // localizedStandardContains, not localizedCaseInsensitiveContains: filename
+        // search must be diacritic-insensitive ("cafe" finds "café.txt"), and this is
+        // the API Apple documents for exactly this user-initiated-search case.
+        result = result.filter { $0.name.localizedStandardContains(needle) }
+    }
+    return result
+}
+
+/// Collapse machine rows that are provably one physical box: two entries whose
+/// /health-reported hardware MAC matches are the same machine paired twice — the live
+/// case was a fleet-adopted alias ("mac", from the CLI's hosts.json) sitting next to
+/// the real "arya-macbook-pro" row, each listing the same sessions. A free function so
+/// `scripts/check-machine-dedupe.swift` can exercise it without a store.
+///
+/// The keeper, decided in order (each rule breaks the previous rule's ties):
+///   1. a non-loopback ip beats a 127.0.0.1 artifact,
+///   2. the longer host name beats the shorter (the alias is usually the short one),
+///   3. list order.
+/// Configured bridge/VNC URLs do NOT vote: the fold below carries them to whichever
+/// row wins, so config survives either way and must not crown an alias.
+/// The keeper absorbs any bridgeURL/vncURL a losing row had that it lacks. Each loser
+/// is returned WITH its keeper so the caller can tombstone selectively — only the
+/// identifiers the keeper does not share. Tombstoning a loser's ip wholesale would
+/// block the keeper too: `filteringRemovedHosts` rejects fleet entries by ip, and two
+/// rows for one box usually hold the same ip. Without any tombstone, the next
+/// `mesh pair` fleet-adoption resurrects the alias immediately.
+func mergeDuplicateMachineRows(_ rows: [Machine]) -> (kept: [Machine], removed: [(loser: Machine, keeper: Machine)]) {
+    var byMac: [String: [Int]] = [:]
+    for (i, m) in rows.enumerated() {
+        guard let mac = m.macAddress?.lowercased(), !mac.isEmpty else { continue }
+        byMac[mac, default: []].append(i)
+    }
+    var losers: [Int: Int] = [:]   // loser index -> keeper index
+    var kept = rows
+    for idxs in byMac.values where idxs.count > 1 {
+        func score(_ m: Machine) -> (Int, Int) {
+            ((m.ip.hasPrefix("127.") || m.ip == "localhost") ? 0 : 1,
+             m.host.count)
+        }
+        let ranked = idxs.sorted { score(rows[$0]) == score(rows[$1]) ? $0 < $1 : score(rows[$0]) > score(rows[$1]) }
+        let keeper = ranked[0]
+        for loser in ranked.dropFirst() {
+            if kept[keeper].bridgeURL?.isEmpty != false { kept[keeper].bridgeURL = rows[loser].bridgeURL }
+            if kept[keeper].vncURL?.isEmpty != false { kept[keeper].vncURL = rows[loser].vncURL }
+            losers[loser] = keeper
+        }
+    }
+    return (kept: kept.indices.filter { losers[$0] == nil }.map { kept[$0] },
+            removed: losers.sorted { $0.key < $1.key }.map { (loser: rows[$0.key], keeper: kept[$0.value]) })
 }
 
 // MARK: - Usage (OpenUsage)
@@ -208,6 +551,62 @@ struct UsageSnapshot: Codable, Hashable {
     var providers: [UsageProvider]
 }
 
+/// When a provider session limit resets, tap the notification to send `continue` here.
+struct PinnedLimitSession: Codable, Hashable, Identifiable {
+    var id: String { providerId }
+    var providerId: String
+    var host: String
+    var sessionName: String
+}
+
+// MARK: - Time
+
+/// Parse an ISO-8601 stamp from the daemon, with or without fractional seconds.
+///
+/// `ISO8601DateFormatter()` in its default configuration silently refuses anything
+/// with a fraction, and meshd stamps events as `2026-08-20T14:02:35.185Z` — so the
+/// bare initialiser returns nil for every real event while passing any fixture written
+/// by hand as `...:00Z`. That combination is invisible in tests and total in
+/// production: it is why the blocked-since timer rendered as nothing at all against
+/// the live daemon while its check was green.
+func parseISO(_ iso: String?) -> Date? {
+    guard let iso, !iso.isEmpty else { return nil }
+    let withFraction = ISO8601DateFormatter()
+    withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = withFraction.date(from: iso) { return date }
+    let plain = ISO8601DateFormatter()
+    plain.formatOptions = [.withInternetDateTime]
+    return plain.date(from: iso)
+}
+
+// MARK: - Connection phase
+
+/// How connected the watch is, judged by the age of the last good snapshot — not by
+/// the WCSession reachability flag.
+public enum ConnectionPhase: String, Hashable {
+    case waiting      // never heard back yet (cold start)
+    case live         // a fresh snapshot; treat as connected
+    case reconnecting // briefly out of contact, still showing the last data
+    case offline      // out of contact long enough to mean it
+}
+
+/// The watch has no Tailscale of its own, so it reaches the mesh through the phone —
+/// and WCSession drops `isReachable` to false the instant the phone app suspends,
+/// which is every few seconds. Surfacing that raw flag is exactly why the connection
+/// "feels unstable": a snapshot six seconds old is fine, but the flag already says
+/// offline. So the phase is judged purely by how long since a *good* snapshot last
+/// arrived, from either path. Inside the grace window we keep showing the last data
+/// and say "reconnecting", never "offline" — the poll is every 6s, so a single missed
+/// round trip never crosses `live`.
+public func connectionPhase(lastContact: Date?, now: Date = Date(),
+                            live: TimeInterval = 20, grace: TimeInterval = 75) -> ConnectionPhase {
+    guard let lastContact else { return .waiting }
+    let age = now.timeIntervalSince(lastContact)
+    if age <= live { return .live }
+    if age <= grace { return .reconnecting }
+    return .offline
+}
+
 // MARK: - Agent hooks
 
 struct AgentEvent: Codable, Hashable, Identifiable {
@@ -219,6 +618,243 @@ struct AgentEvent: Codable, Hashable, Identifiable {
     var title: String
     var body: String?
     var createdISO: String
+    /// meshd 0.4.2+: false when the hook could not resolve a mux target, so no
+    /// reply can route. Absent (old daemons) means "assume replyable" — the
+    /// pre-existing behavior.
+    var replyable: Bool?
+    /// meshd 0.4.2+: the exact `session:window.pane` for pane-precise replies.
+    var pane: String?
+    /// The identity the AGENT gave us, independent of any multiplexer — Claude Code's
+    /// `session_id`, a UUID present on every hook payload.
+    ///
+    /// `session` above is whatever mesh-hook could resolve, which outside a mux pane is
+    /// the working directory. That never equals a name `/agents` lists, so the join that
+    /// decides "is anything waiting on you" silently found nothing. Measured live: 83
+    /// events carrying worktree paths against agents named watch-shell-21068 and
+    /// watch-shell-292 — the wrist said nothing was waiting while a warning sat unread.
+    ///
+    /// Optional so an older daemon's rows, and rows already written to
+    /// agent-events.jsonl, still decode.
+    var sessionId: String?
+    /// Where the agent is working. Not an identity — two sessions can share a cwd — but
+    /// it is the only human-readable label a non-mux session has, so the row can say
+    /// "feat-x" instead of a UUID.
+    var cwd: String?
+}
+
+// MARK: - The live card
+
+/// The one session worth a Lock Screen card, a Dynamic Island and a slot in the watch
+/// Smart Stack, chosen from a whole mesh.
+struct LiveSessionPick: Hashable {
+    var host: String
+    var session: String
+    var agentType: String
+    var state: SessionState
+    var lastLine: String
+    var cpuPct: Double?
+    var memLabel: String?
+    /// When the agent stopped, so the row can count the wait up live instead of
+    /// re-rendering on a poll. Nil for a session picked because it is being watched
+    /// rather than because it is blocked — that one is not waiting on anybody.
+    var blockedSince: Date?
+    /// What answering would actually do. See `classifyRisk`.
+    var risk: RiskVerdict = .safe
+}
+
+/// Every session across the whole mesh that is stopped waiting on a human, newest
+/// first. This is the list the product exists to show: not "here are your machines",
+/// but "these two agents are blocked on you right now".
+///
+/// Derived from `events`, because that is the only signal that arrives without the
+/// session being open — `mesh-hook` posts one the moment an agent asks a question.
+/// A session that has since produced a newer, calmer event is dropped: the question
+/// was answered, and a stale "needs you" row is worse than none.
+/// The agent a given event is about.
+///
+/// Identity first, name second, and never both at once. `session` is whatever mesh-hook
+/// could resolve; outside a multiplexer pane that is the working directory, which never
+/// equals a name `/agents` lists. Requiring `agent.name == session` therefore dropped
+/// every desktop-app and worktree session on the floor — measured live as 83 unread
+/// events against two mux-named agents, with the wrist reporting nothing waiting.
+///
+/// The order matters in both directions:
+///  - An event that carries an id is answered ONLY by the agent with that id. Falling
+///    back to the name when the ids disagree would attach a question to the wrong
+///    session, which is worse than showing nothing: the reply would go somewhere else.
+///  - An event with no id at all keeps the original behaviour exactly, because a plain
+///    rmux session reports its mux name and has no agent id to offer.
+func matchingAgent(for event: AgentEvent, session: String, in machine: MachineSnapshot) -> Agent? {
+    if let id = event.sessionId, !id.isEmpty {
+        return machine.agents.first { $0.sessionId == id }
+    }
+    return machine.agents.first { $0.name == session }
+}
+
+func sessionsNeedingAttention(from snapshot: MeshSnapshot) -> [LiveSessionPick] {
+    var latestByKey: [String: AgentEvent] = [:]
+    for event in snapshot.events ?? [] {
+        guard let host = event.host, let session = event.session else { continue }
+        let key = "\(host)\u{1}\(session)"
+        // `events` arrives oldest first, so a later one always wins.
+        latestByKey[key] = event
+    }
+
+    return (snapshot.events ?? []).reversed().compactMap { event -> LiveSessionPick? in
+        guard let eventHost = event.host, let session = event.session else { return nil }
+        guard latestByKey["\(eventHost)\u{1}\(session)"]?.id == event.id else { return nil }  // superseded
+        let state = cardStateForLevel(event.level)
+        guard state.wantsAttentionState else { return nil }
+        // The event carries the name the *daemon* uses — macOS says
+        // "Aryas-MacBook-Pro.local" where the app stored "Aryas-MacBook-Pro" — so an
+        // exact match finds nothing and the whole list stays silently empty. Observed
+        // live before this line existed.
+        guard let machine = snapshotMachineMatching(eventHost, in: snapshot.machines),
+              let agent = matchingAgent(for: event, session: session, in: machine) else { return nil }
+        // Report the host the app knows, so the row, the reply and the deep link all
+        // address the same machine.
+        let line = String((event.body ?? event.title).prefix(80))
+        return LiveSessionPick(host: machine.host, session: session, agentType: agent.agentType ?? "shell",
+                               state: state, lastLine: line,
+                               cpuPct: agent.cpuPct, memLabel: agent.memLabel,
+                               blockedSince: parseISO(event.createdISO),
+                               // Classify the question, not the title: the title is
+                               // usually boilerplate ("Claude needs attention") while
+                               // the body carries the command being asked about.
+                               risk: classifyRisk(event.body ?? event.title))
+    }
+}
+
+/// Pick the session that deserves the live card, or nil for "show nothing".
+///
+/// Two reasons qualify and no others. A session that is **blocked or broken** is the
+/// whole point — that is the interruption worth carrying on your wrist. A session the
+/// user is **actively watching** qualifies because they have already said they care.
+/// A merely-busy session somewhere in the fleet does not: a permanent card that says
+/// "Working" is wallpaper, and every update spends a budget ActivityKit enforces.
+func liveSessionPick(from snapshot: MeshSnapshot) -> LiveSessionPick? {
+    if let blocked = sessionsNeedingAttention(from: snapshot).first { return blocked }
+
+    // The session the user opened. Its real output beats any event guess.
+    if let host = snapshot.watchedHost, let name = snapshot.watchedAgent,
+       let match = snapshot.machines.first(where: { $0.host == host })?
+           .agents.first(where: { $0.name == name }) {
+        let lines = snapshot.watchedOutput ?? []
+        let state = lines.isEmpty ? (match.attached ? SessionState.running : .idle)
+                                  : sessionState(lines: lines, attached: match.attached)
+        let last = lines.last { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? ""
+        return LiveSessionPick(host: host, session: name, agentType: match.agentType ?? "shell",
+                               state: state, lastLine: String(last.prefix(80)),
+                               cpuPct: match.cpuPct, memLabel: match.memLabel,
+                               blockedSince: nil,
+                               // A watched session's own output can still be a prompt
+                               // about something destructive, so classify it too.
+                               risk: classifyRisk(last))
+    }
+
+    return nil
+}
+
+/// "2/3 machines online" — the other half of what a glance is for. The card already
+/// answers "who is waiting on me"; this answers "and is the fleet even up", which is
+/// the question that otherwise costs an app launch. Nil when there are no machines at
+/// all, because "0/0" is a sentence about nothing.
+func fleetLine(online: Int, total: Int) -> String? {
+    guard total > 0 else { return nil }
+    let up = max(0, min(online, total))
+    guard up < total else { return total == 1 ? "1 machine online" : "all \(total) machines online" }
+    return "\(up)/\(total) machines online"
+}
+
+/// Level-to-state, free of SwiftUI so the selection above stays testable with bare
+/// swiftc. `cardState(forLevel:attached:)` in SessionCard.swift wraps it.
+///
+/// More than one vocabulary reaches `/events`: `mesh-hook` grades warning/error/info,
+/// while `mesh-event` and older producers write "needs-input" and "finished" straight
+/// through. Accepting both costs three lines; rejecting one silently drops the exact
+/// events this app exists to surface. Must stay in step with `isActionable` in
+/// `meshd/push.ts`.
+func cardStateForLevel(_ level: String?) -> SessionState {
+    switch (level ?? "").lowercased() {
+    case "warning", "needs-input", "needs_input", "needsinput": return .waiting
+    case "error", "failed", "failure":                          return .error
+    default:                                                    return .unknown
+    }
+}
+
+// MARK: - Per-session display status (list rows)
+
+/// The four words a session *row* can say, aligned with the daemon's own `status`
+/// field on `/agents` (meshd 0.5.0+, "sessionStatus" capability). Distinct from
+/// `SessionState`, which is inferred from live output inside an open session: this
+/// one is event/attach-derived and has no "unknown", because a row that shrugs is
+/// a row that answers nothing.
+enum SessionDisplayState: String, Codable {
+    case working
+    case waiting
+    case error
+    case idle
+
+    /// Bridge into the existing card vocabulary so `SessionStatusLabel`, the tints
+    /// and the symbols stay one system across phone, watch and widgets.
+    var sessionState: SessionState {
+        switch self {
+        case .working: return .running
+        case .waiting: return .waiting
+        case .error:   return .error
+        case .idle:    return .idle
+        }
+    }
+}
+
+/// Client-side mirror of the daemon's status computation, for daemons that do not
+/// advertise "sessionStatus". Pure and clock-injected so a headless check can pin
+/// every branch. Must stay in step with the daemon's semantics:
+///
+///   error   — last event level error/failed/failure, younger than 60 minutes
+///   waiting — last event an unanswered ask (warning/needs-input level, or a
+///             needs-attention title), younger than 60 minutes
+///   working — session attached, or any event younger than 5 minutes
+///   idle    — everything else
+///
+/// The hour cap is what stops "Needs you" going stale forever: hooks only fire at
+/// ask/stop boundaries, so with no resume signal an answered question would
+/// otherwise hold its row until the next event ever arrives.
+func derivedSessionDisplayState(level: String?, title: String? = nil,
+                                eventDate: Date?, attached: Bool,
+                                now: Date = Date()) -> SessionDisplayState {
+    let age = eventDate.map { now.timeIntervalSince($0) }
+    let fresh = age.map { $0 >= 0 && $0 < 3600 } ?? false
+    if fresh {
+        switch cardStateForLevel(level) {
+        case .error:   return .error
+        case .waiting: return .waiting
+        default:
+            if let title, title.lowercased().contains("needs attention") { return .waiting }
+        }
+    }
+    if attached { return .working }
+    if let age, age >= 0, age < 300 { return .working }
+    return .idle
+}
+
+extension Agent {
+    /// What this session's row should say. Prefers the daemon's own `status`
+    /// (meshd 0.5.0+); otherwise derives one from the daemon's `lastEventLevel` /
+    /// `lastEventISO` when present, or from `latestEvent` — the newest `AgentEvent`
+    /// the caller holds for this (host, session) — when the daemon sent neither.
+    /// An unrecognized daemon status string falls through to derivation rather than
+    /// failing, so a future daemon vocabulary cannot blank today's rows.
+    func displayState(latestEvent: AgentEvent? = nil, now: Date = Date()) -> SessionDisplayState {
+        if let status, let mapped = SessionDisplayState(rawValue: status.lowercased()) {
+            return mapped
+        }
+        return derivedSessionDisplayState(level: lastEventLevel ?? latestEvent?.level,
+                                          title: latestEvent?.title,
+                                          eventDate: parseISO(lastEventISO) ?? parseISO(latestEvent?.createdISO),
+                                          attached: attached,
+                                          now: now)
+    }
 }
 
 // MARK: - Relay envelope (iPhone -> Watch over WatchConnectivity)
@@ -239,11 +875,16 @@ struct MeshSnapshot: Codable, Hashable {
     var watchedAgent: String?
     var watchedPane: String?
     var watchedOutput: [String]?
+    var pinnedLimitSessions: [PinnedLimitSession]? = nil
 }
 
 struct MachineSnapshot: Codable, Hashable, Identifiable {
     var id: String { host }
     var host: String
+    /// The phone's own config for this machine — address, port and current token.
+    /// The watch ships hard-coded defaults that go stale the moment a token is
+    /// rotated, which silently demotes it to the slow relay; this keeps it honest.
+    var config: Machine? = nil
     var reachable: Bool
     var stats: Stats?
     var agents: [Agent]
@@ -257,9 +898,293 @@ struct MachineSnapshot: Codable, Hashable, Identifiable {
     var capabilities: [String]? = nil
     var tailnetPeers: [TailnetPeer]? = nil
     var tailnetError: String? = nil
+    /// Hardware MAC from /health, so the "Wake via <peer>" button knows what to wake.
+    var mac: String? = nil
+    /// Primary-interface IPv4 + netmask from /health (meshd 0.5.0+), relayed so the
+    /// watch can pick a wake peer on the sleeping target's own subnet too.
+    var ipv4: String? = nil
+    var netmask: String? = nil
+    /// Seconds since this host last actually answered. Non-nil means the data shown is
+    /// remembered, not fresh — a relayed tailnet drops polls, and blanking the whole
+    /// machine on the first miss is what made the app look broken every few minutes.
+    var staleSeconds: Int? = nil
+
+    var isStale: Bool { (staleSeconds ?? 0) > 0 }
+
+    /// "offline" only once it has really stopped answering.
+    var statusLabel: String {
+        if let authError { return authError }
+        if reachable && !isStale { return "online" }
+        if let staleSeconds, reachable { return "last seen \(Self.age(staleSeconds))" }
+        return error ?? "offline"
+    }
+
+    static func age(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds)s ago" }
+        if seconds < 3600 { return "\(seconds / 60)m ago" }
+        return "\(seconds / 3600)h ago"
+    }
+}
+
+/// Version, build and the moment this binary was produced. The build date comes from
+/// the bundle itself, so it changes on every build with nothing to remember to bump —
+/// which is the whole point when you are sideloading several times an hour.
+enum BuildInfo {
+    static var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+    static var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+    }
+    static var builtAt: Date? {
+        guard let url = Bundle.main.executableURL,
+              let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+        else { return nil }
+        return values.contentModificationDate
+    }
+    /// "0.1.0 (1) · built 20 Aug 14:32"
+    static var summary: String {
+        var text = "\(version) (\(build))"
+        if let builtAt {
+            let f = DateFormatter()
+            f.dateFormat = "d MMM HH:mm"
+            text += " · built \(f.string(from: builtAt))"
+        }
+        return text
+    }
+}
+
+/// iOS refuses local-network traffic until the user grants it, and Tailscale's
+/// 100.64.0.0/10 range counts as local network. A denied app does not get an error
+/// saying so — URLSession returns NSURLErrorTimedOut, and after the first attempt it
+/// returns it *immediately* rather than waiting out the timeout. That impossibly fast
+/// "timeout" is the only signal we get, so it is the one we detect.
+///
+/// Measured on device: first attempt 16s (a real timeout across two addresses), every
+/// attempt after 6ms.
+func looksLikeLocalNetworkDenial(error: Error, elapsed: TimeInterval) -> Bool {
+    guard elapsed < 0.5 else { return false }
+    guard let urlError = error as? URLError else { return false }
+    return urlError.code == .timedOut || urlError.code == .cannotConnectToHost
+}
+
+/// Addresses iOS gates behind the Local Network permission.
+func isLocalNetworkAddress(_ host: String) -> Bool {
+    let parts = host.split(separator: ".").compactMap { Int($0) }
+    guard parts.count == 4 else { return false }
+    if parts[0] == 10 { return true }
+    if parts[0] == 192 && parts[1] == 168 { return true }
+    if parts[0] == 172 && (16...31).contains(parts[1]) { return true }
+    // 100.64.0.0/10 — CGNAT, which is where every Tailscale address lives.
+    if parts[0] == 100 && (64...127).contains(parts[1]) { return true }
+    return false
+}
+
+// MARK: - Mac remote control (meshd 0.2.2+, macOS hosts)
+
+/// One synthetic input event for the Mac. Mirrors `bin/mesh-input`'s NDJSON shape;
+/// nil fields are omitted by JSONEncoder, so the wire stays small enough to batch.
+struct InputEvent: Codable, Hashable {
+    var t: String
+    var dx: Double? = nil
+    var dy: Double? = nil
+    var x: Double? = nil
+    var y: Double? = nil
+    var button: String? = nil
+    var count: Int? = nil
+    var key: String? = nil
+    var mods: [String]? = nil
+    var s: String? = nil
+    var place: String? = nil
+    var display: Int? = nil
+
+    static func move(dx: Double, dy: Double) -> InputEvent { .init(t: "move", dx: dx, dy: dy) }
+    /// Normalized 0…1 within one display — the same frame `/screen.jpg?display=` shows.
+    static func moveTo(x: Double, y: Double, display: Int? = nil) -> InputEvent {
+        .init(t: "moveTo", x: x, y: y, display: display)
+    }
+    static func click(_ button: String = "left", count: Int = 1) -> InputEvent {
+        .init(t: "click", button: button, count: count)
+    }
+    static let hold = InputEvent(t: "down")
+    static let release = InputEvent(t: "up")
+    static func scroll(dx: Double = 0, dy: Double = 0) -> InputEvent { .init(t: "scroll", dx: dx, dy: dy) }
+    static func key(_ key: String, _ mods: [String] = []) -> InputEvent {
+        .init(t: "key", key: key, mods: mods.isEmpty ? nil : mods)
+    }
+    static func text(_ s: String) -> InputEvent { .init(t: "text", s: s) }
+    /// Media / brightness / keyboard-backlight — the NX channel, not a keycode.
+    static func media(_ key: String) -> InputEvent { .init(t: "media", key: key) }
+    /// Snap the frontmost window: left, right, top, bottom, center, full.
+    static func window(_ place: String, display: Int? = nil) -> InputEvent {
+        .init(t: "window", place: place, display: display)
+    }
+}
+
+struct InputStatus: Codable, Hashable {
+    var ok: Bool
+    /// False until the helper binary is in System Settings › Privacy › Accessibility.
+    /// Quartz drops every event silently until then, so the UI has to say it out loud.
+    var trusted: Bool
+    var helper: String?
+    var hint: String?
+    var error: String?
+}
+
+struct DisplayInfo: Codable, Hashable, Identifiable {
+    var id: Int { index }
+    /// 1-based and shared with `screencapture -D`, so the preview and the cursor
+    /// coordinates always mean the same screen.
+    var index: Int
+    var x: Int
+    var y: Int
+    var width: Int
+    var height: Int
+    var main: Bool?
+    var name: String?
+
+    var label: String { name ?? "Display \(index)" }
+    var aspect: Double { height > 0 ? Double(width) / Double(height) : 1.6 }
+}
+
+struct DisplayList: Codable, Hashable {
+    var ok: Bool
+    var displays: [DisplayInfo]
+}
+
+struct MacApp: Codable, Hashable, Identifiable {
+    var id: String { name }
+    var name: String
+    var bundleID: String?
+    var front: Bool?
+}
+
+struct AppList: Codable, Hashable {
+    var ok: Bool
+    var front: String?
+    var running: [MacApp]
+    var installed: [String]
+}
+
+struct VolumeState: Codable, Hashable {
+    var ok: Bool
+    var level: Int?
+    var muted: Bool?
+    var error: String?
+}
+
+/// The answer to `POST /system`. meshd 0.5.0 runs every action through a checked
+/// spawn and reports the real exit code and stderr; older daemons said
+/// `{ok:true, action}` no matter what actually happened. Every field is optional so
+/// both shapes — and whatever a future daemon adds — decode without a fuss.
+struct SystemResult: Codable, Hashable {
+    var ok: Bool?
+    var exitCode: Int?
+    var stderr: String?
+    var action: String?
+    var error: String?
+
+    /// True only when the daemon explicitly said so. An old daemon's blind
+    /// `ok:true` still reads as success — that is today's behavior, unchanged.
+    var succeeded: Bool { ok == true }
+
+    /// One line for a toast when it did not work, or nil when it did. The stderr
+    /// tail is the most honest thing available; the daemon's error string is next.
+    var failureLine: String? {
+        if succeeded { return nil }
+        if let stderr = stderr?.trimmingCharacters(in: .whitespacesAndNewlines), !stderr.isEmpty {
+            return String(stderr.suffix(120))
+        }
+        if let error, !error.isEmpty { return error }
+        return ok == false ? "failed" + (exitCode.map { " (exit \($0))" } ?? "") : nil
+    }
+}
+
+/// Wrist rotation → cursor velocity, the air-mouse mapping.
+///
+/// WowMouse does this on Wear OS by pairing as a Bluetooth HID mouse. watchOS gives
+/// third-party apps no HID peripheral role at all, so that exact route is closed to
+/// us — but the useful half is the motion mapping, and CoreMotion gives us the same
+/// signal. We send the resulting delta over the network instead of over HID.
+///
+/// Rotation *rate* rather than attitude: rate is self-centring (stop moving your arm
+/// and the cursor stops), where attitude drifts and needs a re-zero. The deadzone
+/// exists because a resting wrist is never actually still.
+/// ponytail: sensitivity and deadzone are the calibration knobs — a wrist is not a
+/// mouse and these want tuning per person, not per first principles.
+func airMouseDelta(pitchRate: Double, yawRate: Double,
+                   sensitivity: Double = 9, deadzone: Double = 0.06) -> CGVector? {
+    guard sensitivity > 0 else { return nil }
+    // Ignore tremor, but measure the throw from the deadzone edge so crossing it is
+    // smooth instead of jumping by a whole deadzone's worth.
+    func shaped(_ rate: Double) -> Double {
+        let magnitude = abs(rate)
+        guard magnitude > deadzone else { return 0 }
+        return (magnitude - deadzone) * (rate < 0 ? -1 : 1) * sensitivity
+    }
+    let dx = shaped(yawRate)
+    let dy = shaped(pitchRate)
+    return (dx == 0 && dy == 0) ? nil : CGVector(dx: dx, dy: dy)
+}
+
+/// Pointer gain for one drag callback, given the distance that callback moved.
+///
+/// A fixed multiplier cannot serve both jobs: what makes a 40mm pad cross a 3432pt
+/// two-screen arrangement in one flick makes it impossible to hit a close button. So
+/// slow movement stays near the base gain for precision and fast movement scales up.
+/// ponytail: tuned by feel on a 46mm watch — these three numbers are the knob.
+func pointerGain(step: Double, base: Double = 2.2, softening: Double = 6, ceiling: Double = 3.5) -> Double {
+    guard step > 0, softening > 0 else { return base }
+    return base * min(ceiling, 1 + step / softening)
+}
+
+/// The window inside which a second trackpad tap means "right click" in full-pad
+/// mode. 350ms sits between a deliberate tap-tap (~250ms apart) and two separate
+/// approval taps (people pause noticeably between distinct clicks).
+let trackpadDoubleTapWindow: TimeInterval = 0.35
+
+/// Second-tap test for the full-pad trackpad. Pure so check-trackpad-clicks.swift
+/// can pin the window; clock weirdness (a "previous" tap in the future) reads as
+/// not-a-double-tap rather than something clever.
+func isDoubleTap(previous: Date?, now: Date, window: TimeInterval = trackpadDoubleTapWindow) -> Bool {
+    guard let previous else { return false }
+    let gap = now.timeIntervalSince(previous)
+    return gap >= 0 && gap <= window
+}
+
+/// Where a tap on the watch's screen preview lands, as 0…1 of the actual screenshot.
+///
+/// The preview is scaled to fit, so it is letterboxed whenever its aspect ratio differs
+/// from its container's — a 16:9 external display shown in a 1.54 slot. Mapping the tap
+/// against the container rather than the drawn image would put the cursor somewhere
+/// else entirely. Returns nil for taps in the letterbox, which point at no pixel.
+func normalizedPreviewPoint(tap: CGPoint, container: CGSize, imageAspect: Double) -> CGPoint? {
+    guard container.width > 0, container.height > 0, imageAspect > 0 else { return nil }
+    let containerAspect = Double(container.width / container.height)
+    let drawn = imageAspect > containerAspect
+        ? CGSize(width: container.width, height: container.width / imageAspect)
+        : CGSize(width: container.height * imageAspect, height: container.height)
+    let origin = CGPoint(x: (container.width - drawn.width) / 2,
+                         y: (container.height - drawn.height) / 2)
+    let x = (tap.x - origin.x) / drawn.width
+    let y = (tap.y - origin.y) / drawn.height
+    guard (0...1).contains(x), (0...1).contains(y) else { return nil }
+    return CGPoint(x: x, y: y)
 }
 
 // MARK: - Watch -> Phone command
+
+/// Replies to a relayed read are encoded as a bare `String`. A failure travels as
+/// that same string, prefixed — the wrist has no other channel to explain itself
+/// with. Both sides read this constant so the two halves cannot drift again: they
+/// already did once, and a phone encoding `["text": …]` against a watch decoding
+/// `String` fails identically to having no clipboard at all.
+enum RelayReply {
+    static let errorPrefix = "mesh-error:"
+
+    /// The failure form of a relayed read.
+    static func failure(_ why: String) -> String { errorPrefix + " " + why }
+}
 
 enum WatchCommandKind: String, Codable {
     case refresh
@@ -270,6 +1195,23 @@ enum WatchCommandKind: String, Codable {
     case newPane
     case killAgent
     case killPane
+    case input
+    case volume
+    case clipboard
+    case system
+    case readClipboard
+    case inputStatus
+    case listApps
+    case activateApp
+    case listDisplays
+    /// The iPhone's own UIPasteboard — NOT the Mac's clipboard (that is
+    /// `readClipboard`). Only answerable while the phone app is foreground;
+    /// the phone must reply with an honest error otherwise, never an empty string.
+    case readPhoneClipboard
+    /// Open `url` in the target machine's default browser (meshd 0.5.0+ /open).
+    case openURL
+    /// List `path` on the target machine via GET /fs; reply is an encoded FsListing.
+    case fsList
 }
 
 struct WatchCommand: Codable {
@@ -280,7 +1222,37 @@ struct WatchCommand: Codable {
     var key: String?
     var pane: String? = nil
     var cmd: String? = nil
+    /// Where a new session should start. Optional, and it has to travel here rather than
+    /// only on the direct path: when the watch is off the tailnet the phone runs the
+    /// command, so a working directory the watch cannot relay is a working directory the
+    /// watch cannot choose. "Open an agent inside a workspace" needs exactly this.
+    var cwd: String? = nil
     var initialText: String? = nil
+    var input: [InputEvent]? = nil
+    var display: Int? = nil
+    var volumeDelta: Int? = nil
+    var volumeMuted: Bool? = nil
+    /// Normalized crop for the screenPeek command — [x, y, w, h], each 0…1, the same
+    /// rect `MeshClient.screenImage(rect:)` takes. A flat array rather than CGRect
+    /// because CGRect's Codable form nests, and this envelope stays flat on purpose.
+    var rect: [Double]? = nil
+    /// Longest-edge pixels for screenPeek; nil = the phone's default width.
+    var width: Int? = nil
+    /// JPEG quality 1…100 for screenPeek; nil = the daemon's default.
+    var quality: Int? = nil
+    /// PTY size for newAgent — see `MeshClient.newSession(cols:rows:)`.
+    var cols: Int? = nil
+    var rows: Int? = nil
+    /// The link an `openURL` command opens on the machine. http/https only —
+    /// the phone validates before relaying, the daemon again before spawning.
+    var url: String? = nil
+    /// The directory an `fsList` command lists; nil = the machine's home.
+    var path: String? = nil
+    /// Whether the watch is in Reader mode for an `agentOutput` relay. The relay is
+    /// the normal route for a watch that is not on the tailnet, so without this the
+    /// same session reads wrapped one way and unwrapped the other depending on how
+    /// it was reached. nil = an older watch build; the phone keeps the plain capture.
+    var reader: Bool? = nil
 }
 
 // MARK: - Tiny local phrase mapper
@@ -376,6 +1348,13 @@ func shellQuotedArgument(_ value: String) -> String {
 /// and "it's still thinking" at a glance.
 /// ponytail: pure heuristic over the captured tail, no agent-specific protocol. Tighten
 /// the marker lists (or fold in /events hook signals) if it misclassifies in practice.
+extension SessionState {
+    /// The states that justify interrupting someone. Kept next to the enum and free of
+    /// SwiftUI so `liveSessionPick` stays checkable; `wantsAttention` in
+    /// SessionCard.swift is the same predicate for view code.
+    var wantsAttentionState: Bool { self == .waiting || self == .error }
+}
+
 enum SessionState: String {
     case waiting   // shell/agent is asking the user something — needs attention
     case running   // producing output, no prompt yet — busy

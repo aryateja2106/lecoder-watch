@@ -1,0 +1,214 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Mesh Desktop</title>
+<!--
+  A remote desktop built from what meshd already has: /screen.jpg for pixels and
+  /input for events. No VNC server, no websockify, no Screen Sharing toggle, and it
+  authenticates with the same bearer token as everything else.
+
+  ponytail: polled JPEG, not a delta-encoded video stream. Costs more bandwidth than
+  VNC and tops out around 5 fps. That is the right trade for "look at the Mac and
+  click something" over a tailnet; if this ever needs to be smooth, the upgrade is a
+  WebSocket carrying dirty rectangles, not a bigger poll.
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0d10; color: #e6e9ef; font: 13px/1.4 -apple-system, system-ui, sans-serif; }
+  header { display: flex; gap: 6px; align-items: center; padding: 6px 8px; background: #14181e; position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
+  button, select { background: #232a33; color: #e6e9ef; border: 1px solid #333c48; border-radius: 6px; padding: 4px 9px; font: inherit; cursor: pointer; }
+  button:hover { background: #2c3540; }
+  button.on { background: #2f6feb; border-color: #2f6feb; }
+  #wrap { display: flex; justify-content: center; padding: 8px; }
+  #screen { max-width: 100%; image-rendering: auto; cursor: crosshair; touch-action: none; border-radius: 6px; }
+  #status { margin-left: auto; opacity: .65; font-variant-numeric: tabular-nums; }
+  kbd { background: #232a33; border: 1px solid #333c48; border-radius: 4px; padding: 0 4px; }
+  #hint { padding: 0 10px 10px; opacity: .55; }
+</style>
+
+<header>
+  <select id="display"></select>
+  <select id="quality">
+    <option value="1000">1000px</option>
+    <option value="1400" selected>1400px</option>
+    <option value="1920">1920px</option>
+  </select>
+  <select id="rate">
+    <option value="400">2.5 fps</option>
+    <option value="700" selected>1.4 fps</option>
+    <option value="1500">0.7 fps</option>
+    <option value="0">paused</option>
+  </select>
+  <button id="kbd">Keyboard</button>
+  <button id="rclick">Right click</button>
+  <button id="dclick">Double click</button>
+  <span id="status">…</span>
+</header>
+
+<div id="wrap"><img id="screen" alt="remote screen"></div>
+<div id="hint">Click to place the cursor and click. Drag to drag. Scroll to scroll.
+  Turn on <kbd>Keyboard</kbd> to send keystrokes (⌘, ⌥, ⌃, ⇧ pass through).</div>
+
+<script>
+const qs = new URLSearchParams(location.search);
+// meshd's gate is header-only on purpose — a ?token= leaks into proxy logs and
+// browser history. The native host injects window.MESH_TOKEN before this runs.
+const TOKEN = window.MESH_TOKEN || "";
+const auth = TOKEN ? { authorization: "Bearer " + TOKEN } : {};
+const $ = (id) => document.getElementById(id);
+const img = $("screen");
+
+let display = Number(qs.get("display") || 1);
+let inflight = false, generation = 0, dragging = false;
+
+async function send(events) {
+  try {
+    await fetch("/input", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ events }),
+    });
+  } catch (e) { $("status").textContent = "input failed"; }
+}
+
+// Where a click on the <img> lands in the remote display, 0…1. The element is
+// letterboxed by object-fit, so measure against the rendered image box, not the tag.
+function normalize(event) {
+  const box = img.getBoundingClientRect();
+  const x = (event.clientX - box.left) / box.width;
+  const y = (event.clientY - box.top) / box.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+  return { x, y };
+}
+
+async function frame() {
+  if (inflight) return;
+  inflight = true;
+  const mine = ++generation;
+  try {
+    const width = $("quality").value;
+    const res = await fetch(`/screen.jpg?display=${display}&width=${width}&t=${Date.now()}`, { headers: auth });
+    if (!res.ok) throw new Error(res.status);
+    const blob = await res.blob();
+    if (mine !== generation) return;          // a newer frame already won
+    const url = URL.createObjectURL(blob);
+    const old = img.src;
+    img.src = url;
+    if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+    $("status").textContent = `display ${display} · ${(blob.size / 1024) | 0} KB`;
+  } catch (e) {
+    $("status").textContent = "screen unavailable";
+  } finally {
+    inflight = false;
+  }
+}
+
+let timer = null;
+function schedule() {
+  clearInterval(timer);
+  const ms = Number($("rate").value);
+  if (ms > 0) timer = setInterval(frame, ms);
+}
+$("rate").onchange = schedule;
+$("quality").onchange = frame;
+
+// Pointer: press places the cursor, then a real drag streams relative moves so
+// text selection and window dragging work rather than teleporting.
+let last = null;
+img.addEventListener("pointerdown", async (e) => {
+  const p = normalize(e); if (!p) return;
+  e.preventDefault();
+  img.setPointerCapture(e.pointerId);
+  dragging = true; last = { x: e.clientX, y: e.clientY };
+  await send([{ t: "moveTo", x: p.x, y: p.y, display }, { t: "down" }]);
+});
+img.addEventListener("pointermove", async (e) => {
+  if (!dragging || !last) return;
+  const box = img.getBoundingClientRect();
+  const scale = (remote.width || box.width) / box.width;
+  const dx = (e.clientX - last.x) * scale, dy = (e.clientY - last.y) * scale;
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+  last = { x: e.clientX, y: e.clientY };
+  await send([{ t: "move", dx, dy }]);
+});
+const endDrag = async (e) => {
+  if (!dragging) return;
+  dragging = false; last = null;
+  await send([{ t: "up" }]);
+  setTimeout(frame, 120);
+};
+img.addEventListener("pointerup", endDrag);
+img.addEventListener("pointercancel", endDrag);
+img.addEventListener("contextmenu", (e) => e.preventDefault());
+
+img.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  send([{ t: "scroll", dx: -e.deltaX, dy: -e.deltaY }]);
+}, { passive: false });
+
+$("rclick").onclick = () => send([{ t: "click", button: "right" }]).then(() => setTimeout(frame, 150));
+$("dclick").onclick = () => send([{ t: "click", count: 2 }]).then(() => setTimeout(frame, 150));
+
+// Keyboard: opt in, because otherwise the page swallows browser shortcuts.
+let keyboard = false;
+$("kbd").onclick = () => {
+  keyboard = !keyboard;
+  $("kbd").classList.toggle("on", keyboard);
+  $("kbd").textContent = keyboard ? "Keyboard on" : "Keyboard";
+};
+
+const NAMED = {
+  Enter: "return", Tab: "tab", Escape: "escape", Backspace: "delete", Delete: "forwarddelete",
+  ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+  Home: "home", End: "end", PageUp: "pageup", PageDown: "pagedown", " ": "space",
+};
+
+document.addEventListener("keydown", (e) => {
+  if (!keyboard) return;
+  const mods = [];
+  if (e.metaKey) mods.push("cmd");
+  if (e.shiftKey) mods.push("shift");
+  if (e.altKey) mods.push("opt");
+  if (e.ctrlKey) mods.push("ctrl");
+
+  const named = NAMED[e.key];
+  if (named) { e.preventDefault(); send([{ t: "key", key: named, mods }]); }
+  else if (e.key.length === 1) {
+    e.preventDefault();
+    // A plain character types as text (any layout, any script); with a modifier it
+    // has to go as a keycode, because text injection carries no chord.
+    if (mods.length === 0 || (mods.length === 1 && mods[0] === "shift")) {
+      send([{ t: "text", s: e.key }]);
+    } else {
+      send([{ t: "key", key: e.key.toLowerCase(), mods }]);
+    }
+  }
+  setTimeout(frame, 150);
+});
+
+const remote = {};
+async function loadDisplays() {
+  try {
+    const res = await fetch("/displays", { headers: auth });
+    const body = await res.json();
+    const list = body.displays || [];
+    const sel = $("display");
+    sel.innerHTML = "";
+    for (const d of list) {
+      // new Option escapes text and value — never innerHTML with a daemon-supplied
+      // display name; this page carries MESH_TOKEN.
+      sel.add(new Option(`${d.name || "Display " + d.index} (${d.width}×${d.height})`, String(d.index)));
+    }
+    $("display").value = String(display);
+    $("display").style.display = list.length > 1 ? "" : "none";
+    const current = list.find((d) => d.index === display);
+    if (current) { remote.width = current.width; remote.height = current.height; }
+  } catch (e) { $("display").style.display = "none"; }
+}
+$("display").onchange = async () => { display = Number($("display").value); await loadDisplays(); frame(); };
+
+document.addEventListener("visibilitychange", () => document.hidden ? clearInterval(timer) : schedule());
+
+loadDisplays().then(() => { frame(); schedule(); });
+</script>

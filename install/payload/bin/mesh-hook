@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -50,6 +51,43 @@ def event_title(source, doc, override=None):
     return pick(doc, "title", "event", "hook_event_name", "tool_name") or "Agent event"
 
 
+def _display(base, fmt):
+    try:
+        out = subprocess.run(base + [fmt], capture_output=True, text=True, timeout=2)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    val = out.stdout.strip()
+    return val if out.returncode == 0 and val else None
+
+
+def mux_target():
+    """(session, pane) of the multiplexer pane this hook runs inside, or (None, None).
+
+    This is not cosmetic. The reply buttons on a notification post to
+    /agents/<session>/send, so `session` has to be the name `mesh ls` shows -- the
+    bare #S, which is also what the apps match against the agent list. Falling back
+    to the working directory -- which is what happens without this -- produces an
+    event you can see and cannot answer.
+
+    The pane (#S:#I.#P) travels separately: send-keys to a bare session name lands
+    in whichever pane is active, which is not necessarily the agent's. meshd's send
+    route already accepts a pane target; carrying it lets a client answer the exact
+    pane. Best-effort -- a mux that cannot format it still yields the session.
+    """
+    for var, cmd in (("TMUX", "tmux"), ("RMUX", "rmux")):
+        if not os.getenv(var):
+            continue
+        # Without -t, the mux answers for its active client, which may be looking
+        # at a different session than the one this hook is running in.
+        pane_id = os.getenv(var + "_PANE")
+        base = [cmd, "display-message", "-p"] + (["-t", pane_id] if pane_id else [])
+        session = _display(base, "#S")
+        if not session:
+            continue
+        return session, _display(base, "#S:#I.#P")
+    return None, None
+
+
 def event_level(source, doc):
     hook = pick(doc, "hook_event_name", "event", "type")
     haystack = " ".join(
@@ -84,14 +122,43 @@ def main():
     doc = load_stdin()
     title = event_title(args.source, doc, args.title)
     body = args.body or pick(doc, "body", "message", "prompt", "command", "transcript_path")
-    session = args.session or pick(doc, "session", "cwd", "workspace")
+    # Multiplexer session first: it is the only name the reply path can address.
+    # An explicit --session / MESHD_SESSION is the caller naming that target itself.
+    session = args.session
+    pane = None
+    if not session:
+        session, pane = mux_target()
+    replyable = bool(session)
+    if not session:
+        # Bare terminal or IDE: nothing the reply route can address, and the event
+        # says so instead of smuggling a cwd path into the session field. Keep the
+        # folder name a human recognizes, not the full path.
+        raw = pick(doc, "session", "cwd", "workspace")
+        if raw:
+            session = os.path.basename(raw.rstrip("/")) or raw
+    # The identity the AGENT owns, which no multiplexer is involved in. Claude Code puts
+    # `session_id` on every hook payload and Codex puts one on its own; we were throwing
+    # it away and then trying to guess an identity from tmux, which is why a desktop-app
+    # or worktree session was never matched to anything and the wrist reported that
+    # nothing was waiting. `cwd` rides along purely as a label a human recognises — it is
+    # not an identity, because two sessions can share one.
+    session_id = pick(doc, "session_id", "sessionId")
+    cwd = pick(doc, "cwd", "workspace")
+
     payload_doc = {
         "source": args.source,
         "title": title,
         "body": body,
         "session": session,
         "level": args.level or event_level(args.source, doc),
+        "replyable": replyable,
     }
+    if session_id:
+        payload_doc["sessionId"] = session_id
+    if cwd:
+        payload_doc["cwd"] = cwd
+    if pane:
+        payload_doc["pane"] = pane
     if args.dry_run:
         print(json.dumps(payload_doc, indent=2, sort_keys=True))
         return 0
@@ -103,7 +170,7 @@ def main():
             token = f.readline().strip()
     if not token:
         print(f"mesh-hook: missing MESHD_TOKEN and unreadable {token_file}", file=sys.stderr)
-        return 2
+        return 0
 
     host = os.getenv("MESHD_HOST", "127.0.0.1")
     port = os.getenv("MESHD_PORT", "8899")
@@ -121,8 +188,29 @@ def main():
         print(f"mesh-hook: HTTP {e.code}", file=sys.stderr)
     except OSError as e:
         print(f"mesh-hook: {e}", file=sys.stderr)
-    return 1
+    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # Never a non-zero exit, whatever happens inside.
+    #
+    # This hook is registered on Stop, and Claude Code treats a Stop hook exiting 2 as a
+    # BLOCKING error: it refuses to end the turn and loops. So an unreadable token file —
+    # a rotated token, a half-finished install, a MESH_HOME that moved — did not merely
+    # lose a notification, it wedged the session that was trying to finish. Verified on
+    # the deployed hook: `printf '{"hook_event_name":"Stop"}' | env -u MESHD_TOKEN
+    # MESH_HOME=/nonexistent mesh-hook --source claude` exits 2.
+    #
+    # This is telemetry. It has no opinion about whether the agent may proceed, so it must
+    # never be able to express one. Failures go to stderr, where Claude shows them without
+    # acting on them, and the exit status stays 0 — including for an argparse error or an
+    # unexpected exception, which would otherwise escape as 2 and 1 respectively.
+    try:
+        main()
+    except SystemExit as e:                     # argparse --help / bad flags
+        if e.code not in (0, None):
+            print(f"mesh-hook: exiting 0 despite {e.code} — a hook must not block a turn",
+                  file=sys.stderr)
+    except Exception as e:                      # anything at all
+        print(f"mesh-hook: {type(e).__name__}: {e}", file=sys.stderr)
+    raise SystemExit(0)

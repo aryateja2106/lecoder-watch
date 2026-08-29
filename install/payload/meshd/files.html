@@ -1,0 +1,108 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mesh Files</title>
+<!--
+  The half of "remote desktop" that works on a headless box: browse, read, make a
+  folder, rename, and jump into a terminal in the current directory. Filesystem calls
+  only — no X server, no VNC, identical on macOS and Linux.
+-->
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0d10; color: #e6e9ef; font: 14px/1.5 -apple-system, system-ui, sans-serif; }
+  header { position: sticky; top: 0; background: #14181e; padding: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  button { background: #232a33; color: #e6e9ef; border: 1px solid #333c48; border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
+  button:hover { background: #2c3540; }
+  #path { flex: 1; min-width: 200px; background: #0b0d10; color: #9fb3c8; border: 1px solid #333c48; border-radius: 6px; padding: 5px 8px; font: 12px/1.4 ui-monospace, monospace; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid #191f27; cursor: pointer; }
+  li:hover { background: #131922; }
+  .kind { width: 1.4em; text-align: center; opacity: .8; }
+  .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { color: #6b7c8f; font: 11px/1.4 ui-monospace, monospace; white-space: nowrap; }
+  pre { margin: 0; padding: 12px; white-space: pre-wrap; word-break: break-word; font: 12px/1.5 ui-monospace, monospace; color: #cfe3f7; }
+  #msg { padding: 10px 12px; color: #e0a458; }
+</style>
+
+<header>
+  <button id="up">↑</button>
+  <button id="home">Home</button>
+  <input id="path" spellcheck="false">
+  <button id="go">Go</button>
+  <button id="mkdir">New folder</button>
+</header>
+<div id="msg"></div>
+<ul id="list"></ul>
+<pre id="view" hidden></pre>
+
+<script>
+const TOKEN = window.MESH_TOKEN || "";
+const auth = TOKEN ? { authorization: "Bearer " + TOKEN } : {};
+const $ = (id) => document.getElementById(id);
+let current = "";
+
+const human = (n) => n < 1024 ? n + " B"
+  : n < 1048576 ? (n / 1024).toFixed(0) + " KB"
+  : (n / 1048576).toFixed(1) + " MB";
+
+async function api(path, options = {}) {
+  const res = await fetch(path, { ...options, headers: { ...auth, ...(options.headers || {}) } });
+  return res;
+}
+
+async function open(path) {
+  $("msg").textContent = "";
+  $("view").hidden = true;
+  const res = await api(`/fs?path=${encodeURIComponent(path)}`);
+  const body = await res.json();
+  if (!body.ok) { $("msg").textContent = body.error || "cannot open"; return; }
+  current = body.path;
+  $("path").value = body.path;
+  $("list").hidden = false;
+  $("list").innerHTML = "";
+  for (const e of body.entries) {
+    const li = document.createElement("li");
+    const icon = e.kind === "dir" ? "📁" : e.kind === "link" ? "🔗" : "📄";
+    const when = e.modifiedISO ? new Date(e.modifiedISO).toLocaleString() : "";
+    li.innerHTML = `<span class="kind">${icon}</span><span class="name"></span>` +
+                   `<span class="meta">${e.kind === "dir" ? "" : human(e.size)} ${when}</span>`;
+    li.querySelector(".name").textContent = e.name;   // never innerHTML a filename
+    li.onclick = () => e.kind === "dir" ? open(e.path) : view(e.path);
+    $("list").append(li);
+  }
+}
+
+async function view(path) {
+  const res = await api(`/fs/read?path=${encodeURIComponent(path)}`);
+  const type = res.headers.get("content-type") || "";
+  if (!type.includes("application/json")) {
+    $("msg").textContent = "binary file — not shown";
+    return;
+  }
+  const body = await res.json();
+  if (body.error) { $("msg").textContent = body.error; return; }
+  $("list").hidden = true;
+  $("view").hidden = false;
+  $("view").textContent = body.text + (body.truncated ? "\n\n… truncated" : "");
+  $("path").value = body.path;
+}
+
+$("up").onclick = () => { if (current && current !== "/") open(current.replace(/\/[^/]+\/?$/, "") || "/"); };
+$("home").onclick = () => open("");
+$("go").onclick = () => open($("path").value);
+$("path").onkeydown = (e) => { if (e.key === "Enter") open($("path").value); };
+$("mkdir").onclick = async () => {
+  const name = prompt("New folder name");
+  if (!name) return;
+  const res = await api("/fs/mkdir", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path: current.replace(/\/$/, "") + "/" + name }),
+  });
+  const body = await res.json();
+  if (body.error) $("msg").textContent = body.error; else open(current);
+};
+
+open(new URLSearchParams(location.search).get("path") || "");
+</script>

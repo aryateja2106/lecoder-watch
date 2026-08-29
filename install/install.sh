@@ -49,6 +49,9 @@ Options:
   --without LIST   Install everything except these components.
   --prefix DIR     Install location (default: \$MESH_HOME or ~/.mesh).
   --no-start       Install but do not launch services.
+  --force          Reinstall even if this machine already runs the same version.
+  --upgrade        Fetch the latest and reinstall in place, preserving the existing
+  --update         token and config (same as re-running install; clearer intent).
   --list           Show what is installed under the prefix, then exit.
   --uninstall      Stop services and remove the selected components.
   --purge          With --uninstall, also remove the token and the prefix dir.
@@ -57,7 +60,13 @@ Options:
 Components: $ALL_COMPONENTS
   meshd  = stats/sessions/events daemon (:$MESHD_DEFAULT_PORT)
   bridge = rmux-bridge live terminal stream (:$BRIDGE_DEFAULT_PORT)
-  tools  = mesh-event/mesh-hook/mesh-agent-run/mesh-self-check + hook examples
+  tools  = mesh CLI + mesh-event/mesh-hook/mesh-agent-run/mesh-self-check + hooks
+
+After install:
+  ~/.mesh/bin/mesh setup       first run: permissions + pair your phone
+  ~/.mesh/bin/mesh --help      every command (man: mesh man)
+PATH is wired into ~/.zshrc or ~/.bashrc automatically; the manual line is
+  eval "\$(~/.mesh/bin/mesh shellenv)"
 EOF
 }
 
@@ -154,7 +163,10 @@ detect_service_mgr() {
   printf 'tmux'
 }
 
-mux_session()   { printf '%s-%s' "$LABEL_PREFIX" "$1"; }   # tmux session name, label-isolated
+# Dots are stripped because tmux rewrites '.' in a session name to '_' and reads '.' in a
+# target as the session:window.pane separator — so a dotted name can be created and then
+# never killed by the name that created it, and the next start collides with it forever.
+mux_session()   { printf '%s-%s' "$LABEL_PREFIX" "$1" | tr '.' '_'; }   # tmux session name, label-isolated
 launchd_label() { printf '%s.%s' "$LABEL_PREFIX" "$1"; }
 launchd_plist() { printf '%s/Library/LaunchAgents/%s.%s.plist' "$HOME" "$LABEL_PREFIX" "$1"; }
 systemd_unit()  { printf '%s/.config/systemd/user/%s-%s.service' "$HOME" "$LABEL_PREFIX" "$1"; }
@@ -190,7 +202,7 @@ $el_env
     </dict>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
-    <key>ProcessType</key><string>Background</string>
+    <key>ProcessType</key><string>Interactive</string>
     <key>StandardOutPath</key><string>$el_log</string>
     <key>StandardErrorPath</key><string>$el_log</string>
 </dict>
@@ -238,6 +250,7 @@ service_start() {
       ss_plist=$(launchd_plist "$ss_name"); ss_label=$(launchd_label "$ss_name")
       mkdir -p "$(dirname "$ss_plist")"
       printf '%s\n' "$ss_env" | emit_launchd_plist "$ss_label" "$ss_workdir" "$BUN_BIN" "$ss_entry" "${TMPDIR:-/tmp}/${ss_name}.log" > "$ss_plist"
+      chmod 600 "$ss_plist"   # the plist embeds MESHD_TOKEN; keep it off other users
       launchctl bootout "gui/$(id -u)/$ss_label" 2>/dev/null || true
       launchctl bootstrap "gui/$(id -u)" "$ss_plist" 2>/dev/null || launchctl load "$ss_plist" 2>/dev/null || \
         warn "launchctl could not load $ss_label; check $ss_plist"
@@ -247,15 +260,37 @@ service_start() {
       ss_unit=$(systemd_unit "$ss_name")
       mkdir -p "$(dirname "$ss_unit")"
       printf '%s\n' "$ss_env" | emit_systemd_unit "mesh $ss_name" "$ss_workdir" "$BUN_BIN" "$ss_entry" > "$ss_unit"
+      chmod 600 "$ss_unit"    # the unit embeds MESHD_TOKEN; keep it off other users
       loginctl enable-linger "$(id -un)" 2>/dev/null || sudo loginctl enable-linger "$(id -un)" 2>/dev/null || \
         warn "could not enable linger; services may stop when you log out (run: sudo loginctl enable-linger $(id -un))"
       systemctl --user daemon-reload 2>/dev/null || true
       systemctl --user enable --now "$(systemd_name "$ss_name")" 2>/dev/null || \
         warn "systemctl --user could not start $(systemd_name "$ss_name"); check: systemctl --user status $(systemd_name "$ss_name")"
+      # `enable --now` is a no-op on an already-active unit, so an upgrade left the OLD
+      # daemon running out of memory with the new files on disk and no error anywhere —
+      # that is how the fleet stayed on 0.2.x. Restart explicitly to load the new code.
+      systemctl --user restart "$(systemd_name "$ss_name")" 2>/dev/null || \
+        warn "systemctl --user could not restart $(systemd_name "$ss_name"); it may still be running the previous build"
       ;;
     *)  # tmux fallback (does NOT survive reboot)
-      ss_flat=$(printf '%s' "$ss_env" | tr '\n' ' ')   # env values are space-free
-      start_session "$(mux_session "$ss_name")" "$ss_workdir" "env $ss_flat $BUN_BIN run $ss_entry"
+      # The environment goes into a 0600 file and is sourced, never passed as argv:
+      # `env MESHD_TOKEN=<secret> bun run server.ts` in a command line is readable by
+      # every other local user through `ps`, and that token is a shell on this machine.
+      # The launchd and systemd paths above already keep their env out of `ps`; this
+      # fallback was the one that did not. server.ts is unchanged — still process.env.
+      ss_envfile="$MESH_HOME/$ss_name.env"
+      mkdir -p "$MESH_HOME"
+      ( umask 077
+        printf '%s\n' "$ss_env" | while IFS= read -r kv; do
+          [ -n "$kv" ] || continue
+          printf '%s=%s\n' "${kv%%=*}" "$(shell_quote "${kv#*=}")"
+        done > "$ss_envfile" )
+      chmod 600 "$ss_envfile" 2>/dev/null || true
+      # sh -c explicitly: tmux runs commands through default-shell, which may be fish or
+      # csh, and neither speaks `set -a`. Paths arrive as $0/$1/$2 so spaces survive, and
+      # `exec` leaves a process whose argv holds no secret.
+      start_session "$(mux_session "$ss_name")" "$ss_workdir" \
+        "sh -c 'set -a; . \"\$0\"; set +a; exec \"\$1\" run \"\$2\"' $(shell_quote "$ss_envfile") $(shell_quote "$BUN_BIN") $(shell_quote "$ss_entry")"
       ;;
   esac
 }
@@ -279,6 +314,7 @@ service_stop() {
     fi
   fi
   kill_session "$(mux_session "$st_name")" >/dev/null 2>&1 && st_removed=0 || true
+  rm -f "$MESH_HOME/$st_name.env"   # holds MESHD_TOKEN; nothing should outlive the service
   return $st_removed
 }
 
@@ -429,9 +465,14 @@ resolve_payload() {
       *.tgz|*.tar.gz) url="$src";;
       *) url="${src%/}/mesh-install.tgz";;
     esac
+    # Refuse a plaintext source: whoever controls any hop then runs code as you (and,
+    # on --user, as another user via sudo). HTTPS or a local file only.
+    case "$url" in http://*) die "refusing plaintext payload source (use https): $url";; esac
     need_cmd curl
     log "Fetching payload: $url"
-    curl -fsSL "$url" -o "$TMP_FETCH/payload.tgz" || die "failed to download $url"
+    # --progress-bar, not -s: with the script itself piped through `curl | sh`, this
+    # download is the one silent stretch, and people reasonably assume a hung install.
+    curl -fL --progress-bar "$url" -o "$TMP_FETCH/payload.tgz" || die "failed to download $url"
   fi
   ( cd "$TMP_FETCH" && tar -xzf payload.tgz ) || die "failed to extract payload"
   if [ -d "$TMP_FETCH/install/payload" ]; then SCRIPT_DIR="$TMP_FETCH/install"
@@ -451,7 +492,7 @@ validate_payload() {
     [ -f "$PAYLOAD_DIR/rmux-bridge/public/index.html" ] || die "missing payload: rmux-bridge/public/index.html"
   fi
   if want_component tools; then
-    for f in mesh-event mesh-hook mesh-agent-run mesh-codex-notify mesh-self-check; do
+    for f in mesh mesh-event mesh-hook mesh-agent-run mesh-codex-notify mesh-self-check; do
       [ -f "$PAYLOAD_DIR/bin/$f" ] || die "missing payload: bin/$f"
     done
   fi
@@ -469,10 +510,84 @@ install_components() {
     rm -rf "$MESH_HOME/bin"; cp -R "$PAYLOAD_DIR/bin" "$MESH_HOME/"
     chmod +x "$MESH_HOME"/bin/* 2>/dev/null || true
     if [ -d "$SCRIPT_DIR/hooks" ]; then rm -rf "$MESH_HOME/hooks"; cp -R "$SCRIPT_DIR/hooks" "$MESH_HOME/"; fi
+    if [ -d "$PAYLOAD_DIR/share" ]; then rm -rf "$MESH_HOME/share"; cp -R "$PAYLOAD_DIR/share" "$MESH_HOME/"; fi
+  fi
+  if want_component meshd && [ "$OS_NAME" = "Darwin" ] && [ -f "$PAYLOAD_DIR/hooks/cmux-bridge.zsh" ]; then
+    mkdir -p "$MESH_HOME/hooks"
+    cp "$PAYLOAD_DIR/hooks/cmux-bridge.zsh" "$MESH_HOME/hooks/cmux-bridge.zsh"
+    _hook='[ -f "$HOME/.mesh/hooks/cmux-bridge.zsh" ] && source "$HOME/.mesh/hooks/cmux-bridge.zsh"'
+    if [ -f "$HOME/.zshrc" ] && ! grep -Fq 'cmux-bridge.zsh' "$HOME/.zshrc" 2>/dev/null; then
+      printf '\n# MeshWatch cmux bridge (auto-start in interactive shells)\n%s\n' "$_hook" >> "$HOME/.zshrc"
+      log "Added cmux-bridge hook to ~/.zshrc"
+    fi
+  fi
+}
+
+# Wire agent alerts into Claude Code. Everything the watch does about agents -- the
+# notification with its reply buttons, the live card, the face complication -- hangs off
+# one event an agent posts when it stops and waits for a human. Without this the tools
+# are installed and nothing ever fires them, which reads as "the app does not do that".
+# Merges into an existing settings.json (other tools own hooks there too) and is a
+# no-op when already present.
+install_agent_hooks() {
+  want_component tools || return 0
+  command -v bun >/dev/null 2>&1 || return 0
+  [ -x "$MESH_HOME/bin/mesh" ] || return 0
+  if "$MESH_HOME/bin/mesh" hooks install >/dev/null 2>&1; then
+    log "Wired agent alerts into Claude Code (mesh hooks status to check)"
+  else
+    log "Could not wire Claude Code hooks — run: $MESH_HOME/bin/mesh hooks install"
   fi
 }
 
 install_deps() { ( cd "$1" && bun install ); }
+
+# ---------- PATH onboarding ----------
+#
+# An install nobody can invoke is not an install: every previous run ended by printing
+# "~/.mesh/bin/mesh pair" and left the user to work out the PATH themselves, so `mesh`
+# did not exist in their next terminal. Add ONE homebrew-shaped eval line to the right
+# rc file, exactly once. A child process cannot change the parent shell, so the last
+# thing this installer prints is how to pick it up in the shell they are standing in.
+PATH_RC=""; PATH_LINE=""; PATH_STATE="ok"   # ok | added | present | manual
+
+setup_path() {
+  want_component tools || return 0
+  case ":${PATH}:" in *":$MESH_HOME/bin:"*) return 0;; esac   # already usable
+  PATH_LINE="eval \"\$($MESH_HOME/bin/mesh shellenv)\""
+  # ${SHELL} and not ${SHELL:-} killed the install on any box where SHELL is unset —
+  # a Docker container, a cron job, a non-login ssh, which is to say most of the headless
+  # Linux this is meant to run on. Under `set -u` the expansion is fatal, and it fires at
+  # the very end, after everything is installed, so it reads as "the install failed" when
+  # in fact only the PATH line was left unwritten.
+  case "${SHELL:-}" in "") PATH_STATE="manual"; return 0;; esac
+  case "${SHELL##*/}" in
+    zsh)  PATH_RC="$HOME/.zshrc";;
+    bash) PATH_RC="$HOME/.bashrc";;
+    *)    PATH_STATE="manual"; return 0;;      # fish/csh/unknown: tell, don't guess
+  esac
+  if [ -f "$PATH_RC" ] && grep -Fq 'mesh shellenv' "$PATH_RC" 2>/dev/null; then
+    PATH_STATE="present"; return 0
+  fi
+  if printf '\n# MeshWatch CLI on PATH\n%s\n' "$PATH_LINE" >> "$PATH_RC" 2>/dev/null; then
+    PATH_STATE="added"
+  else
+    PATH_STATE="manual"
+  fi
+}
+
+report_path() {
+  case "$PATH_STATE" in
+    added)
+      printf '\nAdded to %s:\n    %s\n' "$PATH_RC" "$PATH_LINE"
+      printf 'Run this now so "mesh" works in THIS terminal (new terminals get it automatically):\n    source %s\n' "$PATH_RC";;
+    present)
+      printf '\n"mesh" is already wired into %s. Pick it up in THIS terminal with:\n    source %s\n' "$PATH_RC" "$PATH_RC";;
+    manual)
+      printf '\nPut "mesh" on your PATH by adding this line to your shell startup file:\n    %s\n' "$PATH_LINE";;
+    *)  printf '\nNext: mesh setup\n';;
+  esac
+}
 
 # ---------- actions ----------
 
@@ -486,10 +601,10 @@ service_state() {  # prints launchd|systemd|tmux supervisor state for a service 
 do_list() {
   log "Prefix: $MESH_HOME"
   [ -d "$MESH_HOME" ] || { log "  (nothing installed)"; return; }
-  for item in meshd rmux-bridge bin hooks token; do
+  for item in meshd rmux-bridge bin share hooks token; do
     [ -e "$MESH_HOME/$item" ] && log "  present: $item"
   done
-  for svc in meshd rmux-bridge; do
+  for svc in meshd cmux-bridge rmux-bridge; do
     st=$(service_state "$svc")
     [ "$st" = "none" ] || log "  service: $svc ($st)"
   done
@@ -498,6 +613,7 @@ do_list() {
 do_uninstall() {
   removed=""
   if want_component meshd; then
+    service_stop cmux-bridge && removed="$removed cmux-bridge(service)" || true
     service_stop meshd && removed="$removed meshd(service)" || true
     [ -e "$MESH_HOME/meshd" ] && { rm -rf "$MESH_HOME/meshd"; removed="$removed meshd"; }
   fi
@@ -508,6 +624,7 @@ do_uninstall() {
   if want_component tools; then
     [ -e "$MESH_HOME/bin" ] && { rm -rf "$MESH_HOME/bin"; removed="$removed tools"; }
     [ -e "$MESH_HOME/hooks" ] && { rm -rf "$MESH_HOME/hooks"; removed="$removed hooks"; }
+    [ -e "$MESH_HOME/share" ] && { rm -rf "$MESH_HOME/share"; removed="$removed man"; }
   fi
   if [ "$DO_PURGE" = "1" ]; then
     rm -rf "$MESH_HOME"; removed="$removed prefix($MESH_HOME)"
@@ -515,10 +632,23 @@ do_uninstall() {
   if [ -n "$removed" ]; then log "Removed:$removed"; else log "Nothing to remove under $MESH_HOME"; fi
 }
 
+# The version a meshd tree reports, read out of its own source.
+#
+# `tr -d '\000'` is not decoration. The published 0.4.1 server.ts carries two NUL bytes,
+# which makes `file` call it "data" and makes grep and sed silently refuse to match a
+# single line of it. A version check that greps this file finds nothing and concludes
+# "not installed" on a machine that plainly is.
+tree_version() {
+  [ -f "$1" ] || return 0
+  tr -d '\000' < "$1" 2>/dev/null \
+    | sed -n 's/^[[:space:]]*const VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | head -1
+}
+
 # ---------- arg parsing ----------
 
 TOKEN_FLAG=""; SRC_FLAG=""; ONLY_LIST=""; WITHOUT_LIST=""; USER_FLAG=""
-DO_UNINSTALL="0"; DO_PURGE="0"; DO_LIST="0"; NO_START="0"
+DO_UNINSTALL="0"; DO_PURGE="0"; DO_LIST="0"; NO_START="0"; DO_UPGRADE="0"; DO_FORCE="0"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -529,7 +659,9 @@ while [ "$#" -gt 0 ]; do
     --without) shift; [ "$#" -gt 0 ] || die "--without requires a value"; WITHOUT_LIST="$1";;
     --prefix) shift; [ "$#" -gt 0 ] || die "--prefix requires a value"; MESH_HOME="$1";;
     --no-start) NO_START="1";;
+    --force) DO_FORCE="1";;
     --list) DO_LIST="1";;
+    --upgrade|--update) DO_UPGRADE="1";;
     --uninstall) DO_UNINSTALL="1";;
     --purge) DO_PURGE="1";;
     --help|-h) usage; exit 0;;
@@ -564,6 +696,10 @@ if [ "$DO_UNINSTALL" = "1" ]; then do_uninstall; exit 0; fi
 MUX_DEFAULT="tmux"
 if [ "$OS_NAME" = "Darwin" ] && command -v rmux >/dev/null 2>&1; then MUX_DEFAULT="rmux"; fi
 log "Detected: $OS_NAME/$ARCH_NAME · mux=$MUX_DEFAULT · service=$SERVICE_MGR · components=[$SELECTED_COMPONENTS] · prefix=$MESH_HOME"
+if [ "$DO_UPGRADE" = "1" ]; then
+  [ -d "$MESH_HOME/meshd" ] || warn "no existing install under $MESH_HOME — doing a fresh install"
+  log "Upgrade: fetching latest, reinstalling in place (token + config preserved)"
+fi
 
 # ---------- install ----------
 
@@ -574,6 +710,54 @@ if [ -z "$SRC" ] && [ "$MESH_SRC_DEFAULT" != "__MESH_SRC__" ]; then SRC="$MESH_S
 resolve_payload "$SRC"
 validate_payload
 
+# ---------- already running exactly this? ----------
+#
+# The one-liner is the command people have in their shell history and the one printed on
+# the website, so re-running it is the most natural thing in the world. Reinstalling on
+# top of an identical install is not free: bin/ is replaced wholesale, and macOS grants
+# Accessibility per BINARY -- so overwriting an unchanged mesh-input costs the user that
+# grant, and every click and keystroke from their watch silently stops working until they
+# notice and re-approve it. Paying that to install the bytes already on disk is a bad
+# trade nobody chose.
+#
+# A DIFFERENT version still installs: for someone whose `mesh` is too old to run
+# `mesh upgrade`, this one-liner is the upgrade path, and refusing would strand them.
+#
+# And matching versions are NOT enough on their own. Re-running the one-liner is also the
+# documented repair — it is what someone does when a machine has vanished from their phone,
+# because it reinstalls the service and restarts it. Skipping on version alone answered
+# "nothing to do" to a person staring at a dead daemon, which is the single worst moment to
+# say it. So the machine also has to be ANSWERING before we decline to do anything: same
+# version AND a live daemon means there is genuinely nothing to repair; same version and
+# silence means repair is exactly what was asked for.
+daemon_answering() {
+  probe_port="${MESHD_PORT:-$MESHD_DEFAULT_PORT}"
+  # Any HTTP status at all proves something is listening and speaking. 000 is curl for
+  # "nothing there". /health needs no token over loopback, but even a 401 would do.
+  # `|| printf '000'` would be wrong here and was: curl ALREADY prints 000 when it cannot
+  # connect, and still exits non-zero, so the fallback appended a second one and the test
+  # compared "000000" against "000" — every dead daemon read as alive.
+  probe_code=$(curl -s -o /dev/null -w '%{http_code}' -m 3 \
+    "http://127.0.0.1:${probe_port}/health" 2>/dev/null || true)
+  [ -n "$probe_code" ] && [ "$probe_code" != "000" ]
+}
+
+INSTALLED_VERSION=$(tree_version "$MESH_HOME/meshd/server.ts")
+PAYLOAD_VERSION=$(tree_version "$PAYLOAD_DIR/meshd/server.ts")
+if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" = "$PAYLOAD_VERSION" ] \
+   && [ "$DO_UPGRADE" != "1" ] && [ "$DO_FORCE" != "1" ] && daemon_answering; then
+  log "meshd $INSTALLED_VERSION is already installed at $MESH_HOME and answering — nothing to do."
+  log "  check it:     $MESH_HOME/bin/mesh doctor"
+  log "  reinstall:    re-run with --force"
+  exit 0
+fi
+if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" = "$PAYLOAD_VERSION" ]; then
+  log "meshd $INSTALLED_VERSION is installed but not answering — reinstalling to repair it"
+fi
+if [ -n "$INSTALLED_VERSION" ] && [ "$INSTALLED_VERSION" != "$PAYLOAD_VERSION" ]; then
+  log "Upgrading in place: meshd $INSTALLED_VERSION → ${PAYLOAD_VERSION:-unknown} (token and config preserved)"
+fi
+
 if want_component meshd || want_component bridge; then
   ensure_bun
   BUN_BIN=$(command -v bun)
@@ -581,6 +765,8 @@ if want_component meshd || want_component bridge; then
 fi
 
 TOKEN_VALUE="${TOKEN_FLAG:-${MESHD_TOKEN:-}}"
+# Preserve an existing token on re-install/upgrade so saved app/CLI host configs keep working.
+if [ -z "$TOKEN_VALUE" ] && [ -f "$MESH_HOME/token" ]; then TOKEN_VALUE=$(tr -d '\n' < "$MESH_HOME/token" 2>/dev/null); fi
 [ -n "$TOKEN_VALUE" ] || TOKEN_VALUE=$(gen_token)
 
 MESHD_PORT_VALUE="${MESHD_PORT:-$MESHD_DEFAULT_PORT}"
@@ -597,6 +783,7 @@ printf '%s\n' "$TOKEN_VALUE" > "$MESH_HOME/token"
 chmod 600 "$MESH_HOME/token" 2>/dev/null || true
 want_component meshd && install_deps "$MESH_HOME/meshd"
 want_component bridge && install_deps "$MESH_HOME/rmux-bridge"
+install_agent_hooks
 
 MESHD_STATUS="skipped"; BRIDGE_STATUS="skipped"
 if [ "$NO_START" = "1" ]; then
@@ -605,10 +792,16 @@ else
   if want_component meshd; then
     {
       printf 'PATH=%s\n' "$PATH"
+      printf 'HOME=%s\n' "$HOME"
+      printf 'USER=%s\n' "$(id -un)"
       printf 'MESHD_TOKEN=%s\n' "$TOKEN_VALUE"
       printf 'MESHD_PORT=%s\n' "$MESHD_PORT_VALUE"
       [ -n "${MESHD_HOST:-}" ] && printf 'MESHD_HOST=%s\n' "$MESHD_HOST"
       [ -n "$EFFECTIVE_MESHD_MUX" ] && printf 'MESH_MUX=%s\n' "$EFFECTIVE_MESHD_MUX"
+      [ -n "${CMUX_PORT:-}" ] && printf 'CMUX_PORT=%s\n' "$CMUX_PORT"
+      # An install-time opt-out must survive into the service environment, or
+      # MESHD_TELEMETRY=off would silently stop meaning anything under launchd.
+      [ -n "${MESHD_TELEMETRY:-}" ] && printf 'MESHD_TELEMETRY=%s\n' "$MESHD_TELEMETRY"
     } | service_start meshd "$MESH_HOME/meshd" server.ts
     MESHD_STATUS="down"; wait_http "http://127.0.0.1:${MESHD_PORT_VALUE}/health" && MESHD_STATUS="up"
   fi
@@ -636,12 +829,30 @@ if [ -n "$TAILSCALE_IP" ]; then
 else
   printf 'Tailscale IPv4: unavailable (run "tailscale ip -4" once Tailscale is connected)\n'
 fi
-printf 'MESHD token: %s\n' "$TOKEN_VALUE"
+# Never print the token: terminals get screenshotted, scrolled back, and pasted
+# into AI sessions — which is exactly how two of these leaked. Pairing hands it
+# to the phone; nothing else ever needs to see it.
+printf 'MESHD token: minted at ~/.mesh/token (never printed — "mesh pair" hands it to your phone)\n'
+# Watch pointer/keyboard control on Linux rides on xdotool + xclip (X11/Xvfb).
+# Non-fatal: /input reports exactly what is missing until they are installed.
+if [ "$OS_NAME" != "Darwin" ] && ! command -v xdotool >/dev/null 2>&1; then
+  printf 'Watch input control (optional): %s\n' "$(linux_tmux_hint | sed 's/tmux/xdotool xclip/')"
+fi
 if want_component tools; then
   printf 'Self-check: %s/bin/mesh-self-check\n' "$MESH_HOME"
   printf 'Notify test: %s/bin/mesh-event codex "Needs input" "phone/watch smoke test"\n' "$MESH_HOME"
+  printf 'Agent alerts: %s/bin/mesh hooks status\n' "$MESH_HOME"
+  printf '\nFirst time? One command walks you through the rest (permissions + pairing):\n  %s/bin/mesh setup\n' "$MESH_HOME"
+fi
+if [ "$OS_NAME" = "Darwin" ] && command -v cmux >/dev/null 2>&1 && want_component meshd; then
+  printf 'cmux-bridge: source ~/.mesh/hooks/cmux-bridge.zsh (auto via ~/.zshrc in new terminals)\n'
 fi
 printf 'Uninstall: sh install.sh --uninstall   (add --purge to remove the token + %s)\n' "$MESH_HOME"
+
+# Last, because it is the one instruction the user has to act on themselves.
+setup_path
+report_path
+printf '\nThen let the wizard finish the job (permissions, QR pairing, fleet check):\n    mesh setup\n'
 
 if [ "$NO_START" != "1" ]; then
   want_component meshd  && [ "$MESHD_STATUS" != "up" ] && exit 1
