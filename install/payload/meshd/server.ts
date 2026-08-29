@@ -1202,7 +1202,18 @@ Bun.serve({
           await sh(`${MUX} ${base}${tail}`);
         }
         if (b.initialText) {
-          await new Promise((resolve) => setTimeout(resolve, 900));
+          // Poll the fresh pane for a drawn prompt instead of tolling everyone 900ms:
+          // the flat sleep was 943ms of the measured 989ms /agents/new round trip
+          // (issue #117). Ready = capture-pane shows any non-blank byte, which a shell
+          // prompt produces within ~100ms. The old sleep survives only as the ceiling —
+          // a custom cmd that draws nothing still gets its text at 1200ms, bounded,
+          // instead of a keystroke typed into a pane with no reader.
+          const deadline = Date.now() + 1200;
+          while (Date.now() < deadline) {
+            const screen = await sh(`${MUX} capture-pane -p -t ${shq(name)} 2>/dev/null`);
+            if (screen.trim().length > 0) break;
+            await new Promise((r) => setTimeout(r, 50));
+          }
           await agentSend(name, String(b.initialText));
         }
         return json({ ok: true, name });
