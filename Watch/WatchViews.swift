@@ -94,7 +94,7 @@ struct WatchRootView: View {
         NavigationStack {
             MachinesListView()
                 .environmentObject(store)
-                .navigationTitle("Mesh")
+                .navigationTitle("MeshWatch")
         }
         .onAppear {
             store.start()
@@ -974,7 +974,10 @@ struct AgentLiveView: View {
                     Text(statusText)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    if let pane = currentPane {
+                    // Only when there is more than one pane to tell apart: for a
+                    // single-pane session "0.0 2.1.250" is a riddle spending one of
+                    // the wrist's ~6 readable lines (same rule as the iOS pane card).
+                    if let pane = currentPane, panes.count > 1 {
                         Text(pane.label)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
