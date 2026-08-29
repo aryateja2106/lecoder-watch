@@ -29,6 +29,12 @@ Legend: **A** = automatable under the charter as-is. **S** = NEEDS-SPEC (spec be
 that spec; the run still forces `deep` gates and a human read via the load-bearing rule).
 **H** = human-gated (device proof or release).
 
+**Progress note, 2026-08-29 afternoon:** items 2, 4, 5, 6 and 8 landed in the
+interactive session ahead of the factory (commits `d6cf928`, and the dedupe/polish
+commits following it) — do not re-claim them; item 3 was examined and deliberately
+deferred (the 500ms interactive cadence covers most of the perceived gap, and a pending
+echo layer is speculative until a device test says otherwise). Items 1, 7, 9, 10 remain.
+
 | # | Item | Class | Gate | Spec / acceptance |
 |---|------|-------|------|-------------------|
 | 1 | **#117: replace `setTimeout(900)` in `/agents/new`** with readiness polling | S | deep | Poll the new pane for a live prompt (or first output byte) every 50ms, cap 1200ms, then send `initialText`. Acceptance: a `time curl /agents/new` with initialText lands under 250ms against a warm shell; the existing behavior is the fallback at cap. New `scripts/check-agent-new-latency.sh` asserts no literal `setTimeout(900` remains. |

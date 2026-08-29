@@ -476,6 +476,49 @@ func filterFsEntries(_ entries: [FsEntry], showHidden: Bool, query: String) -> [
     return result
 }
 
+/// Collapse machine rows that are provably one physical box: two entries whose
+/// /health-reported hardware MAC matches are the same machine paired twice — the live
+/// case was a fleet-adopted alias ("mac", from the CLI's hosts.json) sitting next to
+/// the real "arya-macbook-pro" row, each listing the same sessions. A free function so
+/// `scripts/check-machine-dedupe.swift` can exercise it without a store.
+///
+/// The keeper, decided in order (each rule breaks the previous rule's ties):
+///   1. a non-loopback ip beats a 127.0.0.1 artifact,
+///   2. the longer host name beats the shorter (the alias is usually the short one),
+///   3. list order.
+/// Configured bridge/VNC URLs do NOT vote: the fold below carries them to whichever
+/// row wins, so config survives either way and must not crown an alias.
+/// The keeper absorbs any bridgeURL/vncURL a losing row had that it lacks. Each loser
+/// is returned WITH its keeper so the caller can tombstone selectively — only the
+/// identifiers the keeper does not share. Tombstoning a loser's ip wholesale would
+/// block the keeper too: `filteringRemovedHosts` rejects fleet entries by ip, and two
+/// rows for one box usually hold the same ip. Without any tombstone, the next
+/// `mesh pair` fleet-adoption resurrects the alias immediately.
+func mergeDuplicateMachineRows(_ rows: [Machine]) -> (kept: [Machine], removed: [(loser: Machine, keeper: Machine)]) {
+    var byMac: [String: [Int]] = [:]
+    for (i, m) in rows.enumerated() {
+        guard let mac = m.macAddress?.lowercased(), !mac.isEmpty else { continue }
+        byMac[mac, default: []].append(i)
+    }
+    var losers: [Int: Int] = [:]   // loser index -> keeper index
+    var kept = rows
+    for idxs in byMac.values where idxs.count > 1 {
+        func score(_ m: Machine) -> (Int, Int) {
+            ((m.ip.hasPrefix("127.") || m.ip == "localhost") ? 0 : 1,
+             m.host.count)
+        }
+        let ranked = idxs.sorted { score(rows[$0]) == score(rows[$1]) ? $0 < $1 : score(rows[$0]) > score(rows[$1]) }
+        let keeper = ranked[0]
+        for loser in ranked.dropFirst() {
+            if kept[keeper].bridgeURL?.isEmpty != false { kept[keeper].bridgeURL = rows[loser].bridgeURL }
+            if kept[keeper].vncURL?.isEmpty != false { kept[keeper].vncURL = rows[loser].vncURL }
+            losers[loser] = keeper
+        }
+    }
+    return (kept: kept.indices.filter { losers[$0] == nil }.map { kept[$0] },
+            removed: losers.sorted { $0.key < $1.key }.map { (loser: rows[$0.key], keeper: kept[$0.value]) })
+}
+
 // MARK: - Usage (OpenUsage)
 
 struct UsageLimit: Codable, Hashable, Identifiable {

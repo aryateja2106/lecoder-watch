@@ -503,6 +503,30 @@ final class MeshStore: ObservableObject {
                 capabilitiesChanged = true
             }
         }
+        // Two rows, one hardware MAC = one machine paired twice (a fleet-adopted alias
+        // beside the real entry — both listing the same eight sessions). Merge here,
+        // right after the MACs above went fresh, and tombstone the losing identity so
+        // the next pair's fleet adoption cannot hand it straight back. The
+        // `liveHosts` filter below then drops the loser from this same snapshot.
+        let merged = mergeDuplicateMachineRows(machines)
+        if !merged.removed.isEmpty {
+            machines = merged.kept
+            // Selective tombstone: only the identifiers the keeper does NOT share.
+            // The loser usually holds the keeper's own ip, and filteringRemovedHosts
+            // rejects fleet entries by ip — a wholesale tombstone would ban the
+            // keeper from every future fleet adoption.
+            var set = removedHosts
+            for (loser, keeper) in merged.removed {
+                if !loser.host.isEmpty, !hostNamesMatch(loser.host, keeper.host) {
+                    set.insert(loser.host.lowercased())
+                }
+                if !loser.ip.isEmpty, loser.ip.lowercased() != keeper.ip.lowercased() {
+                    set.insert(loser.ip.lowercased())
+                }
+            }
+            removedHosts = set
+            machinesChanged = true
+        }
         if machinesChanged { save() }
         if identitiesChanged { saveNetIdentities() }
         if capabilitiesChanged { saveCapabilities() }
