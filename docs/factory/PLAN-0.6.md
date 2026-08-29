@@ -29,11 +29,16 @@ Legend: **A** = automatable under the charter as-is. **S** = NEEDS-SPEC (spec be
 that spec; the run still forces `deep` gates and a human read via the load-bearing rule).
 **H** = human-gated (device proof or release).
 
-**Progress note, 2026-08-29 afternoon:** items 2, 4, 5, 6 and 8 landed in the
-interactive session ahead of the factory (commits `d6cf928`, and the dedupe/polish
-commits following it) — do not re-claim them; item 3 was examined and deliberately
-deferred (the 500ms interactive cadence covers most of the perceived gap, and a pending
-echo layer is speculative until a device test says otherwise). Items 1, 7, 9, 10 remain.
+**Progress note, 2026-08-29 evening:** items 1, 2, 4, 5, 6 and 8 landed in the
+interactive session ahead of the factory (item 1 measured live: 1019ms → 47ms,
+commit `e7f5336`; the rest in `d6cf928` and the dedupe/polish commits around it) — do
+not re-claim them. Item 3 was examined and deliberately deferred (the 500ms
+interactive cadence covers most of the perceived gap; a pending-echo layer is
+speculative until a device test says otherwise). Item 7 was audited and already
+holds on all three surfaces: the iOS compose and phrase sheets send only on an
+explicit tap (the phrase sheet previews the parsed command in monospace first), and
+the watch `DictateLink` documents and implements append-to-editable-draft with
+nothing dispatching until confirmed. Only the human-gated items 9 and 10 remain.
 
 | # | Item | Class | Gate | Spec / acceptance |
 |---|------|-------|------|-------------------|
