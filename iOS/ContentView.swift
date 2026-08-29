@@ -89,7 +89,14 @@ private struct MonitorTab: View {
                                     .foregroundStyle(.secondary)
                             }
                             if let body = event.body, !body.isEmpty {
-                                Text(body).font(.subheadline)
+                                // Hooks post transcript PATHS as event bodies, and a
+                                // five-line /Users/… wall tells a phone reader nothing
+                                // the subtitle line doesn't. A body that is one bare
+                                // absolute path collapses to its filename; prose
+                                // bodies still render in full.
+                                Text(compactEventBody(body))
+                                    .font(.subheadline)
+                                    .lineLimit(4)
                             }
                             Text([event.host, event.source, event.session].compactMap { $0 }.joined(separator: " · "))
                                 .font(.caption2)
@@ -1624,4 +1631,15 @@ private func resetText(_ iso: String?) -> String? {
 private func eventTime(_ iso: String) -> String {
     guard let date = parseISO(iso) else { return "" }
     return date.formatted(date: .omitted, time: .shortened)
+}
+
+/// An event body that is exactly one absolute path (hooks post transcript paths there)
+/// collapses to its filename — the subtitle already names host, source and session, and
+/// five wrapped lines of /Users/… bury the events around it. Anything with spaces or
+/// newlines is prose and passes through untouched.
+private func compactEventBody(_ body: String) -> String {
+    let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("/"), !trimmed.contains(" "), !trimmed.contains("\n"),
+          let last = trimmed.split(separator: "/").last else { return body }
+    return String(last)
 }
