@@ -568,9 +568,14 @@ private struct SessionPeekScreen: View {
                 Label(session.isCmux ? "Surface" : session.isHerdr ? "herdr pane" : "Pane", systemImage: "rectangle.split.2x1")
                     .font(.headline)
                 Spacer()
-                Text(activePane?.label ?? "session")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                // Only when there is a choice to describe: with one pane, "0.0 2.1.250"
+                // in the corner is a riddle, not information — the path below already
+                // says everything a single pane has to say.
+                if panes.count > 1 {
+                    Text(activePane?.label ?? "session")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             if panes.isEmpty {
                 Text("No pane list yet.")
@@ -584,10 +589,12 @@ private struct SessionPeekScreen: View {
                         .lineLimit(2)
                         .textSelection(.enabled)
                 }
-                FlowButtons(items: panes.map(\.label)) { label in
-                    guard let pane = panes.first(where: { $0.label == label }) else { return }
-                    selectedPane = pane.paneId
-                    Task { await refresh() }
+                if panes.count > 1 {
+                    FlowButtons(items: panes.map(\.label)) { label in
+                        guard let pane = panes.first(where: { $0.label == label }) else { return }
+                        selectedPane = pane.paneId
+                        Task { await refresh() }
+                    }
                 }
             }
         }
@@ -631,6 +638,13 @@ private struct SessionPeekScreen: View {
                         .font(.system(.caption, design: .monospaced))
                         .lineSpacing(2)
                         .textSelection(.enabled)
+                        // Accept the proposed width, wrap, grow down. Without this an
+                        // unbreakable run (a agent's ────── separator, a long path)
+                        // sets the Text's ideal width past the viewport, and inside a
+                        // ScrollView it GETS it — every maxWidth:.infinity sibling then
+                        // stretches to match, which is why the whole screen rendered
+                        // full-bleed with both gutters clipped.
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -708,15 +722,21 @@ private struct SessionPeekScreen: View {
             }
             .buttonStyle(.bordered)
             .labelStyle(.iconOnly)
-            HStack {
-                Button { Task { await send(key: "enter") } } label: { Label("Enter", systemImage: "return") }
-                Button(role: .destructive) { Task { await send(key: "ctrl-c") } } label: { Label("Stop", systemImage: "xmark.octagon") }
-                Button { Task { await send(key: "up") } } label: { Label("Up", systemImage: "arrow.up") }
-                Button { Task { await send(key: "down") } } label: { Label("Down", systemImage: "arrow.down") }
-                Button { Task { await send(key: "left") } } label: { Label("Left", systemImage: "arrow.left") }
-                Button { Task { await send(key: "right") } } label: { Label("Right", systemImage: "arrow.right") }
-                Button { Task { await send(key: "tab") } } label: { Label("Tab", systemImage: "arrow.right.to.line") }
-                Button { Task { await send(key: "escape") } } label: { Label("Esc", systemImage: "escape") }
+            // Scrolls sideways instead of dictating the page's width: eight bordered
+            // icon buttons want ~450pt on a 402pt screen, and an HStack that gets its
+            // ideal width inside this ScrollView stretched EVERY card past both edges —
+            // the whole peek screen rendered full-bleed with its gutters clipped.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    Button { Task { await send(key: "enter") } } label: { Label("Enter", systemImage: "return") }
+                    Button(role: .destructive) { Task { await send(key: "ctrl-c") } } label: { Label("Stop", systemImage: "xmark.octagon") }
+                    Button { Task { await send(key: "up") } } label: { Label("Up", systemImage: "arrow.up") }
+                    Button { Task { await send(key: "down") } } label: { Label("Down", systemImage: "arrow.down") }
+                    Button { Task { await send(key: "left") } } label: { Label("Left", systemImage: "arrow.left") }
+                    Button { Task { await send(key: "right") } } label: { Label("Right", systemImage: "arrow.right") }
+                    Button { Task { await send(key: "tab") } } label: { Label("Tab", systemImage: "arrow.right.to.line") }
+                    Button { Task { await send(key: "escape") } } label: { Label("Esc", systemImage: "escape") }
+                }
             }
             .buttonStyle(.bordered)
             .labelStyle(.iconOnly)

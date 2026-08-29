@@ -50,3 +50,24 @@ items are already awaiting review, or when proving the change needs a physical d
 
 State lives in files: one immutable record per run under `docs/factory/runs/`, and GitHub
 labels for operational state. Transcripts are not the queue.
+
+## Agent skills
+
+Skills live in `.claude/skills/` (Claude Code), `.agents/skills/` (Codex and the
+shared copy), and `.cursor/skills/` (Cursor pointers). Factory and OpenSpec skills
+stay the queue for Mesh product work. Matt Pocock and Addy Osmani packs are the
+general engineering loop.
+
+### Issue tracker
+
+GitHub issues on this remote (`gh`). Factory `factory:*` labels are the live queue.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Map Matt's five roles onto `factory:*`. Do not create a second label set.
+See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md`, `MEMORY.md`, `AGENTS.md`. See `docs/agents/domain.md`.

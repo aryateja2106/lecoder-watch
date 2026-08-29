@@ -244,7 +244,8 @@ struct PairMachineView: View {
         default:
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorTimedOut {
-                return "No answer from \(ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String ?? "that address"). Check the address, and that iOS hasn't blocked Local Network access."
+                let failing = (ns.userInfo[NSURLErrorFailingURLErrorKey] as? URL)?.absoluteString ?? "that address"
+                return "No answer from \(failing). Check the address, and that iOS hasn't blocked Local Network access."
             }
             return ns.localizedDescription
         }
