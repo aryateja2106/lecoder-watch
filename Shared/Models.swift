@@ -468,7 +468,10 @@ func filterFsEntries(_ entries: [FsEntry], showHidden: Bool, query: String) -> [
     var result = showHidden ? entries : entries.filter { !$0.name.hasPrefix(".") }
     let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
     if !needle.isEmpty {
-        result = result.filter { $0.name.localizedCaseInsensitiveContains(needle) }
+        // localizedStandardContains, not localizedCaseInsensitiveContains: filename
+        // search must be diacritic-insensitive ("cafe" finds "café.txt"), and this is
+        // the API Apple documents for exactly this user-initiated-search case.
+        result = result.filter { $0.name.localizedStandardContains(needle) }
     }
     return result
 }

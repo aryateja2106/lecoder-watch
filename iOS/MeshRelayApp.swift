@@ -44,6 +44,14 @@ struct MeshRelayApp: App {
         NotificationManager.shared.onAgentAction = { host, session, text, key, pane in
             Task { await store.respondToAgent(host: host, session: session, text: text, key: key, pane: pane) }
         }
+        // A plain tap on the banner lands on the session it is about, exactly like the
+        // Live Activity's widgetURL. Set on the main actor: the tap can arrive on a
+        // cold start, and deepLinkSession drives navigation.
+        NotificationManager.shared.onOpenSession = { host, session in
+            Task { @MainActor in
+                store.deepLinkSession = MeshStore.SessionTarget(host: host, session: session)
+            }
+        }
         // Live Activity push tokens go to the machines themselves — meshd pushes the
         // card directly, same as it pushes alerts, so there is no cloud in the path.
         // Wired here rather than in the controller so the controller keeps knowing
@@ -99,6 +107,12 @@ struct MeshRelayApp: App {
                     // suspend often fails once while the radio wakes, which used to
                     // read as "offline". Poll immediately instead.
                     Task { await store.refresh() }
+                    // A card meshd push-STARTED while we were parked is not ours yet:
+                    // adoption only ran at launch, so its update token was never
+                    // uploaded and the daemon could start cards it could never change
+                    // (/push showed laStartTokens:2, laUpdateTokens:0 — that shape).
+                    // Re-adopt on every return to the foreground; attach is idempotent.
+                    LiveActivityController.shared.readoptIfNeeded()
                 default:
                     break
                 }

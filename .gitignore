@@ -37,3 +37,8 @@ install/dist/
 # gajae-code: per-machine tmux session state, never shared
 .gjc/
 supabase/.temp/
+
+# Harness droppings, never product
+.cursor/hooks/state/
+.habit-hooks/
+.jscpd.json

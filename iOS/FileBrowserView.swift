@@ -59,6 +59,12 @@ struct FileBrowserView: View {
     private var visibleRows: [FsEntry] {
         filterFsEntries(rows, showHidden: showHidden, query: query)
     }
+    /// How many rows the hidden-files filter is holding back right now (query included,
+    /// so "matches exist but they are hidden" is answerable). Zero when showing hidden.
+    private var hiddenCount: Int {
+        guard !showHidden else { return 0 }
+        return filterFsEntries(rows, showHidden: true, query: query).count - visibleRows.count
+    }
 
     var body: some View {
         List {
@@ -82,6 +88,19 @@ struct FileBrowserView: View {
                 ForEach(visibleRows) { entry in row(entry) }
                 if visibleRows.isEmpty, !loading, failure == nil {
                     emptyStateLabel
+                }
+                // A folder showing 12 of 40 entries must say so, or the filter reads
+                // as data loss. One tappable line, inside the listing where the missing
+                // rows would have been — not a toggle buried below the whole list.
+                if hiddenCount > 0, !loading {
+                    Button { showHidden = true } label: {
+                        Label(
+                            hiddenCount == 1 ? "1 hidden item" : "\(hiddenCount) hidden items",
+                            systemImage: "eye.slash"
+                        )
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    }
                 }
             } header: {
                 breadcrumb
@@ -131,7 +150,10 @@ struct FileBrowserView: View {
                 .disabled(loading)
             }
         }
-        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Filter by name")
+        // Default placement, not .navigationBarDrawer(displayMode: .always): on this
+        // app's iOS 26 floor the automatic iPhone placement bottom-aligns the field
+        // where a thumb can reach it one-handed, and does not reserve permanent space.
+        .searchable(text: $query, prompt: "Filter by name")
         .task(id: path) { await load() }
         .alert("New folder", isPresented: $creatingFolder) {
             TextField("name", text: $folderName.shellSafe)
@@ -245,6 +267,10 @@ struct FileBrowserView: View {
 
     private func go(to newPath: String) {
         failure = nil
+        // A filter typed for one folder must not silently filter the next: navigation
+        // is in-place (same view instance, .task(id: path) refetches), so the query
+        // survives unless cleared here. Files.app clears on navigation; so do we.
+        query = ""
         path = newPath
     }
 

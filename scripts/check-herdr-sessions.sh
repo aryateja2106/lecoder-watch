@@ -56,6 +56,8 @@ J
   gone:p9) echo '{"error":{"code":"pane_not_found","message":"pane gone:p9 not found"},"id":"cli:pane:read"}'; exit 1 ;;
   liar:p9) echo '{"error":{"code":"pane_not_found","message":"pane liar:p9 not found"},"id":"cli:pane:read"}'; exit 0 ;;
   blank:p1) : ;;
+  jsonscreen:p1) printf '{"error":"rate limited by upstream API"}\n' ;;
+  jsonfrag:p1) printf '{\n  "name": "meshd",\n  "version":\n' ;;
   *) printf 'first\nsecond\nthird\n' ;;
   esac
   ;;
@@ -83,7 +85,7 @@ cat > "$TMP/t.ts" <<'TS'
 import {
   herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount,
   isHerdrAgent, herdrPaneRef, herdrTitle, parsePaneList, parseWorkspaceList,
-  parseProcessInfo, parseEnvelope, runError,
+  parseProcessInfo, parseEnvelope, runError, isHerdrErrorEnvelope, herdrStatus,
 } from "./herdr.ts";
 
 const log = process.env.ARGV_LOG!;
@@ -143,6 +145,17 @@ if (await herdrOutput("herdr:liar:p9", 10, false) !== null)
 const blank = await herdrOutput("herdr:blank:p1", 10, false);
 if (blank === null) say("a pane that resolves with an empty screen is NOT gone — it must stay peekable");
 if (blank && blank.lines.join("") !== "") say("a genuinely blank screen has no lines");
+// The other direction of the same lie: a LIVE pane whose screen happens to show JSON
+// (a curl'd API error, the top of a package.json) must peek as content, never as 404.
+// Only the CLI's own envelope — one whole JSON object with the CLI's id — means gone.
+const jsonScreen = await herdrOutput("herdr:jsonscreen:p1", 10, false);
+if (jsonScreen === null) say("a live pane showing a JSON error on screen must NOT be reported dead");
+if (jsonScreen && !jsonScreen.lines[0]?.includes("rate limited")) say("the JSON on a live screen is output and must be returned");
+const jsonFrag = await herdrOutput("herdr:jsonfrag:p1", 10, false);
+if (jsonFrag === null) say("a screen showing the top of a JSON file must NOT be reported dead");
+if (!isHerdrErrorEnvelope('{"id":"cli:pane:read","error":{"code":"x","message":"y"}}')) say("the CLI's own envelope must be recognised");
+if (isHerdrErrorEnvelope('{"error":"no id key, this is screen content"}')) say("an id-less JSON object is screen content, not a verdict");
+if (isHerdrErrorEnvelope("{ not json")) say("an unparseable brace is screen content, not a verdict");
 
 await reset();
 await herdrOutput("herdr:w9:p2", 5, true);
@@ -180,6 +193,27 @@ if (badKey.ok) say("an unmapped key must be refused by name rather than sent and
 if (!badKey.error?.includes("page-up")) say(`the refusal must name the key, got "${badKey.error}"`);
 const nothing = await herdrSend("herdr:w9:p2");
 if (nothing.ok) say("a send with neither text nor key is a caller bug, not a success");
+
+// ---- paste: newline bytes must not become Enter presses ----
+await reset();
+const pasted = await herdrSend("herdr:w9:p2", "line one\nline two\n", undefined, true);
+if (!pasted.ok) say(`a multi-line paste must send, got ${pasted.error}`);
+const pasteArgv = (await argv()).trim().split("\n").filter(Boolean);
+const pasteCalls = pasteArgv.filter((l) => l.startsWith("pane send-text")).length;
+if (pasteCalls !== 1) say(`a paste is ONE send-text call, got ${pasteCalls}`);
+if (pasteArgv.some((l) => l.includes("send-keys")))
+  say("a paste must not append an Enter — a pasted paragraph submitting itself is the regression");
+if (!(await argv()).includes("[200~") || !(await argv()).includes("[201~"))
+  say("a multi-line paste must travel inside bracketed-paste markers, or every newline byte is a submit");
+
+// ---- status: herdr's own verdict survives to the row ----
+if (herdrStatus("working") !== "working") say("herdr says working, the row says working");
+if (herdrStatus("unknown") !== undefined) say("'unknown' (a plain shell) must fall back to the event heuristic, not claim a status");
+if (herdrStatus(undefined) !== undefined) say("absent agent_status claims nothing");
+await reset();
+const statusRows = await herdrSessions(usage);
+if (statusRows[0]?.herdrStatus !== "working") say(`the focused working pane must carry herdrStatus, got ${statusRows[0]?.herdrStatus}`);
+if (statusRows[1]?.herdrStatus !== undefined) say("an unknown-status pane must not carry a herdrStatus");
 
 // ---- panes ----
 const p = await herdrPanes("herdr:w9:p2");

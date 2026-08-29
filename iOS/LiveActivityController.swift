@@ -73,6 +73,22 @@ final class LiveActivityController {
         watchPushToStartTokens()
     }
 
+    /// Called on every return to the foreground. A card that meshd push-started while
+    /// the app was parked exists in `Activity.activities` but is held by nobody — its
+    /// update token was never observed, so the daemon that started it can never change
+    /// it, and after 15 minutes it grays out stale forever. Adoption at launch alone
+    /// cannot see it; this can. Cheap when there is nothing to do.
+    func readoptIfNeeded() {
+        let held = activity?.id
+        let live = Activity<SessionActivityAttributes>.activities
+        // Re-adopt when we hold nothing, or when what we hold is no longer live
+        // (swiped away while parked — `forget` only hears about that while awake).
+        if held == nil || !live.contains(where: { $0.id == held }) {
+            activity = nil
+            adoptExistingActivities()
+        }
+    }
+
     private func adoptExistingActivities() {
         let existing = Activity<SessionActivityAttributes>.activities
         guard let first = existing.first else { return }

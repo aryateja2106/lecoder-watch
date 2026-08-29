@@ -1252,11 +1252,17 @@ struct AgentLiveView: View {
                 keyChip("Down", "arrow.down") { store.send(key: "down") }
                 keyChip("Left", "arrow.left") { store.send(key: "left") }
                 keyChip("Right", "arrow.right") { store.send(key: "right") }
-                keyChip("Backspace", "delete.left") { store.send(key: "backspace") }
-                keyChip("Page up", "arrow.up.to.line") { store.send(key: "page-up") }
-                keyChip("Page down", "arrow.down.to.line") { store.send(key: "page-down") }
-                keyChip("Home", "arrow.up.to.line.compact") { store.send(key: "home") }
-                keyChip("End", "arrow.down.to.line.compact") { store.send(key: "end") }
+                // herdr's send-keys vocabulary has no backspace/paging/home/end; the
+                // daemon refuses them by name and the refusal never reaches the wrist,
+                // so on a herdr row these five chips would be dead buttons. Hide them —
+                // a control that cannot work is worse on a watch than no control.
+                if currentAgent?.isHerdr != true {
+                    keyChip("Backspace", "delete.left") { store.send(key: "backspace") }
+                    keyChip("Page up", "arrow.up.to.line") { store.send(key: "page-up") }
+                    keyChip("Page down", "arrow.down.to.line") { store.send(key: "page-down") }
+                    keyChip("Home", "arrow.up.to.line.compact") { store.send(key: "home") }
+                    keyChip("End", "arrow.down.to.line.compact") { store.send(key: "end") }
+                }
                 keyChip("End of input, control D", "control") { store.send(key: "ctrl-d") }
                 // A push rather than a sheet: this bar already lives inside a presented
                 // sheet, and watchOS does not present a second one over it reliably.

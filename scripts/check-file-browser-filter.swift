@@ -1,6 +1,8 @@
 import Foundation
 
-// Run: swiftc Shared/Models.swift scripts/check-file-browser-filter.swift -o /tmp/cfbf && /tmp/cfbf
+// Run via `sh scripts/check-all.sh`, which compiles every check-*.swift against the
+// full Shared/ dependency set. Models.swift is not standalone (it needs
+// RiskClassifier.swift and friends), so a two-file swiftc invocation cannot build this.
 
 func entry(_ name: String, dir: Bool = false) -> FsEntry {
     FsEntry(name: name, path: "/x/\(name)", kind: dir ? "dir" : "file", size: 0, modifiedISO: nil)

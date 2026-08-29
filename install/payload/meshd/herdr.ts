@@ -19,13 +19,19 @@ export function herdrPaneRef(name: string): string { return name.slice(HERDR_PRE
 
 export type HerdrRun = (args: string[]) => Promise<{ out: string; err: string; code: number }>;
 
-function shq(s: string) { return `'${s.replace(/'/g, `'\\''`)}'`; }
-
 const defaultRun: HerdrRun = async (args) => {
-  const cmd = `${shq(HERDR_BIN)} ${args.map(shq).join(" ")}`;
-  const p = Bun.spawn(["/bin/sh", "-c", cmd], { stdout: "pipe", stderr: "pipe" });
-  const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
-  return { out, err: err.trim(), code: await p.exited };
+  // argv straight to spawn, no shell: pane refs come off the URL, and a lane with no
+  // /bin/sh -c in it has no quoting to get wrong. Bun resolves a bare binary via PATH.
+  const p = Bun.spawn([HERDR_BIN, ...args], { stdout: "pipe", stderr: "pipe" });
+  // /stats and /agents call this on their hot paths; a herdr server that stops
+  // answering its socket must not wedge them. 5s is generous for a local socket RPC.
+  const timer = setTimeout(() => { try { p.kill(); } catch { } }, 5000);
+  try {
+    const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
+    return { out, err: err.trim(), code: await p.exited };
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 /// The CLI answers `{id, result}` on success and `{id, error:{code,message}}` on failure,
@@ -41,6 +47,21 @@ export function parseEnvelope(raw: string): { result?: any; error?: string } {
     return { error: String(e?.message ?? e?.code ?? "herdr error") };
   }
   return { result: body?.result };
+}
+
+/// True only for the CLI's own failure envelope: one JSON object spanning the whole
+/// output, with the `id` the CLI stamps on every response plus a truthy `error`.
+/// Screen text that merely starts with "{" — or is valid JSON without the id — is a
+/// pane's content, not a verdict about the pane.
+export function isHerdrErrorEnvelope(raw: string): boolean {
+  const text = raw.trim();
+  if (!text.startsWith("{")) return false;
+  try {
+    const body = JSON.parse(text);
+    return typeof body?.id === "string" && Boolean(body?.error);
+  } catch {
+    return false;
+  }
 }
 
 /// The CLI does not agree with itself about where a failure goes: `pane read` prints
@@ -127,6 +148,21 @@ export function herdrAgentType(cmdline: string | undefined, agentStatus: string 
   return agentStatus && agentStatus !== "unknown" ? "shell" : undefined;
 }
 
+/// herdr's own per-pane agent verdict, folded onto the four words the phone renders.
+/// Only statuses herdr affirmatively reports survive; "unknown" (a plain shell) maps
+/// to undefined so the caller falls back to the event-index heuristic — without this,
+/// a Claude grinding away in an unfocused herdr pane badges "idle" on the phone,
+/// because no hook posts events under `herdr:w9:p2`-shaped names.
+export function herdrStatus(agentStatus: string | undefined): "working" | "waiting" | "error" | "idle" | undefined {
+  switch ((agentStatus ?? "").toLowerCase()) {
+    case "working": case "running": case "busy": return "working";
+    case "waiting": case "needs_attention": case "needs-attention": case "blocked": return "waiting";
+    case "error": case "failed": return "error";
+    case "idle": case "done": return "idle";
+    default: return undefined;
+  }
+}
+
 export type HerdrProcess = { shellPid?: number; pids: number[]; cmdline?: string };
 
 export function parseProcessInfo(raw: string): HerdrProcess {
@@ -179,6 +215,9 @@ export async function herdrSessions(
       createdISO: null,
       attached: pane.focused,
       agentType: herdrAgentType(proc.cmdline, pane.agentStatus),
+      // herdr watches its own panes; its verdict beats the event-index heuristic,
+      // which no hook feeds under herdr:* names. See herdrStatus() for the mapping.
+      herdrStatus: herdrStatus(pane.agentStatus),
       memMB: memMB ? Math.round(memMB) : undefined,
       cpuPct: cpuPct ? Math.round(cpuPct * 10) / 10 : undefined,
       cwd: pane.cwd,
@@ -209,7 +248,12 @@ export async function herdrOutput(
   if (r.code !== 0) return null;
   // pane read prints terminal text, not JSON — but it prints the error envelope on
   // stdout when the pane is gone, and that envelope must not be rendered as output.
-  if (r.out.trimStart().startsWith("{") && parseEnvelope(r.out).error) return null;
+  // The discriminator has to be strict: a live pane whose screen happens to show JSON
+  // (a curl'd API error, the top of a package.json) also starts with "{", and reporting
+  // that pane dead is exactly the confident-wrong answer this lane exists to kill. The
+  // CLI's envelope is one whole JSON object carrying both `id` and `error`; anything
+  // that fails strict parsing, or parses without that shape, is screen content.
+  if (isHerdrErrorEnvelope(r.out)) return null;
   const arr = r.out.replace(/\n+$/, "").split("\n");
   return { name, lines: arr.slice(-lines) };
 }
@@ -231,7 +275,7 @@ export const HERDR_KEYS: Record<string, string> = {
 };
 
 export async function herdrSend(
-  name: string, text?: string, key?: string, run: HerdrRun = defaultRun,
+  name: string, text?: string, key?: string, paste = false, run: HerdrRun = defaultRun,
 ): Promise<{ ok: boolean; error?: string }> {
   const ref = herdrPaneRef(name);
   const hasText = typeof text === "string" && text.length > 0;
@@ -247,8 +291,14 @@ export async function herdrSend(
     // send-text is literal and never appends a newline, so a payload ending in "\n"
     // must become a real Enter press — otherwise the phone's send button composes the
     // line and leaves it sitting unsubmitted at the prompt.
-    const submit = text.endsWith("\n");
-    const body = submit ? text.slice(0, -1) : text;
+    const submit = !paste && text.endsWith("\n");
+    let body = submit ? text.slice(0, -1) : text;
+    // A literal write is NOT paste-safe: embedded newline bytes hit the pty as Enter
+    // presses, and a pasted paragraph becomes eight half-submitted prompts — the exact
+    // regression the rmux lane's paste-buffer path exists to prevent. Bracketed-paste
+    // markers make a TUI that has paste mode on (Claude Code, codex, every modern
+    // readline) treat the span as one atomic paste.
+    if (paste && body.includes("\n")) body = `\x1b[200~${body}\x1b[201~`;
     if (body.length) {
       const r = await run(["pane", "send-text", ref, body]).catch(() => ({ out: "", err: "herdr unavailable", code: 1 }));
       if (r.code !== 0) return fail(r);

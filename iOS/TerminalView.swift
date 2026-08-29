@@ -402,11 +402,21 @@ private struct SessionPeekScreen: View {
     @State private var showingPhrase = false
     @State private var loading = false
     @State private var lastUpdated: Date?
-    /// The last poll came back with nothing at all. Distinct from "no output": one is
-    /// a quiet session, the other is a machine that stopped answering, and a screen
-    /// that shows the same thing for both is the reason "updated 14:02" used to be a
-    /// lie told every two seconds.
-    @State private var unreachable = false
+    /// Why the last poll came back with nothing, told apart. One `unreachable` boolean
+    /// used to cover all of these, which printed "HOST isn't answering" over a machine
+    /// that was answering fine — it had answered 404, because the session was gone.
+    /// A stale Live Activity tap lands here constantly; the sentence must be true.
+    enum PeekFailure: Equatable {
+        case none
+        /// Transport-level nothing: the machine did not answer at all.
+        case unreachable
+        /// The machine answered 404: the session/pane no longer exists.
+        case sessionGone
+        /// The machine answered 401/403: the token is bad — "pair again" territory.
+        case tokenRejected
+    }
+    @State private var peekFailure: PeekFailure = .none
+    private var unreachable: Bool { peekFailure == .unreachable }
     /// Why the last keystroke did not land, in the daemon's own words. Cleared by the
     /// next send that succeeds, so it describes the present and not a solved problem.
     @State private var inputRefusal: String?
@@ -509,14 +519,30 @@ private struct SessionPeekScreen: View {
                 StatPill(label: "Mem", value: session.memLabel ?? "—")
                 StatPill(label: "State", value: state.label, tone: stateColor(state))
             }
-            if unreachable {
+            switch peekFailure {
+            case .unreachable:
                 Label(lastUpdated == nil
                       ? "\(machine.host) isn't answering — nothing has loaded yet"
                       : "\(machine.host) stopped answering · showing the last output",
                       systemImage: "wifi.exclamationmark")
                     .font(.caption)
                     .foregroundStyle(.orange)
-            } else if let lastUpdated {
+            case .sessionGone:
+                Label(lastUpdated == nil
+                      ? "This session has ended — \(machine.host) is answering, the pane is gone"
+                      : "This session has ended · showing its last output",
+                      systemImage: "moon.zzz")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .tokenRejected:
+                Label("\(machine.host) rejected the token — pair again from Machines",
+                      systemImage: "key.slash")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            case .none:
+                EmptyView()
+            }
+            if peekFailure == .none, let lastUpdated {
                 Text("updated \(lastUpdated.formatted(date: .omitted, time: .shortened))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -585,13 +611,19 @@ private struct SessionPeekScreen: View {
             }
             Group {
                 if visibleLines.isEmpty {
-                    // "No output yet" is only true when the session answered. A session
-                    // the daemon could not read at all is a different sentence, and
-                    // printing the reassuring one over a vanished pane is what made the
+                    // "No output yet" is only true when the session answered. Each
+                    // failure gets its own sentence: a vanished pane, a silent machine
+                    // and a rejected token demand three different next moves, and
+                    // printing the reassuring line over any of them is what made the
                     // terminal look merely quiet.
-                    Text(unreachable
-                         ? "\(machine.host) isn't answering — this is not an empty session."
-                         : "No output yet. Tap refresh or open the terminal.")
+                    Text({
+                        switch peekFailure {
+                        case .unreachable: "\(machine.host) isn't answering — this is not an empty session."
+                        case .sessionGone: "This session has ended. Nothing more will appear here."
+                        case .tokenRejected: "\(machine.host) rejected the token — pair again from Machines."
+                        case .none: "No output yet. Tap refresh or open the terminal."
+                        }
+                    }())
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
@@ -668,7 +700,9 @@ private struct SessionPeekScreen: View {
                 if !session.isMuxGuest {
                     Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
                 }
-                if activePane != nil && !session.isCmux {
+                if activePane != nil && !session.isMuxGuest {
+                    // isMuxGuest, not isCmux: the daemon refuses kill for herdr panes
+                    // too, and a button that always answers 400 is not a control.
                     Button(role: .destructive) { Task { await killPane() } } label: { Label("Kill pane", systemImage: "rectangle.split.1x2") }
                 }
             }
@@ -802,17 +836,20 @@ private struct SessionPeekScreen: View {
         let mesh = client
         let name = session.name
         let pane = selectedPane
-        async let out = try? mesh.output(agent: name, lines: 120, pane: pane)
-        async let paneList = try? mesh.panes(agent: name)
-        let fetchedOutput = await out
-        let fetchedPanes = await paneList
-        if let fetchedOutput {
+        // Task.result, not `try?`: the error IS the data here. A 404 means the machine
+        // answered and the session is gone; a transport error means it did not answer;
+        // 401/403 means the token died. `try?` melted all three into one wrong banner.
+        let outTask = Task { try await mesh.output(agent: name, lines: 120, pane: pane) }
+        let panesTask = Task { try await mesh.panes(agent: name) }
+        let outResult = await outTask.result
+        let panesResult = await panesTask.result
+        if case .success(let fetchedOutput) = outResult {
             output = fetchedOutput.lines
             // Scanned off the fetched lines rather than off `visibleLines`, so this
             // never depends on when a @State write becomes readable again.
             links = detectedLinks(in: Array(fetchedOutput.lines.suffix(32)))
         }
-        if let fetchedPanes {
+        if case .success(let fetchedPanes) = panesResult {
             panes = fetchedPanes
             if selectedPane == nil {
                 selectedPane = fetchedPanes.first(where: { $0.active })?.paneId ?? fetchedPanes.first?.paneId
@@ -821,11 +858,22 @@ private struct SessionPeekScreen: View {
         // Only real data moves the clock. Stamping `Date()` unconditionally meant a
         // machine that had been unreachable for an hour still reported itself updated
         // two seconds ago — the timestamp described the poll, not the output.
-        if fetchedOutput != nil || fetchedPanes != nil {
+        switch (outResult, panesResult) {
+        case (.success, _), (_, .success):
             lastUpdated = Date()
-            unreachable = false
-        } else {
-            unreachable = true
+            peekFailure = .none
+        case (.failure(let outError), .failure):
+            peekFailure = Self.classify(outError)
+        }
+    }
+
+    /// The output fetch's error decides the banner; the panes fetch fails the same way
+    /// for the same causes and adds nothing.
+    private static func classify(_ error: Error) -> PeekFailure {
+        switch (error as? MeshClient.MeshError)?.statusCode {
+        case 404: .sessionGone
+        case 401, 403: .tokenRejected
+        default: .unreachable
         }
     }
 

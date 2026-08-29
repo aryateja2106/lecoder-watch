@@ -75,9 +75,27 @@ story: `Your Mac, from your wrist`.
 
 ## 2. The product, in one sentence
 
-**LeSearch Mesh puts every machine you own — and every coding agent running on it — on
+**MeshWatch puts every machine you own — and every coding agent running on it — on
 your iPhone and Apple Watch, over your own network, with no account and no server of ours
 in the path: one pasted command in, one command out.**
+
+### 2.1 The category word — RECOMMENDED 2026-08-29, awaiting owner sign-off
+
+The owner's working phrase is "multi-agent, multi-machine orchestration platform". Keep
+the first half, trade the second: **"orchestration platform" promises scheduling and
+routing we do not ship yet**, and a technical room (the NVIDIA/Micron pitch) will hear
+Kubernetes-for-agents and probe exactly the part that is roadmap (#114). What the product
+provably does today is *supervision*: spawn, watch, answer, steer and interrupt agents on
+every machine you own, plus full GUI control of the machines themselves.
+
+- **Category, for decks:** a multi-agent, multi-machine **control plane** — local-first,
+  no cloud in the path.
+- **Category, for humans:** **mission control for your AI agents**, from your pocket or
+  your wrist.
+- **The pitch line:** "Every AI agent, on every machine you own, observable and steerable
+  from a phone or a watch. Your network, your keys, no server of ours in the path."
+- **When to upgrade the word:** the day the local-first agent layer (#114) routes work
+  *between* machines, "orchestration platform" becomes true. Claim it then, not before.
 
 **Who it is for.** Solo builders and small teams who run coding agents (Claude Code,
 Codex) on their own Macs and Linux boxes, and who step away from the desk — to the kitchen,

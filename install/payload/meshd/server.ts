@@ -373,7 +373,14 @@ async function listAgents() {
   // Additive per-row status from the event index — old clients never look at the
   // extra keys, new clients stop deriving "is it stuck?" from pane heuristics.
   const now = Date.now();
-  return [...rmux, ...cmux, ...herdr].map((s) => ({ ...s, ...sessionStatusFields(s.name, Boolean(s.attached), now) }));
+  return [...rmux, ...cmux, ...herdr].map((s) => {
+    const fields = sessionStatusFields(s.name, Boolean(s.attached), now);
+    // herdr panes carry herdr's own agent verdict; the event index never hears about
+    // them (no hook posts under herdr:* names), so its heuristic would badge a
+    // grinding agent "idle". herdrStatus stays out of the wire row itself.
+    const { herdrStatus, ...row } = s as any;
+    return { ...row, ...fields, ...(herdrStatus ? { status: herdrStatus } : {}) };
+  });
 }
 
 async function cmuxPanes(name: string) {
@@ -599,9 +606,9 @@ const KEY_SEND_KEYS: Record<string, string> = {
 };
 
 async function agentSend(name: string, text?: string, key?: string, pane?: string, paste?: boolean): Promise<{ ok: boolean; error?: string }> {
-  // herdr's send-text is already a literal write, so a pasted paragraph needs no
-  // bracketed-paste dance: `paste` collapses into the same call.
-  if (isHerdrAgent(name)) return herdrSend(name, text, key);
+  // paste travels: a literal write of newline bytes IS the submit-per-line problem,
+  // so herdrSend wraps multi-line pastes in bracketed-paste markers itself.
+  if (isHerdrAgent(name)) return herdrSend(name, text, key, paste === true);
   if (isCmuxAgent(name)) return cmuxSend(name, text, key);
   const hasText = typeof text === "string" && text.length > 0;
   const hasKey = typeof key === "string" && key.length > 0;
@@ -856,15 +863,28 @@ async function addEvent(input: any): Promise<AgentEvent> {
     pushAlert(event.title, event.body, { level: event.level, session: event.session, host: event.host, replyable: event.replyable }).catch(() => {});
     if (event.session) {
       const session = event.session;
-      const contentState = laContentState(event);
       const alert = { title: event.title, body: event.body };
       const attributes = { host: (event.host ?? os.hostname()).replace(/\.local$/i, ""), session };
       laActiveSessions.add(session);
-      // Start conjures the card on a pocketed phone; the update refreshes a card
-      // already live for this session. iOS treats a start for a live identity as an
-      // update, so sending both is convergence, not duplication.
-      pushLiveActivity("start", { attributes, contentState, alert }).catch(() => {});
-      pushLiveActivity("update", { session, contentState, alert }).catch(() => {});
+      // A push-started card used to carry 3 of the 9 ContentState fields, so it
+      // rendered visibly thinner than a card the app started itself. cpu/mem for the
+      // session are knowable here; the lookup rides the same fire-and-forget lane as
+      // the push, so a slow enumeration can never block event ingestion. Fleet counts
+      // stay out — this daemon only knows itself, and a wrong "1/1 online" is worse
+      // than the card hiding that line.
+      (async () => {
+        const contentState = laContentState(event);
+        try {
+          const row = (await listAgents()).find((s: any) => s?.name === session);
+          if (typeof row?.cpuPct === "number") contentState.cpuPct = row.cpuPct;
+          if (typeof row?.memMB === "number") contentState.memLabel = `${Math.round(row.memMB)} MB`;
+        } catch { /* the thin card still beats no card */ }
+        // Start conjures the card on a pocketed phone; the update refreshes a card
+        // already live for this session. iOS treats a start for a live identity as an
+        // update, so sending both is convergence, not duplication.
+        pushLiveActivity("start", { attributes, contentState, alert }).catch(() => {});
+        pushLiveActivity("update", { session, contentState, alert }).catch(() => {});
+      })().catch(() => {});
     }
   } else if (event.session && laActiveSessions.has(event.session)) {
     // The wait cleared (a calm event followed the alerting one): dismiss the card
