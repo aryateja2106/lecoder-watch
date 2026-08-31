@@ -14,12 +14,17 @@ Each keeps its own LICENSE — they are not under this repo's license.
 
 ## What each one is
 
-- **kimi-k3-in-c** — a pure-C inference engine for the Kimi K3 MoE model. Interesting
-  for the *techniques*, not the code: MXFP4 quantization, MLA/KDA attention, and how a
-  mixture-of-experts model is served from limited RAM.
-- **mference** — a Swift/MLX local-inference package for Apple Silicon, including a
-  speculative-decoding drafter for Qwen3.8. Interesting as a *potential dependency or
-  pattern* for running local models on the Mac next to `meshd`.
+- **kimi-k3-in-c** — a pure-C99 CPU inference engine that runs Moonshot's 1.56 TB
+  Kimi K3 checkpoint in 8 GB of RAM with byte-identical output, by streaming weights
+  from SSD (pinned-prefix + ring, page-cache bypassed). Interesting for the
+  *byte-placement discipline*, not the kernels: weight streaming, memory
+  plan-then-refuse, session state snapshots.
+- **mference** — a from-scratch Swift + Metal inference engine for Apple Silicon
+  ("big MoE models in 'small' GB of RAM"): SSD expert streaming, paged KV with SSD
+  spill, byte-identical speculative decoding (MTP + a DFlash2 drafter), a resumable
+  streaming installer, and an OpenAI-compatible loopback server. The candidate
+  local-model sidecar for `meshd`. Not built on MLX — it consumes MLX-community
+  checkpoints with its own kernels.
 
 ## Pruned from the vendored copies
 
