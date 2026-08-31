@@ -50,7 +50,7 @@ Options:
   --prefix DIR     Install location (default: \$MESH_HOME or ~/.mesh).
   --no-start       Install but do not launch services.
   --upgrade        Fetch the latest and reinstall in place, preserving the existing
-  --update         token and config (same as re-running install; clearer intent).
+  --update         token and config. Without this, a matching version is left alone.
   --list           Show what is installed under the prefix, then exit.
   --uninstall      Stop services and remove the selected components.
   --purge          With --uninstall, also remove the token and the prefix dir.
@@ -72,6 +72,12 @@ EOF
 # ---------- small helpers (unchanged behaviour) ----------
 
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"; }
+
+# meshd VERSION from a server.ts. Empty if the file is missing or has no const.
+read_meshd_version() {
+  [ -f "$1" ] || return 0
+  sed -n 's/^[[:space:]]*const VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$1" | head -1
+}
 
 shell_quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
@@ -686,10 +692,29 @@ if [ -z "$SRC" ] && [ "$MESH_SRC_DEFAULT" != "__MESH_SRC__" ]; then SRC="$MESH_S
 resolve_payload "$SRC"
 validate_payload
 
-if want_component meshd || want_component bridge; then
-  ensure_bun
-  BUN_BIN=$(command -v bun)
-  [ "$NO_START" = "1" ] || ensure_tmux
+# Same version already on disk: do not recopy. `--upgrade` is the escape hatch when
+# someone wants the files rewritten anyway (corrupt tree, matching version but
+# missing a file). Tools-only installs always copy — they have no meshd VERSION.
+SKIP_COPY="0"
+PAYLOAD_VER=$(read_meshd_version "$PAYLOAD_DIR/meshd/server.ts")
+INSTALLED_VER=$(read_meshd_version "$MESH_HOME/meshd/server.ts")
+if [ "$DO_UPGRADE" != "1" ] && want_component meshd && [ -n "$PAYLOAD_VER" ] && [ "$INSTALLED_VER" = "$PAYLOAD_VER" ]; then
+  skip_ok=1
+  [ -d "$MESH_HOME/meshd" ] || skip_ok=0
+  want_component tools && [ ! -x "$MESH_HOME/bin/mesh" ] && skip_ok=0
+  want_component bridge && [ ! -d "$MESH_HOME/rmux-bridge" ] && skip_ok=0
+  if [ "$skip_ok" = "1" ]; then
+    SKIP_COPY="1"
+    log "Already installed meshd $INSTALLED_VER at $MESH_HOME — skipping copy (pass --upgrade to reinstall)"
+  fi
+fi
+
+if [ "$SKIP_COPY" = "0" ] || [ "$NO_START" != "1" ]; then
+  if want_component meshd || want_component bridge; then
+    ensure_bun
+    BUN_BIN=$(command -v bun)
+    [ "$NO_START" = "1" ] || ensure_tmux
+  fi
 fi
 
 TOKEN_VALUE="${TOKEN_FLAG:-${MESHD_TOKEN:-}}"
@@ -706,12 +731,14 @@ if [ "$MUX_DEFAULT" = "tmux" ]; then
   [ -n "$EFFECTIVE_BRIDGE_MUX" ] || EFFECTIVE_BRIDGE_MUX="tmux"
 fi
 
-install_components
-printf '%s\n' "$TOKEN_VALUE" > "$MESH_HOME/token"
-chmod 600 "$MESH_HOME/token" 2>/dev/null || true
-want_component meshd && install_deps "$MESH_HOME/meshd"
-want_component bridge && install_deps "$MESH_HOME/rmux-bridge"
-install_agent_hooks
+if [ "$SKIP_COPY" = "0" ]; then
+  install_components
+  printf '%s\n' "$TOKEN_VALUE" > "$MESH_HOME/token"
+  chmod 600 "$MESH_HOME/token" 2>/dev/null || true
+  want_component meshd && install_deps "$MESH_HOME/meshd"
+  want_component bridge && install_deps "$MESH_HOME/rmux-bridge"
+  install_agent_hooks
+fi
 
 MESHD_STATUS="skipped"; BRIDGE_STATUS="skipped"
 if [ "$NO_START" = "1" ]; then

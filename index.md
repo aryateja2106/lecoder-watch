@@ -9,7 +9,7 @@ Read [CONTEXT.md](CONTEXT.md) first (the map and the shape), then [MEMORY.md](ME
 |---|---|
 | `CONTEXT.md` | Overall shape, where things live, things that cost hours |
 | `MEMORY.md` | Why things are the way they are; settled decisions and dead ends |
-| `CHANGELOG.md` | What shipped, in user words; 0.3.0 section is the current state |
+| `CHANGELOG.md` | What shipped, in user words; 0.5.0 section is the current state |
 | `install/payload/meshd/server.ts` | The daemon; routes, auth, Host/browser defenses |
 | `install/payload/meshd/auth.ts` | Fail-closed bearer auth; header-only, constant-time |
 | `install/payload/meshd/doctor.ts` | GET/POST /doctor; tests token/input/screen/mux/push |

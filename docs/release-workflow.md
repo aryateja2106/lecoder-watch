@@ -1,7 +1,7 @@
 # Shipping to TestFlight / App Store
 
-The repeatable path for this app and the next one. Tooling: [`asc`](https://github.com/rorkai/App-Store-Connect-CLI)
-(`brew upgrade asc`, currently 4.6.0) plus `scripts/release-testflight.sh`.
+The repeatable path for this app and the next one. Tooling: `asc` (`brew upgrade asc`) plus `scripts/release-testflight.sh`. Command-level
+TestFlight runbook: [`docs/testflight-asc.md`](testflight-asc.md).
 
 ## Why not sideload
 

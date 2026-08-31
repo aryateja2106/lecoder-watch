@@ -53,6 +53,13 @@ mesh upgrade
 Or, on a machine that has no `mesh` yet:
 
 ```bash
+curl -fsSL https://mesh.lesearch.ai/install.sh | sh
+```
+
+That URL redirects to the GitHub `mesh-install` **latest** release. The equivalent
+direct form, if DNS is down:
+
+```bash
 curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh
 ```
 

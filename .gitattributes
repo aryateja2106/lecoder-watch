@@ -1,0 +1,7 @@
+# GitHub language stats should follow the product, not the mocks.
+
+# Design HTML in .agents is not the iOS/watchOS app.
+.agents/design/** linguist-documentation
+
+# Vendored xterm in the local terminal bridge.
+install/payload/rmux-bridge/public/vendor/** linguist-vendored

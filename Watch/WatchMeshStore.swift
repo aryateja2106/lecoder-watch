@@ -783,10 +783,6 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
-    private func shortHostName(_ host: String) -> String {
-        host.split(separator: ".").first.map(String.init) ?? host
-    }
-
     /// The PTY a wrist-launched session gets.
     ///
     /// The daemon's default is 80×24, and a watch draws about 21 monospaced columns —

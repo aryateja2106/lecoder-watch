@@ -37,3 +37,16 @@ install/dist/
 # gajae-code: per-machine tmux session state, never shared
 .gjc/
 supabase/.temp/
+
+# Local product recordings for /see — never commit video
+docs/recordings/*
+!docs/recordings/README.md
+
+# Scrollcraft build workspace (fingerprints may be committed later)
+web/.scrollcraft/builds/
+/scrollcraft/
+
+# Large local reference media (kept on disk, not in git)
+reference-video/
+*.MP4
+*.mov

@@ -440,6 +440,11 @@ func parseISO(_ iso: String?) -> Date? {
     return plain.date(from: iso)
 }
 
+func resetText(_ iso: String?) -> String? {
+    guard let date = parseISO(iso) else { return nil }
+    return "resets \(date.formatted(date: .abbreviated, time: .shortened))"
+}
+
 // MARK: - Connection phase
 
 /// How connected the watch is, judged by the age of the last good snapshot — not by
@@ -785,6 +790,23 @@ struct MachineSnapshot: Codable, Hashable, Identifiable {
         if seconds < 3600 { return "\(seconds / 60)m ago" }
         return "\(seconds / 3600)h ago"
     }
+}
+
+extension Array where Element == MachineSnapshot {
+    /// Online first, then the host with the most sessions, then name.
+    func activeFirst() -> [MachineSnapshot] {
+        sorted {
+            if $0.reachable != $1.reachable { return $0.reachable && !$1.reachable }
+            if $0.agents.count != $1.agents.count { return $0.agents.count > $1.agents.count }
+            return $0.host < $1.host
+        }
+    }
+}
+
+/// The label that fits a row: first DNS label, not a personal prefix strip.
+/// Stripping "arya-" / "agents" flattered one naming scheme and mangled everyone else's.
+func shortHostName(_ host: String) -> String {
+    host.split(separator: ".").first.map(String.init) ?? host
 }
 
 /// Version, build and the moment this binary was produced. The build date comes from

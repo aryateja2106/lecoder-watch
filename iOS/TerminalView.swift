@@ -15,7 +15,7 @@ struct TerminalTab: View {
         let snaps = store.snapshot?.machines.isEmpty == false
             ? store.snapshot?.machines ?? []
             : store.machines.map { MachineSnapshot(host: $0.host, reachable: false, stats: nil, agents: [], error: "not checked yet") }
-        return terminalActiveFirst(snaps)
+        return snaps.activeFirst()
     }
 
     private func machine(for host: String) -> Machine? {
@@ -153,14 +153,6 @@ struct TerminalTab: View {
     private func agent(named name: String, on host: String) -> Agent {
         store.snapshot?.machines.first { $0.host == host }?.agents.first { $0.name == name }
             ?? Agent(name: name, windows: 1, attached: false)
-    }
-}
-
-private func terminalActiveFirst(_ snaps: [MachineSnapshot]) -> [MachineSnapshot] {
-    snaps.sorted {
-        if $0.reachable != $1.reachable { return $0.reachable && !$1.reachable }
-        if $0.agents.count != $1.agents.count { return $0.agents.count > $1.agents.count }
-        return $0.host < $1.host
     }
 }
 

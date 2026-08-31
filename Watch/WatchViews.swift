@@ -192,7 +192,7 @@ struct MachinesListView: View {
                     }
                 }
             }
-            ForEach(activeFirst(store.snaps)) { m in
+            ForEach(store.snaps.activeFirst()) { m in
                 NavigationLink {
                     SessionsView(host: m.host).environmentObject(store)
                 } label: {
@@ -463,14 +463,6 @@ private struct AttentionRow: View {
 enum WatchTouch {
     static let minWidth: CGFloat = 42
     static let minHeight: CGFloat = 38
-}
-
-private func activeFirst(_ snaps: [MachineSnapshot]) -> [MachineSnapshot] {
-    snaps.sorted {
-        if $0.reachable != $1.reachable { return $0.reachable && !$1.reachable }
-        if $0.agents.count != $1.agents.count { return $0.agents.count > $1.agents.count }
-        return $0.host < $1.host
-    }
 }
 
 private func statusColor(_ snap: MachineSnapshot) -> Color {
@@ -1490,11 +1482,6 @@ func shortName(_ host: String) -> String {
 func lastPathBit(_ path: String) -> String {
     let parts = path.split(separator: "/").map(String.init)
     return parts.suffix(2).joined(separator: "/")
-}
-
-private func resetText(_ iso: String?) -> String? {
-    guard let date = parseISO(iso) else { return nil }
-    return "resets \(date.formatted(date: .abbreviated, time: .shortened))"
 }
 
 #if canImport(UIKit)

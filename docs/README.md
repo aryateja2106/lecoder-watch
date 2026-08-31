@@ -22,6 +22,7 @@ those three.
 | [release-workflow.md](release-workflow.md) | Cutting a release | See the warning below — the fleet lags the repo. |
 | [backlog.md](backlog.md) | Asking "do we already have X?" before building it | 75 items graded against the code as done/partial/buried/missing. Generated — edit `.github/backlog.json`, not this. |
 | [updating.md](updating.md) | Anyone asks "how do I get the new version?" | Three components, three routes, no cable. Includes the internal-vs-external TestFlight trap. |
+| [testflight-asc.md](testflight-asc.md) | Uploading or submitting a TestFlight build | Command-level `asc` runbook. `asc --help` wins if a flag has moved. |
 | [ci.md](ci.md) | Changing `.github/workflows/ci.yml` | What triggers, what cancels. |
 | [app-store-submission.md](app-store-submission.md) | Anything App Review touches | Aug 2026, every rule links to Apple's source. |
 | [XCODE-WATCH-DEVICE-RUNBOOK.md](XCODE-WATCH-DEVICE-RUNBOOK.md) | Running on the physical watch | Signing and device traps. |
@@ -51,13 +52,8 @@ branch names, version numbers or "next steps" from them.**
 ## One thing that will mislead you if nobody says it
 
 **The fleet does not run this repo.** Machines run whatever `mesh-install` last released.
-On 2026-08-27 that was **v0.4.1 (21 Aug)** against a **0.5.0** daemon here, which meant
-seven capabilities the Swift calls every day were answered by nothing, and an installed
-`mesh-hook` 30 lines behind the one in this tree.
-
-That gap has produced at least three multi-day investigations into app code that was
-already correct. Before you debug daemon-side behaviour against a real machine, ask the
-machine what it is running:
+On 2026-08-27 that became **v0.5.0**. Confirm a machine before debugging daemon-shaped
+bugs against it:
 
 ```sh
 curl -s http://127.0.0.1:8899/health | python3 -m json.tool | head -20

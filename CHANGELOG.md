@@ -15,6 +15,11 @@ each entry as you ship the slice, not at release time.
   raise Accessibility and Screen Recording dialogs quietly did a GET instead. The
   setup wizard still worked; anyone following the docs during first setup did not.
 
+### Changed
+- **Re-running the installer against the same version is a no-op.** A second
+  `curl | sh` on a machine that already has this payload no longer recopies
+  `~/.mesh` or rewrites the token. Pass `--upgrade` when you mean it.
+
 ## [0.5.0] — 2026-08-27
 
 Daemon and apps now share marketing version 0.5.0. `mesh-install` v0.5.0 is the

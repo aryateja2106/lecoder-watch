@@ -1,0 +1,60 @@
+- generic [active] [ref=f12e1]:
+  - generic [ref=f12e2]:
+    - banner [ref=f12e3]:
+      - link "LeSearch AI, Mesh home" [ref=f12e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f12e5]:
+          - strong [ref=f12e6]: LeSearch AI
+          - generic [ref=f12e7]: Mesh
+      - link "All field notes" [ref=f12e8] [cursor=pointer]:
+        - /url: /blog/
+    - main [ref=f12e9]:
+      - article [ref=f12e10]:
+        - generic [ref=f12e11]:
+          - generic [ref=f12e12]:
+            - time [ref=f12e13]: August 27, 2026
+            - generic [ref=f12e14]: ·
+            - generic [ref=f12e15]: 5 min read
+          - heading "Supervise a reachable Linux machine from iPhone and Apple Watch" [level=1] [ref=f12e16]
+          - paragraph [ref=f12e17]: Use the iPhone for terminal detail and the Watch for status and short replies while a Linux machine you own does the work.
+        - figure [ref=f12e18]:
+          - img "Mesh machine list on iPhone showing reachable machines" [ref=f12e19]
+        - generic [ref=f12e20]:
+          - complementary [ref=f12e21]:
+            - paragraph [ref=f12e22]: Mesh field note
+            - link "Join the beta" [ref=f12e23] [cursor=pointer]:
+              - /url: /#beta
+          - generic [ref=f12e25]:
+            - paragraph [ref=f12e26]: A Linux machine is useful precisely because it can keep running when your laptop is closed. It might be a small home server, a workstation in another room, or a VM you control.
+            - paragraph [ref=f12e27]: The awkward part is checking a task from a phone without turning every small question into a full remote-desktop session. Mesh splits that job between the iPhone and Apple Watch.
+            - heading "The connection path" [level=2] [ref=f12e28]
+            - paragraph [ref=f12e29]: Run the Mesh host on the Linux machine and pair it with the iPhone using the temporary code or QR flow. The machine must be reachable over the same LAN or through Tailscale.
+            - paragraph [ref=f12e30]: "The iPhone connects to the machine you own. The Apple Watch is a companion to that phone: it reads status and sends replies through the paired iPhone. It does not connect directly to the Linux machine or VM."
+            - paragraph [ref=f12e31]: That boundary matters. A Watch on its own is not a general SSH client, and Mesh does not turn an unreachable server into a reachable one.
+            - heading "Start with the iPhone" [level=2] [ref=f12e32]
+            - paragraph [ref=f12e33]: Open the machine list on the iPhone and confirm that the Linux host is reachable. From there, you can open an existing session or start a supported terminal session.
+            - paragraph [ref=f12e34]: "The iPhone is the detailed control surface. Use it to:"
+            - list [ref=f12e35]:
+              - listitem [ref=f12e36]: read live session output
+              - listitem [ref=f12e37]: send text or key input
+              - listitem [ref=f12e38]: start or stop supported terminal sessions
+              - listitem [ref=f12e39]: review machine health, session events, and provider usage limits
+              - listitem [ref=f12e40]: use remote screen controls when the Linux host exposes that capability
+            - paragraph [ref=f12e41]: You can step away once the session is running. The process remains on the Linux machine; the phone is a control surface, not the place doing the work.
+            - heading "Let the Watch handle the interruption" [level=2] [ref=f12e42]
+            - paragraph [ref=f12e43]: "If the session changes state while you are walking, commuting, or in another room, the Watch gives you the short version: which machine, which session, and whether it needs you."
+            - paragraph [ref=f12e44]: For a simple question, reply from the Watch with a quick command, dictation, Scribble, or text. The answer travels through the paired iPhone to the Linux host. For anything that requires logs, terminal context, or precise input, open the iPhone.
+            - paragraph [ref=f12e45]: This division keeps both screens honest. The Watch is fast because it does less. The iPhone is capable because it has room for the session.
+            - heading "A practical example" [level=2] [ref=f12e46]
+            - paragraph [ref=f12e47]: You start an agent on a Linux VM you own and ask it to inspect a failing service, update the configuration, and run the checks. Then you leave your desk.
+            - paragraph [ref=f12e48]:
+              - text: The Watch shows that the session is running. Later it reports
+              - strong [ref=f12e49]: Needs you
+              - text: with a short question about the next step. You send a brief answer from your wrist. If the checks fail again, you open the iPhone, read the output, and decide whether to send another instruction or stop the session.
+            - paragraph [ref=f12e50]: The machine stays responsible for execution. Your Apple devices give you progressively deeper ways to supervise it.
+            - paragraph [ref=f12e51]: Mesh is in beta. Reachability still depends on your LAN or Tailscale setup, and remote-screen controls depend on the host capabilities available on that Linux machine.
+    - contentinfo [ref=f12e52]:
+      - paragraph [ref=f12e53]: Mesh by LeSearch AI
+      - link "What is in the beta" [ref=f12e54] [cursor=pointer]:
+        - /url: /changelog/
+  - alert [ref=f12e55]

@@ -161,7 +161,7 @@ private struct MachinesTab: View {
                                 // "checking…" is only true before we have ever looked.
                                 error: store.hasEverPolled ? "no answer" : "checking…")
             }
-        return activeFirst(machines)
+        return machines.activeFirst()
     }
 
     /// Before the first poll finishes there is nothing to say about any machine, and
@@ -234,7 +234,7 @@ private struct MachinesTab: View {
                                     .fill(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
                                     .frame(width: 9, height: 9)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(machineShortName(m.host)).font(.headline)
+                                    Text(shortHostName(m.host)).font(.headline)
                                     Text(machineSummary(m))
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
@@ -378,7 +378,7 @@ private struct MachineDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         CopyableCommand(text: PairMachineView.installCommand)
-                        Text("Run on \(machineShortName(m.host)). It keeps the existing token.")
+                        Text("Run on \(shortHostName(m.host)). It keeps the existing token.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -389,7 +389,7 @@ private struct MachineDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         CopyableCommand(text: PairMachineView.installCommand)
-                        Text("Starts rmux-bridge on \(machineShortName(m.host)) so phone terminals can open.")
+                        Text("Starts rmux-bridge on \(shortHostName(m.host)) so phone terminals can open.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -409,7 +409,7 @@ private struct MachineDetailView: View {
                 Text("No reading for this machine yet.").foregroundStyle(.secondary)
             }
         }
-        .navigationTitle(machineShortName(host))
+        .navigationTitle(shortHostName(host))
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await store.refresh() }
     }
@@ -481,7 +481,7 @@ private struct MachinePowerSection: View {
     ]
 
     private var irreversible: [PowerAction] {
-        let name = machineShortName(machine.host)
+        let name = shortHostName(machine.host)
         return [
             PowerAction(action: "restart", label: "Restart…", symbol: "arrow.clockwise.circle",
                         confirm: (title: "Restart \(name)?",
@@ -609,7 +609,7 @@ private struct WakeRow: View {
 
     var body: some View {
         if identity.mac == nil {
-            Text("No hardware address for \(machineShortName(host)) yet. Open it once while it's awake and a Wake button appears here.")
+            Text("No hardware address for \(shortHostName(host)) yet. Open it once while it's awake and a Wake button appears here.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         } else if let peer = store.wakePeer(for: host) {
@@ -635,8 +635,8 @@ private struct WakeRow: View {
             }
         } else {
             Text(identity.ipv4 == nil
-                 ? "Nothing else is online to broadcast a wake packet for \(machineShortName(host))."
-                 : "Can't wake \(machineShortName(host)): no online machine is on its network (\(identity.ipv4 ?? "")).")
+                 ? "Nothing else is online to broadcast a wake packet for \(shortHostName(host))."
+                 : "Can't wake \(shortHostName(host)): no online machine is on its network (\(identity.ipv4 ?? "")).")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -644,8 +644,8 @@ private struct WakeRow: View {
 
     private func label(peer: Machine) -> String {
         if sending { return "Sending…" }
-        if let sentVia { return "Magic packet sent via \(machineShortName(sentVia)) — waking takes ~30s" }
-        return "Wake via \(machineShortName(peer.host))"
+        if let sentVia { return "Magic packet sent via \(shortHostName(sentVia)) — waking takes ~30s" }
+        return "Wake via \(shortHostName(peer.host))"
     }
 }
 
@@ -684,15 +684,15 @@ private struct MachineSetupSection: View {
                     Button {
                         Task { await run(fix: true) }
                     } label: {
-                        Label(asking ? "Asking \(machineShortName(machine.host))…" : "Grant on \(machineShortName(machine.host))",
+                        Label(asking ? "Asking \(shortHostName(machine.host))…" : "Grant on \(shortHostName(machine.host))",
                               systemImage: "hand.tap")
                     }
                     .disabled(asking)
-                    Text("Opens the Accessibility and Screen Recording dialogs on \(machineShortName(machine.host)). Approve them there, then pull to refresh.")
+                    Text("Opens the Accessibility and Screen Recording dialogs on \(shortHostName(machine.host)). Approve them there, then pull to refresh.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             } else if loading {
-                HStack { ProgressView(); Text("Checking \(machineShortName(machine.host))…").foregroundStyle(.secondary) }
+                HStack { ProgressView(); Text("Checking \(shortHostName(machine.host))…").foregroundStyle(.secondary) }
             } else if let error {
                 Text(error).font(.caption).foregroundStyle(.secondary)
             }
@@ -715,7 +715,7 @@ private struct MachineSetupSection: View {
             if case MeshClient.MeshError.http(404) = error {
                 self.error = "This machine's daemon predates setup checks. Reinstall to update it."
             } else {
-                self.error = "Couldn't reach \(machineShortName(machine.host))."
+                self.error = "Couldn't reach \(shortHostName(machine.host))."
             }
         }
     }
@@ -744,7 +744,7 @@ private struct AttentionRow: View {
                     .foregroundStyle(item.state.tint)
                 Text(item.session).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Text("·").foregroundStyle(.tertiary)
-                Text(machineShortName(item.host)).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+                Text(shortHostName(item.host)).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 4)
                 if let since = item.blockedSince {
                     Text(since, style: .timer)
@@ -838,20 +838,6 @@ private func peerDetail(_ peer: TailnetPeer) -> String {
         .compactMap { $0 }
         .filter { !$0.isEmpty }
         .joined(separator: " · ")
-}
-
-private func activeFirst(_ snaps: [MachineSnapshot]) -> [MachineSnapshot] {
-    snaps.sorted {
-        if $0.reachable != $1.reachable { return $0.reachable && !$1.reachable }
-        if $0.agents.count != $1.agents.count { return $0.agents.count > $1.agents.count }
-        return $0.host < $1.host
-    }
-}
-
-private func machineShortName(_ host: String) -> String {
-    // Just the hostname. The old version stripped "arya-" and "agents", which flattered
-    // exactly one person's naming scheme and mangled everyone else's.
-    host.split(separator: ".").first.map(String.init) ?? host
 }
 
 private func machineSummary(_ machine: MachineSnapshot) -> String {
@@ -1336,7 +1322,7 @@ private struct RemoteControlTab: View {
 
     private var machines: [Machine] {
         guard let snaps = store.snapshot?.machines, !snaps.isEmpty else { return store.machines }
-        let sortedHosts = activeFirst(snaps).map(\.host)
+        let sortedHosts = snaps.activeFirst().map(\.host)
         let seen = Set(sortedHosts)
         return sortedHosts.compactMap { host in store.machines.first { $0.host == host } }
             + store.machines.filter { !seen.contains($0.host) }
@@ -1565,11 +1551,6 @@ private struct SectionLabel: View {
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
     }
-}
-
-private func resetText(_ iso: String?) -> String? {
-    guard let date = parseISO(iso) else { return nil }
-    return "resets \(date.formatted(date: .abbreviated, time: .shortened))"
 }
 
 private func eventTime(_ iso: String) -> String {

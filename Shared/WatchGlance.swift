@@ -101,7 +101,7 @@ struct WatchGlance: Codable, Hashable {
         }
         if let first = waiting.first {
             let eyebrow = waiting.count == 1 ? "WAITING ON YOU" : "\(waiting.count) WAITING"
-            let title = "\(first.session) · \(shortHost(first.host))"
+            let title = "\(first.session) · \(shortHostName(first.host))"
             return (eyebrow, title, first.line)
         }
         // Below waiting on purpose: a question outranks a hunch. And only in this
@@ -116,11 +116,6 @@ struct WatchGlance: Codable, Hashable {
             return ("NOT PAIRED", "Pair a machine", "Open LeSearch Mesh on your iPhone.")
         }
         return ("ALL CLEAR", "Nothing waiting on you", "\(machinesUp) of \(machinesTotal) machines up")
-    }
-
-    /// The complication has room for a name, not a fully-qualified one.
-    private func shortHost(_ host: String) -> String {
-        host.split(separator: ".").first.map(String.init) ?? host
     }
 }
 

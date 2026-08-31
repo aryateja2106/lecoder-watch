@@ -1,0 +1,26 @@
+- main [ref=f7e2]:
+  - generic [ref=f7e3]:
+    - link "← Back to Mesh" [ref=f7e4] [cursor=pointer]:
+      - /url: /
+    - paragraph [ref=f7e5]: LeSearch AI · updated 27 August 2026
+    - heading "Landing-page privacy notice" [level=1] [ref=f7e6]
+    - paragraph [ref=f7e7]: This notice covers the beta-update, feature-request, and feedback form on lesearch.ai. It does not change Mesh’s local-first product boundary.
+    - generic [ref=f7e8]:
+      - heading "What the form stores" [level=2] [ref=f7e9]
+      - paragraph [ref=f7e10]: We store the email address, the reason you contacted us, an optional message, the time of submission, and—when you ask for updates—the exact consent version and source shown with the form. Cloudflare Turnstile receives request data needed to screen automated submissions; the visitor IP is not written to our marketing tables.
+    - generic [ref=f7e11]:
+      - heading "How we use it" [level=2] [ref=f7e12]
+      - paragraph [ref=f7e13]: Feature requests and feedback are used to decide what to fix or build. An update request remains pending until the address is confirmed; pending addresses are not treated as newsletter subscribers. Product telemetry is a separate, opt-in choice inside the app.
+    - generic [ref=f7e14]:
+      - heading "Storage and retention" [level=2] [ref=f7e15]
+      - paragraph [ref=f7e16]: Form records are kept in LeSearch AI’s Supabase account with access restricted to the service that receives the form and authorized project operators. During the beta, we retain these records to manage update requests and review product feedback. We have not yet set a fixed automatic deletion schedule; a record may be removed sooner after we complete a verified deletion request.
+    - generic [ref=f7e17]:
+      - heading "Access, correction, and deletion" [level=2] [ref=f7e18]
+      - paragraph [ref=f7e19]:
+        - text: Use the
+        - link "feedback option on the landing page" [ref=f7e20] [cursor=pointer]:
+          - /url: /#contact
+        - text: and begin the message with “Privacy request.” Include the address used in the original submission. We will verify control of that address before releasing, changing, or deleting its records. Until email confirmation and unsubscribe controls are live, LeSearch AI will not send marketing email from pending update requests.
+    - generic [ref=f7e21]:
+      - heading "Product traffic stays separate" [level=2] [ref=f7e22]
+      - paragraph [ref=f7e23]: Under the current beta architecture, agent code, prompts, files, and terminal output remain on devices you control and move only between paired product surfaces. The cloud account plane may store account details, the device roster, session metadata, and usage rollups; it does not store terminal content, prompts, or agent output. Apple Push Notification service may process alert text and the host or session metadata needed to deliver a notification.

@@ -1,0 +1,255 @@
+- generic [active] [ref=f10e1]:
+  - main [ref=f10e2]:
+    - link "Skip to main content" [ref=f10e3] [cursor=pointer]:
+      - /url: "#main-content"
+    - generic [ref=f10e4]:
+      - navigation "Main navigation" [ref=f10e5]:
+        - generic [ref=f10e6]:
+          - link "LeSearch AI Mesh home" [ref=f10e7] [cursor=pointer]:
+            - /url: "#main-content"
+            - generic [ref=f10e10]:
+              - strong [ref=f10e11]: LeSearch AI
+              - generic [ref=f10e12]: Mesh
+          - group [ref=f10e13]:
+            - generic "Open navigation" [ref=f10e14] [cursor=pointer]
+      - generic [ref=f10e16]:
+        - generic [ref=f10e18]:
+          - generic [ref=f10e19]:
+            - paragraph [ref=f10e20]: Mesh beta · Apple first
+            - heading "Your machines. On your wrist." [level=1] [ref=f10e21]
+            - paragraph [ref=f10e22]: Check agents, answer the next step, and keep work moving when your Mac is out of reach.
+            - generic [ref=f10e23]:
+              - link "Join the beta" [ref=f10e24] [cursor=pointer]:
+                - /url: https://testflight.apple.com/join/pVYPTxc7
+              - link "See how it works" [ref=f10e27] [cursor=pointer]:
+                - /url: "#how-it-works"
+            - paragraph [ref=f10e30]: Watch requests relay through the paired iPhone. The current TestFlight build may still show the older “LeSearch Mesh” name.
+          - generic [ref=f10e31]:
+            - figure [ref=f10e32]:
+              - img "Mesh session output on iPhone" [ref=f10e35]
+            - figure "Mesh Watch dashboard showing whether a session needs attention" [ref=f10e37]
+            - generic [ref=f10e40]: Machine overview
+            - generic [ref=f10e42]: Paired iPhone relay
+            - generic [ref=f10e47]: Session output
+        - region "Current beta support" [ref=f10e48]:
+          - generic [ref=f10e49]: Watch first
+          - generic [ref=f10e55]: iPhone for deeper control
+          - generic [ref=f10e58]: macOS and Linux hosts
+          - generic [ref=f10e61]: Free during beta
+      - generic [ref=f10e65]:
+        - generic [ref=f10e66]:
+          - paragraph [ref=f10e67]: On your wrist
+          - heading "The whole point fits on your wrist." [level=2] [ref=f10e68]
+          - paragraph [ref=f10e69]: See what needs attention. Answer from your wrist. Open iPhone when the task needs more room.
+        - region "How Mesh relays work" [ref=f10e70]:
+          - generic [ref=f10e71]:
+            - figure "Mesh Watch dashboard showing whether a session needs attention" [ref=f10e73]
+            - figure "Watch requests relay through your paired iPhone." [ref=f10e78]:
+              - img "Machine overview in the Mesh iPhone app" [ref=f10e81]
+          - group "Story chapters" [ref=f10e83]:
+            - generic [ref=f10e84]:
+              - button "01 Glance" [expanded] [ref=f10e85] [cursor=pointer]:
+                - generic [ref=f10e86]: "01"
+                - strong [ref=f10e87]: Glance
+              - paragraph [ref=f10e91]: Check whether a session needs you without opening your laptop.
+            - button "02 Decide" [ref=f10e93] [cursor=pointer]:
+              - generic [ref=f10e94]: "02"
+              - strong [ref=f10e95]: Decide
+            - button "03 Continue" [ref=f10e99] [cursor=pointer]:
+              - generic [ref=f10e100]: "03"
+              - strong [ref=f10e101]: Continue
+        - list "The Mesh attention loop" [ref=f10e104]:
+          - listitem [ref=f10e105]:
+            - generic [ref=f10e109]:
+              - text: "01"
+              - heading "Run" [level=3] [ref=f10e110]
+              - paragraph [ref=f10e111]: The agent stays on the machine with your files.
+          - listitem [ref=f10e112]:
+            - generic [ref=f10e119]:
+              - text: "02"
+              - heading "Needs you" [level=3] [ref=f10e120]
+              - paragraph [ref=f10e121]: The app shows which session stopped and what it needs.
+          - listitem [ref=f10e122]:
+            - generic [ref=f10e126]:
+              - text: "03"
+              - heading "Answer" [level=3] [ref=f10e127]
+              - paragraph [ref=f10e128]: Read the context, then send the next input from Watch or iPhone.
+          - listitem [ref=f10e129]:
+            - generic [ref=f10e133]:
+              - text: "04"
+              - heading "Continues" [level=3] [ref=f10e134]
+              - paragraph [ref=f10e135]: Your input returns over the connection you control.
+      - generic [ref=f10e137]:
+        - generic [ref=f10e138]:
+          - paragraph [ref=f10e139]: Deeper control
+          - heading "iPhone when a glance is not enough." [level=2] [ref=f10e140]
+          - paragraph [ref=f10e141]: Read sessions and logs, send text or key input, and open a supported host’s remote screen without pretending a Watch should be a tiny desktop.
+        - generic [ref=f10e142]:
+          - article [ref=f10e143]:
+            - figure [ref=f10e144]:
+              - img "Mesh iPhone machine list with connected and reconnecting hosts" [ref=f10e146]
+            - generic [ref=f10e147]:
+              - generic [ref=f10e148]: "01"
+              - generic [ref=f10e149]:
+                - heading "Machines" [level=3] [ref=f10e150]
+                - paragraph [ref=f10e151]: Check owned Mac and Linux hosts from one machine list.
+          - article [ref=f10e152]:
+            - figure [ref=f10e153]:
+              - img "Mesh iPhone session view with recent terminal output" [ref=f10e155]
+            - generic [ref=f10e156]:
+              - generic [ref=f10e157]: "02"
+              - generic [ref=f10e158]:
+                - heading "Sessions" [level=3] [ref=f10e159]
+                - paragraph [ref=f10e160]: Read what happened and send the next piece of input.
+          - article [ref=f10e161]:
+            - img "Mesh iPhone remote-screen controls on a connected host" [ref=f10e163]
+            - generic [ref=f10e164]:
+              - generic [ref=f10e165]: "03"
+              - generic [ref=f10e166]:
+                - heading "Remote screen" [level=3] [ref=f10e167]
+                - paragraph [ref=f10e168]: When text is not enough, take over from iPhone.
+        - region "Supported machine examples" [ref=f10e169]:
+          - generic [ref=f10e170]:
+            - strong [ref=f10e173]: MacBook
+            - generic [ref=f10e174]: Reachable over LAN or Tailscale
+          - generic [ref=f10e175]:
+            - strong [ref=f10e179]: Linux host
+            - generic [ref=f10e180]: Reachable over LAN or Tailscale
+          - generic [ref=f10e181]:
+            - strong [ref=f10e184]: Remote VM
+            - generic [ref=f10e185]: A machine you own and can reach
+      - region [ref=f10e186]:
+        - generic [ref=f10e187]:
+          - generic [ref=f10e188]:
+            - paragraph [ref=f10e189]: Concrete use
+            - heading "Work keeps moving when you do." [level=2] [ref=f10e190]
+            - list [ref=f10e191]:
+              - listitem [ref=f10e192]:
+                - generic [ref=f10e193]: "01"
+                - generic [ref=f10e194]:
+                  - heading "A build stops while you are away." [level=3] [ref=f10e195]
+                  - paragraph [ref=f10e196]: Read the last output and answer the question without opening your MacBook.
+              - listitem [ref=f10e199]:
+                - generic [ref=f10e200]: "02"
+                - generic [ref=f10e201]:
+                  - heading "A reachable Linux host needs one answer." [level=3] [ref=f10e202]
+                  - paragraph [ref=f10e203]: Check the session from Watch, then open iPhone when you need the full terminal.
+              - listitem [ref=f10e206]:
+                - generic [ref=f10e207]: "03"
+                - generic [ref=f10e208]:
+                  - heading "Several machines are running different jobs." [level=3] [ref=f10e209]
+                  - paragraph [ref=f10e210]: See which host is active, idle, reconnecting, or waiting for you.
+              - listitem [ref=f10e213]:
+                - generic [ref=f10e214]: "04"
+                - generic [ref=f10e215]:
+                  - heading "Text is not enough." [level=3] [ref=f10e216]
+                  - paragraph [ref=f10e217]: Open the remote screen on iPhone and use trackpad or keyboard controls.
+          - figure "Remote screen · iPhone" [ref=f10e220]:
+            - img "Mesh remote screen on iPhone while a connected machine is open" [ref=f10e221]
+      - generic [ref=f10e224]:
+        - generic [ref=f10e225]:
+          - paragraph [ref=f10e226]: Local-first boundary
+          - heading "Your machine stays in charge." [level=2] [ref=f10e227]
+          - paragraph [ref=f10e228]: Local-first means naming the network boundary instead of hiding it.
+        - table [ref=f10e229]:
+          - caption [ref=f10e230]: Mesh product data boundary
+          - rowgroup [ref=f10e231]:
+            - row [ref=f10e232]:
+              - rowheader "Agents, code, prompts, files" [ref=f10e233]
+              - cell "Run and remain on machines you own." [ref=f10e234]
+            - row [ref=f10e235]:
+              - rowheader "Terminal output and state" [ref=f10e236]
+              - cell "Stay on your machine until you open them on a paired surface." [ref=f10e237]
+            - row [ref=f10e238]:
+              - rowheader "Notifications through APNs" [ref=f10e239]
+              - cell "Apple may receive alert text plus host and session metadata needed to deliver a notification." [ref=f10e240]
+            - row [ref=f10e241]:
+              - rowheader "Your answers" [ref=f10e242]
+              - cell "Return through the paired iPhone over your LAN or Tailscale connection." [ref=f10e243]
+        - paragraph [ref=f10e244]: There is no LeSearch AI relay in the terminal path.
+      - generic [ref=f10e249]:
+        - generic [ref=f10e250]:
+          - paragraph [ref=f10e251]: Public beta
+          - heading "Shipping, learning, and saying what is not ready." [level=2] [ref=f10e252]
+          - paragraph [ref=f10e253]: We update the product quickly and keep the line between available and planned visible.
+        - generic [ref=f10e254]:
+          - article [ref=f10e255]:
+            - heading "Available now" [level=3] [ref=f10e256]
+            - list [ref=f10e257]:
+              - listitem [ref=f10e258]: —Native iPhone and Apple Watch apps
+              - listitem [ref=f10e259]: —Machine and session status
+              - listitem [ref=f10e260]: —Read output and send input
+              - listitem [ref=f10e261]: —Remote screen on supported hosts from iPhone
+              - listitem [ref=f10e262]: —Public source repository
+          - article [ref=f10e263]:
+            - heading "Improving" [level=3] [ref=f10e264]
+            - list [ref=f10e265]:
+              - listitem [ref=f10e266]: —Guided setup
+              - listitem [ref=f10e267]: —Session recovery
+              - listitem [ref=f10e268]: —Safer enrollment
+              - listitem [ref=f10e269]: —Clearer permissions
+          - article [ref=f10e270]:
+            - heading "Planned" [level=3] [ref=f10e271]
+            - list [ref=f10e272]:
+              - listitem [ref=f10e273]: —Reachability beyond your private network
+              - listitem [ref=f10e274]: —Dedicated approval actions
+              - listitem [ref=f10e275]: —Broader platform polish
+        - generic [ref=f10e276]:
+          - link "Product changes Read the changelog" [ref=f10e277] [cursor=pointer]:
+            - /url: /changelog/
+            - generic [ref=f10e278]: Product changes
+            - strong [ref=f10e279]: Read the changelog
+          - link "Concrete use cases Read field notes" [ref=f10e282] [cursor=pointer]:
+            - /url: /blog/
+            - generic [ref=f10e283]: Concrete use cases
+            - strong [ref=f10e284]: Read field notes
+      - generic [ref=f10e288]:
+        - generic [ref=f10e289]:
+          - paragraph [ref=f10e290]: Host setup
+          - heading "One command on the machine. Finish on iPhone." [level=2] [ref=f10e291]
+        - generic [ref=f10e292]:
+          - region "Mesh host install command" [ref=f10e293]:
+            - generic [ref=f10e294]: $
+            - code [ref=f10e295]: curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh | sh
+            - button "Copy install command" [ref=f10e296] [cursor=pointer]
+            - paragraph
+          - list [ref=f10e300]:
+            - listitem [ref=f10e301]: 01 Run the installer
+            - listitem [ref=f10e302]:
+              - text: 02 Run
+              - code [ref=f10e303]: mesh setup
+            - listitem [ref=f10e304]: 03 Pair from iPhone
+          - paragraph [ref=f10e305]:
+            - text: Install attention hooks with
+            - code [ref=f10e306]: mesh hooks install
+            - text: so blocked sessions can notify the paired devices.
+      - generic [ref=f10e308]:
+        - generic [ref=f10e309]:
+          - heading "Try the beta. Tell us what is missing." [level=2] [ref=f10e312]
+          - paragraph [ref=f10e313]: Join TestFlight for what works today, or send the one request that would make Mesh useful in your day.
+          - link "Join TestFlight" [ref=f10e314] [cursor=pointer]:
+            - /url: https://testflight.apple.com/join/pVYPTxc7
+        - generic [ref=f10e317]:
+          - heading "Feedback stays close to the beta." [level=3] [ref=f10e318]
+          - paragraph [ref=f10e319]: Join TestFlight to try the current build and send feedback from the app, or open an issue if you would rather write it in public.
+          - link "Open GitHub issues" [ref=f10e320] [cursor=pointer]:
+            - /url: https://github.com/LeSearch-AI/mesh/issues
+      - generic [ref=f10e324]:
+        - generic [ref=f10e325]:
+          - generic [ref=f10e328]:
+            - strong [ref=f10e329]: LeSearch AI
+            - generic [ref=f10e330]: Mesh
+          - paragraph [ref=f10e331]: Watch-first control for agent sessions on machines you own.
+        - generic [ref=f10e332]:
+          - link "Product" [ref=f10e333] [cursor=pointer]:
+            - /url: "#product"
+          - link "How it works" [ref=f10e334] [cursor=pointer]:
+            - /url: "#how-it-works"
+          - link "Changelog" [ref=f10e335] [cursor=pointer]:
+            - /url: /changelog/
+          - link "Journal" [ref=f10e336] [cursor=pointer]:
+            - /url: /blog/
+          - link "Privacy" [ref=f10e337] [cursor=pointer]:
+            - /url: /privacy/
+        - paragraph [ref=f10e338]: © 2026 LeSearch AI
+  - alert [ref=f10e339]

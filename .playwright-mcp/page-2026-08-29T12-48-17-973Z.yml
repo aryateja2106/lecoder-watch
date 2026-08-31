@@ -1,0 +1,58 @@
+- generic [active] [ref=f6e1]:
+  - generic [ref=f6e2]:
+    - banner [ref=f6e3]:
+      - generic [ref=f6e4]:
+        - link "LeSearch AI, Mesh home" [ref=f6e5] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f6e6]:
+            - strong [ref=f6e7]: LeSearch AI
+            - generic [ref=f6e8]: Mesh
+        - navigation "Editorial navigation" [ref=f6e9]:
+          - link "Join beta" [ref=f6e10] [cursor=pointer]:
+            - /url: /#beta
+    - main [ref=f6e11]:
+      - region [ref=f6e12]:
+        - paragraph [ref=f6e13]: Field notes
+        - heading "What remote supervision looks like in practice." [level=1] [ref=f6e14]
+        - paragraph [ref=f6e15]: Concrete workflows for keeping work moving from an iPhone or Apple Watch while your own machine runs the agent.
+      - region "Latest articles" [ref=f6e16]:
+        - article [ref=f6e17]:
+          - generic [ref=f6e18]: "01"
+          - generic [ref=f6e19]:
+            - generic [ref=f6e20]:
+              - time [ref=f6e21]: August 27, 2026
+              - generic [ref=f6e22]: ·
+              - generic [ref=f6e23]: 4 min read
+            - heading [level=2] [ref=f6e24]:
+              - link "Check a long-running agent from Apple Watch" [ref=f6e25] [cursor=pointer]:
+                - /url: /blog/check-a-long-running-agent-from-apple-watch/
+            - paragraph [ref=f6e26]: A short walk-through of leaving the desk, seeing when an agent needs you, and replying without opening the laptop.
+            - link "Read the note" [ref=f6e27] [cursor=pointer]:
+              - /url: /blog/check-a-long-running-agent-from-apple-watch/
+              - text: Read the note
+              - generic [ref=f6e28]: ↗
+          - img "Mesh showing machine and session status on Apple Watch" [ref=f6e30]
+        - article [ref=f6e31]:
+          - generic [ref=f6e32]: "02"
+          - generic [ref=f6e33]:
+            - generic [ref=f6e34]:
+              - time [ref=f6e35]: August 27, 2026
+              - generic [ref=f6e36]: ·
+              - generic [ref=f6e37]: 5 min read
+            - heading [level=2] [ref=f6e38]:
+              - link "Supervise a reachable Linux machine from iPhone and Apple Watch" [ref=f6e39] [cursor=pointer]:
+                - /url: /blog/supervise-a-linux-machine-from-iphone-and-apple-watch/
+            - paragraph [ref=f6e40]: How the phone handles terminal detail while the Watch stays useful for status and short replies.
+            - link "Read the note" [ref=f6e41] [cursor=pointer]:
+              - /url: /blog/supervise-a-linux-machine-from-iphone-and-apple-watch/
+              - text: Read the note
+              - generic [ref=f6e42]: ↗
+          - img "Mesh machine list on iPhone showing reachable machines" [ref=f6e44]
+    - contentinfo [ref=f6e45]:
+      - link "LeSearch AI, Mesh home" [ref=f6e46] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f6e47]:
+          - strong [ref=f6e48]: LeSearch AI
+          - generic [ref=f6e49]: Mesh
+      - paragraph [ref=f6e50]: Less Search. More Agents.
+  - alert [ref=f6e51]

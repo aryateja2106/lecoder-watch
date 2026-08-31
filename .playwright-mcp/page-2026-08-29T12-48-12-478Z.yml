@@ -1,0 +1,58 @@
+- generic [active] [ref=f5e1]:
+  - generic [ref=f5e2]:
+    - banner [ref=f5e3]:
+      - link "LeSearch AI, Mesh home" [ref=f5e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f5e5]:
+          - strong [ref=f5e6]: LeSearch AI
+          - generic [ref=f5e7]: Mesh
+      - link "Field notes" [ref=f5e8] [cursor=pointer]:
+        - /url: /blog/
+    - main [ref=f5e9]:
+      - generic [ref=f5e10]:
+        - paragraph [ref=f5e11]: Product record
+        - heading "What is in the beta." [level=1] [ref=f5e12]
+        - paragraph [ref=f5e13]: A plain record of what works now, what we are building, and what remains a plan. We update this page as the boundary moves.
+      - region [ref=f5e14]:
+        - generic [ref=f5e15]:
+          - time [ref=f5e16]: August 2026
+          - generic [ref=f5e17]: Available now
+        - generic [ref=f5e18]:
+          - heading "Current public beta" [level=2] [ref=f5e19]
+          - paragraph [ref=f5e20]: Mesh keeps execution on machines you own and puts supervision on iPhone and Apple Watch. The Watch relays through its paired iPhone; it is not a direct machine connection.
+          - list [ref=f5e21]:
+            - listitem [ref=f5e22]: Native iPhone and Apple Watch apps.
+            - listitem [ref=f5e23]: Pair owned macOS and Linux machines with a temporary code or QR link.
+            - listitem [ref=f5e24]: See machine reachability, health, sessions, events, and provider usage limits.
+            - listitem [ref=f5e25]: Read session output, send text or key input, and start or stop supported terminal sessions from iPhone.
+            - listitem [ref=f5e26]: See machine and session state on Apple Watch, then send short replies through the paired iPhone.
+            - listitem [ref=f5e27]: Use iPhone remote screen, trackpad, and keyboard controls when the host supports them.
+            - listitem [ref=f5e28]: Connect over a reachable LAN or Tailscale network, including the local flow without a LeSearch AI account.
+      - region [ref=f5e29]:
+        - generic [ref=f5e30]:
+          - generic [ref=f5e31]: In progress
+          - generic [ref=f5e32]: Building
+        - generic [ref=f5e33]:
+          - heading "Building next" [level=2] [ref=f5e34]
+          - paragraph [ref=f5e35]: These areas are active work, not finished beta features.
+          - list [ref=f5e36]:
+            - listitem [ref=f5e37]: Guided setup for people who do not want to configure a terminal workflow by hand.
+            - listitem [ref=f5e38]: Optional account and identity flows.
+            - listitem [ref=f5e39]: Clearer host enrollment, recovery, device lifecycle, and permission education.
+            - listitem [ref=f5e40]: Consistent Mesh naming across binaries and packages.
+      - region [ref=f5e41]:
+        - generic [ref=f5e42]:
+          - generic [ref=f5e43]: Later
+          - generic [ref=f5e44]: Planned
+        - generic [ref=f5e45]:
+          - heading "Planned" [level=2] [ref=f5e46]
+          - paragraph [ref=f5e47]: These are directions, not promises of current availability.
+          - list [ref=f5e48]:
+            - listitem [ref=f5e49]: NetBird transport support.
+            - listitem [ref=f5e50]: Reachability without a pre-existing private network.
+            - listitem [ref=f5e51]: Dedicated approval actions and broader platform polish.
+    - contentinfo [ref=f5e52]:
+      - paragraph [ref=f5e53]: Mesh by LeSearch AI
+      - link "Join the beta" [ref=f5e54] [cursor=pointer]:
+        - /url: /#beta
+  - alert [ref=f5e55]

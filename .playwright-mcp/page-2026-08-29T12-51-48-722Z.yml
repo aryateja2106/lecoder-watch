@@ -1,0 +1,65 @@
+- generic [active] [ref=f11e1]:
+  - generic [ref=f11e2]:
+    - banner [ref=f11e3]:
+      - link "LeSearch AI, Mesh home" [ref=f11e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f11e5]:
+          - strong [ref=f11e6]: LeSearch AI
+          - generic [ref=f11e7]: Mesh
+      - link "All field notes" [ref=f11e8] [cursor=pointer]:
+        - /url: /blog/
+    - main [ref=f11e9]:
+      - article [ref=f11e10]:
+        - generic [ref=f11e11]:
+          - generic [ref=f11e12]:
+            - time [ref=f11e13]: August 27, 2026
+            - generic [ref=f11e14]: ·
+            - generic [ref=f11e15]: 4 min read
+          - heading "Check a long-running agent from Apple Watch" [level=1] [ref=f11e16]
+          - paragraph [ref=f11e17]: Leave the desk, see when an agent needs you, and send a short reply without opening the laptop.
+        - figure [ref=f11e18]:
+          - img "Mesh showing machine and session status on Apple Watch" [ref=f11e19]
+        - generic [ref=f11e20]:
+          - complementary [ref=f11e21]:
+            - paragraph [ref=f11e22]: Mesh field note
+            - link "Join the beta" [ref=f11e23] [cursor=pointer]:
+              - /url: /#beta
+          - generic [ref=f11e25]:
+            - paragraph [ref=f11e26]: An agent is changing a project on your MacBook. The first pass is going well, but it will take longer than the ten minutes you have before leaving home.
+            - paragraph [ref=f11e27]: "You do not need to keep watching the terminal. You need to know two things: is it still working, and does it need an answer?"
+            - paragraph [ref=f11e28]: That is the useful part of Mesh on Apple Watch.
+            - heading "Before you walk away" [level=2] [ref=f11e29]
+            - paragraph [ref=f11e30]: "The machine running the agent needs to remain on and reachable over your LAN or Tailscale network. Pair it with Mesh on your iPhone, then install the attention hooks on the machine:"
+            - generic [ref=f11e31]:
+              - generic [ref=f11e32]:
+                - generic [ref=f11e33]:
+                  - generic [ref=f11e34]: bash
+                  - generic [ref=f11e35]: macOS / Linux
+                - button "Copy" [ref=f11e36]
+              - code [ref=f11e41]: mesh hooks install
+            - paragraph [ref=f11e42]: Those hooks let a supported session report that it needs you. The Apple Watch app receives its state and sends replies through the paired iPhone. The Watch does not connect directly to the Mac or hold machine credentials.
+            - heading "A five-minute check-in" [level=2] [ref=f11e43]
+            - paragraph [ref=f11e44]: Suppose you asked an agent to update a settings screen and run the tests. You leave for the grocery store while it works.
+            - paragraph [ref=f11e45]: At the store, you raise your wrist. Mesh shows the session name, the Mac running it, and its current state. If the session is still running, there is nothing to do.
+            - paragraph [ref=f11e46]:
+              - text: A few minutes later, the state changes to
+              - strong [ref=f11e47]: Needs you
+              - text: . Open the item and read the short question. If the answer is simple, send a quick command or reply with dictation, Scribble, or text. The paired iPhone relays that answer to the Mac, and the session can continue.
+            - paragraph [ref=f11e48]: The whole exchange is small on purpose. The Watch is for a glance and a short decision, not for reading a terminal on your wrist.
+            - heading "When to open the iPhone" [level=2] [ref=f11e49]
+            - paragraph [ref=f11e50]: "Some questions need context. Open Mesh on the iPhone when you need to:"
+            - list [ref=f11e51]:
+              - listitem [ref=f11e52]: read more session output
+              - listitem [ref=f11e53]: type a longer answer or send key input
+              - listitem [ref=f11e54]: start or stop a supported terminal session
+              - listitem [ref=f11e55]: use the remote screen, trackpad, or keyboard when the host supports them
+            - paragraph [ref=f11e56]: "The handoff is straightforward: the Watch tells you something changed; the iPhone gives you room to inspect it."
+            - heading "What this changes" [level=2] [ref=f11e57]
+            - paragraph [ref=f11e58]: The useful difference is not that you can carry a terminal everywhere. It is that you can stop babysitting one.
+            - paragraph [ref=f11e59]: Your machine keeps doing the work. The Watch tells you when the work has reached a decision only you can make. If the decision is short, answer it there. If it is not, move to the iPhone without returning to the laptop.
+            - paragraph [ref=f11e60]: "Mesh is in beta, so the setup and supported agent flows are still improving. The basic rhythm is already the point: run, leave, answer, continue."
+    - contentinfo [ref=f11e61]:
+      - paragraph [ref=f11e62]: Mesh by LeSearch AI
+      - link "What is in the beta" [ref=f11e63] [cursor=pointer]:
+        - /url: /changelog/
+  - alert [ref=f11e64]

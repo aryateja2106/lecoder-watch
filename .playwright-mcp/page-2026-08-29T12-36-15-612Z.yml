@@ -1,0 +1,219 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "LeSearch Mesh" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - link "How it works" [ref=e5] [cursor=pointer]:
+        - /url: "#how"
+      - link "On your wrist" [ref=e6] [cursor=pointer]:
+        - /url: "#wrist"
+      - link "FAQ" [ref=e7] [cursor=pointer]:
+        - /url: "#faq"
+      - link "GitHub" [ref=e8] [cursor=pointer]:
+        - /url: https://github.com/LeSearch-AI/mesh
+      - link "Join the beta" [ref=e9] [cursor=pointer]:
+        - /url: https://testflight.apple.com/join/pVYPTxc7
+  - generic [ref=e10]:
+    - generic [ref=e11]: Free TestFlight beta · iPhone + Apple Watch
+    - heading "Your agents stop and ask. You answer from your wrist." [level=1] [ref=e13]
+    - paragraph [ref=e14]:
+      - text: Coding agents run for hours and then freeze on one question —
+      - emphasis [ref=e15]: can I force-push?
+      - text: ","
+      - emphasis [ref=e16]: overwrite this file?
+      - text: — and sit there until you walk back to the machine. LeSearch Mesh puts every machine you own, and every agent running on it, on your iPhone and Apple Watch. The moment one blocks, your wrist buzzes. You tap
+      - strong [ref=e17]: Continue
+      - text: . It carries on.
+    - generic [ref=e18]:
+      - link "Join the TestFlight →" [ref=e19] [cursor=pointer]:
+        - /url: https://testflight.apple.com/join/pVYPTxc7
+      - link "Read the source" [ref=e20] [cursor=pointer]:
+        - /url: https://github.com/LeSearch-AI/mesh
+      - generic [ref=e21]: Free · no account · no server of ours between you and your Mac
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - generic [ref=e27]: you@your-mac
+        - button "Copy" [ref=e28] [cursor=pointer]
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - generic [ref=e31]: $
+          - code [ref=e32]: curl -fsSL https://mesh.lesearch.ai/install.sh | sh
+        - generic [ref=e33]: ✓ meshd installed · launchd · survives reboot
+        - generic [ref=e34]: ✓ run mesh pair to put it on your phone
+        - generic [ref=e35]: $
+  - generic [ref=e39]:
+    - text: The whole point
+    - heading "Three seconds instead of twenty minutes." [level=2] [ref=e40]
+    - paragraph [ref=e41]: This is the loop the app exists for. Everything else is in service of it.
+    - generic [ref=e42]:
+      - generic [ref=e43]:
+        - text: "01"
+        - heading "An agent blocks" [level=3] [ref=e44]
+        - paragraph [ref=e45]: Claude Code, Codex, whatever you run — it hits a permission prompt in a tmux session on your Mac and stops dead. A hook fires the instant it does.
+      - generic [ref=e46]:
+        - text: "02"
+        - heading "Your wrist buzzes" [level=3] [ref=e47]
+        - paragraph [ref=e48]: The machine, the session, and the actual question, in a notification you can act on. A question that would force-push or delete gets a red button naming the verb — everything else is a calm Continue.
+        - generic [ref=e49]:
+          - text: studio · deploy-api
+          - generic [ref=e50]: run git push --force?
+          - generic [ref=e51]:
+            - generic [ref=e52]: Force push
+            - generic [ref=e53]: Reply
+            - generic [ref=e54]: Stop
+      - generic [ref=e55]:
+        - text: "03"
+        - heading "You answer" [level=3] [ref=e56]
+        - paragraph [ref=e57]: Tap Continue and Enter lands in the real session. Or dictate a reply and it gets typed in. The agent picks up where it stopped — you never got up.
+        - generic [ref=e58]:
+          - text: studio · docs-site
+          - generic [ref=e59]: edit vite.config.ts?
+          - generic [ref=e60]:
+            - generic [ref=e61]: Continue
+            - generic [ref=e62]: Reply
+            - generic [ref=e63]: Stop
+  - generic [ref=e65]:
+    - text: What it looks like
+    - heading "Real screens, real data." [level=2] [ref=e66]
+    - paragraph [ref=e67]: Captured against a live daemon — a fleet with one machine honestly offline, a build streaming into the phone terminal, and the crown-scrollable terminal on the wrist.
+    - generic [ref=e68]:
+      - figure "Machines" [ref=e69]:
+        - img "Machines list with live stats" [ref=e71]
+      - figure "Live terminal" [ref=e73]:
+        - img "Live terminal session on the phone" [ref=e75]
+      - figure "Mac control" [ref=e77]:
+        - img "Remote control of each machine" [ref=e79]
+      - figure "Wrist terminal" [ref=e81]:
+        - img "Crown-scrollable terminal on the watch" [ref=e83]
+      - figure "Fleet at a glance" [ref=e85]:
+        - img "Machines on the watch" [ref=e87]
+  - generic [ref=e90]:
+    - text: Setup
+    - heading "Three commands and an eight-character code." [level=2] [ref=e91]
+    - paragraph [ref=e92]:
+      - text: There is no signup, no dashboard and no server of ours in the path. You install a small daemon on a machine you own, and your phone pairs with it directly. Or run
+      - code [ref=e93]: mesh setup
+      - text: and let it walk you through permissions, pairing, and hooks.
+    - generic [ref=e94]:
+      - generic [ref=e95]:
+        - generic [ref=e96]: "1"
+        - generic [ref=e97]:
+          - heading "Install the daemon on your Mac or Linux box" [level=3] [ref=e98]
+          - paragraph [ref=e99]: Bun + TypeScript, ~3 MB. Registers with launchd or systemd, so it comes back after a reboot. Read it before you run it — the installer is one shell script and the daemon source is public.
+          - generic [ref=e100]:
+            - generic [ref=e101]: $
+            - code [ref=e102]: curl -fsSL https://mesh.lesearch.ai/install.sh | sh
+            - button "Copy" [ref=e103] [cursor=pointer]
+      - generic [ref=e104]:
+        - generic [ref=e105]: "2"
+        - generic [ref=e106]:
+          - heading "Pair your phone" [level=3] [ref=e107]
+          - paragraph [ref=e108]: Prints a QR code and an eight-character code that is good for ten minutes and one use. Scan it with your iPhone's camera. The Mac hands back its own access token and every other machine it already knows about — a fleet of four takes one code.
+          - generic [ref=e109]:
+            - generic [ref=e110]: $
+            - code [ref=e111]: mesh pair
+            - button "Copy" [ref=e112] [cursor=pointer]
+      - generic [ref=e113]:
+        - generic [ref=e114]: "3"
+        - generic [ref=e115]:
+          - heading "Let your agents tell you when they need you" [level=3] [ref=e116]
+          - paragraph [ref=e117]: Registers a hook with Claude Code so a blocked agent reaches your wrist. Merges into your existing hooks, backs up your settings first, and is safe to run twice.
+          - generic [ref=e118]:
+            - generic [ref=e119]: $
+            - code [ref=e120]: mesh hooks install
+            - button "Copy" [ref=e121] [cursor=pointer]
+  - generic [ref=e123]:
+    - text: On your wrist
+    - heading "Built watch-first, not watch-also." [level=2] [ref=e124]
+    - paragraph [ref=e125]: Most tools in this space treat the watch as a notification mirror. Here it is the primary surface, and the phone is the thing that keeps it fed.
+    - generic [ref=e126]:
+      - generic [ref=e127]:
+        - generic [ref=e128]: Complication
+        - heading "A count on your watch face" [level=3] [ref=e129]
+        - paragraph [ref=e130]: How many agents are waiting on you, all day, in every accessory family. When nothing is waiting it shows how much of your mesh is up — and it tells you when the reading has gone stale instead of quietly lying.
+      - generic [ref=e131]:
+        - generic [ref=e132]: Notifications
+        - heading "Answerable, not just readable" [level=3] [ref=e133]
+        - paragraph [ref=e134]: Continue, Stop, or dictate a Reply straight from the notification. The reply is typed into the real session on the real machine — and once the task is done, the banner takes itself down.
+      - generic [ref=e135]:
+        - generic [ref=e136]: Live Activity
+        - heading "Lock Screen and Dynamic Island" [level=3] [ref=e137]
+        - paragraph [ref=e138]: The one session that actually needs you, live on the Lock Screen and in the Smart Stack — with how much of your fleet is online next to it. Blocked always outranks merely busy.
+      - generic [ref=e139]:
+        - generic [ref=e140]: Terminal
+        - heading "A real terminal, on a watch" [level=3] [ref=e141]
+        - paragraph [ref=e142]: Crown to scroll, auto-follow at the tail, a key bar for the characters a watch keyboard will not give you, and full VoiceOver.
+      - generic [ref=e143]:
+        - generic [ref=e144]: Mac control
+        - heading "Mouse, keyboard, screen" [level=3] [ref=e145]
+        - paragraph [ref=e146]: Drive the Mac itself across multiple displays — trackpad-style pointer with pinch-to-zoom, sticky modifiers so ⌘⇧4 works, paste both ways, and a live screen view — when answering a question is not enough.
+      - generic [ref=e147]:
+        - generic [ref=e148]: Machines
+        - heading "htop for everything you own" [level=3] [ref=e149]
+        - paragraph [ref=e150]:
+          - text: CPU, memory, disk, load and top processes for every paired machine. Wake a sleeping box over LAN from its neighbour.
+          - code [ref=e151]: mesh status
+          - text: shows the whole fleet in one screen.
+  - generic [ref=e153]:
+    - text: Local-first, and it matters
+    - heading "There is no cloud in the middle." [level=2] [ref=e154]
+    - paragraph [ref=e155]: The comparable tools relay your sessions through their servers. That is the easy way to build this, and it means your terminal output, your prompts and your source code pass through somebody else's machine.
+    - generic [ref=e156]:
+      - generic [ref=e157]:
+        - generic [ref=e158]: Where your data goes
+        - generic [ref=e159]:
+          - text: Phone → your machine, directly, over your own private network. We run no relay, so your terminal output and your code never reach us. The one thing that does is a daily count from the daemon — version, platform, uptime — which you can switch off.
+          - link "The exact payload" [ref=e160] [cursor=pointer]:
+            - /url: /privacy
+          - text: .
+      - generic [ref=e161]:
+        - generic [ref=e162]: What an account costs you
+        - generic [ref=e163]: There is no account. No email, no OAuth, no team seat. Pairing is a code your own machine printed.
+      - generic [ref=e164]:
+        - generic [ref=e165]: How access is gated
+        - generic [ref=e166]: A per-machine bearer token, minted by that machine, plus whatever network you already trust — your Tailscale ACL or your LAN. Nothing is port-forwarded and nothing is exposed to the public internet.
+      - generic [ref=e167]:
+        - generic [ref=e168]: If this project disappears
+        - generic [ref=e169]: The daemon keeps running and the source stays public. It is your machine, your token, and a plain HTTP API you can curl.
+  - generic [ref=e171]:
+    - text: Questions
+    - heading "The honest answers." [level=2] [ref=e172]
+    - group [ref=e173]:
+      - generic "What do I need? +" [ref=e174] [cursor=pointer]
+    - group [ref=e175]:
+      - generic "Does it work when I am away from home? +" [ref=e176] [cursor=pointer]
+    - group [ref=e177]:
+      - generic "Linux too? +" [ref=e178] [cursor=pointer]
+    - group [ref=e179]:
+      - generic "Which agents does it watch? +" [ref=e180] [cursor=pointer]
+    - group [ref=e181]:
+      - generic "Is it open source? +" [ref=e182] [cursor=pointer]
+    - group [ref=e183]:
+      - generic "How finished is this? +" [ref=e184] [cursor=pointer]
+  - generic [ref=e185]:
+    - heading "Stop walking back to the machine." [level=2] [ref=e186]
+    - paragraph [ref=e187]: Free while it is in beta. Takes about two minutes to set up.
+    - generic [ref=e188]:
+      - link "Join the TestFlight →" [ref=e189] [cursor=pointer]:
+        - /url: https://testflight.apple.com/join/pVYPTxc7
+      - link "See the setup" [ref=e190] [cursor=pointer]:
+        - /url: "#how"
+    - generic [ref=e191]:
+      - generic [ref=e192]: iPhone · iOS 26+
+      - generic [ref=e193]: Apple Watch · watchOS 10+
+      - generic [ref=e194]: macOS or Linux daemon
+  - contentinfo [ref=e195]:
+    - generic [ref=e196]:
+      - generic [ref=e197]: LeSearch AI
+      - link "GitHub" [ref=e198] [cursor=pointer]:
+        - /url: https://github.com/LeSearch-AI/mesh
+      - link "Changelog" [ref=e199] [cursor=pointer]:
+        - /url: https://github.com/LeSearch-AI/mesh/blob/main/CHANGELOG.md
+      - link "Roadmap" [ref=e200] [cursor=pointer]:
+        - /url: https://github.com/LeSearch-AI/mesh/blob/main/ROADMAP.md
+      - link "install.sh" [ref=e201] [cursor=pointer]:
+        - /url: /install.sh
+      - link "Privacy" [ref=e202] [cursor=pointer]:
+        - /url: /privacy
+      - link "lesearch.ai" [ref=e203] [cursor=pointer]:
+        - /url: https://lesearch.ai
