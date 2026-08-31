@@ -2,16 +2,32 @@ import SwiftUI
 import UIKit
 import WebKit
 
+/// The tabs, as routable values. A `TabView` with no `selection` cannot be
+/// driven programmatically — iOS just restores the last-open tab — which is
+/// why notification taps used to land on the terminal.
+enum AppTab: Hashable {
+    case machines, terminal, remote, monitor, settings
+}
+
+/// Holds the tab a notification tap asked for. Lives outside the view so
+/// `MeshRelayApp.init` can wire the handler at launch — a cold-start tap is
+/// delivered before any `onAppear` runs.
+final class AppRouter: ObservableObject {
+    static let shared = AppRouter()
+    @Published var tab: AppTab = .machines
+}
+
 struct ContentView: View {
     @EnvironmentObject var store: MeshStore
+    @ObservedObject private var router = AppRouter.shared
 
     var body: some View {
-        TabView {
-            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }
-            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }
-            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }
-            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }
-            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }
+        TabView(selection: $router.tab) {
+            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }.tag(AppTab.machines)
+            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }.tag(AppTab.terminal)
+            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }.tag(AppTab.remote)
+            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }.tag(AppTab.monitor)
+            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }.tag(AppTab.settings)
         }
     }
 }

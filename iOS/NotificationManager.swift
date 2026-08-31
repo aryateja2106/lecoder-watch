@@ -35,6 +35,11 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     /// Resume handler — MeshStore wires this to send `continue` to the pinned session.
     var onLimitResume: ((String) -> Void)?
 
+    /// Tap handler for every other notification. Without this a tap restores
+    /// whatever tab was last open — which is the terminal, and the phone
+    /// terminal cannot attach. Routing to Monitor shows the alert instead.
+    var onEventTap: ((_ host: String?, _ session: String?) -> Void)?
+
     private override init() {
         super.init()
         if let saved = UserDefaults.standard.stringArray(forKey: firedKeysDefaultsKey) {
@@ -67,9 +72,15 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
             let key = "event-\(event.id)"
             guard !firedKeys.contains(key) else { continue }
             firedKeys.insert(key)
+            // Carry the origin in the payload, not only in the body text: the tap
+            // handler needs it to route, and body text is unparseable.
+            var info: [String: String] = ["action": "agentEvent"]
+            if let host = event.host { info["host"] = host }
+            if let session = event.session { info["session"] = session }
             notifyNow(id: key,
                       title: eventNotificationTitle(event),
-                      body: eventNotificationBody(event))
+                      body: eventNotificationBody(event),
+                      userInfo: info)
         }
     }
 
@@ -303,6 +314,11 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
         if let providerId,
            action == "limitReset" || action == "limitAvailable" {
             onLimitResume?(providerId)
+        } else {
+            // Everything else — agent events, reachability, usage warnings.
+            // Always route, even when host/session are absent, so the tap can
+            // never fall through to the last-open tab.
+            onEventTap?(info["host"] as? String, info["session"] as? String)
         }
         completionHandler()
     }

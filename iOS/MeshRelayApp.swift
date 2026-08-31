@@ -12,6 +12,12 @@ struct MeshRelayApp: App {
         NotificationManager.shared.onLimitResume = { providerId in
             Task { await store.resumePinnedLimit(providerId: providerId) }
         }
+        // Any other tap goes to Monitor, where the alert is actually readable.
+        // Without this the tap falls through to the restored tab — the terminal,
+        // which cannot attach — which is what made every alert look broken.
+        NotificationManager.shared.onEventTap = { _, _ in
+            Task { @MainActor in AppRouter.shared.tab = .monitor }
+        }
     }
 
     var body: some Scene {
