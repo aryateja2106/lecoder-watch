@@ -46,6 +46,22 @@ function resolvePath(ctx: ToolContext, p: string): string {
   return resolve(ctx.cwd, p);
 }
 
+/**
+ * Coerce an argument back to a string.
+ *
+ * The Qwen tool-call parser opportunistically types any value whose first character is
+ * in `{[-0123456789tfn` and which parses as JSON, so `run_command(command="true")`
+ * arrives as the BOOLEAN true and a path like `2024` arrives as a NUMBER. Type-checking
+ * these with `typeof x === "string"` silently rejects perfectly good calls, which the
+ * model then has no way to understand. Coerce, never reject on type alone.
+ */
+function asString(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return JSON.stringify(v);
+}
+
 export const TOOLS: ToolSchema[] = [
   {
     type: "function",
@@ -146,7 +162,7 @@ export async function runTool(
 ): Promise<ToolResult> {
   switch (name) {
     case "run_command": {
-      const command = String(args.command ?? "").trim();
+      const command = asString(args.command).trim();
       if (!command) return { ok: false, content: "error: command is required and was empty." };
       const timeoutMs = Math.max(1, Number(args.timeout_seconds ?? 600)) * 1000;
       const r = await execInSession(ctx.mesh, ctx.session, command, { timeoutMs });
@@ -160,7 +176,7 @@ export async function runTool(
     }
 
     case "read_file": {
-      const p = resolvePath(ctx, String(args.path ?? ""));
+      const p = resolvePath(ctx, asString(args.path));
       if (!existsSync(p)) return { ok: false, content: `error: no such file: ${p}` };
       const st = statSync(p);
       if (st.isDirectory()) return { ok: false, content: `error: ${p} is a directory. Use list_dir.` };
@@ -178,10 +194,10 @@ export async function runTool(
     }
 
     case "write_file": {
-      const p = resolvePath(ctx, String(args.path ?? ""));
-      const content = typeof args.content === "string" ? args.content : null;
+      const p = resolvePath(ctx, asString(args.path));
+      const content = args.content === undefined ? null : asString(args.content);
       if (content === null)
-        return { ok: false, content: "error: content is required and must be a string." };
+        return { ok: false, content: "error: content is required." };
       try {
         mkdirSync(dirname(p), { recursive: true });
         writeFileSync(p, content, "utf8");
@@ -192,9 +208,9 @@ export async function runTool(
     }
 
     case "str_replace": {
-      const p = resolvePath(ctx, String(args.path ?? ""));
-      const find = typeof args.find === "string" ? args.find : "";
-      const replace = typeof args.replace === "string" ? args.replace : "";
+      const p = resolvePath(ctx, asString(args.path));
+      const find = asString(args.find);
+      const replace = asString(args.replace);
       if (!existsSync(p)) return { ok: false, content: `error: no such file: ${p}` };
       if (find === "") return { ok: false, content: "error: find is required and was empty." };
       const text = readFileSync(p, "utf8");
@@ -216,7 +232,7 @@ export async function runTool(
     }
 
     case "list_dir": {
-      const p = resolvePath(ctx, String(args.path ?? "."));
+      const p = resolvePath(ctx, asString(args.path) || ".");
       if (!existsSync(p)) return { ok: false, content: `error: no such directory: ${p}` };
       let entries: string[];
       try {
@@ -238,7 +254,7 @@ export async function runTool(
     }
 
     case "finish": {
-      ctx.finished = { summary: String(args.summary ?? "") };
+      ctx.finished = { summary: asString(args.summary) };
       return { ok: true, content: "run ended." };
     }
 

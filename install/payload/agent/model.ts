@@ -165,7 +165,7 @@ export class Model {
   }
 
   /** One turn. History must be complete and append-only, or the server's prefix cache misses. */
-  async chat(messages: Message[], tools: ToolSchema[]): Promise<Turn> {
+  async chat(messages: Message[], tools: ToolSchema[], temperatureOverride?: number): Promise<Turn> {
     const started = Date.now();
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.cfg.apiKey) headers.authorization = `Bearer ${this.cfg.apiKey}`;
@@ -173,7 +173,7 @@ export class Model {
     const body: Record<string, unknown> = {
       model: this.cfg.model,
       messages,
-      temperature: this.cfg.temperature,
+      temperature: temperatureOverride ?? this.cfg.temperature,
       max_tokens: this.cfg.maxTokens,
     };
     if (tools.length) body.tools = tools;

@@ -11,6 +11,15 @@
 // server keeps exactly ONE cached conversation prefix, so an append-only history is what
 // makes turn twenty as cheap as turn two. Anything that rewrites earlier messages —
 // summarising in place, dropping a middle tool result — throws that cache away.
+//
+// Stronger, and specific to this server: on the Qwen dialect the only cache path that
+// can hit is raw token-prefix matching, because the structural tool-result path throws
+// for every dialect except Gemma (Tokenizer.swift:883). Two consequences shape this file.
+// The assistant message is echoed back BYTE-IDENTICALLY — same tool_call ids, same
+// arguments string, never re-serialized — or the prefix diverges. And a new USER message
+// mid-run is not free: the ChatML template scans back to the last user message that is
+// not wholly a tool response, so appending one re-prefills the entire history. Mid-run
+// guidance is therefore appended to a tool result the loop is already about to send.
 
 import { Model, type Message, type Turn } from "./model";
 import { TOOLS, TOOL_NAMES, runTool, clamp, type ToolContext } from "./tools";
@@ -72,12 +81,22 @@ export async function runLoop(
     try {
       turn = await model.chat(state.messages, TOOLS);
     } catch (err) {
-      state.status = "failed";
-      state.summary = err instanceof Error ? err.message : String(err);
-      state.updatedISO = new Date().toISOString();
-      saveRun(state);
-      emit({ kind: "done", status: "failed", summary: state.summary });
-      return state;
+      // A tool call the server's own parser rejects fails the whole REQUEST — the
+      // harness never receives the offending call, so there is nothing to correct.
+      // Retrying is only useful if it can produce different output, and at temperature
+      // 0 it cannot, so the single retry deliberately raises temperature to break
+      // determinism. One retry, then the run fails honestly.
+      emit({ kind: "correction", reason: `generation failed (${err instanceof Error ? err.message : err}); retrying once` });
+      try {
+        turn = await model.chat(state.messages, TOOLS, 0.4);
+      } catch (err2) {
+        state.status = "failed";
+        state.summary = err2 instanceof Error ? err2.message : String(err2);
+        state.updatedISO = new Date().toISOString();
+        saveRun(state);
+        emit({ kind: "done", status: "failed", summary: state.summary });
+        return state;
+      }
     }
 
     emit({ kind: "turn", n: state.turns, turn });
@@ -105,6 +124,9 @@ export async function runLoop(
         return state;
       }
       lastFailure = "no-tool-call";
+      // The one place a user message is unavoidable — there is no tool result to append
+      // to when the model answered in prose. It costs a full re-prefill on this server,
+      // so it happens at most once per run: the next prose answer ends the run instead.
       state.messages.push({
         role: "user",
         content:
@@ -152,10 +174,12 @@ export async function runLoop(
           repeats += 1;
           if (repeats >= opts.repeatLimit) {
             const reason = `the same command failed ${repeats + 1} times: ${call.args.command}`;
-            state.messages.push({
-              role: "user",
-              content: `You have run that failing command ${repeats + 1} times. Stop repeating it. Either try a different approach or call finish and explain what is blocking you.`,
-            });
+            // Appended to the tool result rather than sent as a user message: a user
+            // message here would re-prefill the whole history on every stuck run.
+            const last = state.messages[state.messages.length - 1];
+            if (last && last.role === "tool") {
+              last.content = `${last.content}\n\n[harness] You have now run that failing command ${repeats + 1} times. Stop repeating it: either try a different approach, or call finish and explain what is blocking you.`;
+            }
             emit({ kind: "stuck", reason });
             repeats = 0;
           }
