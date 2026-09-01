@@ -18,6 +18,8 @@ those three.
 | Doc | Read it when | Notes |
 |---|---|---|
 | [mac-remote-control.md](mac-remote-control.md) | Touching pointer, keyboard, media, windows or power | The control surface, end to end. Referenced from CONTEXT.md. |
+| [handoff-2026-09-01-local-inference.md](handoff-2026-09-01-local-inference.md) | Picking up the local-model or harness work | **Start here for that work.** What is done, what has never been run, and the deepseek-harness decision that is still open. |
+| [local-brain-runbook.md](local-brain-runbook.md) | Actually running a local model on the Mac | The command sequence, in order: fork, build, install, serve, measure, grade. None of it has been executed yet. |
 | [vision-tower-port-scope.md](vision-tower-port-scope.md) | Considering local image understanding | Sep 2026 scope for a Metal vision tower in the Mference fork. Most of the ViT already exists in that repo; the new work is small and staged. |
 | [local-inference-references.md](local-inference-references.md) | Any local-model / local-inference work | Aug 2026 deep dive of the two vendored codebases in `references/`, plus the three integration seams. Companion to `openspec/changes/local-brain-and-harness/`. |
 | [mesh-cli-and-remote-install.md](mesh-cli-and-remote-install.md) | Adding a machine, the `mesh` CLI, upgrade/uninstall | Start here for anything installer-shaped. |

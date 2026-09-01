@@ -44,9 +44,11 @@ cannot run in CI or a cloud agent container.
       Default the memory profile to 32 slots (~2.2 GB), not 16: 16 is the exact chunked-
       prefill floor with zero headroom, and the slowest rung.
       A family that cannot fit is shown and disabled, never hidden.
-      *Verify by running: the install list on a machine with ~30 GB free shows Qwen 3.6,
-      Gemma 4 and Maple installable, DeepSeek-V4-Flash and Inkling-Small refused with
-      both numbers.*
+      *Verify by running: the install list on this host — **175.21 GB free, measured
+      2026-09-01** — shows Qwen 3.6, Gemma 4, Maple and now DeepSeek-V4-Flash (~91 GB)
+      installable, and Inkling-Small (~148 GB) refused with both numbers because it would
+      leave ~27 GB on the boot volume. The earlier "~30 GB free" assumption is superseded;
+      disk is no longer the binding constraint on this machine — memory is.*
 
 ## Stage 2 — Qwen 3.6 serving, measured honestly
 

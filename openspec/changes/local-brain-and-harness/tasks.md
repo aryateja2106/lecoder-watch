@@ -2,6 +2,23 @@
 
 Sequenced so the cheap, reversible learning happens before any commitment.
 
+## Status, 2026-09-01 — read before starting the spike
+
+**The spike below was never run, and an agent loop was built anyway.** The
+`local-native-inference` change shipped `mesh-code`
+(`install/payload/agent/`): its own turn loop, tool registry, model adapter and permission
+system. Finding 2 of [proposal.md](proposal.md) advises against exactly that. This was not a
+considered reversal — the harness question simply never came up while the model work was in
+front of it.
+
+The cost of adopting the harness after the fact is bounded and known: `loop.ts`, `tools.ts`
+and `model.ts` (~840 lines) are what a harness would replace. `exec.ts`, `meshd.ts`,
+`mobile.ts`, `risk.ts`, `meshd/brain.ts` and `scripts/brain-eval/` are harness-agnostic and
+survive either decision — and they are the parts that were expensive to get right.
+
+**Run the spike before extending `mesh-code` further.** Context:
+[docs/handoff-2026-09-01-local-inference.md](../../../docs/handoff-2026-09-01-local-inference.md).
+
 ## Spike — time-boxed, throwaway
 
 - [ ] **Read deepseek-harness's `ctx.subprocess` and `ctx.fs` interfaces** and write down,

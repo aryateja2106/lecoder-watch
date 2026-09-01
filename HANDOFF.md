@@ -1,5 +1,15 @@
 # HANDOFF — MeshWatch (updated 2026-07-07)
 
+> **This file is a July snapshot and parts of it are actively wrong.** The resume protocol
+> below names branch `backup/2026-07-02` and says never to push; that has not been true for
+> months. Read it for the shipped-feature history, not for instructions.
+>
+> **For the local-model and harness work, start at
+> [docs/handoff-2026-09-01-local-inference.md](docs/handoff-2026-09-01-local-inference.md).**
+> The repo-level brief is always [AGENTS.md](AGENTS.md); `docs/README.md` says which docs
+> are current and which are archaeology.
+
+
 Single entry point to resume. Read this → `docs/PROJECT-STATE-AND-LEARNINGS-2026-07-07.md` → `git log`, then continue.
 Older but still-useful context: `docs/PRODUCT-CONTEXT-2026-06-05.md`, `docs/XCODE-WATCH-DEVICE-RUNBOOK.md`.
 
