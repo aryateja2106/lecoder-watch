@@ -24,11 +24,16 @@
 import { Model, type Message, type Turn } from "./model";
 import { TOOLS, TOOL_NAMES, runTool, clamp, type ToolContext } from "./tools";
 import { saveRun, type RunState } from "./session";
+import { decide, type ConsentMode, type Ledger, type Verdict } from "./escalate";
 
 export type LoopOptions = {
   maxTurns: number;
   /** consecutive identical failing commands before the loop calls it stuck */
   repeatLimit: number;
+  /** default "off": the router runs and records, but nothing leaves the machine */
+  consent?: ConsentMode;
+  /** the server's context window, used to measure context pressure */
+  maxContext?: number;
   onEvent?: (e: LoopEvent) => void;
 };
 
@@ -38,6 +43,7 @@ export type LoopEvent =
   | { kind: "tool"; name: string; args: any; ok: boolean; summary: string }
   | { kind: "correction"; reason: string }
   | { kind: "stuck"; reason: string }
+  | { kind: "escalation"; verdict: Verdict }
   | { kind: "done"; status: RunState["status"]; summary: string };
 
 export function systemPrompt(cwd: string, session: string): string {
@@ -73,6 +79,8 @@ export async function runLoop(
   const emit = (e: LoopEvent) => opts.onEvent?.(e);
   let lastFailure = "";
   let repeats = 0;
+  let consecutiveToolFailures = 0;
+  let lastPromptTokens = 0;
 
   while (state.turns < opts.maxTurns) {
     state.turns += 1;
@@ -101,6 +109,7 @@ export async function runLoop(
 
     emit({ kind: "turn", n: state.turns, turn });
     if (turn.usage) {
+      lastPromptTokens = turn.usage.prompt;
       state.tokens.prompt += turn.usage.prompt;
       state.tokens.completion += turn.usage.completion;
       state.tokens.cached += turn.usage.cached;
@@ -166,6 +175,7 @@ export async function runLoop(
         ok: result.ok,
         summary: summarise(result.content),
       });
+      consecutiveToolFailures = result.ok ? 0 : consecutiveToolFailures + 1;
 
       // Repeating the same failing command is the classic small-model death spiral.
       if (!result.ok && call.name === "run_command") {
@@ -198,6 +208,34 @@ export async function runLoop(
         state.updatedISO = new Date().toISOString();
         saveRun(state);
         emit({ kind: "done", status: "finished", summary: state.summary });
+        return state;
+      }
+    }
+
+    // Is this still worth doing locally? The router is a pure function over facts the
+    // protocol already gave us; in the default "off" mode it only records what it would
+    // have done, because escalation sends the user's code off their machine.
+    const ledger: Ledger = {
+      turns: state.turns,
+      maxTurns: opts.maxTurns,
+      maxContext: opts.maxContext ?? 16384,
+      promptTokens: lastPromptTokens,
+      cachedTokens: state.tokens.cached,
+      consecutiveToolFailures,
+      repeatedFailingCommand: repeats + 1,
+      modelRequest: ctx.escalationRequest ?? null,
+      lastHttpStatus: null,
+    };
+    const verdict = decide(ledger, opts.consent ?? "off");
+    if (verdict.escalate) {
+      emit({ kind: "escalation", verdict });
+      state.escalation = { at: state.turns, reason: verdict.reason, action: verdict.action };
+      if (verdict.action === "ask-user" || verdict.action === "escalate") {
+        state.status = "escalate";
+        state.summary = verdict.reason;
+        state.updatedISO = new Date().toISOString();
+        saveRun(state);
+        emit({ kind: "done", status: "escalate", summary: verdict.reason ?? "escalation requested" });
         return state;
       }
     }

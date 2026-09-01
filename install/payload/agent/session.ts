@@ -36,6 +36,8 @@ export type RunState = {
   updatedISO: string;
   brain: { model: string; endpoint: string; source: string } | null;
   summary: string | null;
+  /** what the router decided, and whether anything was allowed to leave the machine */
+  escalation?: { at: number; reason: string | null; action: string } | null;
   messages: Message[];
   commands: CommandRecord[];
   tokens: { prompt: number; completion: number; cached: number };

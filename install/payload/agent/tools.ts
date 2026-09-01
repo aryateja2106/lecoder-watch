@@ -30,6 +30,8 @@ export type ToolContext = {
   cwd: string;
   /** set by the finish tool so the loop knows the model considers the task done */
   finished?: { summary: string };
+  /** set by the escalate tool; the router treats this as a blocking signal */
+  escalationRequest?: { reason: string; question: string; exitCriterion: string };
   onCommand?: (r: ExecResult) => void;
 };
 
@@ -134,6 +136,23 @@ export const TOOLS: ToolSchema[] = [
         type: "object",
         properties: { path: { type: "string" } },
         required: ["path"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "escalate",
+      description:
+        "Ask for a bigger model's help when this task is beyond you. Use it when you have tried and are genuinely stuck, not as a first move. The run pauses for the user to decide.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: { type: "string", description: "Why you cannot do this yourself." },
+          question: { type: "string", description: "The specific question a bigger model should answer." },
+          exit_criterion: { type: "string", description: "How you will know the answer worked." },
+        },
+        required: ["reason", "question"],
       },
     },
   },
@@ -260,6 +279,21 @@ export async function runTool(
       });
       const more = entries.length > shown.length ? `\n... and ${entries.length - shown.length} more` : "";
       return { ok: true, content: `${p}:\n${shown.join("\n")}${more}` };
+    }
+
+    case "escalate": {
+      ctx.escalationRequest = {
+        reason: asString(args.reason),
+        question: asString(args.question),
+        exitCriterion: asString(args.exit_criterion),
+      };
+      // Not a refusal: the run continues locally until the router and the user's consent
+      // mode decide otherwise, so a model that escalates too eagerly does not stall.
+      return {
+        ok: true,
+        content:
+          "noted: your request for help was recorded. Keep working on what you can in the meantime.",
+      };
     }
 
     case "finish": {

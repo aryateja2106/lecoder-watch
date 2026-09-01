@@ -43,6 +43,24 @@ const SCRIPT: Array<{ text: string | null; calls: any[] }> = [
   { text: null, calls: [call("c10", "finish", { summary: "Wrote app.js and verified it prints sum 42." })] },
 ]
 
+// A second script: the model tries, fails, and asks for help.
+const ESCALATION_SCRIPT: Array<{ text: string | null; calls: any[] }> = [
+  { text: null, calls: [call("e1", "run_command", { command: "false" })] },
+  { text: null, calls: [call("e2", "run_command", { command: "false" })] },
+  {
+    text: null,
+    calls: [
+      call("e3", "escalate", {
+        reason: "this refactor spans twelve files and I keep breaking the build",
+        question: "what is the right decomposition here?",
+        exit_criterion: "the test suite passes",
+      }),
+    ],
+  },
+  { text: null, calls: [call("e4", "run_command", { command: "echo still-working" })] },
+  { text: null, calls: [call("e5", "finish", { summary: "did what I could locally" })] },
+]
+
 Bun.serve({
   port,
   async fetch(req) {
@@ -55,7 +73,9 @@ Bun.serve({
     const messages: any[] = body?.messages ?? []
     // Stateless: the step is how many assistant turns have already happened.
     const step = messages.filter((m) => m.role === "assistant").length
-    const entry = SCRIPT[step] ?? { text: "Nothing left to do.", calls: [] }
+    const wantsEscalation = JSON.stringify(messages[1] ?? {}).includes("escalation-demo")
+    const script = wantsEscalation ? ESCALATION_SCRIPT : SCRIPT
+    const entry = script[step] ?? { text: "Nothing left to do.", calls: [] }
 
     return Response.json({
       id: "chatcmpl-scripted",

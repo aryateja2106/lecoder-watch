@@ -54,6 +54,7 @@ Options
   --cwd DIR          working directory for the task (default: current directory)
   --session NAME     meshd session to work in (default: derived from the run id)
   --max-turns N      stop after N turns (default 40)
+  --consent MODE     off (default, records only) | ask | auto — escalation to a bigger model
   --daemon URL       meshd base URL (default http://127.0.0.1:8899)
   --token TOKEN      meshd bearer token (default $MESHD_TOKEN)
   --probe            with 'brain', measure capabilities instead of reading cached ones
@@ -272,6 +273,11 @@ async function main() {
       case "stuck":
         console.log(`  ${RED}· stuck: ${e.reason}${RESET}`);
         break;
+      case "escalation":
+        console.log(
+          `  ${BOLD}· escalation ${e.verdict.action}${RESET}: ${GREY}${e.verdict.reason}${RESET}`,
+        );
+        break;
       case "done":
         console.log(`\n${BOLD}${e.status}${RESET}: ${e.summary}`);
         break;
@@ -281,6 +287,7 @@ async function main() {
   const final = await runLoop(model, ctx, state, {
     maxTurns: Number(flags["max-turns"] ?? 40),
     repeatLimit: 2,
+    consent: (typeof flags.consent === "string" ? flags.consent : "off") as any,
     onEvent,
   });
 
