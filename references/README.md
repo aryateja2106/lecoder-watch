@@ -33,7 +33,7 @@ copies — this directory is study material and nothing may build against it.
 
 | Patch | What it does |
 |---|---|
-| `0001-mference-server-expert-cache-slots.patch` | Adds `--expert-cache-slots` to `MferenceServer`, so the memory/speed profile is selectable instead of being inferred from host RAM. Upstream's CLI already has the flag; its server does not. Verified to apply cleanly with `git apply` against the pinned commit; **not compiled** — that needs a Mac. |
+| `0001-mference-server-expert-cache-slots.patch` | Adds `--expert-cache-slots` to `MferenceServer`, so the memory/speed profile is selectable instead of being inferred from host RAM. Upstream's CLI already has the flag; its server does not. Applies cleanly with `git apply` against the pinned commit, and **built and tested on a 24 GB M4 Pro (2026-09-01): `swift build` clean, `swift test` 1102 tests / 179 suites, zero failures.** |
 
 Apply in a fork checkout, not here:
 

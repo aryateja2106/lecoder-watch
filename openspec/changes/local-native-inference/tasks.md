@@ -27,8 +27,11 @@ cannot run in CI or a cloud agent container.
       `allowedExpertCacheSlots`, and rejects `8` specifically: it is an allowed CLI rung
       but below chunked prefill's floor of `(maxPendingDepth + 1) * tileExperts`, so it
       would throw mid-generation instead of at startup.
-      *Verified: applies cleanly with `git apply` to a pristine copy of the pinned
-      commit. NOT compiled — no Swift toolchain here; that is the next task.*
+      *Verified on the Mac, 2026-09-01: `swift build -c release --product MferenceServer`
+      succeeded, and `swift test` passed 1102 tests across 179 suites with zero failures.
+      Every compiler warning in that run is pre-existing upstream code — the patch touches
+      only ServerArguments.swift, ServerInference.swift and main.swift, none of which
+      appear in any warning.*
 - [ ] **Build and measure it on the Mac.** Apply the patch in the fork, build, then run
       the server twice on the same model — once at `--slots 32`, once at `--slots auto`
       (96 on this 24 GiB host).
