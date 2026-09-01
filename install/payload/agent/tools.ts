@@ -17,6 +17,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, existsSy
 import { dirname, resolve } from "node:path";
 import type { Meshd } from "./meshd";
 import { execInSession, type ExecResult } from "./exec";
+import { compressIfRecognized } from "./mobile";
 import type { ToolSchema } from "./model";
 
 export const MAX_TOOL_RESULT_CHARS = 12000;
@@ -171,7 +172,15 @@ export async function runTool(
         ? `command timed out after ${Math.round(r.durationMs / 1000)}s and was interrupted`
         : `exit code ${r.exitCode}`;
       const note = r.truncated && r.totalBytes !== null ? ` (output was ${r.totalBytes} bytes; tail shown)` : "";
-      const body = r.output.trim() === "" ? "(no output)" : clamp(r.output);
+      // A raw test log or UI dump is minutes of prefill and half the context window, so
+      // recognised artifacts are digested before the model ever sees them.
+      const compressed = compressIfRecognized(r.output);
+      const body =
+        r.output.trim() === ""
+          ? "(no output)"
+          : compressed
+            ? `[${compressed.note}]\n\n${clamp(compressed.text)}`
+            : clamp(r.output);
       return { ok: r.exitCode === 0, content: `${head}${note}\n\n${body}` };
     }
 
