@@ -509,6 +509,9 @@ install_components() {
   if want_component tools; then
     rm -rf "$MESH_HOME/bin"; cp -R "$PAYLOAD_DIR/bin" "$MESH_HOME/"
     chmod +x "$MESH_HOME"/bin/* 2>/dev/null || true
+    # mesh-code is a shim in bin/; its implementation lives in agent/. Shipping one
+    # without the other installs a command that cannot start.
+    if [ -d "$PAYLOAD_DIR/agent" ]; then rm -rf "$MESH_HOME/agent"; cp -R "$PAYLOAD_DIR/agent" "$MESH_HOME/"; fi
     if [ -d "$SCRIPT_DIR/hooks" ]; then rm -rf "$MESH_HOME/hooks"; cp -R "$SCRIPT_DIR/hooks" "$MESH_HOME/"; fi
     if [ -d "$PAYLOAD_DIR/share" ]; then rm -rf "$MESH_HOME/share"; cp -R "$PAYLOAD_DIR/share" "$MESH_HOME/"; fi
   fi
@@ -601,7 +604,7 @@ service_state() {  # prints launchd|systemd|tmux supervisor state for a service 
 do_list() {
   log "Prefix: $MESH_HOME"
   [ -d "$MESH_HOME" ] || { log "  (nothing installed)"; return; }
-  for item in meshd rmux-bridge bin share hooks token; do
+  for item in meshd rmux-bridge bin agent share hooks token; do
     [ -e "$MESH_HOME/$item" ] && log "  present: $item"
   done
   for svc in meshd cmux-bridge rmux-bridge; do
