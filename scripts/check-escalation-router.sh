@@ -10,7 +10,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 cat > "$TMP/driver.ts" <<'TS'
-import { decide, handoffBrief, DEFAULTS, type Ledger } from "AGENT/escalate";
+import { decide, handoffBrief, DEFAULTS, type Ledger } from "./escalate.ts";
 
 let failed = 0;
 const check = (name: string, cond: boolean, detail = "") => {
@@ -69,5 +69,5 @@ if (failed) { console.log(`\n${failed} assertion(s) failed`); process.exit(1); }
 console.log("check-escalation-router: all assertions passed");
 TS
 
-sed -i "s#AGENT#$ROOT/install/payload/agent#" "$TMP/driver.ts"
+cp "$ROOT/install/payload/agent/escalate.ts" "$TMP/escalate.ts"
 bun run "$TMP/driver.ts"

@@ -67,7 +67,7 @@ LOG
 } > "$TMP/ui.xml"
 
 cat > "$TMP/driver.ts" <<'TS'
-import { digestTestLog, outlineUiHierarchy, compressIfRecognized } from "AGENT/mobile";
+import { digestTestLog, outlineUiHierarchy, compressIfRecognized } from "./mobile.ts";
 import { readFileSync } from "node:fs";
 
 let failed = 0;
@@ -116,5 +116,5 @@ if (failed) { console.log(`\n${failed} assertion(s) failed`); process.exit(1); }
 console.log("check-mobile-digest: all assertions passed");
 TS
 
-sed -i "s#AGENT#$ROOT/install/payload/agent#" "$TMP/driver.ts"
+cp "$ROOT/install/payload/agent/mobile.ts" "$TMP/mobile.ts"
 bun run "$TMP/driver.ts" "$TMP"
