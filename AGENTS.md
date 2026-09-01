@@ -121,6 +121,7 @@ next steps that were correct in June and July and are wrong now; the index says 
 | `WatchWidgets/`, `MeshWatchWidgets/` | Complication; iOS Live Activity. |
 | `install/payload/meshd/` | **The daemon.** Bun + TypeScript. The only copy. |
 | `install/payload/bin/mesh` | The CLI: setup, pair, doctor, upgrade, uninstall. |
+| `install/payload/agent/` | **mesh-code**: the local coding agent. Read its README before changing `exec.ts`. |
 | `install/install.sh` | The `curl \| sh` installer. |
 | `scripts/check-*.{swift,sh}` | Self-checks. `check-all.sh` runs every one. |
 | `scripts/brain-eval/` | Capability scorecard for any OpenAI-compatible local endpoint. |
