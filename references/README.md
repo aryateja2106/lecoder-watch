@@ -26,6 +26,23 @@ Each keeps its own LICENSE — they are not under this repo's license.
   local-model sidecar for `meshd`. Not built on MLX — it consumes MLX-community
   checkpoints with its own kernels.
 
+## patches/
+
+Changes we maintain against upstream, as patch files rather than edits to the vendored
+copies — this directory is study material and nothing may build against it.
+
+| Patch | What it does |
+|---|---|
+| `0001-mference-server-expert-cache-slots.patch` | Adds `--expert-cache-slots` to `MferenceServer`, so the memory/speed profile is selectable instead of being inferred from host RAM. Upstream's CLI already has the flag; its server does not. Verified to apply cleanly with `git apply` against the pinned commit; **not compiled** — that needs a Mac. |
+
+Apply in a fork checkout, not here:
+
+```sh
+cd <your fork of Mference>
+git apply /path/to/lecoder-watch/references/patches/0001-mference-server-expert-cache-slots.patch
+swift build -c release --product MferenceServer
+```
+
 ## Pruned from the vendored copies
 
 To keep the repo small, the copies are source-complete but asset-pruned. Fetch the

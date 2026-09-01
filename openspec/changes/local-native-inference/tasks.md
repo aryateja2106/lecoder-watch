@@ -21,17 +21,25 @@ cannot run in CI or a cloud agent container.
       the upstream commit it forks from; upstream is a single-maintainer research repo,
       so pin and merge deliberately rather than tracking `main`.
       *Verify by running: `git -C <fork> log -1` and `git remote -v` pasted here.*
-- [ ] **Add `--expert-cache-slots` to `MferenceServer`**, mirroring the flag
-      `MferenceCLI` already has, so the ~1.45 GB profile is selectable on a 16/24 GB
-      host. Today the server builds its runtime from the auto-selection at
-      `Sources/MferenceServer/Core/ServerInference.swift:218-232` with no override.
-      Validate the value against `RuntimeConfiguration.allowedExpertCacheSlots`
-      (`[8,16,24,32,64,96,128]`) and refuse anything else rather than silently rounding.
-      *Verify by running: start the server twice on the same model, at 16 and at 96
-      slots, and record peak RSS and tok/s for each. Two different numbers is the proof.*
+- [x] **Write the `--expert-cache-slots` patch for `MferenceServer`** —
+      `references/patches/0001-mference-server-expert-cache-slots.patch` (3 files, 53
+      insertions), plus `scripts/start-brain.sh` to pass it. Rejects values outside
+      `allowedExpertCacheSlots`, and rejects `8` specifically: it is an allowed CLI rung
+      but below chunked prefill's floor of `(maxPendingDepth + 1) * tileExperts`, so it
+      would throw mid-generation instead of at startup.
+      *Verified: applies cleanly with `git apply` to a pristine copy of the pinned
+      commit. NOT compiled — no Swift toolchain here; that is the next task.*
+- [ ] **Build and measure it on the Mac.** Apply the patch in the fork, build, then run
+      the server twice on the same model — once at `--slots 32`, once at `--slots auto`
+      (96 on this 24 GiB host).
+      *Verify by running: record peak RSS AND tokens/sec for each, because slots trade
+      memory for speed and a footprint win that thirds throughput is not a win.
+      `scripts/brain-eval/eval.ts` already times every probe — run it against both.*
 - [ ] **Expose every upstream family in our install path** — `gemma4`, `qwen36`,
       `qwen38`, `maple`, `deepseekV4Flash`, `inklingSmall` — each carrying its disk and
       RAM cost, and each marked installable or not against this machine's free space.
+      Default the memory profile to 32 slots (~2.2 GB), not 16: 16 is the exact chunked-
+      prefill floor with zero headroom, and the slowest rung.
       A family that cannot fit is shown and disabled, never hidden.
       *Verify by running: the install list on a machine with ~30 GB free shows Qwen 3.6,
       Gemma 4 and Maple installable, DeepSeek-V4-Flash and Inkling-Small refused with

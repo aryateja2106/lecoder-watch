@@ -68,7 +68,7 @@ hardware — replace them with our own once step 3 above has run here.
 |---|---|---|---|---|
 | Maple Preview 20B-A1B | `maple` | ~6.6 GB | ~645 MiB | fits easily; smallest real option |
 | Gemma 4 26B-A4B | `gemma4` | ~14.3 GB | ~2 GB | fits; the app's default |
-| **Qwen 3.6 35B-A3B** | `qwen36` | **~19.6 GB** | **~1.45 GB @ 16 slots** | **fits — first choice** |
+| **Qwen 3.6 35B-A3B** | `qwen36` | **~19.6 GB** | ~2.2 GB @ 32 slots (~1.45 GB @ 16) | **fits — first choice** |
 | Qwen 3.8 27B dense | `qwen38` | ~15.1 GB | ~15 GB | disk fits, RAM does not |
 | DeepSeek-V4-Flash | `deepseekV4Flash` | ~91 GB | ~6.8 GB | does not fit |
 | Inkling-Small | `inklingSmall` | ~148 GB | ~9 GB | does not fit |
@@ -78,23 +78,34 @@ and is tight against a 40 GB budget.
 
 ## The RAM number has a catch — read this before quoting ~1.45 GB
 
-That figure is the **16-slot** expert-cache profile. Slots are a speed dial: more
-wired slots means fewer SSD reads and more tokens/sec, at more RAM. The profile is
-chosen from host memory in
+That figure is the **16-slot** expert-cache profile. Slots are a speed dial: more wired
+slots means fewer SSD reads and more tokens/sec, at more RAM. The profile is chosen from
+host memory in
 [`RuntimeConfiguration.defaultExpertCacheSlots`](../../references/mference/Sources/Mference/Runtime/Configuration/RuntimeConfiguration.swift):
 
 - ≥ 24 GiB host → **96 slots, ~6.8 GB wired**
 - ≥ 16 GiB host → 32 slots
 - below that → 16 slots, ~1.45 GB
 
-**`MferenceCLI` exposes `--expert-cache-slots`; `MferenceServer` does not.** The server
-builds its config in `Sources/MferenceServer/Core/ServerInference.swift:218-232` with no
-override, so on a 16 GB or 24 GB Mac the server will quietly take the bigger footprint
-and there is no flag to ask for the small one.
+Upstream's `MferenceCLI` exposes `--expert-cache-slots`; upstream's `MferenceServer` does
+not, and builds its runtime from the auto rule at `ServerInference.swift:218-232` with no
+override. **Our fork adds the flag** —
+[`references/patches/0001-mference-server-expert-cache-slots.patch`](../../references/patches/0001-mference-server-expert-cache-slots.patch),
+applied with `git apply` in a fork checkout and built on the Mac. `scripts/start-brain.sh`
+passes it, and refuses to start rather than silently ignoring a profile an unpatched
+server cannot honour.
 
-So: measure the CLI at `--expert-cache-slots 16` to see the ~1.45 GB behaviour today,
-and treat "add `--expert-cache-slots` to MferenceServer" as the first patch in our fork.
-It is a small, surgical change that mirrors a flag the CLI already has.
+**Prefer 32 slots (~2.2 GB), not 16.** Two reasons, both from the scheduler rather than
+taste. 16 is the exact floor chunked prefill can schedule —
+`(maxPendingDepth + 1) * tileExperts` in `PrefillRoutedTileScheduler` — so it has zero
+headroom. And because slots buy speed, 16 is also the slowest rung, which hurts most on a
+prefill-bound workload. 32 is still a fraction of the 96 that auto-selects on a 24 GB
+machine. Keep 16 reachable for measuring the smallest possible footprint; do not make it
+the default.
+
+Whatever profile you pick, **measure throughput, not just footprint**: `eval.ts` times
+every probe, so run it against both and compare. A profile that halves memory and thirds
+throughput is not obviously a win.
 
 ## Running it against LM Studio
 
