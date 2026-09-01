@@ -120,3 +120,54 @@ requires to edit a config file or know a port number fails it.
 - **THEN** weights, server process, and service registration SHALL all be gone,
   and the daemon SHALL report no local brain — with the machine otherwise exactly
   as it was
+
+### Requirement: Two local endpoints are supported, and work is routed by capability
+
+The product SHALL support both an existing third-party local server (LM Studio) and our
+own supervised inference, and SHALL route each request to an endpoint whose reported
+capabilities cover it, rather than to a fixed preference. Where no reachable endpoint has
+the needed capability, the request SHALL be refused with a reason naming the missing
+capability.
+
+Two audiences, one mechanism: someone with a working local setup keeps it, and someone
+who wants the smallest footprint gets ours. Neither is a second-class path. Routing by
+capability rather than preference is what makes an engine that cannot read images safe to
+prefer for everything else.
+
+#### Scenario: Only a text-only engine is running
+- **WHEN** a request needs image understanding and the only reachable endpoint is
+  text-only
+- **THEN** the request SHALL be refused with a reason naming image support as the missing
+  capability
+- **AND** the refusal SHALL NOT be reported as a model failure or a server error
+
+#### Scenario: Both endpoints are reachable
+- **WHEN** an image request arrives and one endpoint accepts images while the other does
+  not
+- **THEN** the request SHALL go to the endpoint that accepts images
+- **AND** text and tool-calling work SHALL continue to go to the endpoint chosen for it
+
+#### Scenario: A third-party server the user already runs
+- **WHEN** the user has their own local model server running
+- **THEN** the product SHALL detect and use it
+- **AND** SHALL NOT start, stop, restart, or reconfigure it
+
+### Requirement: The memory profile is selectable and reported
+
+Where the engine trades memory for speed, that trade SHALL be selectable when the server
+is started, and the profile actually in force SHALL be reported alongside the model.
+A profile the engine does not support SHALL be refused at startup, naming the accepted
+values, rather than silently rounded to a nearby one.
+
+Memory is the whole reason this product runs a local model at all. A footprint chosen
+silently from host RAM — and unchangeable — is the difference between a model that fits
+this machine and one that does not.
+
+#### Scenario: Asking for the small footprint
+- **WHEN** the server is started with an explicit memory profile
+- **THEN** it SHALL use that profile rather than one inferred from host memory
+- **AND** the reported brain status SHALL state which profile is in force
+
+#### Scenario: An unsupported profile
+- **WHEN** a profile outside the engine's accepted set is requested
+- **THEN** the server SHALL refuse to start and name the accepted values

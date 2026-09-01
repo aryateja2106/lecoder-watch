@@ -5,82 +5,91 @@
 The owner's ask, verbatim: *"I want us to have local native inference for models we are
 currently using … I want to start using models like qwen 3.8 27b, but I don't have
 enough memory and storage to run them. I want us to start running local models and work
-on long running tasks given clear instructions."*
+on long running tasks given clear instructions."* Then, once the numbers were on the
+table: *"i think the 2gb memory option is far better than 8-15gb, in fact i want us to
+support all the models they are providing from this repo, we can create our own fork
+and start working inside the repo."* And on audience: *"lm studio for non technical
+developers who wants their existing setups to work and our own inference for better
+best value for the memory spent. We want to address & support both kind of audience."*
 
-[local-brain-and-harness](../local-brain-and-harness/proposal.md) already settled the
-strategy (keep meshd's session layer; adopt a harness; stage the local model in,
-frontier-by-default). It left the *mechanics* open: which local engine, how a
-too-big model fits the owner's actual Mac, and how the daemon and clients learn a
-local brain exists. Two vendored codebases — studied in depth in
-[docs/local-inference-references.md](../../../docs/local-inference-references.md),
-source in [references/](../../../references/README.md) — close those gaps.
+[local-brain-and-harness](../local-brain-and-harness/proposal.md) settled the strategy
+(keep meshd's session layer, adopt a harness, stage the local model in). This change
+settles the mechanics, against findings verified line by line in
+[docs/local-inference-references.md](../../../docs/local-inference-references.md).
 
-## What the references established
+## What the source says, once checked
 
-1. **The memory complaint dissolves with the right model shape.** Dense Qwen 3.8 27B
-   needs ~15 GB resident (a 24 GB Mac). **Qwen 3.6 35B-A3B — the same quality class —
-   runs in ~1.45 GB of RAM and ~20 GB of disk** at 10–14 tok/s even under a verified
-   8 GB working set, via mference's SSD expert streaming. The binding constraint
-   becomes ~20 GB of disk, and mference's resumable byte-range installer never needs
-   2× disk. MoE-with-few-active-params first, quantization second, streaming third.
-2. **A local OpenAI-compatible server already exists and matches our daemon.**
-   `MferenceServer` (loopback, SSE streaming, tool-call parsing, a single-prefix
-   prompt cache that makes agent-loop turns cheap) has exactly the gaps meshd
-   already fills for other loopback services: bearer auth, the Host/browser guard,
-   fleet reachability. meshd fronts OpenUsage and the cmux bridge today; a model
-   server is the third of that species.
-3. **Both references agree on the discipline**: stream weights from SSD with explicit
-   reads (both measured mmap/page-cache losing badly), gate every trick on
-   byte-identical output, and plan memory up front — refuse to start rather than OOM
-   an hour into a task.
+1. **The 2 GB tier is the right tier, and it is a dial, not a constant.** Qwen 3.6
+   35B-A3B runs at ~1.45 GB in the 16-slot expert-cache profile and ~6.8 GB at 96
+   slots; more wired slots buy tokens/sec. `RuntimeConfiguration.defaultExpertCacheSlots`
+   picks the profile from host RAM (≥24 GiB → 96, ≥16 GiB → 32, below → 16).
+2. **The server cannot ask for the cheap profile.** `MferenceCLI` has
+   `--expert-cache-slots`; `MferenceServer` builds its runtime straight from the
+   auto-selection (`Sources/MferenceServer/Core/ServerInference.swift:218-232`) with no
+   override. On a 16 or 24 GB Mac the server silently takes the larger footprint. This
+   is the first patch our fork should carry.
+3. **Mference is text-only — every family.** `RepackPlanner.isExcludedTensorName`
+   drops `vision_tower.`, `embed_vision.`, `audio_tower.`, `model.visual.` and
+   `model.audio.` at install; nothing in the engine consumes pixels. Function calling
+   and terminal/browser tool use are supported and fail closed; **reading images is
+   not**, so the owner's third condition cannot be met by this engine.
+4. **Storage is the binding constraint, not memory.** Against ~30–40 GB free: Qwen 3.6
+   (~19.6 GB), Gemma 4 (~14.3 GB) and Maple (~6.6 GB) fit; Qwen 3.8 27B fits on disk
+   but wants ~15 GB RAM; DeepSeek-V4-Flash (~91 GB) and Inkling-Small (~148 GB) do not.
 
 ## What this change delivers
 
-Three seams, each independently shippable, in order:
+**Two brains, deliberately, because there are two audiences.**
 
-- **Seam A — `brain.ts`**: a self-contained meshd module (the `wol.ts`/`files.ts`
-  pattern) that discovers and health-checks a loopback OpenAI-compatible model server
-  (MferenceServer, LM Studio, llama.cpp — the spec is endpoint-agnostic), exposes
-  which model is loaded, and adds a `brain` capability string. Plus the wire types
-  and a model badge so the phone and watch show which model is answering — the
-  release gate the agent-brain spec already demands.
-- **Local model on the Mac**: MferenceServer supervised as a service, with
-  **Qwen 3.6 35B-A3B as the first local model** (Qwen 3.8 27B + MTP when a 24 GB Mac
-  is available). Measured honestly on the owner's machine before any claim.
-- **Seam B — long-running tasks**: the harness (per local-brain-and-harness) runs in
-  a mux session started via `POST /agents/new`, with its OpenAI adapter pointed at
-  the local endpoint. The phone/watch see, steer, and get pushed about it through
-  today's plumbing; turns stay cheap because the daemon serializes agent turns and
-  sends complete history, exploiting the server's single-prefix prompt cache.
+- **LM Studio** — for people who already run a local setup and will not build Swift. We
+  detect it and use it; we never supervise or restart it. It is also, today, **the only
+  path to image input**: a vision model loaded there answers screenshot and GUI-grounding
+  work that Mference structurally cannot.
+- **Our Mference fork** — for the best capability per gigabyte. We supervise it, patch
+  it, and measure it. First patch: `--expert-cache-slots` on the server, so the ~1.45 GB
+  profile is selectable. Beyond that, expose **every family the upstream supports**, with
+  disk and RAM stated up front and the ones that cannot fit this machine marked as such
+  rather than hidden.
+
+Both are reached identically: an OpenAI-compatible loopback endpoint behind meshd's
+bearer auth, surfaced through one capability-gated `brain` route and one model badge on
+the phone and watch. Routing is by capability, not by preference: image work goes to the
+endpoint that accepts images, text and agentic work to the cheapest endpoint that passes
+the function-calling and terminal probes.
+
+**Grading is not a matter of opinion.** [`scripts/brain-eval/`](../../../scripts/brain-eval/README.md)
+runs one scorecard against any OpenAI-compatible endpoint — function calling, terminal
+actions through meshd-shaped tools, browser sequencing, image acceptance, prefix reuse,
+stop discipline — so both engines are compared with the same probes and the answer is
+recorded rather than argued.
 
 ## Target user skill level
 
-Unchanged from the product brief: non-technical people. They will not run a llama.cpp
-command or edit an env file. Installing and serving a local model must be one pasted
-command (`mesh` CLI) or one button (MeshDesktop), and removal must be as clean.
-Choosing a model is choosing from a short named list with disk/RAM requirements shown
-up front — never a HuggingFace URL.
+Unchanged: non-technical. Choosing a model is picking from a named list that states its
+disk and RAM cost, not pasting a HuggingFace URL. Installing and serving is one command
+or one button; removal is as clean. The LM Studio path exists precisely so that someone
+who already has a working setup does not have to learn ours.
 
 ## Non-goals
 
-- Making the local model the *default* brain this cycle (local-brain-and-harness
-  finding 3 stands; the honesty spec requirement stands with it).
-- Building an inference engine, or embedding one in-process in meshd or the apps —
-  mference's own Mac app isolates the model in a helper process; we front a server.
-- Generic GGUF/any-checkpoint support. First ship is the curated list mference pins.
-- Running the coding model on the Jetson (949 s/token measured on kimi-k3-in-c's
-  Orin Nano proof-of-life; ~14 tok/s on a 7B — routing/grounding roles only).
-- Replacing meshd's session model, or adding a second daemon payload copy.
-- DFlash2 speculative decoding (loses on code/prose until its verify-batching lands;
-  MTP is the shipped speculation path).
+- Making a local model the *default* brain this cycle. Frontier-by-default stands, and
+  so does the honesty requirement that goes with it.
+- Building an inference engine, or embedding one in-process in meshd or the apps.
+  Mference's own Mac app isolates the model in a helper process; we front a server.
+- Adding a vision tower to our fork in this change. It is a Metal ViT + projector port —
+  scope it separately, and use LM Studio for images until it exists.
+- Running the coding model on the Jetson (949 s/token measured on kimi-k3's Orin Nano
+  proof-of-life).
+- Generic GGUF loading in our fork, or supervising LM Studio.
+- Shipping DeepSeek-V4-Flash or Inkling-Small on this machine — they are supported in
+  code and marked as not installable here.
 
 ## Open questions for the owner
 
-1. Disk: is ~20 GB for Qwen 3.6 35B-A3B available on the MacBook? If not, Gemma 4
-   26B-A4B (~14.3 GB disk, ~2 GB RAM) is the fallback first model.
-2. Does the first supervised-server ship go through the `mesh` CLI or MeshDesktop?
-   (The CLI is cheaper; MeshDesktop is the non-technical answer. Recommend CLI first,
-   button second — same underlying commands.)
-3. LM Studio already runs on the Mac. Treat it as a supported endpoint from day one
-   (Seam A is endpoint-agnostic anyway), or standardize on MferenceServer for the
-   supervised path? Recommend: detect both, supervise only MferenceServer.
+1. Fork host: this session's GitHub scope is limited to `aryateja2106/lecoder-watch`, so
+   the fork must be created once by hand (`gh repo fork NeelM0906/Mference --clone`, or
+   the Fork button). Which account or org should own it?
+2. How much RAM does the MacBook have? It selects the slot profile, and therefore both
+   the footprint and the tokens/sec we will measure.
+3. Vision: accept LM Studio as the image path for now, or scope the Metal vision-tower
+   port as its own change?

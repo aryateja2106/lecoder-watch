@@ -249,3 +249,91 @@ brains. Defer: embedding inference in-process anywhere (mference's own Mac app
 isolates the model in a helper process — copy that judgment), the Jetson for
 anything interactive (949 s/token measured on kimi-k3), and DFlash2 until its
 verify-batching lands.
+
+---
+
+## Verified against the source, 2026-09-01
+
+The section above was written from a reading of both codebases. These four points were
+then checked line by line, because the product decision turns on them.
+
+### 1. Mference is text-only. Every family. No image input.
+
+The owner's condition was "strong at function calling, **read images**, and take actions
+on the browser or terminal". Two of three are supported; the image half is not, and not
+by a small margin — there is no image path at all.
+
+`RepackPlanner.isExcludedTensorName` (`references/mference/Sources/MferenceRepack/Core/Planning/RepackPlanner.swift:344-352`)
+drops, at install time:
+
+```swift
+name.hasPrefix("vision_tower.") ||
+    name.hasPrefix("embed_vision.") ||
+    name.hasPrefix("audio_tower.") ||
+    name.hasPrefix("model.visual.") ||
+    name.hasPrefix("model.audio.")
+```
+
+Several of these checkpoints *are* multimodal upstream — `Model.swift:116-121` notes Gemma
+and Qwen ship inside a `language_model.model.` container and Inkling names sibling
+`model.visual.` / `model.audio.` towers — but the towers never reach disk, and nothing in
+`Sources/` consumes pixels (no ViT, no projector, no `pixel_values`, no image token). The
+only `vision` string in the whole engine is the exclusion filter itself.
+
+**Consequence:** images route to a second endpoint, not to Mference. That is not a
+workaround bolted on — it is the cleanest version of the dual-provider design we already
+wanted, because LM Studio can load a vision model today with no build step. Text and
+agentic work go to our inference; screenshots and GUI grounding go to the LM Studio
+endpoint. Adding a vision tower to our fork is a kernel-level port (Metal ViT + projector),
+worth scoping separately, never a prerequisite.
+
+### 2. Function calling is real and fails closed
+
+`QwenToolCallParser` parses the ChatML `<tool_call>` body — `<function=NAME>` with
+`<parameter=KEY>` blocks — coerces structural JSON to typed values, keeps everything else
+as a raw string, caps input at 256 KiB, and **rejects any call whose name is not in the
+allowed set** (`ToolCallParserError.unknownTool`). Per-family parsers exist for Qwen,
+Gemma, DeepSeek and Maple. The server surfaces OpenAI `tool_calls` with
+`finish_reason: "tool_calls"` and runs no tool itself — the client owns the loop and the
+permission checks, which is exactly the split our approval model already assumes.
+Limits: `tool_choice` is `auto`/`none` only (no `required`, no named selection, no
+`parallel_tool_calls: false`), and there is no JSON-schema/structured-output mode.
+
+### 3. The ~1.45 GB figure is a profile the server cannot select
+
+`RuntimeConfiguration.defaultExpertCacheSlots` picks the expert-cache profile from host
+RAM: **≥24 GiB → 96 slots (~6.8 GB wired), ≥16 GiB → 32 slots, below → 16 slots
+(~1.45 GB)**. Slots are the same speed dial kimi-k3-in-c found from the other direction —
+more wired slots, fewer SSD reads, more tokens/sec, more RAM.
+
+`MferenceCLI` exposes `--expert-cache-slots`. **`MferenceServer` does not**: it builds its
+runtime at `Sources/MferenceServer/Core/ServerInference.swift:218-232` straight from the
+auto-selection with no override. So on a 16 or 24 GB Mac the server takes the larger
+footprint and offers no way to ask for the small one — precisely the tier we want.
+
+**This is the first patch for our fork.** Mirroring an existing CLI flag onto the server is
+small, obviously correct, and is the whole "best value for the memory spent" thesis in one
+change.
+
+### 4. Storage, not memory, is the binding constraint
+
+Against ~30–40 GB free: Qwen 3.6 (~19.6 GB) fits with room to spare; Maple (~6.6 GB) and
+Gemma 4 (~14.3 GB) also fit; Qwen 3.8 27B fits on disk but wants ~15 GB RAM;
+DeepSeek-V4-Flash (~91 GB) and Inkling-Small (~148 GB) do not fit at all. The streaming
+installer never needs 2× disk and resumes, so the only number that matters is the final
+install size. Full table and commands in
+[scripts/brain-eval/README.md](../scripts/brain-eval/README.md).
+
+## Two brains, two audiences — the shape this settles into
+
+| | LM Studio | Our Mference fork |
+|---|---|---|
+| Audience | already has a local setup, will not build Swift | wants the most capability per GB |
+| Install | existing app, GUI | `MferenceRepack`, one command, resumable |
+| Qwen-3.6-class RAM | whatever the GGUF needs (multiples more) | ~1.45–6.8 GB, slot-dependent |
+| Images | **yes**, load a vision model | no — towers stripped at repack |
+| Our work | detect and use it; never supervise or restart it | supervise, patch, and measure it |
+
+Both are reached the same way: an OpenAI-compatible loopback endpoint behind meshd's
+bearer auth. `scripts/brain-eval/` grades both with one scorecard, so "which brain for
+this machine" is answered with numbers.

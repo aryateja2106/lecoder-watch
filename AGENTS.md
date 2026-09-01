@@ -123,6 +123,8 @@ next steps that were correct in June and July and are wrong now; the index says 
 | `install/payload/bin/mesh` | The CLI: setup, pair, doctor, upgrade, uninstall. |
 | `install/install.sh` | The `curl \| sh` installer. |
 | `scripts/check-*.{swift,sh}` | Self-checks. `check-all.sh` runs every one. |
+| `scripts/brain-eval/` | Capability scorecard for any OpenAI-compatible local endpoint. |
+| `references/` | Vendored third-party codebases, for study only. Nothing builds against them. |
 | `project.yml` | Canonical Xcode project. Run `xcodegen generate` after editing. |
 | `openspec/` | Specs and change proposals. |
 | `web/` | Landing page (Vercel). |
