@@ -654,8 +654,25 @@ struct TrackpadSurface: UIViewRepresentable {
 
         init(_ parent: TrackpadSurface) { self.parent = parent }
 
+        /// Our own recognizers must cooperate — one-finger pan alongside pinch is
+        /// ordinary trackpad behaviour, and that cooperation is what this delegate
+        /// exists for. The navigation controller's interactive-pop is the one
+        /// recognizer that must never join in: it is a left-edge pan, which is
+        /// also exactly how you move the pointer left. Saying yes to it meant a
+        /// leftward drag moved the pointer AND popped the screen at the same time.
         func gestureRecognizer(_ g: UIGestureRecognizer,
-                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            !(other is UIScreenEdgePanGestureRecognizer)
+        }
+
+        /// Refusing to recognize simultaneously is not enough on its own — UIKit
+        /// would still be free to let the edge swipe win outright. This makes the
+        /// pop wait for our pan to fail first, and on this surface our pan always
+        /// recognizes, so the swipe-back never fires while a drag is in progress.
+        func gestureRecognizer(_ g: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            other is UIScreenEdgePanGestureRecognizer
+        }
 
         @objc func pan(_ g: UIPanGestureRecognizer) {
             let t = g.translation(in: g.view)
