@@ -158,6 +158,7 @@ Sessions are real, persistent multiplexer sessions. State survives between calls
 GET    /health                       no auth; identity + capabilities
 GET    /doctor                       setup truth: token, input, screen, mux, push
 GET    /stats /agents /usage /tailnet /displays /events
+GET    /brain[?probe=1|need=images]  local model server: reachable, model, capabilities
 POST   /agents/new                   {name,cwd,cmd,initialText}
 GET    /agents/:n/panes              panes, each with currentPath
 GET    /agents/:n/output?lines&pane  the pane's screen as TEXT

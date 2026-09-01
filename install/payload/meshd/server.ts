@@ -11,6 +11,7 @@ import { handlePush, pushAlert, passesPushGate, notePushDecision, pushLiveActivi
 import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
 import { handleDoctor, tokenWeakness } from "./doctor";
+import { handleBrain } from "./brain";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
 
@@ -24,7 +25,7 @@ const VERSION = "0.5.2";
 // + Live Activity pushes), sessionStatus (status fields on /agents rows), paste
 // (bracketed multiline paste on /agents/<s>/send), captureJoin (join=1/plain=1 on
 // the output route). Clients must gate new behavior on these strings, not on version.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "brain"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -1032,6 +1033,9 @@ Bun.serve({
       if (remote) return remote;
       const files = await handleFiles(req, url);
       if (files) return files;
+      // Which local model server is running here, and what it can do — see brain.ts.
+      const brain = await handleBrain(req, url);
+      if (brain) return brain;
       // APNs device registration + status + test — see push.ts.
       const pushed = await handlePush(req, url);
       if (pushed) return pushed;

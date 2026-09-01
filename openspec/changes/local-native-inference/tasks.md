@@ -58,16 +58,24 @@ cannot run in CI or a cloud agent container.
 
 ## Stage 3 — the daemon and the clients
 
-- [ ] **Write `install/payload/meshd/brain.ts`** following the `wol.ts`/`files.ts` claim
+- [x] **Write `install/payload/meshd/brain.ts`** following the `wol.ts`/`files.ts` claim
       pattern: probe both endpoints (ours and LM Studio, `MESHD_BRAIN_URL` overriding),
       report `{reachable, endpoint, model, source, capabilities}` where capabilities
       include whether the endpoint accepts images. Server down is HTTP 200 with
       `reachable:false`, never a 500. Add `"brain"` to `CAPABILITIES`. The `server.ts`
-      edit is two lines plus the capability string — a serialized file, so one agent and
-      nothing else in that PR.
-      *Verify by running: spare-port daemon (`MESHD_PORT=8898 …`), `curl -s :8898/brain`
-      with the model server up and down, both JSON bodies pasted here; then
-      `bun x tsc --noEmit -p install/payload/meshd/tsconfig.json`.*
+      edit is two lines plus the capability string.
+      *Verified by running, on a spare-port daemon (`MESHD_PORT=8898`) against a stub
+      model server, `bun x tsc --noEmit` clean:*
+      - *no server running → HTTP 200, both candidates `reachable:false`, `brain:null`
+        — a missing brain is a state, not a fault*
+      - *server up → `brain.model = "stub-qwen36"`, `images:"unknown"` on the fast path
+        (no generation spent)*
+      - *`?probe=1` → `images:"no"`, measured from the endpoint's own 400, then served
+        from cache on the next plain call*
+      - *`?need=images` → `brain:null` with reason "no reachable local model accepts
+        images; load a vision model in LM Studio"*
+      - *`/health` advertises the `brain` capability; the claim sits after the 401 gate,
+        so the tokenless 200 seen locally is the daemon's documented loopback exemption*
 - [ ] **Add the wire types and the model badge**: `BrainStatus` in `Shared/Models.swift`,
       `MeshClient.brain()` in `Shared/MeshClient.swift` (both serialized), and a badge
       beside the existing `agentType` chips on iOS and the watch. No capability, no badge
