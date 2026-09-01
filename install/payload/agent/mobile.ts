@@ -181,9 +181,18 @@ export function outlineUiHierarchy(xml: string): { elements: UiElement[]; text: 
     elements.push({ index, role: cls, label: label.slice(0, 60), clickable, bounds: centre });
   }
 
-  const text = elements
-    .map((e) => `${String(e.index).padStart(3)}. ${e.clickable ? "[tap] " : "      "}${e.role}: ${e.label}`)
-    .join("\n");
+  // State the numbering base explicitly. The model is given an INDEX and the harness
+  // resolves it to a pixel: if the two disagree about whether counting starts at 0 or 1,
+  // every tap lands on the wrong element and nothing errors.
+  const header = elements.length
+    ? `${elements.length} elements, numbered from 1. [tap] marks what you can tap.`
+    : "no actionable elements found";
+  const text = [
+    header,
+    ...elements.map(
+      (e) => `${String(e.index).padStart(3)}. ${e.clickable ? "[tap] " : "      "}${e.role}: ${e.label}`,
+    ),
+  ].join("\n");
   return { elements, text };
 }
 

@@ -21,7 +21,7 @@
 // not wholly a tool response, so appending one re-prefills the entire history. Mid-run
 // guidance is therefore appended to a tool result the loop is already about to send.
 
-import { Model, type Message, type Turn } from "./model";
+import { Model, ModelError, type Message, type Turn } from "./model";
 import { TOOLS, TOOL_NAMES, runTool, clamp, type ToolContext } from "./tools";
 import { saveRun, type RunState } from "./session";
 import { decide, type ConsentMode, type Ledger, type Verdict } from "./escalate";
@@ -81,14 +81,19 @@ export async function runLoop(
   let repeats = 0;
   let consecutiveToolFailures = 0;
   let lastPromptTokens = 0;
+  // Carries the endpoint's HTTP status into the router. Without it the "a local 429 is
+  // busy, not stuck" rule could never fire, because nothing ever set the field.
+  let lastHttpStatus: number | null = null;
 
   while (state.turns < opts.maxTurns) {
     state.turns += 1;
 
     let turn: Turn;
+    lastHttpStatus = null;
     try {
       turn = await model.chat(state.messages, TOOLS);
     } catch (err) {
+      if (err instanceof ModelError) lastHttpStatus = err.status;
       // A tool call the server's own parser rejects fails the whole REQUEST — the
       // harness never receives the offending call, so there is nothing to correct.
       // Retrying is only useful if it can produce different output, and at temperature
@@ -98,6 +103,7 @@ export async function runLoop(
       try {
         turn = await model.chat(state.messages, TOOLS, 0.4);
       } catch (err2) {
+        if (err2 instanceof ModelError) lastHttpStatus = err2.status;
         state.status = "failed";
         state.summary = err2 instanceof Error ? err2.message : String(err2);
         state.updatedISO = new Date().toISOString();
@@ -224,9 +230,12 @@ export async function runLoop(
       consecutiveToolFailures,
       repeatedFailingCommand: repeats + 1,
       modelRequest: ctx.escalationRequest ?? null,
-      lastHttpStatus: null,
+      lastHttpStatus,
     };
     const verdict = decide(ledger, opts.consent ?? "off");
+    // Consume the request. Left set, it scores every subsequent turn as blocking, so one
+    // call to escalate would make escalation permanent and self-fulfilling.
+    ctx.escalationRequest = undefined;
     if (verdict.escalate) {
       emit({ kind: "escalation", verdict });
       state.escalation = { at: state.turns, reason: verdict.reason, action: verdict.action };

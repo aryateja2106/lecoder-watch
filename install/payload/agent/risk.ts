@@ -43,6 +43,25 @@ export const DESTRUCTIVE_RULES: Array<{ needles: string[]; verb: string; why: st
   { needles: ["sudo "], verb: "Run as root", why: "Runs with root privileges." },
 ];
 
+/**
+ * Shipping actions, gated separately from DESTRUCTIVE_RULES.
+ *
+ * These are deliberately NOT mirrored into Shared/RiskClassifier.swift, and the reason is
+ * a domain difference rather than an oversight: the Swift classifier judges "the line an
+ * agent is blocked on" -- a prompt a human is about to answer on a watch -- while this
+ * judges "a command about to run". Tapping Continue on a wrist cannot submit a build to
+ * the App Store; the agent's shell can. The user's goal says ship "securely to
+ * production", and an unattended model is not who decides that.
+ */
+export const SHIP_RULES: Array<{ needles: string[]; verb: string; why: string }> = [
+  { needles: ["notarytool submit", "altool --upload", "xcrun altool"], verb: "Submit to Apple", why: "Uploads a build to Apple." },
+  { needles: ["fastlane deliver", "fastlane pilot", "fastlane release"], verb: "Release build", why: "Publishes a build to users." },
+  { needles: ["bundle exec fastlane deliver"], verb: "Release build", why: "Publishes a build to users." },
+  { needles: ["npm publish", "yarn publish", "pnpm publish"], verb: "Publish package", why: "Publishes to a public registry." },
+  { needles: ["gcloud app deploy", "vercel --prod", "netlify deploy --prod", "eas submit"], verb: "Deploy to production", why: "Changes what real users are running." },
+  { needles: ["gh release create"], verb: "Cut a release", why: "Publishes a release publicly." },
+];
+
 export function classifyRisk(text: string): Verdict {
   const hay = text
     .toLowerCase()
@@ -50,7 +69,7 @@ export function classifyRisk(text: string): Verdict {
     .filter((s) => s.length > 0)
     .join(" ");
   if (!hay) return SAFE;
-  for (const rule of DESTRUCTIVE_RULES) {
+  for (const rule of [...DESTRUCTIVE_RULES, ...SHIP_RULES]) {
     if (rule.needles.some((n) => hay.includes(n))) {
       return { risk: "destructive", verb: rule.verb, consequence: rule.why };
     }

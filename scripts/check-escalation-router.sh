@@ -58,6 +58,13 @@ check("auto mode escalates", decide({ ...base, modelRequest: { reason: "r", ques
 // Turn budget alone is weak.
 check("turn budget alone does not escalate", decide({ ...base, turns: 36 }).escalate === false);
 
+// Regression: a 429 must stay "busy" even when every other alarm is firing. This rule
+// existed but could never fire, because the loop hardcoded lastHttpStatus to null.
+const allAlarms = { ...base, turns: 9, maxTurns: 10, promptTokens: 15800,
+  consecutiveToolFailures: 9, repeatedFailingCommand: 9,
+  modelRequest: { reason: "r", question: "q", exitCriterion: "e" }, lastHttpStatus: 429 };
+check("429 outranks every other signal", decide(allAlarms, "auto").escalate === false, decide(allAlarms, "auto").action);
+
 // The brief is deterministic and shows the user what would leave.
 const b1 = handoffBrief("fix login", { ...base, modelRequest: { reason: "stuck", question: "q", exitCriterion: "e" } }, ["exit code 1", "exit code 1"]);
 const b2 = handoffBrief("fix login", { ...base, modelRequest: { reason: "stuck", question: "q", exitCriterion: "e" } }, ["exit code 1", "exit code 1"]);

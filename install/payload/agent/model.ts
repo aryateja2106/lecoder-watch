@@ -61,7 +61,14 @@ export type ModelConfig = {
   maxTokens: number;
 };
 
-export class ModelError extends Error {}
+export class ModelError extends Error {
+  /** HTTP status when the endpoint answered, null when it never did. The escalation
+   *  router needs this: a local 429 is BUSY, not STUCK, and must never escalate. */
+  constructor(message: string, readonly status: number | null = null) {
+    super(message);
+    this.name = "ModelError";
+  }
+}
 
 /**
  * Resolve which brain to use. Prefers the daemon's own view (GET /brain) so the CLI and
@@ -189,11 +196,12 @@ export class Model {
     } catch (err) {
       throw new ModelError(
         `${this.cfg.endpoint} did not answer: ${err instanceof Error ? err.message : String(err)}`,
+        null,
       );
     }
 
     const text = await res.text();
-    if (!res.ok) throw new ModelError(`model returned HTTP ${res.status}: ${text.slice(0, 300)}`);
+    if (!res.ok) throw new ModelError(`model returned HTTP ${res.status}: ${text.slice(0, 300)}`, res.status);
 
     let payload: any;
     try {
