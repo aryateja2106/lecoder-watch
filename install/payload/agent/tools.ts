@@ -18,6 +18,7 @@ import { dirname, resolve } from "node:path";
 import type { Meshd } from "./meshd";
 import { execInSession, type ExecResult } from "./exec";
 import { compressIfRecognized } from "./mobile";
+import { decideCommand, type ApprovalMode } from "./risk";
 import type { ToolSchema } from "./model";
 
 export const MAX_TOOL_RESULT_CHARS = 12000;
@@ -28,6 +29,8 @@ export type ToolContext = {
   mesh: Meshd;
   session: string;
   cwd: string;
+  /** default "ask": safe commands run, destructive ones are refused (AGENTS.md principle 4) */
+  approve?: ApprovalMode;
   /** set by the finish tool so the loop knows the model considers the task done */
   finished?: { summary: string };
   /** set by the escalate tool; the router treats this as a blocking signal */
@@ -63,6 +66,26 @@ function asString(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   return JSON.stringify(v);
+}
+
+/**
+ * For arguments that are FILE CONTENT, a non-string is never safe to coerce.
+ *
+ * Qwen's parser opportunistically parses any value that looks like JSON, so writing a
+ * .json file hands us an object rather than the author's text. Re-serializing it would
+ * silently rewrite their formatting, key order and spacing -- data loss disguised as a
+ * successful write, in exactly the repos a mobile developer keeps configs in. Refuse and
+ * tell the model how to fix it.
+ */
+function asContent(v: unknown, field: string): { text: string } | { error: string } {
+  if (typeof v === "string") return { text: v };
+  if (v === null || v === undefined) return { error: `error: ${field} is required.` };
+  if (typeof v === "number" || typeof v === "boolean") return { text: String(v) };
+  return {
+    error:
+      `error: ${field} arrived as structured data, not text, so it was NOT written -- ` +
+      `re-serializing it would have changed the file's formatting. Send ${field} as a plain string.`,
+  };
 }
 
 export const TOOLS: ToolSchema[] = [
@@ -184,6 +207,11 @@ export async function runTool(
     case "run_command": {
       const command = asString(args.command).trim();
       if (!command) return { ok: false, content: "error: command is required and was empty." };
+      // Nothing reaches a shell unreviewed unless the user opted in. The refusal is a
+      // corrective tool result rather than a thrown error, so the model can pick a safer
+      // route instead of the run dying.
+      const gate = decideCommand(command, ctx.approve ?? "ask");
+      if (!gate.allow) return { ok: false, content: gate.explanation };
       const timeoutMs = Math.max(1, Number(args.timeout_seconds ?? 600)) * 1000;
       const r = await execInSession(ctx.mesh, ctx.session, command, { timeoutMs });
       ctx.onCommand?.(r);
@@ -223,9 +251,9 @@ export async function runTool(
 
     case "write_file": {
       const p = resolvePath(ctx, asString(args.path));
-      const content = args.content === undefined ? null : asString(args.content);
-      if (content === null)
-        return { ok: false, content: "error: content is required." };
+      const got = asContent(args.content, "content");
+      if ("error" in got) return { ok: false, content: got.error };
+      const content = got.text;
       try {
         mkdirSync(dirname(p), { recursive: true });
         writeFileSync(p, content, "utf8");
@@ -237,8 +265,12 @@ export async function runTool(
 
     case "str_replace": {
       const p = resolvePath(ctx, asString(args.path));
-      const find = asString(args.find);
-      const replace = asString(args.replace);
+      const gotFind = asContent(args.find, "find");
+      if ("error" in gotFind) return { ok: false, content: gotFind.error };
+      const gotReplace = asContent(args.replace, "replace");
+      if ("error" in gotReplace) return { ok: false, content: gotReplace.error };
+      const find = gotFind.text;
+      const replace = gotReplace.text;
       if (!existsSync(p)) return { ok: false, content: `error: no such file: ${p}` };
       if (find === "") return { ok: false, content: "error: find is required and was empty." };
       const text = readFileSync(p, "utf8");

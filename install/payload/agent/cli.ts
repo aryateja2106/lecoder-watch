@@ -55,6 +55,7 @@ Options
   --session NAME     meshd session to work in (default: derived from the run id)
   --max-turns N      stop after N turns (default 40)
   --consent MODE     off (default, records only) | ask | auto — escalation to a bigger model
+  --approve MODE     ask (default: destructive commands refused) | auto | never
   --daemon URL       meshd base URL (default http://127.0.0.1:8899)
   --token TOKEN      meshd bearer token (default $MESHD_TOKEN)
   --probe            with 'brain', measure capabilities instead of reading cached ones
@@ -239,6 +240,7 @@ async function main() {
     mesh,
     session,
     cwd,
+    approve: (typeof flags.approve === "string" ? flags.approve : "ask") as any,
     onCommand: (r) =>
       state.commands.push({
         command: r.command,
