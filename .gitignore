@@ -37,3 +37,8 @@ install/dist/
 # gajae-code: per-machine tmux session state, never shared
 .gjc/
 supabase/.temp/
+
+# The Mference fork, if it gets cloned inside this tree. It is a separate repo
+# with its own history and a multi-GB .build/ — it must never be committed here.
+# Preferred location is outside this repo entirely (e.g. ~/Projects/Mference).
+Mference/
