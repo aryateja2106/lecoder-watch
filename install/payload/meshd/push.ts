@@ -354,7 +354,8 @@ export async function pushLiveActivity(
     alert?: { title: string; body?: string };
   },
 ): Promise<{ ok: boolean; sent: number; of: number }> {
-  const routed = laRoute(await readLaTokens(), event, opts.session ?? opts.attributes?.session);
+  const all = await readLaTokens();
+  const routed = laRoute(all, event, opts.session ?? opts.attributes?.session);
   event = routed.event;
   const targets = routed.targets;
   if (targets.length === 0) return { ok: false, sent: 0, of: 0 };
