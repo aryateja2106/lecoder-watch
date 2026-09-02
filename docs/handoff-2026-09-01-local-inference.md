@@ -138,20 +138,95 @@ either way. **Run the spike before extending `mesh-code` further.**
 The caveat from the proposal still stands: deepseek-harness is a developer preview with
 explicit breaking-change warnings. OpenHands' `BaseWorkspace` is the mature fallback.
 
-## The fork
+## The fork, and where the Mac-side work actually lives (updated 2026-09-02)
 
-`aryateja2106/Mference` — a public fork of `NeelM0906/Mference`, pinned at
-`297c0080947d8be0ddc65f973217c0d14d1d68fd`.
+`aryateja2106/Mference` — public fork of `NeelM0906/Mference`; `main` is pinned at
+upstream `297c0080947d8be0ddc65f973217c0d14d1d68fd`.
 
-The patch is **committed locally in that clone as `0b00b2d` and never pushed.** The cloud
-session could clone it (public) but not push to it: this session's GitHub grant covers only
-`aryateja2106/lecoder-watch`. Pushing it is a one-line manual step, in the runbook.
+**What reached GitHub:** branch `claude/expert-cache-slots` at `e27bbcb`, one commit,
+**byte-identical to `references/patches/0001-mference-server-expert-cache-slots.patch`**
+(verified by applying the patch to the pinned commit and diffing trees). That is the whole
+of it.
 
-It was cloned to `~/Projects/lecoder-watch/Mference` — **inside** this repo, because the
-instruction that produced it did not say where to clone and the shell was sitting in
-`lecoder-watch`. That is a repo inside a repo, one careless `git add .` from being
-committed here. A `.gitignore` entry now covers it as a seatbelt, but **move it to
-`~/Projects/Mference`.**
+**What did not — and this is most of the value:** a Cursor session running in
+`~/deepseek-harness` reported porting **paged full-attention KV to Qwen 3.6**. Upstream's
+`KVPageStore` / `Qwen38PagedKVRuntime` are Qwen 3.8-only, and the upstream *server* has no
+paged-KV flags at all (`--kv-paged` and `--kv-pool-pages` exist only in
+`MferenceCLI/Args.swift`). So that port is new engineering in two places: the Qwen 3.6
+runner, and server-side plumbing. As reported by that session, not measured by anything in
+this repo:
+
+| Reported | Value |
+|---|---|
+| Server config | context 32768 · expert slots **16** · kv paged on · kv pool 48 pages |
+| RSS after two chats | 1.14 GiB |
+| RSS idle | ~0.97 GiB |
+| Prompt cache | `cached_tokens: 19` on the second turn (single-prefix) |
+| Spill | a 5,459-token prefill past the 3,072-token hot pool wrote `$TMPDIR/mference-kvpages-*/kvpages.spill` |
+| Restart | `./scripts/run-qwen-server.sh` in `~/deepseek-harness/Mference` |
+
+It also stood up **dsh web with a "LeSearch" plugin** on `http://127.0.0.1:3080` (ttyd on
+`:7681`). None of this is on GitHub. It exists only on the Mac.
+
+**There are now two clones of the fork on the Mac**, and they have diverged:
+
+| Clone | Has | Status |
+|---|---|---|
+| `~/Projects/lecoder-watch/Mference` | the patch, as local commit `0b00b2d` | behind; inside this repo (gitignored as a seatbelt) — **delete it** |
+| `~/deepseek-harness/Mference` | the patch **plus** the paged-KV port, `scratch/qwen36.gturbo`, `run-qwen-server.sh` | ahead; **this is the one to keep and push** |
+
+Push it, so the next session anywhere can read it:
+
+```sh
+cd ~/deepseek-harness/Mference
+git status --short | head            # see what the Cursor session left uncommitted
+git add -A && git commit -m "feat: paged full-attention KV for Qwen 3.6, server-side paged-KV flags"
+git push -u origin HEAD:claude/qwen36-paged-kv
+```
+
+Then vendor `scripts/run-qwen-server.sh` into this repo beside `scripts/start-brain.sh`
+(or fold its flags into it — they only differ by the paged-KV flags, which
+`start-brain.sh` must gate on `--help` output the way it already gates
+`--expert-cache-slots`, because the upstream server rejects unknown flags).
+
+## Ornith, identified
+
+"Ornith" is a real, public model family — [ornith-ai](https://github.com/ornith-ai/Ornith-1),
+MIT — not a private name. The one that fits this Mac and LM Studio is
+**Ornith-1.5-35B-A3B** (MLX 4/6/8-bit or GGUF), and three facts about it decide how the
+comparison against Qwen 3.6 has to be run:
+
+1. **It is the same architecture class as Qwen 3.6-35B-A3B** — 35B MoE, ~3B active per
+   token, built on Qwen 3.5. Its card claims it beats Qwen 3.6 on every agentic benchmark
+   listed (Terminal-Bench 2.1: 67.8 vs 52.5; SWE-bench Verified: 79 vs 73.4). So the
+   comparison is **engine vs engine as much as model vs model**: Mference streams
+   experts from SSD at ~1.1 GiB resident; LM Studio holds the whole MLX model in RAM
+   (roughly 18–20 GB at 4-bit on a 24 GB machine). Memory footprint is a first-class
+   axis of the verdict, not a footnote.
+2. **It is a reasoning model.** Every assistant turn opens with a `<think>…</think>`
+   block. Depending on LM Studio's version and the model, that arrives as
+   `delta.reasoning_content`, `delta.reasoning`, or inline `<think>` tags inside
+   `delta.content`. Time-to-first-token and tokens/sec are meaningless unless reasoning
+   is split from the answer — `scripts/brain-eval/sse.ts` does that and is tested
+   against all three shapes.
+3. **Its authors recommend temperature 0.6 (coding) or 1.0 (benchmarks), never 0.**
+   Reasoning models at temperature 0 can loop inside the think block. A fair comparison
+   sets temperature explicitly on both endpoints (Mference defaults to 0.2, LM Studio to
+   the model's own default) and records it in the result.
+
+It speaks the Qwen3 XML tool dialect (`<tool_call>` / `<function=…>`), the same one
+`mesh-code` already parses. When LM Studio fails to parse it, the XML lands in `content`;
+the eval classifies that separately from "answered in prose", because it is a server
+configuration finding, not a model capability finding.
+
+## Two harnesses are now running in parallel — decide on purpose
+
+The Cursor session took the route [local-brain-and-harness](../openspec/changes/local-brain-and-harness/proposal.md)
+Finding 2 recommends: deepseek-harness (`dsh web`) with a plugin. This repo took the
+other route: `mesh-code`, our own loop. **The harness decision is being made by
+accident, in two directories, by two agents that cannot see each other.** Make it on
+purpose: read the previous section of this document, run the spike in the deepseek-harness
+task list, and record the outcome as a spec delta.
 
 ## Traps this work has already hit
 

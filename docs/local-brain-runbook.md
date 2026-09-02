@@ -23,29 +23,27 @@ git branch --show-current
 Work continues on `claude/local-model-inference-g3i08e` unless PR #119 has merged, in which
 case branch fresh from `main`.
 
-## 1. Move the fork out of this repo, and push the patch
+## 1. Consolidate the two fork clones, and push the paged-KV port
 
-It was cloned to `~/Projects/lecoder-watch/Mference` — a repo inside a repo. Move it:
-
-```sh
-mv ~/Projects/lecoder-watch/Mference ~/Projects/Mference
-```
-
-The patch is committed there as `0b00b2d` and has never been pushed. The cloud session
-could not push (its GitHub grant covered only `lecoder-watch`). Push it:
+The patch is already on GitHub as fork branch `claude/expert-cache-slots` (verified
+byte-identical to `references/patches/0001-…`). What is **not** pushed is the bigger
+thing: the Qwen 3.6 paged-KV port a Cursor session made in `~/deepseek-harness/Mference`.
+That clone is ahead of `~/Projects/lecoder-watch/Mference`, which only has the patch.
 
 ```sh
-cd ~/Projects/Mference
-git log --oneline -3          # expect 0b00b2d on top of upstream 297c0080
-git remote -v                 # expect origin = aryateja2106/Mference
-git push -u origin HEAD
+# keep the one that is ahead; push it
+cd ~/deepseek-harness/Mference
+git log --oneline -5                 # expect the patch commit plus the paged-KV work
+git status --short | head            # commit anything the Cursor session left loose
+git add -A && git commit -m "feat: paged full-attention KV for Qwen 3.6, server-side paged-KV flags"
+git push -u origin HEAD:claude/qwen36-paged-kv
+
+# then remove the stale copy that sits inside this repo
+rm -rf ~/Projects/lecoder-watch/Mference
 ```
 
-If the commit is not there, the patch re-applies cleanly against the pinned commit:
-
-```sh
-git apply ~/Projects/lecoder-watch/references/patches/0001-mference-server-expert-cache-slots.patch
-```
+If you would rather keep the fork under `~/Projects`, `mv ~/deepseek-harness/Mference
+~/Projects/Mference` first — but move it, do not re-clone, or the port is lost.
 
 ## 2. Build
 
@@ -102,6 +100,13 @@ cd ~/Projects/lecoder-watch
 scripts/start-brain.sh --model ~/models/qwen36.gturbo --slots 32 \
   --bin ~/Projects/Mference/.build/release/MferenceServer
 ```
+
+**Reported, not yet measured by this harness:** the Cursor session ran this model at
+**16 slots with paged KV at 32K context and saw 1.14 GiB RSS** after two chats. That is
+the first real number anyone has for this stack. It came from `run-qwen-server.sh` in
+`~/deepseek-harness/Mference`, which passes paged-KV flags the upstream server does not
+have. `start-brain.sh` does not pass them, so until that script is vendored, 32 slots
+without paged KV is what this command starts.
 
 **Why 32 and not the built-in rule.** On a ≥24 GiB host the engine picks 96 slots
 (~6.8 GB wired). Activity Monitor on 2026-09-01 showed 16.39 GB of 24 GB already in use
