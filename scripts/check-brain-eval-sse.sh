@@ -184,3 +184,58 @@ TS
 
 cp "$ROOT/scripts/brain-eval/sse.ts" "$TMP/sse.ts"
 bun run "$TMP/driver.ts"
+
+# Stage 2: the real path — fetch, ReadableStream, TextDecoder, readSSE — against both
+# stub personas. The synthetic fixtures above never touch that plumbing. Ports are high
+# and checked first; something already listening is not ours to kill (AGENTS.md rule 8).
+PT=8141; PV=8142
+for port in $PT $PV; do
+  if lsof -ti "tcp:$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "check-brain-eval-sse: SKIP live stage (something already listens on :$port — not killing it)"
+    exit 0
+  fi
+done
+bun run "$ROOT/scripts/brain-eval/stub-server.ts" --port $PT --persona textonly >"$TMP/t.log" 2>&1 &
+TPID=$!
+bun run "$ROOT/scripts/brain-eval/stub-server.ts" --port $PV --persona vision >"$TMP/v.log" 2>&1 &
+VPID=$!
+trap 'kill $TPID $VPID 2>/dev/null; rm -rf "$TMP"' EXIT
+i=0; while [ $i -lt 50 ]; do
+  curl -sf "http://127.0.0.1:$PT/v1/models" >/dev/null 2>&1 && curl -sf "http://127.0.0.1:$PV/v1/models" >/dev/null 2>&1 && break
+  i=$((i+1)); sleep 0.1
+done
+
+cat > "$TMP/live.ts" <<'TS'
+import { readSSE } from "./sse.ts"
+let failed = 0
+const check = (name: string, cond: boolean, detail = "") => {
+  if (!cond) { console.log(`  FAIL ${name} ${detail}`); failed++ } else console.log(`  ok   ${name} ${detail}`)
+}
+async function run(port: string) {
+  const started = Date.now()
+  const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model: "x", stream: true, stream_options: { include_usage: true },
+      messages: [{ role: "user", content: "Count: one two three." }] }),
+  })
+  return readSSE(res, started)
+}
+const t = await run(process.argv[2])
+check("live textonly: content", t.content === "one two three", JSON.stringify(t.content))
+check("live textonly: no reasoning", t.reasoningSource === "none")
+check("live textonly: usage via stream_options", t.usage?.completion_tokens === 3 && t.usage?.cached_tokens === 0, JSON.stringify(t.usage))
+check("live textonly: done", t.done && t.finishReason === "stop")
+
+const v = await run(process.argv[3])
+check("live vision: reasoning split", v.reasoningSource === "reasoning_content" && v.reasoning === "Let me count carefully.", `${v.reasoningSource} ${JSON.stringify(v.reasoning)}`)
+check("live vision: content is the answer only", v.content === "one two three", JSON.stringify(v.content))
+check("live vision: ttfc after ttft (thinking took time)", v.ttftMs !== null && v.ttfcMs !== null && v.ttfcMs > v.ttftMs, `ttft=${v.ttftMs} ttfc=${v.ttfcMs}`)
+check("live vision: paced frames give a finite rate on usage basis", v.tokPerSecBasis === "usage" && (v.tokPerSec ?? 0) > 0 && (v.tokPerSec ?? 0) < 200, `${v.tokPerSec?.toFixed(1)} ${v.tokPerSecBasis}`)
+check("live vision: no cached_tokens → null", v.usage?.cached_tokens === null && v.usage?.reasoning_tokens === 2, JSON.stringify(v.usage))
+// The slow persona must be measurably slower than the fast one — that is the whole point.
+check("live: vision persona is slower to first answer token", (v.ttfcMs ?? 0) > (t.ttfcMs ?? 0) + 50, `vision=${v.ttfcMs} textonly=${t.ttfcMs}`)
+if (failed) { console.log(`\n${failed} live assertion(s) failed`); process.exit(1) }
+console.log("check-brain-eval-sse: live stage passed")
+TS
+bun run "$TMP/live.ts" $PT $PV
