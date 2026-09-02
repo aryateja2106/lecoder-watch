@@ -121,7 +121,9 @@ def main():
 
     doc = load_stdin()
     title = event_title(args.source, doc, args.title)
-    body = args.body or pick(doc, "body", "message", "prompt", "command", "transcript_path")
+    # Not the transcript path: a file path is not a body. 212 of one day's 312 events
+    # were "Claude event" banners whose whole text was a .cursor/ transcript location.
+    body = args.body or pick(doc, "body", "message", "prompt", "command")
     # Multiplexer session first: it is the only name the reply path can address.
     # An explicit --session / MESHD_SESSION is the caller naming that target itself.
     session = args.session
