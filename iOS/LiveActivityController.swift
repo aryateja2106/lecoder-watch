@@ -46,6 +46,7 @@ final class LiveActivityController {
     private var pushToStartTask: Task<Void, Never>?
     private var activityStateTask: Task<Void, Never>?
     private var updateTokenTask: Task<Void, Never>?
+    private var pushStartedTask: Task<Void, Never>?
 
     /// How long a card may go without an update before iOS greys it out.
     ///
@@ -68,20 +69,48 @@ final class LiveActivityController {
     /// nothing holds it — it sits on the Lock Screen until iOS ages it out eight hours
     /// later. `Activity.activities` is the only way back to it.
     func begin() {
-        adoptExistingActivities()
+        reconcile(keeping: nil)
         watchEnablement()
         watchPushToStartTokens()
+        watchPushStartedActivities()
     }
 
-    private func adoptExistingActivities() {
+    /// Exactly one card, always — and not only at launch. meshd starts cards over APNs
+    /// while the app is suspended, and those arrive with no reference held here; this
+    /// used to run once per cold process, so they were swept only after a crash or a
+    /// reboot. Now every snapshot keeps the card for `pick` (adopting it, which uploads
+    /// the update token that is the daemon's only way to end it) and ends the rest.
+    /// With no pick, the first existing card is the one kept.
+    private func reconcile(keeping pick: (host: String, session: String)?) {
         let existing = Activity<SessionActivityAttributes>.activities
-        guard let first = existing.first else { return }
-        // Exactly one card, always. Anything past the first is an orphan from a crash
-        // or a build that ended one without waiting.
-        for extra in existing.dropFirst() {
+        let keep: Activity<SessionActivityAttributes>?
+        if let pick {
+            keep = existing.first {
+                $0.attributes.session == pick.session && hostNamesMatch($0.attributes.host, pick.host)
+            }
+        } else {
+            keep = existing.first
+        }
+        for extra in existing where extra.id != keep?.id {
+            if activity?.id == extra.id { forget(extra) }
             Task { await extra.end(nil, dismissalPolicy: .immediate) }
         }
-        attach(first, host: first.attributes.host, session: first.attributes.session)
+        if let keep, activity?.id != keep.id {
+            attach(keep, host: keep.attributes.host, session: keep.attributes.session)
+        }
+    }
+
+    /// Cards meshd starts while the app is open land on this stream with nothing here
+    /// holding them. Reconcile against the card already shown: adopt if there is none,
+    /// end the newcomer if there is.
+    private func watchPushStartedActivities() {
+        pushStartedTask?.cancel()
+        pushStartedTask = Task { [weak self] in
+            for await _ in Activity<SessionActivityAttributes>.activityUpdates {
+                guard !Task.isCancelled, let self else { return }
+                self.reconcile(keeping: self.showing)
+            }
+        }
     }
 
     /// Take ownership of an activity: hold it, follow its state, and register its
@@ -177,9 +206,16 @@ final class LiveActivityController {
     /// Called with each fresh snapshot.
     func sync(snapshot: MeshSnapshot) {
         guard let pick = liveSessionPick(from: snapshot) else {
+            // Nothing deserves a card: end every card, not just the held one. A
+            // push-started card for a session that has since gone quiet is exactly the
+            // stale card nothing else will ever end.
+            for orphan in Activity<SessionActivityAttributes>.activities where orphan.id != activity?.id {
+                Task { await orphan.end(nil, dismissalPolicy: .immediate) }
+            }
             Task { await end() }
             return
         }
+        reconcile(keeping: (pick.host, pick.session))
         let content = SessionActivityAttributes.ContentState(
             stateRaw: pick.state.rawValue,
             agentType: pick.agentType,

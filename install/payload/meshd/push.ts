@@ -331,6 +331,20 @@ export async function pushAlert(
 /// decoder's date strategy for pushed content-state is not something to guess at from
 /// here — a wrong encoding kills the whole decode silently — so only the required
 /// String/number fields travel until it is verified on a physical device.
+/// Which tokens a Live Activity event reaches, and as what. A start for a session whose
+/// card is already live and addressable becomes an update to that one token: a start
+/// goes to EVERY push-to-start token, and a phone whose token rotated holds several —
+/// each one a fresh card, which is how 5-7 stale cards piled up. An update with no
+/// token to reach returns no targets rather than falling back to a start.
+export function laRoute(
+  all: LAToken[], event: "start" | "update" | "end", session?: string,
+): { event: "start" | "update" | "end"; targets: LAToken[] } {
+  const updates = all.filter((t) => t.kind === "update" && t.session != null && t.session === session);
+  if (event === "start" && updates.length > 0) return { event: "update", targets: updates };
+  if (event === "start") return { event, targets: all.filter((t) => t.kind === "start") };
+  return { event, targets: updates };
+}
+
 export async function pushLiveActivity(
   event: "start" | "update" | "end",
   opts: {
@@ -340,10 +354,9 @@ export async function pushLiveActivity(
     alert?: { title: string; body?: string };
   },
 ): Promise<{ ok: boolean; sent: number; of: number }> {
-  const all = await readLaTokens();
-  const targets = event === "start"
-    ? all.filter((t) => t.kind === "start")
-    : all.filter((t) => t.kind === "update" && t.session != null && t.session === opts.session);
+  const routed = laRoute(await readLaTokens(), event, opts.session ?? opts.attributes?.session);
+  event = routed.event;
+  const targets = routed.targets;
   if (targets.length === 0) return { ok: false, sent: 0, of: 0 };
   const now = Math.floor(Date.now() / 1000);
   const payload = {

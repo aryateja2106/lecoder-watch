@@ -812,14 +812,14 @@ async function addEvent(input: any): Promise<AgentEvent> {
     if (event.session) {
       const session = event.session;
       const contentState = laContentState(event);
-      const alert = { title: event.title, body: event.body };
       const attributes = { host: (event.host ?? os.hostname()).replace(/\.local$/i, ""), session };
+      // One card per wait, one banner per event. The alert push above is the banner; a
+      // card that alerts too is a second, buttonless banner — times N start tokens.
+      // Start the card once per wait and only update it after: "iOS folds a start into
+      // a live identity" was never verified here, and 5-7 stale cards said otherwise.
+      const fresh = !laActiveSessions.has(session);
       laActiveSessions.add(session);
-      // Start conjures the card on a pocketed phone; the update refreshes a card
-      // already live for this session. iOS treats a start for a live identity as an
-      // update, so sending both is convergence, not duplication.
-      pushLiveActivity("start", { attributes, contentState, alert }).catch(() => {});
-      pushLiveActivity("update", { session, contentState, alert }).catch(() => {});
+      pushLiveActivity(fresh ? "start" : "update", { session, attributes, contentState }).catch(() => {});
     }
   } else if (event.session && laActiveSessions.has(event.session)) {
     // The wait cleared (a calm event followed the alerting one): dismiss the card
