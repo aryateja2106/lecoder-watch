@@ -9,6 +9,20 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Added
+- **Run meshd in Docker on a Linux box or VPS.** You can start the daemon with
+  `docker compose up` instead of the curl installer — same pairing code, same terminal
+  sessions and agent alerts, with your token and paired hosts kept on a Docker volume.
+  The iPhone and watch apps are not in the container; they still pair to the daemon over
+  your LAN or VPN. Uninstall is `docker compose down -v`.
+
+### Fixed
+- **A Linux or Docker machine no longer offers screen and trackpad controls it cannot
+  deliver.** `/health` used to advertise screen peek and desktop input on every Linux
+  host, including headless containers with no display — so the phone showed Mac remote
+  controls that always failed. It now advertises only what that machine can actually do:
+  no screen capture on Linux, and no desktop input inside a default container.
+
 ## [0.5.2] — 2026-08-27 (installer only)
 
 ### Fixed
