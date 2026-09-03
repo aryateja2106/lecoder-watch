@@ -75,12 +75,13 @@ Sixteen commits. The detail is in the PR body and the code; this is only the sha
   Capabilities measured via `?probe=1`, not guessed.
 - **`scripts/brain-eval/`** — one capability scorecard that runs against any
   OpenAI-compatible endpoint, so our engine and LM Studio are graded by identical probes.
-  **Since 2026-09-02 it also compares two endpoints side by side** (`--a`/`--b`): ten
+  **Since 2026-09-02 it also compares two endpoints side by side** (`--a`/`--b`): twelve
   use-case probes shaped like the owner's real day (CLI with mesh-code's seven tools, a
-  page outline for the browser, `xcrun simctl` and a test digest for iOS, frontmost-app
-  discipline for macOS), tokens/sec and time-to-first-token with reasoning split from the
+  page outline for the browser, `xcrun simctl` and a test digest for iOS, `adb` and a
+  gradle digest for Android, frontmost-app discipline for macOS), tokens/sec and time-to-first-token with reasoning split from the
   answer, a per-capability *better for* verdict, and a `.jsonl` dataset export. Verified
-  against three stub personas — `check-brain-eval-compare.sh`, ~50 assertions — because
+  against three stub personas — `check-brain-eval-compare.sh`, 80+ assertions, plus an
+  adversarial review round that confirmed and fixed four measurement defects — because
   no model has been graded yet.
 - **The `--expert-cache-slots` patch** —
   `references/patches/0001-mference-server-expert-cache-slots.patch`. **Built and tested on

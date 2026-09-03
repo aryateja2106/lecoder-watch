@@ -65,21 +65,23 @@ const EXPECTED: Record<string, string> = {
   "ios-sim-boot-udid": "wrong-target",
   "ios-test-digest-read": "hallucinated-path",
   "macos-activate-before-type": "typed-into-wrong-app",
+  "android-emu-target": "wrong-target",
+  "android-test-digest-locate": "hallucinated-path",
 }
 const NEW = Object.keys(EXPECTED)
 
 // 1. textonly alone
 const st = load("single-t.json")
-check("single textonly: 19 pass", count(st.results, "pass") === 19, `${count(st.results, "pass")}`)
+check("single textonly: 21 pass", count(st.results, "pass") === 21, `${count(st.results, "pass")}`)
 check("single textonly: 0 fail", count(st.results, "fail") === 0)
 check("single textonly: 1 unsupported (images)", count(st.results, "unsupported") === 1 && st.results.find((r: any) => r.id === "vision").status === "unsupported")
-check("single textonly: 20 probes ran", st.results.length === 20, String(st.results.length))
+check("single textonly: 22 probes ran", st.results.length === 22, String(st.results.length))
 check("single textonly: every probe carries a useCase", st.results.every((r: any) => typeof r.useCase === "string" && r.useCase.length))
 
 // 2. dumb alone — exactly the ten, each for its designed reason
 const sd = load("single-d.json")
 const dumbFails = sd.results.filter((r: any) => r.status === "fail")
-check("single dumb: exactly the 10 use-case probes fail", dumbFails.length === 10 && dumbFails.every((r: any) => NEW.includes(r.id)), dumbFails.map((r: any) => r.id).join(","))
+check("single dumb: exactly the 12 use-case probes fail", dumbFails.length === 12 && dumbFails.every((r: any) => NEW.includes(r.id)), dumbFails.map((r: any) => r.id).join(","))
 for (const id of NEW) {
   const r = sd.results.find((x: any) => x.id === id)
   check(`single dumb: ${id} → ${EXPECTED[id]}`, r?.status === "fail" && r?.failureMode === EXPECTED[id], `${r?.status} ${r?.failureMode}`)
@@ -98,7 +100,7 @@ for (const id of NEW) {
 const v = (cap: string) => tv.verdicts.find((x: any) => x.capability === cap)
 check("compare tv: reads images → B by more-passes", v("reads images")?.betterFor === "b" && v("reads images")?.rule === "more-passes", JSON.stringify(v("reads images")))
 check("compare tv: economics → A (B cannot report prefix reuse)", v("long-running economics")?.betterFor === "a" && tv.b.summary["long-running economics"] === "PARTIAL", JSON.stringify(v("long-running economics")))
-check("compare tv: use-case capabilities OK on both", ["cli agent", "ios simulator", "macos control"].every((c) => tv.a.summary[c] === "OK" && tv.b.summary[c] === "OK"))
+check("compare tv: use-case capabilities OK on both", ["cli agent", "ios simulator", "macos control", "android emulator"].every((c) => tv.a.summary[c] === "OK" && tv.b.summary[c] === "OK"))
 check("compare tv: no failure modes on either side", Object.keys(tv.a.failureModes).length === 0 && Object.keys(tv.b.failureModes).length === 0)
 // Speed: the vision persona paces frames 20x slower; the harness must see it on a paired pass.
 const tools = tv.table.find((r: any) => r.id === "tools-single")
@@ -107,7 +109,7 @@ check("compare tv: cached_tokens visible on A, null on B", tools.a.cachedTokens 
 check("compare tv: reasoning split recorded for B", tv.b.probes.find((p: any) => p.id === "tools-single").turns[0].response.perf.reasoningSource === "reasoning_content")
 // Dataset export: one row per (endpoint, probe, turn), each carrying the full request and reply.
 const rows = readFileSync(`${dir}/tv.jsonl`, "utf8").trim().split("\n").map((l) => JSON.parse(l))
-check("compare tv: jsonl has 40 rows (20 probes × 2 endpoints; the stream probe and models fetch by hand)", rows.length === 40, String(rows.length))
+check("compare tv: jsonl has 44 rows (22 probes × 2 endpoints; the stream probe and models fetch by hand)", rows.length === 44, String(rows.length))
 check("compare tv: every row carries the request messages", rows.every((r) => Array.isArray(r.messages) && r.messages.length))
 check("compare tv: every 200 row carries the assistant message + perf", rows.filter((r) => r.httpStatus === 200).every((r) => r.assistant && r.perf))
 // The capability boundary shows up in the dataset as the one non-200 row: A refusing the
@@ -120,12 +122,12 @@ check("compare tv: settings recorded (2048-token budget for reasoning models)", 
 // 4. textonly vs dumb — every use-case capability to A, and B's modes listed
 const td = load("td.json")
 const w = (cap: string) => td.verdicts.find((x: any) => x.capability === cap)
-for (const cap of ["cli agent", "ios simulator", "macos control", "terminal actions", "browser actions"]) {
+for (const cap of ["cli agent", "ios simulator", "macos control", "android emulator", "terminal actions", "browser actions"]) {
   check(`compare td: ${cap} → A by more-passes`, w(cap)?.betterFor === "a" && w(cap)?.rule === "more-passes", JSON.stringify(w(cap)))
 }
 check("compare td: function calling ties (dumb answers the old probes well)", w("function calling")?.betterFor === "tie", JSON.stringify(w("function calling")))
 const modes = td.b.failureModes
-check("compare td: B failure modes match the design", modes["hallucinated-path"] === 2 && modes["heredoc"] === 1 && modes["non-unique-find"] === 1 && modes["blind-send"] === 1 && modes["typed-into-wrong-app"] === 1, JSON.stringify(modes))
+check("compare td: B failure modes match the design", modes["hallucinated-path"] === 3 && modes["wrong-target"] === 2 && modes["heredoc"] === 1 && modes["non-unique-find"] === 1 && modes["blind-send"] === 1 && modes["typed-into-wrong-app"] === 1, JSON.stringify(modes))
 check("compare td: A has none", Object.keys(td.a.failureModes).length === 0)
 check("compare td: warm-up skipped when asked", td.a.warmupMs === null && td.b.warmupMs === null)
 check("compare tv: warm-up recorded by default", typeof tv.a.warmupMs === "number" && typeof tv.b.warmupMs === "number")

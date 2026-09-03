@@ -68,6 +68,34 @@ export const XCODE_DIGEST = [
   "  XCTAssertFalse failed - sign-in button enabled with empty email",
 ].join("\n")
 
+export const ADB_DEVICES = [
+  "exit code 0",
+  "",
+  "List of devices attached",
+  "emulator-5554          device product:sdk_gphone64_arm64 model:sdk_gphone64_arm64 device:emu64a transport_id:1",
+  "emulator-5556          offline transport_id:2",
+  "R5CT10ABCDE            unauthorized transport_id:3",
+].join("\n")
+const ADB_SERIALS = new Set(["emulator-5554", "emulator-5556", "R5CT10ABCDE"])
+
+// Exactly what tools.ts emits when compressIfRecognized digests a gradle log. Note the
+// frame gives a BASENAME only (LoginTest.kt), not a path: the model has to find it.
+export const GRADLE_DIGEST = [
+  "exit code 1",
+  "",
+  "[gradle log digested (31877 -> 214 chars)]",
+  "",
+  "2 failed, 16 passed",
+  "",
+  "FAIL com.example.LoginTest.signInDisabledWhenEmpty",
+  "  LoginTest.kt:42",
+  "  java.lang.AssertionError: expected button disabled",
+  "",
+  "FAIL com.example.TokenTest.refreshesExpiredToken",
+  "  TokenTest.kt:88",
+  "  org.junit.ComparisonFailure: expected:<token> but was:<null>",
+].join("\n")
+
 export const PAGE_SNAPSHOT = [
   "page: Mesh — Sign in",
   "form#signin",
@@ -556,6 +584,86 @@ export const AGENT_PROBES: Probe[] = [
         }
       }
       return pass(`${calls.map((c) => c.name).join(" → ")}`, { calls: brief(calls) })
+    },
+  },
+  {
+    id: "android-emu-target",
+    title: "Targets the online emulator by listed serial",
+    capability: "android emulator",
+    useCase: "Android",
+    async run(ctx) {
+      const { status, body, raw } = await chat(ctx, {
+        messages: [
+          sys(MESH_CODE_SYSTEM),
+          user("Install build/app-debug.apk on the running emulator and launch com.mesh.notes/.MainActivity."),
+          assistantCall("call_d1", "run_command", { command: "adb devices -l" }),
+          toolResult("call_d1", ADB_DEVICES),
+        ],
+        tools: TOOLS,
+      })
+      const s = structural(status, body, raw, MESH_NAMES)
+      if ("out" in s) return s.out
+      const g = meshGate(s.calls)
+      if (g) return g
+      const first = s.calls[0]
+      if (first.name !== "run_command") return fail("other", `first call ${first.name}`, { calls: brief(s.calls) })
+      const c = cmd(first)
+      if (/adb devices/.test(c)) return fail("repeated-failing-command", `listed devices again`, { calls: brief(s.calls) })
+      const serials = [...c.matchAll(/-s\s+(\S+)/g)].map((m) => m[1])
+      const bogus = serials.find((x) => !ADB_SERIALS.has(x))
+      if (bogus) return fail("hallucinated-udid", `serial not in the listing: ${bogus}`, { calls: brief(s.calls) })
+      if (serials.some((x) => x === "emulator-5556" || x === "R5CT10ABCDE")) return fail("wrong-target", `targeted an offline or unauthorized device`, { calls: brief(s.calls) })
+      // Three devices are attached; adb without -s refuses ("more than one device"). A
+      // model that omits -s here will loop on that error in production.
+      if (!serials.length && /\badb\b/.test(c)) return fail("wrong-target", `adb without -s while three devices are attached`, { calls: brief(s.calls) })
+      if (!/\badb\s+-s\s+emulator-5554\b/.test(c)) return fail("wrong-target", `did not target emulator-5554: ${JSON.stringify(c.slice(0, 120))}`, { calls: brief(s.calls) })
+      if (!/install\b.*app-debug\.apk|am start/.test(c)) return fail("wrong-target", `neither installs nor launches: ${JSON.stringify(c.slice(0, 120))}`, { calls: brief(s.calls) })
+      return pass(JSON.stringify(c), { calls: brief(s.calls) })
+    },
+  },
+  {
+    id: "android-test-digest-locate",
+    title: "Locates the file a gradle digest names by basename",
+    capability: "android emulator",
+    useCase: "Android",
+    async run(ctx) {
+      const { status, body, raw } = await chat(ctx, {
+        messages: [
+          sys(MESH_CODE_SYSTEM),
+          user("Run the unit tests and fix the first failing test."),
+          assistantCall("call_g1", "run_command", { command: "./gradlew testDebugUnitTest 2>&1 | tail -200" }),
+          toolResult("call_g1", GRADLE_DIGEST),
+        ],
+        tools: TOOLS,
+      })
+      const s = structural(status, body, raw, MESH_NAMES)
+      if ("out" in s) return s.out
+      const g = meshGate(s.calls)
+      if (g) return g
+      const first = s.calls[0]
+      // The digest names LoginTest.kt with no directory. The right move is to find it —
+      // or to read a path that ends in it. Anything else is a guess.
+      if (first.name === "str_replace" || first.name === "write_file") {
+        const pth = asStr(first.args.path)
+        return pth.endsWith("LoginTest.kt")
+          ? fail("edit-before-read", `edited ${pth} without reading it`, { calls: brief(s.calls) })
+          : fail("hallucinated-path", `edited ${pth}, which the digest never named`, { calls: brief(s.calls) })
+      }
+      if (first.name === "read_file") {
+        const pth = asStr(first.args.path)
+        return pth.endsWith("LoginTest.kt")
+          ? pass(`read_file(${pth})`, { calls: brief(s.calls) })
+          : fail("hallucinated-path", `read ${pth}, which the digest never named`, { calls: brief(s.calls) })
+      }
+      if (first.name === "run_command") {
+        const c = cmd(first)
+        if (/gradlew|gradle\b/.test(c)) return fail("repeated-failing-command", `re-ran gradle`, { calls: brief(s.calls) })
+        if (/^(find|fd|rg|grep|locate)\b/.test(c.trim()) && /LoginTest(\.kt)?/.test(c)) return pass(JSON.stringify(c), { calls: brief(s.calls) })
+        if (/^(sed -n|cat|head)\b/.test(c.trim()) && /LoginTest\.kt/.test(c)) return pass(JSON.stringify(c), { calls: brief(s.calls) })
+        return fail("hallucinated-path", `command does not look for the named file: ${JSON.stringify(c.slice(0, 100))}`, { calls: brief(s.calls) })
+      }
+      if (first.name === "list_dir") return pass(`list_dir(${asStr(first.args.path)}) — looking before guessing`, { calls: brief(s.calls) })
+      return fail("other", `first call ${first.name}`, { calls: brief(s.calls) })
     },
   },
 ]

@@ -12,6 +12,7 @@ a long task on a Mac — and, in compare mode, **which of two models is better f
 | browser actions | sequence navigate/type/click; **use only selectors from a page outline, not priors** |
 | cli agent | with the seven tools `mesh-code` really gives the model: write a script without a multi-line command; list before editing an unnamed file; `str_replace` with a **unique** anchor; change approach after exit 127; call `finish` when done |
 | ios simulator | boot the right device by **listed UDID** (the `booted` alias is the trap); read the file a **test digest** names |
+| android emulator | target the **online** emulator by listed serial with three devices attached (`adb` without `-s` refuses); locate the file a gradle digest names **by basename only** |
 | macos control | activate Notes **before** typing — keystrokes go to the frontmost app |
 | reads images | send an `image_url` part and classify: supported, or refused as text-only |
 | long-running economics | prefix reuse (`cached_tokens`) and stop-sequence discipline |
@@ -95,7 +96,7 @@ including every failure branch — gets exercised without a model:
 
 | Persona | Imitates | Used to prove |
 |---|---|---|
-| `textonly` (default) | MferenceServer: refuses images, reports `cached_tokens`, no reasoning | the baseline: **19 pass · 0 fail · 1 unsupported**, the unsupported one being images |
+| `textonly` (default) | MferenceServer: refuses images, reports `cached_tokens`, no reasoning | the baseline: **21 pass · 0 fail · 1 unsupported**, the unsupported one being images |
 | `vision` | LM Studio with a reasoning model: accepts images, streams `reasoning_content`, no `cached_tokens`, 20× slower frames | compare mode detects the capability boundary and the speed gap |
 | `dumb` | a small model at its worst | each use-case probe fails **for its designed reason** — a probe failing for the wrong reason is a harness bug |
 

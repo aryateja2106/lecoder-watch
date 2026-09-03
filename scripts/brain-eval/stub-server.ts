@@ -89,6 +89,14 @@ function answer(body: any): Msg {
       return dumb
         ? calls(toolCall("browser_type", { selector: "#email", text: "dev@mesh.test" }, "call_1"), toolCall("browser_type", { selector: "#password", text: "hunter2" }, "call_2"), toolCall("browser_click", { selector: "#login" }, "call_3"))
         : calls(toolCall("browser_type", { selector: "#email-address", text: "dev@mesh.test" }, "call_1"), toolCall("browser_type", { selector: "#passcode", text: "hunter2" }, "call_2"), toolCall("browser_click", { selector: "button.btn-primary" }, "call_3"))
+    if (lastTool.includes("List of devices attached"))
+      return dumb
+        ? calls(toolCall("run_command", { command: "adb install build/app-debug.apk" }))
+        : calls(toolCall("run_command", { command: "adb -s emulator-5554 install -r build/app-debug.apk && adb -s emulator-5554 shell am start -n com.mesh.notes/.MainActivity" }))
+    if (lastTool.includes("gradle log digested"))
+      return dumb
+        ? calls(toolCall("str_replace", { path: "app/src/main/java/com/example/LoginViewModel.kt", find: "isEnabled = true", replace: "isEnabled = email.isNotEmpty()" }))
+        : calls(toolCall("run_command", { command: "find . -name LoginTest.kt -not -path '*/build/*'" }))
     if (names.has("app_activate") && lastTool.startsWith("frontmost:"))
       return dumb
         ? calls(toolCall("input_type", { text: "buy milk" }))

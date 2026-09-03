@@ -13,20 +13,23 @@ cannot run in CI or a cloud agent container.
       *Verified by running: against `stub-server.ts`, 9 pass · 0 fail · 1 unsupported,
       the unsupported one being images, correctly classified from the endpoint's 400.
       Negative control against a dead port reports 3 fails, so the harness can fail.*
-- [x] **Make the scorecard answer "which model is better for what"** — ten use-case probes
+- [x] **Make the scorecard answer "which model is better for what"** — twelve use-case probes
       shaped like the owner's real day (CLI with mesh-code's seven tools, a page outline
-      for the browser, `xcrun simctl` and a test digest for iOS, frontmost-app discipline
-      for macOS), each reporting a failure-mode *tag*; a compare mode (`--a`/`--b`) that
+      for the browser, `xcrun simctl` and a test digest for iOS, `adb` and a gradle digest
+      for Android, frontmost-app discipline for macOS), each reporting a failure-mode *tag*; a compare mode (`--a`/`--b`) that
       streams every probe for TTFT and tok/s with reasoning split from the answer,
       sequences strictly for a single-tenant server, and prints a per-capability *better
       for* line with the rule that decided it; and a `--jsonl` dataset export.
       *Verified by running, 2026-09-02: `check-brain-eval-compare.sh` boots three stub
-      personas and asserts 65 things — textonly alone 19/0/1, dumb alone fails exactly the
-      ten probes for exactly their designed reasons, textonly-vs-vision detects the image
+      personas and asserts 80+ things — textonly alone 21/0/1, dumb alone fails exactly the
+      twelve probes for exactly their designed reasons, textonly-vs-vision detects the image
       boundary and a 20× speed gap, textonly-vs-dumb hands every use-case capability to A
       with B's failure modes listed, `--repeat 2` keeps every turn and reports medians.
-      `check-brain-eval-sse.sh` covers the stream accumulator (45). Nothing has touched a
-      real model.*
+      `check-brain-eval-sse.sh` covers the stream accumulator (51). An adversarial review
+      round (2026-09-03) confirmed four measurement defects — a re-sampled fallback graded
+      a different sample than it timed, `--repeat` graded only the last sample, budget
+      truncation was graded as prose-only, burst-emitted tool calls reported absurd
+      tok/s — all fixed with unit legs. Nothing has touched a real model.*
 
 ## Stage 1 — the fork, and the patch that pays for it
 
