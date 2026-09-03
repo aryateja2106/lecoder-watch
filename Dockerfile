@@ -1,33 +1,40 @@
 # meshd only — the Bun + TypeScript daemon for Linux hosts and VPS boxes.
 # Apple Watch, iPhone, and Mac menu-bar apps are not containerized.
 #
-# Official slim tag is Debian (trixie-slim), not Alpine. Hub name is `1-slim`
-# (there is no `1-debian-slim` tag). Multi-arch: linux/amd64 + linux/arm64.
+# Multi-stage: copy the bun binary from the official image onto debian:bookworm-slim
+# so we do not inherit oven/bun's extra layers. Not Alpine (tmux + glibc).
 # A plain `docker build` produces the host arch. For both:
 #   docker buildx build --platform linux/amd64,linux/arm64 -t meshd .
-FROM oven/bun:1-slim
+FROM oven/bun:1-slim AS bun
+
+FROM debian:bookworm-slim
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-    tmux ca-certificates openssl \
+    tmux curl ca-certificates openssl \
   && rm -rf /var/lib/apt/lists/* \
-  && if ! id bun >/dev/null 2>&1; then \
-       groupadd --gid 1000 bun \
-       && useradd --uid 1000 --gid bun --home-dir /home/bun --create-home bun; \
-     fi \
+  && groupadd --gid 1000 mesh \
+  && useradd --uid 1000 --gid mesh --home-dir /data --shell /bin/sh mesh \
   && mkdir -p /data/.mesh \
-  && chown -R bun:bun /data
+  && chown -R mesh:mesh /data
+
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+RUN chmod 755 /usr/local/bin/bun \
+  && ln -sf /usr/local/bin/bun /usr/local/bin/bunx
 
 WORKDIR /opt/mesh
-COPY --chown=bun:bun install/payload/meshd/ ./meshd/
-COPY --chown=bun:bun install/payload/bin/mesh /usr/local/bin/mesh
-COPY --chown=bun:bun docker/entrypoint.sh /usr/local/bin/meshd-entrypoint
-RUN chmod 755 /usr/local/bin/mesh /usr/local/bin/meshd-entrypoint
+COPY --chown=mesh:mesh install/payload/meshd/ ./meshd/
+# CLI lives next to meshd so `mesh pair` can load ../meshd/qr.ts
+COPY --chown=mesh:mesh install/payload/bin/mesh ./bin/mesh
+COPY --chown=mesh:mesh docker/entrypoint.sh /usr/local/bin/meshd-entrypoint
+RUN chmod 755 /opt/mesh/bin/mesh /usr/local/bin/meshd-entrypoint \
+  && ln -sf /opt/mesh/bin/mesh /usr/local/bin/mesh
 
 # HOME=/data is load-bearing: meshd writes to homedir()/.mesh and ignores MESH_HOME.
 # MESH_HOME is for the mesh CLI in the same container so both land on the volume.
 ENV HOME=/data \
     MESH_HOME=/data/.mesh \
+    PATH="/opt/mesh/bin:/usr/local/bin:${PATH}" \
     MESHD_HOST=0.0.0.0 \
     MESHD_PORT=8899 \
     MESH_MUX=tmux \
@@ -35,10 +42,10 @@ ENV HOME=/data \
 
 EXPOSE 8899
 VOLUME ["/data"]
-USER bun
+USER mesh
 
 WORKDIR /opt/mesh/meshd
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["bun", "-e", "const r=await fetch('http://127.0.0.1:8899/health'); if (!r.ok) process.exit(1)"]
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8899/health
 ENTRYPOINT ["/usr/local/bin/meshd-entrypoint"]
 CMD ["bun", "run", "server.ts"]

@@ -1,11 +1,11 @@
 #!/bin/sh
-# Build the meshd image, start a throwaway container, hit /health, tear down.
-# Skips when docker is not installed (CI agents without Docker).
+# Build the meshd image, start a throwaway container, hit /health, pair via
+# `docker exec … mesh pair`, tear down. Skips when docker is not usable.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${MESHD_TEST_PORT:-18999}"
-MAX_WAIT_SEC="${MESHD_TEST_WAIT_SEC:-30}"
+MAX_WAIT_SEC="${MESHD_TEST_WAIT_SEC:-45}"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "check-docker-meshd: SKIP (no docker)"
@@ -25,13 +25,15 @@ trap cleanup EXIT
 
 log() { printf 'check-docker-meshd: %s\n' "$*"; }
 
-# curl_http URL — prints the HTTP status code (000 on connection failure).
 curl_http() {
   curl -sS -o "$2" -w '%{http_code}' "$1" 2>/dev/null || printf '000'
 }
 
 log "building image"
-docker build -t meshd:smoke "$ROOT" >/dev/null
+docker build -t meshd:smoke "$ROOT"
+
+SIZE="$(docker images meshd:smoke --format '{{.Size}}')"
+log "image size ${SIZE} (previous proven size was 234MB)"
 
 log "starting container on 127.0.0.1:${PORT}"
 docker run -d --name "$NAME" \
@@ -40,8 +42,6 @@ docker run -d --name "$NAME" \
   -p "127.0.0.1:${PORT}:8899" \
   meshd:smoke >/dev/null
 
-# Wait for a stable /health 200. Connection refused / empty body are retried;
-# /health itself is unauthenticated and should not 403.
 deadline=$(( $(date +%s) + MAX_WAIT_SEC ))
 code="000"
 while [ "$(date +%s)" -lt "$deadline" ]; do
@@ -52,12 +52,8 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
         break
       fi
       ;;
-    000|421|502|503)
-      : # retry — meshd still booting or port not ready
-      ;;
-    *)
-      :
-      ;;
+    000|421|502|503) : ;;
+    *) : ;;
   esac
   sleep 0.5
 done
@@ -69,22 +65,36 @@ if [ "$code" != "200" ] || ! grep -q '"ok":true' /tmp/meshd-health.json 2>/dev/n
   exit 1
 fi
 
-# Basic shape checks — match what server.ts actually returns.
 grep -q '"platform":"linux"' /tmp/meshd-health.json || { echo "check-docker-meshd: FAIL (not linux)"; cat /tmp/meshd-health.json; exit 1; }
 grep -q '"meshdVersion"' /tmp/meshd-health.json || { echo "check-docker-meshd: FAIL (no meshdVersion)"; cat /tmp/meshd-health.json; exit 1; }
-
-# Container honesty: no screen peek or desktop input buttons on the phone.
 grep -q '"screenPeek"' /tmp/meshd-health.json && { echo "check-docker-meshd: FAIL (advertised screenPeek in container)"; cat /tmp/meshd-health.json; exit 1; }
 grep -q '"input"' /tmp/meshd-health.json && { echo "check-docker-meshd: FAIL (advertised input in container)"; cat /tmp/meshd-health.json; exit 1; }
 
-# Must not run as root — the image USER is bun (uid 1000).
-uid="$(docker exec "$NAME" id -u)"
+who="$(docker exec "$NAME" /usr/bin/id -un)"
+uid="$(docker exec "$NAME" /usr/bin/id -u)"
 [ "$uid" != "0" ] || { echo "check-docker-meshd: FAIL (container runs as root)"; exit 1; }
+[ "$who" != "root" ] || { echo "check-docker-meshd: FAIL (whoami is root)"; exit 1; }
 
-# Pairing mint is loopback-only (pair.ts 403s off-loopback). Host-mapped curl
-# arrives from the Docker bridge, so mint from inside the container.
-pair_json="$(docker exec "$NAME" bun -e "const r=await fetch('http://127.0.0.1:8899/pair/new'); const t=await r.text(); console.log(t); if (!r.ok) process.exit(1)")" \
-  || { echo "check-docker-meshd: FAIL (/pair/new via docker exec)"; docker logs "$NAME" 2>&1 | tail -20; exit 1; }
-echo "$pair_json" | grep -q '"code"' || { echo "check-docker-meshd: FAIL (/pair/new body)"; echo "$pair_json"; exit 1; }
+# Dockerfile HEALTHCHECK must actually go healthy (not just /health from the host).
+health_deadline=$(( $(date +%s) + MAX_WAIT_SEC ))
+hc="none"
+while [ "$(date +%s)" -lt "$health_deadline" ]; do
+  hc="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$NAME")"
+  [ "$hc" = "healthy" ] && break
+  sleep 1
+done
+[ "$hc" = "healthy" ] || {
+  echo "check-docker-meshd: FAIL (HEALTHCHECK status is ${hc}, want healthy)"
+  docker inspect -f '{{json .State.Health}}' "$NAME" 2>/dev/null | head -c 400
+  echo
+  exit 1
+}
 
-log "ok uid=$uid ($(tr -d '\n' < /tmp/meshd-health.json | head -c 120)…)"
+# Pairing mint is loopback-only. Host-mapped curl is not enough — run the real CLI
+# inside the container, the same command docs tell a user to run.
+pair_json="$(docker exec "$NAME" mesh pair --address 127.0.0.1 --json)" \
+  || { echo "check-docker-meshd: FAIL (docker exec mesh pair)"; docker logs "$NAME" 2>&1 | tail -20; exit 1; }
+echo "$pair_json" | grep -q '"code"' || { echo "check-docker-meshd: FAIL (mesh pair --json missing code)"; echo "$pair_json"; exit 1; }
+echo "$pair_json" | grep -q '"pretty"' || { echo "check-docker-meshd: FAIL (mesh pair --json missing pretty)"; echo "$pair_json"; exit 1; }
+
+log "ok user=${who} uid=${uid} health=${hc} size=${SIZE}"

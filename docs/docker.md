@@ -30,8 +30,8 @@ The entrypoint persists state under a Docker volume at `/data/.mesh` (token,
 `hosts.json`, knowledge base, push tokens, event log). On first boot it mints a
 bearer token when `MESHD_TOKEN` is not set.
 
-The image is `oven/bun:1-slim` (Debian slim — Hub has no `1-debian-slim` tag)
-and runs as uid **1000** (`bun`), not root.
+The image is Debian bookworm-slim with the bun binary copied in (not Alpine)
+and runs as uid **1000** (`mesh`), not root.
 A named volume created by compose inherits that ownership. If you bind-mount a
 host directory onto `/data`, it must be writable by uid 1000. Compose also
 limits the container to 256&nbsp;MB of RAM and half a CPU — enough for the daemon
@@ -97,14 +97,21 @@ The phone app keeps its entry for this machine until you remove it there — sam
 sh scripts/check-docker-meshd.sh
 ```
 
-Builds the image, starts a throwaway container on a spare port, hits `/health`,
-mints a pairing code **inside** the container (`/pair/new` is loopback-only),
-and tears it down.
+Builds the image, starts a throwaway container on a spare port, waits until
+`/health` and the image HEALTHCHECK are healthy, then runs the same pairing
+command a user would:
+
+```sh
+docker exec <container> mesh pair --address 127.0.0.1 --json
+```
+
+(`/pair/new` is loopback-only; a host-side curl is not enough.)
 
 ## Multi-architecture images
 
-`oven/bun:1-slim` is a multi-arch Debian tag (`linux/amd64` and `linux/arm64`).
-A plain `docker build` produces **this host's** architecture. To publish both:
+`debian:bookworm-slim` and `oven/bun:1-slim` are multi-arch (`linux/amd64` and
+`linux/arm64`). A plain `docker build` produces **this host's** architecture.
+To publish both:
 
 ```sh
 docker buildx build --platform linux/amd64,linux/arm64 -t your-registry/meshd:latest --push .

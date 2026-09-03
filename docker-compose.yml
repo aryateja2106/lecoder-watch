@@ -3,7 +3,7 @@
 #
 # Uninstall: docker compose down -v   (removes the persisted volume)
 #
-# The container runs as uid 1000 (bun). A bind-mounted /data must be writable
+# The container runs as uid 1000 (mesh). A bind-mounted /data must be writable
 # by that uid. Named volumes created by compose inherit the image ownership.
 services:
   meshd:
@@ -31,8 +31,8 @@ services:
     cpus: "0.5"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:8899/health'); if (!r.ok) process.exit(1)"]
-      interval: 30s
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8899/health"]
+      interval: 10s
       timeout: 5s
       retries: 3
       start_period: 10s

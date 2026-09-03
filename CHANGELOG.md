@@ -14,8 +14,8 @@ each entry as you ship the slice, not at release time.
   `docker compose up` instead of the curl installer — same pairing code, same terminal
   sessions and agent alerts, with your token and paired hosts kept on a Docker volume.
   The iPhone and watch apps are not in the container; they still pair to the daemon over
-  your LAN or VPN.   The image is Debian slim (`oven/bun:1-slim`), runs as an unprivileged user,
-  and compose caps it at 256&nbsp;MB / half a CPU. Uninstall is
+  your LAN or VPN. The image is a slim Debian box that runs as an unprivileged user
+  (not root), and compose caps it at 256&nbsp;MB / half a CPU. Uninstall is
   `docker compose down -v`.
 
 ### Fixed
