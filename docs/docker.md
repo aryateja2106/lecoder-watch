@@ -55,9 +55,14 @@ that step.
 | `MESHD_TOKEN` | *(minted on first boot)* | Bearer token; persisted to the volume when set |
 | `MESHD_TELEMETRY` | `on` | Set to `off` to disable the daily anonymized heartbeat |
 | `MESH_MUX` | `tmux` | Multiplexer binary inside the container |
+| `MESHD_CONTAINER` | `1` (set by the image) | Marks a container so `/health` does not advertise screen peek or desktop input |
 
 See the README [Telemetry](../README.md#telemetry) section for what the heartbeat
 contains.
+
+`/health` advertises only what works in this environment: no `screenPeek` or `input`
+in a default container (no X11 display, no macOS screen capture). Terminal sessions,
+events, pairing, and files still work.
 
 ## Uninstall
 

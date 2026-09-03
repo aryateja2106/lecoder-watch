@@ -15,6 +15,8 @@ services:
       MESHD_HOST: "0.0.0.0"
       MESHD_PORT: "8899"
       MESH_MUX: "tmux"
+      # Explicit marker so /health does not advertise desktop input/screen in a container.
+      MESHD_CONTAINER: "1"
       # Set to "off" to disable the daily anonymized heartbeat (see README Telemetry).
       MESHD_TELEMETRY: "${MESHD_TELEMETRY:-on}"
       # Optional: pin a token instead of letting the entrypoint mint one on first boot.

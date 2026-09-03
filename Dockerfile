@@ -22,7 +22,8 @@ ENV HOME=/data \
     MESH_HOME=/data/.mesh \
     MESHD_HOST=0.0.0.0 \
     MESHD_PORT=8899 \
-    MESH_MUX=tmux
+    MESH_MUX=tmux \
+    MESHD_CONTAINER=1
 
 EXPOSE 8899
 VOLUME ["/data"]
