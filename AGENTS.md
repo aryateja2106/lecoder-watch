@@ -122,6 +122,10 @@ next steps that were correct in June and July and are wrong now; the index says 
 | `install/payload/meshd/` | **The daemon.** Bun + TypeScript. The only copy. |
 | `install/payload/bin/mesh` | The CLI: setup, pair, doctor, upgrade, uninstall. |
 | `install/install.sh` | The `curl \| sh` installer. |
+| `Dockerfile`, `docker-compose.yml` | **meshd in Docker** — Linux/VPS only; not the watch, phone, or Mac apps. |
+| `docker/entrypoint.sh` | Container entrypoint: persist token and `~/.mesh` state on a volume. |
+| `docs/docker.md` | Docker install runbook (pairing, env, uninstall). |
+| `scripts/check-docker-meshd.sh` | Build image, start throwaway container, hit `/health`. |
 | `scripts/check-*.{swift,sh}` | Self-checks. `check-all.sh` runs every one. |
 | `project.yml` | Canonical Xcode project. Run `xcodegen generate` after editing. |
 | `openspec/` | Specs and change proposals. |
@@ -146,6 +150,11 @@ cd install/payload/meshd && bun add -D --no-save bun-types typescript@~5.7.0 && 
 
 Swift checks must compile with `-Onone`: **`assert` is a no-op under `-O`**, so an
 optimised check passes even when the code under test is wrong.
+
+**After you ship a user-visible slice:** add a line to `CHANGELOG.md` under
+`## [Unreleased]` in the same PR — that block is the source for TestFlight "What to
+Test" notes. Write what a user would notice, not implementation detail. Do not bump
+`MARKETING_VERSION` in `project.yml` unless the slice is a numbered release.
 
 ## The daemon API, in one place
 
@@ -206,7 +215,8 @@ the others.
 
 - SwiftUI view work inside one file (`Watch/WatchViews.swift`, `iOS/ContentView.swift`)
 - A single `scripts/check-*.sh` self-check
-- Docs, the landing page in `web/`, CHANGELOG entries
+- Docs, the landing page in `web/`, CHANGELOG entries, Docker docs (`docs/docker.md`,
+  `Dockerfile`, `docker-compose.yml`)
 - One `install/payload/meshd/*.ts` module that owns its own routes (`wol.ts`, `files.ts`)
 
 **Must be serialized, one agent at a time** — these are the shared contracts, and two

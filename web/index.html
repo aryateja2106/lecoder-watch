@@ -390,12 +390,19 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
         <div>
           <h3>Install the daemon on your Mac or Linux box</h3>
           <p>Bun + TypeScript, ~3&nbsp;MB. Registers with launchd or systemd, so it comes
-             back after a reboot. Read it before you run it — the installer is one shell
+             back after a reboot. On Linux or a VPS you can also run only
+             <code class="inline">meshd</code> in Docker — same pairing, same API.
+             Read it before you run it — the installer is one shell
              script and the daemon source is public.</p>
           <div class="cmd">
             <span class="dollar">$</span>
             <code id="cmd-1">curl -fsSL https://mesh.lesearch.ai/install.sh | sh</code>
             <button class="copy" data-copy="#cmd-1">Copy</button>
+          </div>
+          <div class="cmd">
+            <span class="dollar">$</span>
+            <code id="cmd-1b">docker compose up -d --build</code>
+            <button class="copy" data-copy="#cmd-1b">Copy</button>
           </div>
         </div>
       </div>
@@ -413,6 +420,8 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
             <code id="cmd-2">mesh pair</code>
             <button class="copy" data-copy="#cmd-2">Copy</button>
           </div>
+          <p style="margin-top:12px;color:var(--ink-3);font-size:12.5px">Docker:
+             <code class="inline">docker compose exec meshd mesh pair --address &lt;ip&gt;</code></p>
         </div>
       </div>
 
@@ -552,7 +561,20 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       <summary>Linux too?</summary>
       <p>Yes: the same installer, the same pairing, the same agent alerts, plus keyboard
          and mouse input through <code>xdotool</code> on X11. Screen capture is macOS-only
-         today, and Wayland input is not supported yet.</p>
+         today, and Wayland input is not supported yet. On a VPS or any box that already
+         runs Docker, you can start only the daemon with
+         <code>docker compose up -d --build</code> and pair with
+         <code>docker compose exec meshd mesh pair</code> — see
+         <a href="https://github.com/LeSearch-AI/mesh/blob/main/docs/docker.md">docs/docker.md</a>.</p>
+    </details>
+
+    <details>
+      <summary>Docker?</summary>
+      <p>The iPhone and watch apps do not run in a container — only
+         <code>meshd</code>, the small Bun daemon. Build from this repo, expose port
+         8899 on a network your phone can reach, then pair from inside the container.
+         Uninstall is <code>docker compose down -v</code>. Screen capture stays
+         macOS-only; a container does not change that.</p>
     </details>
 
     <details>

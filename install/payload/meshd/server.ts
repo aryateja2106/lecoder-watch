@@ -13,6 +13,7 @@ import { isAuthorized } from "./auth";
 import { handleDoctor, tokenWeakness } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
+import { advertisedCapabilities } from "./capabilities";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
@@ -24,7 +25,6 @@ const VERSION = "0.5.2";
 // + Live Activity pushes), sessionStatus (status fields on /agents rows), paste
 // (bracketed multiline paste on /agents/<s>/send), captureJoin (join=1/plain=1 on
 // the output route). Clients must gate new behavior on these strings, not on version.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -1010,7 +1010,7 @@ Bun.serve({
       // the same reason: they let a phone compute this machine's directed broadcast
       // later and pick a wake peer that actually shares its LAN.
       const net = primaryIPv4();
-      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES, mac: primaryMac(), ipv4: net?.address ?? null, netmask: net?.netmask ?? null });
+      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: advertisedCapabilities(), mac: primaryMac(), ipv4: net?.address ?? null, netmask: net?.netmask ?? null });
     }
     // Pairing is the one route that must answer without a token — it is how the
     // phone gets one. See pair.ts for why that is safe.

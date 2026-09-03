@@ -49,8 +49,12 @@ grep -q 'handleDoctor(req, url' "$ROOT/install/payload/meshd/server.ts" || {
   echo "FAIL: server.ts does not route /doctor"
   exit 1
 }
-grep -q '"doctor"' "$ROOT/install/payload/meshd/server.ts" || {
+grep -q '"doctor"' "$ROOT/install/payload/meshd/capabilities.ts" || {
   echo "FAIL: capabilities do not advertise doctor"
+  exit 1
+}
+grep -q 'advertisedCapabilities' "$ROOT/install/payload/meshd/server.ts" || {
+  echo "FAIL: /health does not call advertisedCapabilities()"
   exit 1
 }
 echo "check-mesh-doctor: server.ts wired"
