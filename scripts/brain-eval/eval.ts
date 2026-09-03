@@ -24,6 +24,7 @@ import {
   content,
   parseArgs,
   toolCalls,
+  truncatedOutcome,
   type Ctx,
   type FailureMode,
   type Probe,
@@ -88,6 +89,8 @@ const PROBES: Probe[] = [
         max_tokens: 16,
       })
       if (status !== 200) return { status: "fail", detail: `HTTP ${status}: ${raw.slice(0, 200)}` }
+      const cut = truncatedOutcome(body)
+      if (cut) return cut
       const text = content(body).trim()
       return {
         status: text.length ? "pass" : "fail",
@@ -138,6 +141,8 @@ const PROBES: Probe[] = [
         tools: [WEATHER_TOOL],
       })
       if (status !== 200) return { status: "fail", detail: `HTTP ${status}: ${raw.slice(0, 200)}` }
+      const cut = truncatedOutcome(body)
+      if (cut) return cut
       const calls = toolCalls(body)
       if (!calls.length)
         return {
@@ -406,7 +411,8 @@ const HELP = [
   "",
   "both modes:",
   "  --temperature T  default 0. Reasoning models (Ornith) are recommended at 0.6; state it",
-  "  --max-tokens N   default 512",
+  "  --max-tokens N   default 2048 — a reasoning model spends it on the think block first;",
+  "                   a reply cut off by this budget is tagged truncated and not compared",
   "  --timeout MS     per-request timeout, default 120000",
   "  --only IDS       comma-separated probe ids",
   "  --json PATH      write full results as JSON",
@@ -421,7 +427,7 @@ function ctxFrom(args: Record<string, string | boolean>, endpoint: string, suffi
     apiKey: get("api-key") ? String(get("api-key")) : undefined,
     timeoutMs: Number(args.timeout ?? 120000),
     temperature: Number(args.temperature ?? 0),
-    maxTokens: Number(args["max-tokens"] ?? 512),
+    maxTokens: Number(args["max-tokens"] ?? 2048),
     cacheBust: args["cache-bust"] ? Math.random().toString(36).slice(2, 10) : null,
     streamPerf: false,
   }

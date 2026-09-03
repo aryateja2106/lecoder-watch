@@ -13,18 +13,63 @@
  * otherwise the literal word "tie". No overall winner: the owner asked which model is
  * better for WHAT, and the per-capability lines plus the failure-mode tags are that.
  */
-import { median, type Ctx, type FailureMode, type Probe, type ProbeResult, type Status, type Turn } from "./core.ts"
+import { median, type Ctx, type FailureMode, type Probe, type Status, type Turn } from "./core.ts"
 import { apiFetch, chat } from "./core.ts"
 
 export type Verdict = "OK" | "PARTIAL" | "PARTIAL/FAILING" | "UNSUPPORTED"
 
+import type { ProbeResult } from "./core.ts"
+
 export interface ProbeRun extends ProbeResult {
   repeats: number
+  /** every repeat's status, in order; `status` is their majority */
+  statuses: Status[]
+  passRate: number
   nondeterministic: boolean
+  ttftMs: number | null
   ttfcMs: number | null
   tokPerSec: number | null
   cachedTokens: number | null
   turns: Turn[]
+}
+
+export interface RepeatSample {
+  status: Status
+  failureMode: FailureMode | null
+  detail: string
+  ms: number
+}
+
+/**
+ * One status from N repeats. Majority wins; a tie is a fail — a model that passes half
+ * the time has not passed. Unsupported outranks fail when it is the majority, because it
+ * is a capability boundary, not a wrong action. The speed number is the median of the
+ * PASSING repeats only: a failed or timed-out repeat's duration says nothing about how
+ * fast a correct answer arrives.
+ */
+export function aggregateRepeats(samples: RepeatSample[]): { status: Status; failureMode: FailureMode | null; detail: string; ms: number; passRate: number } {
+  const n = samples.length
+  const by = (st: Status) => samples.filter((x) => x.status === st)
+  const passes = by("pass").length
+  const unsupported = by("unsupported").length
+  let status: Status
+  if (passes * 2 > n) status = "pass"
+  else if (unsupported * 2 > n) status = "unsupported"
+  else if (by("skip").length === n) status = "skip"
+  else status = "fail"
+  const chosen = by(status)
+  // The representative sample: the most common failure mode among failed repeats, else
+  // the last repeat with the aggregate status.
+  let failureMode: FailureMode | null = null
+  if (status === "fail") {
+    const modes = new Map<FailureMode, number>()
+    for (const x of by("fail")) if (x.failureMode) modes.set(x.failureMode, (modes.get(x.failureMode) ?? 0) + 1)
+    failureMode = [...modes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "other"
+  }
+  const rep = [...chosen].reverse().find((x) => status !== "fail" || x.failureMode === failureMode) ?? chosen.at(-1) ?? samples.at(-1)!
+  const passing = by("pass").map((x) => x.ms)
+  const ms = median(passing.length ? passing : samples.map((x) => x.ms)) ?? rep.ms
+  return { status, failureMode, detail: n > 1 ? `${passes}/${n} pass · ${rep.detail}` : rep.detail, ms, passRate: n ? passes / n : 0 }
 }
 
 export interface EndpointReport {
@@ -105,13 +150,13 @@ async function warmUp(ctx: Ctx): Promise<number | null> {
 }
 
 async function runProbeOn(side: Side, probe: Probe, repeats: number): Promise<ProbeRun> {
-  const statuses: Status[] = []
-  const mss: number[] = []
+  const samples: RepeatSample[] = []
+  const ttfts: number[] = []
   const ttfcs: number[] = []
   const tps: number[] = []
   const turns: Turn[] = []
-  let last: ProbeResult | null = null
   let cached: number | null = null
+  let meta: Record<string, unknown> | undefined
   for (let r = 0; r < repeats; r++) {
     const started = performance.now()
     side.ctx.turnIndex = 0
@@ -125,26 +170,42 @@ async function runProbeOn(side: Side, probe: Probe, repeats: number): Promise<Pr
       const timeout = /timeout|abort/i.test(msg)
       out = { status: "fail", detail: `threw: ${msg}`, failureMode: timeout ? "timeout" : "other" }
     }
-    const ms = Math.round(performance.now() - started)
-    last = { id: probe.id, title: probe.title, capability: probe.capability, useCase: probe.useCase, ms, failureMode: out.failureMode ?? null, status: out.status, detail: out.detail, meta: out.meta }
-    statuses.push(out.status)
-    mss.push(ms)
+    const wall = performance.now() - started
+    // The probe's time is the server's time: the sum of its turns' request→[DONE]
+    // windows when every turn was measured, so harness work between turns (and any
+    // untimed request) never reaches the speed rule. Wall-clock only when a turn was
+    // not streamed (an HTTP error, or the one probe that fetches by hand).
+    const perfs = mine.map((t) => t.response.perf)
+    const ms = Math.round(mine.length && perfs.every(Boolean) ? perfs.reduce((n, p) => n + p!.totalMs, 0) : wall)
+    samples.push({ status: out.status, failureMode: out.failureMode ?? (out.status === "fail" ? "other" : null), detail: out.detail, ms })
+    meta = out.meta
     // Perf of the probe's LAST turn — the decision turn — is what the table shows.
     const perfTurn = [...mine].reverse().find((t) => t.response.perf)
-    if (perfTurn?.response.perf) {
+    if (perfTurn?.response.perf && out.status === "pass") {
+      if (perfTurn.response.perf.ttftMs !== null) ttfts.push(perfTurn.response.perf.ttftMs)
       if (perfTurn.response.perf.ttfcMs !== null) ttfcs.push(perfTurn.response.perf.ttfcMs)
       if (perfTurn.response.perf.genTokPerSec !== null) tps.push(perfTurn.response.perf.genTokPerSec)
-      if (perfTurn.response.perf.cachedTokens !== null) cached = perfTurn.response.perf.cachedTokens
     }
+    if (perfTurn?.response.perf?.cachedTokens !== null && perfTurn?.response.perf?.cachedTokens !== undefined) cached = perfTurn.response.perf.cachedTokens
     turns.push(...mine.map((t) => ({ ...t, index: r * 100 + t.index })))
   }
   side.ctx.record = undefined
-  const res = last!
+  const agg = aggregateRepeats(samples)
   return {
-    ...res,
-    ms: median(mss) ?? res.ms,
+    id: probe.id,
+    title: probe.title,
+    capability: probe.capability,
+    useCase: probe.useCase,
+    status: agg.status,
+    detail: agg.detail,
+    failureMode: agg.failureMode,
+    ms: agg.ms,
+    meta,
     repeats,
-    nondeterministic: new Set(statuses).size > 1,
+    statuses: samples.map((x) => x.status),
+    passRate: agg.passRate,
+    nondeterministic: new Set(samples.map((x) => x.status)).size > 1,
+    ttftMs: median(ttfts),
     ttfcMs: median(ttfcs),
     tokPerSec: median(tps),
     cachedTokens: cached,
@@ -169,7 +230,10 @@ function summarize(probes: ProbeRun[]): Record<string, Verdict> {
   return out
 }
 
-const excluded = (p: ProbeRun) => p.status === "skip" || p.failureMode === "http-error" || p.failureMode === "timeout"
+// Not the model's doing: a dead endpoint, a timeout, or a reply the harness's own
+// max_tokens cut off. These are listed under "not compared", never counted as fails.
+const excluded = (p: ProbeRun) =>
+  p.status === "skip" || p.failureMode === "http-error" || p.failureMode === "timeout" || p.failureMode === "truncated"
 
 export function decideCapability(capability: string, a: ProbeRun[], b: ProbeRun[]): CapabilityVerdict {
   const byId = (xs: ProbeRun[]) => new Map(xs.map((p) => [p.id, p]))
@@ -215,7 +279,7 @@ export interface CompareFile {
   verdicts: CapabilityVerdict[]
   unsupportedOnAPassingOnB: string[]
 }
-type RowSide = { status: Status; ms: number; tokPerSec: number | null; ttftMs: number | null; cachedTokens: number | null; failureMode: FailureMode | null }
+type RowSide = { status: Status; ms: number; tokPerSec: number | null; ttftMs: number | null; ttfcMs: number | null; cachedTokens: number | null; failureMode: FailureMode | null; passRate: number }
 
 export async function runCompare(a: Side, b: Side, probes: Probe[], settings: CompareSettings, out: { json?: string; jsonl?: string; strict?: boolean }) {
   const sides = [a, b]
@@ -242,7 +306,8 @@ export async function runCompare(a: Side, b: Side, probes: Probe[], settings: Co
     const ra = got[a.label], rb = got[b.label]
     runsA.push(ra)
     runsB.push(rb)
-    const cell = (r: ProbeRun) => `${MARK[r.status]} ${pad(`${r.ms}ms`, 8)} ${pad(fmt(r.tokPerSec, 1) + " t/s", 10)}${r.failureMode ? ` ${r.failureMode}` : ""}`
+    const cell = (r: ProbeRun) =>
+      `${MARK[r.status]}${r.repeats > 1 ? ` ${Math.round(r.passRate * 100)}%` : ""} ${pad(`${r.ms}ms`, 8)} ${pad(fmt(r.tokPerSec, 1) + " t/s", 10)}${r.failureMode ? ` ${r.failureMode}` : ""}`
     console.log(`  ${pad(probe.title, 34)} ${pad(cell(ra), 34)} ${pad(cell(rb), 34)}`)
   }
 
@@ -266,7 +331,7 @@ export async function runCompare(a: Side, b: Side, probes: Probe[], settings: Co
 
   const table = runsA.map((ra, i) => {
     const rb = runsB[i]
-    const side = (r: ProbeRun): RowSide => ({ status: r.status, ms: r.ms, tokPerSec: r.tokPerSec, ttftMs: r.ttfcMs, cachedTokens: r.cachedTokens, failureMode: r.failureMode })
+    const side = (r: ProbeRun): RowSide => ({ status: r.status, ms: r.ms, tokPerSec: r.tokPerSec, ttftMs: r.ttftMs, ttfcMs: r.ttfcMs, cachedTokens: r.cachedTokens, failureMode: r.failureMode, passRate: r.passRate })
     return { id: ra.id, capability: ra.capability, a: side(ra), b: side(rb) }
   })
   const file: CompareFile = {

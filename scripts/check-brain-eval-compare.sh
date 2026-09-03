@@ -115,7 +115,7 @@ check("compare tv: every 200 row carries the assistant message + perf", rows.fil
 const refused = rows.filter((r) => r.httpStatus !== 200)
 check("compare tv: the only non-200 row is A refusing the image", refused.length === 1 && refused[0].endpoint === "a" && refused[0].probe === "vision" && refused[0].httpStatus === 400 && refused[0].assistant === null && refused[0].status === "unsupported", JSON.stringify(refused.map((r) => [r.endpoint, r.probe, r.httpStatus])))
 check("compare tv: rows with tools carry the schemas", rows.filter((r) => r.probe === "cli-single-line").every((r) => Array.isArray(r.tools) && r.tools.length === 7))
-check("compare tv: settings recorded", tv.settings.temperature === 0 && tv.settings.maxTokens === 512 && tv.settings.repeat === 1)
+check("compare tv: settings recorded (2048-token budget for reasoning models)", tv.settings.temperature === 0 && tv.settings.maxTokens === 2048 && tv.settings.repeat === 1, JSON.stringify(tv.settings))
 
 // 4. textonly vs dumb — every use-case capability to A, and B's modes listed
 const td = load("td.json")
@@ -150,3 +150,49 @@ if (failed) { console.log(`\n${failed} assertion(s) failed`); process.exit(1) }
 console.log("check-brain-eval-compare: all assertions passed")
 TS
 bun run "$TMP/assert.ts" "$TMP"
+
+# Stage 2 — the two decisions the personas cannot exercise, because they are
+# deterministic: how N repeats become one status, and what a max_tokens cut-off means.
+cat > "$TMP/unit.ts" <<TS
+import { aggregateRepeats, decideCapability } from "$ROOT/scripts/brain-eval/compare.ts"
+import { truncatedOutcome } from "$ROOT/scripts/brain-eval/core.ts"
+import { structural } from "$ROOT/scripts/brain-eval/probes-agent.ts"
+let failed = 0
+const check = (name: string, cond: boolean, detail = "") => {
+  if (!cond) { console.log(\`  FAIL \${name} \${detail}\`); failed++ } else console.log(\`  ok   \${name} \${detail}\`)
+}
+const s = (status: any, ms: number, failureMode: any = null) => ({ status, failureMode, detail: status, ms })
+
+// Majority, not last sample. The same 2/3 pass rate must give the same answer in any order.
+const a1 = aggregateRepeats([s("pass", 10), s("pass", 12), s("fail", 500, "other")])
+const a2 = aggregateRepeats([s("fail", 500, "other"), s("fail", 600, "other"), s("pass", 10)])
+check("repeats: [pass,pass,fail] → pass", a1.status === "pass" && a1.failureMode === null, a1.status)
+check("repeats: [fail,fail,pass] → fail with the common mode", a2.status === "fail" && a2.failureMode === "other", \`\${a2.status} \${a2.failureMode}\`)
+check("repeats: passRate recorded", Math.abs(a1.passRate - 2 / 3) < 1e-9 && Math.abs(a2.passRate - 1 / 3) < 1e-9)
+check("repeats: speed median over PASSING repeats only", a1.ms === 11, String(a1.ms))
+check("repeats: a tie is a fail", aggregateRepeats([s("pass", 1), s("fail", 2, "heredoc")]).status === "fail")
+check("repeats: unsupported majority stays unsupported", aggregateRepeats([s("unsupported", 1), s("unsupported", 1), s("pass", 1)]).status === "unsupported")
+const a3 = aggregateRepeats([s("fail", 1, "heredoc"), s("fail", 1, "hallucinated-path"), s("fail", 1, "heredoc")])
+check("repeats: most common failure mode wins", a3.failureMode === "heredoc" && a3.detail.startsWith("0/3 pass"), \`\${a3.failureMode} \${a3.detail}\`)
+check("repeats: single sample keeps its detail verbatim", aggregateRepeats([s("pass", 5)]).detail === "pass")
+
+// A reply the budget cut off is not the model's failure.
+const cutBody = { choices: [{ index: 0, message: { role: "assistant", content: "", reasoning_content: "x".repeat(300) }, finish_reason: "length" }] }
+const cut = truncatedOutcome(cutBody)
+check("truncated: length + empty answer → truncated", cut?.status === "fail" && cut?.failureMode === "truncated" && /300 chars of reasoning/.test(cut?.detail ?? ""), JSON.stringify(cut))
+check("truncated: length with an answer is not truncated", truncatedOutcome({ choices: [{ message: { content: "partial" }, finish_reason: "length" }] }) === null)
+check("truncated: length with a tool call is not truncated", truncatedOutcome({ choices: [{ message: { content: null, tool_calls: [{ function: { name: "finish", arguments: "{}" } }] }, finish_reason: "length" }] }) === null)
+const viaStructural = structural(200, cutBody, "", new Set(["run_command"]))
+check("truncated: structural() reports it before prose-only", "out" in viaStructural && viaStructural.out.failureMode === "truncated")
+
+// …and decideCapability leaves it out of the comparison instead of counting a fail.
+const run = (id: string, status: any, failureMode: any = null): any => ({ id, capability: "cli agent", status, failureMode, ms: 10, turns: [] })
+const v = decideCapability("cli agent", [run("p1", "pass"), run("p2", "pass")], [run("p1", "pass"), run("p2", "fail", "truncated")])
+check("truncated: excluded from compared, listed under notCompared", v.compared.length === 1 && v.notCompared[0] === "p2" && v.betterFor === "tie", JSON.stringify(v))
+const w = decideCapability("cli agent", [run("p1", "pass"), run("p2", "pass")], [run("p1", "pass"), run("p2", "fail", "heredoc")])
+check("truncated: a real fail still counts", w.betterFor === "a" && w.rule === "more-passes")
+
+if (failed) { console.log(\`\\n\${failed} unit assertion(s) failed\`); process.exit(1) }
+console.log("check-brain-eval-compare: unit stage passed")
+TS
+bun run "$TMP/unit.ts"

@@ -55,9 +55,14 @@ export type StreamMetrics = {
   /** ms to the first ANSWER token — content outside <think>, or a tool-call fragment */
   ttfcMs: number | null
   lastTokenMs: number | null
+  /** ms to [DONE] (or end of stream) */
+  doneMs: number | null
   /** completion tokens / generation seconds, on the stated basis */
   tokPerSec: number | null
-  tokPerSecBasis: "usage" | "frames" | null
+  /** usage: (n-1)/first→last window. frames: delta count stands in for tokens.
+   *  burst: the server batched output (far fewer deltas than tokens, or an impossible
+   *  rate), so the rate is over first-byte→done instead. */
+  tokPerSecBasis: "usage" | "frames" | "burst" | null
   /** non-empty content/reasoning/tool deltas — the fallback token estimate */
   deltaCount: number
 }
@@ -81,6 +86,7 @@ export function emptyMetrics(): StreamMetrics {
     ttftMs: null,
     ttfcMs: null,
     lastTokenMs: null,
+    doneMs: null,
     tokPerSec: null,
     tokPerSecBasis: null,
     deltaCount: 0,
@@ -117,6 +123,7 @@ export async function accumulateSSE(
     const payload = line.slice(5).trim()
     if (payload === "[DONE]") {
       m.done = true
+      m.doneMs = clock() - startMs
       return
     }
     let obj: any
@@ -218,6 +225,7 @@ export async function accumulateSSE(
 
   for await (const c of chunks as AsyncIterable<string>) feed(c)
   if (buf.length) handleFrame(buf)
+  if (m.doneMs === null) m.doneMs = clock() - startMs
 
   m.toolCalls = [...calls.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c)
   // A model that emitted the Qwen XML dialect which the server did not parse: the
@@ -228,16 +236,28 @@ export async function accumulateSSE(
   // token's cost is already in TTFT, so the decode rate is (n - 1) tokens over that
   // window — otherwise a two-token reply would report double its real rate. Fewer than
   // two tokens is not a rate.
-  if (m.ttftMs !== null && m.lastTokenMs !== null && m.lastTokenMs > m.ttftMs) {
-    const secs = (m.lastTokenMs - m.ttftMs) / 1000
-    const usageTokens = m.usage?.completion_tokens ?? null
-    if (usageTokens !== null && usageTokens > 1) {
-      m.tokPerSec = (usageTokens - 1) / secs
+  //
+  // A server that buffers a tool call until it has parsed the XML, then emits the
+  // fragments in a burst, violates the window assumption: 200 tokens arriving in 4 ms is
+  // not a 50,000 tok/s decode. The evidence is in hand — far fewer deltas than tokens, or
+  // an impossible rate — so the rate falls back to first-byte → done and says so.
+  const usageTokens = m.usage?.completion_tokens ?? null
+  const window = m.ttftMs !== null && m.lastTokenMs !== null ? (m.lastTokenMs - m.ttftMs) / 1000 : null
+  if (usageTokens !== null && usageTokens > 1) {
+    const windowRate = window && window > 0 ? (usageTokens - 1) / window : null
+    const batched = (m.deltaCount * 4 < usageTokens && usageTokens >= 8) || (windowRate !== null && windowRate > 1500)
+    if (batched) {
+      if (m.doneMs !== null && m.ttfbMs !== null && m.doneMs > m.ttfbMs) {
+        m.tokPerSec = (usageTokens - 1) / ((m.doneMs - m.ttfbMs) / 1000)
+        m.tokPerSecBasis = "burst"
+      }
+    } else if (windowRate !== null) {
+      m.tokPerSec = windowRate
       m.tokPerSecBasis = "usage"
-    } else if (m.deltaCount > 1) {
-      m.tokPerSec = (m.deltaCount - 1) / secs
-      m.tokPerSecBasis = "frames"
     }
+  } else if (window && window > 0 && m.deltaCount > 1) {
+    m.tokPerSec = (m.deltaCount - 1) / window
+    m.tokPerSecBasis = "frames"
   }
   return m
 }

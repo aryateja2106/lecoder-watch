@@ -166,6 +166,50 @@ async function* shredded(frames: string[], at: number) {
   check("shredded: done", m.done)
 }
 
+// ---- 6b. A server that buffers a tool call and emits it in a burst: 200 usage tokens,
+//          3 fragments within 4 ms, 4.8 s after the first byte. The window rate would be
+//          ~50,000 tok/s; the honest number is over first-byte → done, labelled burst.
+{
+  let t = 0
+  const at = (ms: number, f: string) => ({ ms, f })
+  const script = [
+    at(200, delta({ role: "assistant" })),
+    at(5000, delta({ tool_calls: [{ index: 0, id: "c1", type: "function", function: { name: "run_command", arguments: "" } }] })),
+    at(5002, delta({ tool_calls: [{ index: 0, function: { arguments: "{\"command\":" } }] })),
+    at(5004, delta({ tool_calls: [{ index: 0, function: { arguments: "\"ls\"}" } }] })),
+    at(5010, frame({ choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage: { prompt_tokens: 50, completion_tokens: 200 } })),
+    at(5012, "data: [DONE]\n\n"),
+  ]
+  async function* scripted() { for (const s of script) { t = s.ms; yield s.f } }
+  const m = await accumulateSSE(scripted(), () => t, 0)
+  check("burst: basis is burst, not usage", m.tokPerSecBasis === "burst", String(m.tokPerSecBasis))
+  // (200-1) tokens over (5012-200) ms
+  check("burst: rate over first-byte→done", Math.abs((m.tokPerSec ?? 0) - 199 / 4.812) < 1e-6, String(m.tokPerSec))
+  check("burst: doneMs recorded", m.doneMs === 5012, String(m.doneMs))
+  check("burst: tool call still reassembled", m.toolCalls[0]?.arguments === "{\"command\":\"ls\"}")
+}
+// ---- 6c. The same burst inside ONE frame (window = 0) still gets a rate
+{
+  let t = 0
+  const script = [
+    { ms: 100, f: delta({ role: "assistant" }) },
+    { ms: 3000, f: delta({ tool_calls: [{ index: 0, id: "c1", type: "function", function: { name: "run_command", arguments: "{\"command\":\"ls\"}" } }] }) },
+    { ms: 3001, f: frame({ choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], usage: { prompt_tokens: 50, completion_tokens: 120 } }) },
+    { ms: 3002, f: "data: [DONE]\n\n" },
+  ]
+  async function* scripted() { for (const s of script) { t = s.ms; yield s.f } }
+  const m = await accumulateSSE(scripted(), () => t, 0)
+  check("burst-1frame: not null, basis burst", m.tokPerSec !== null && m.tokPerSecBasis === "burst", `${m.tokPerSec} ${m.tokPerSecBasis}`)
+}
+// ---- 6d. A normal paced stream is NOT misclassified as a burst
+{
+  const tk = ticking(50)
+  const frames = Array.from({ length: 12 }, (_, i) => delta({ content: `w${i} ` }))
+  frames.push(frame({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 12 } }), "data: [DONE]\n\n")
+  const m = await accumulateSSE(timed(frames, tk), tk.clock, 0)
+  check("paced: basis stays usage", m.tokPerSecBasis === "usage" && Math.abs((m.tokPerSec ?? 0) - 11 / 0.55) < 1e-9, `${m.tokPerSec} ${m.tokPerSecBasis}`)
+}
+
 // ---- 7. Single token is not a rate; malformed frame is ignored
 {
   const tk = ticking(100)

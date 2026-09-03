@@ -13,7 +13,7 @@
  * real run should be diffed against the stub expectations before any number is quoted.
  */
 import { TOOLS, TOOL_NAMES } from "../../install/payload/agent/tools.ts"
-import { asStr, chat, content, toolCalls, unparsedToolCallText, type FailureMode, type Outcome, type Probe } from "./core.ts"
+import { asStr, chat, content, toolCalls, truncatedOutcome, unparsedToolCallText, type FailureMode, type Outcome, type Probe } from "./core.ts"
 
 // One system prompt for every mesh-code-shaped probe: a stable prefix is what the
 // single-prefix cache on our own engine can reuse. 49 words.
@@ -179,8 +179,10 @@ const pass = (detail: string, meta?: Record<string, unknown>): Outcome => ({ sta
 type Call = { name: string; args: any; rawArgs: string }
 
 /** The checks every tool-using probe shares. Returns the calls, or the failure. */
-function structural(status: number, body: any, raw: string, allowed: Set<string>): { calls: Call[] } | { out: Outcome } {
+export function structural(status: number, body: any, raw: string, allowed: Set<string>): { calls: Call[] } | { out: Outcome } {
   if (status !== 200) return { out: fail("http-error", `HTTP ${status}: ${raw.slice(0, 200)}`) }
+  const cut = truncatedOutcome(body)
+  if (cut) return { out: cut }
   const calls = toolCalls(body)
   if (!calls.length) {
     if (unparsedToolCallText(body))
@@ -353,6 +355,8 @@ export const AGENT_PROBES: Probe[] = [
         tools: TOOLS,
       })
       if (status !== 200) return fail("http-error", `HTTP ${status}: ${raw.slice(0, 200)}`)
+      const cut = truncatedOutcome(body)
+      if (cut) return cut
       const calls = toolCalls(body)
       if (!calls.length) {
         if (unparsedToolCallText(body)) return fail("unparsed-tool-call", "model emitted <tool_call> XML the server did not parse")
@@ -364,7 +368,7 @@ export const AGENT_PROBES: Probe[] = [
       const fin = calls.find((c) => c.name === "finish")
       if (!fin) return fail("no-finish", `did something else instead of finish: ${calls.map((c) => c.name).join(",")}`, { calls: brief(calls) })
       if (!asStr(fin.args?.summary).trim()) return fail("malformed-arguments", `finish without a summary`, { calls: brief(calls) })
-      const stray = calls.filter((c) => c.name !== "finish" && !(c.name === "list_dir" || (c.name === "run_command" && /^(ls|stat|test -f|cat|wc)\b/.test(cmd(c).trim()))))
+      const stray = calls.filter((c) => c.name !== "finish" && !(c.name === "list_dir" || c.name === "read_file" || (c.name === "run_command" && /^(ls|stat|test -f|cat|wc)\b/.test(cmd(c).trim()))))
       if (stray.length) return fail("redundant-action", `non-verification call alongside finish: ${stray.map((c) => c.name).join(",")}`, { calls: brief(calls) })
       return pass(`finish(${JSON.stringify(asStr(fin.args.summary).slice(0, 60))})`, { calls: brief(calls) })
     },
@@ -492,6 +496,8 @@ export const AGENT_PROBES: Probe[] = [
       if (g) return g
       const first = s.calls[0]
       const path = "NotesTests/LoginTests.swift"
+      // A model may say ./NotesTests/… or the absolute path; both name the same file.
+      const norm = (p: string) => p.replace(/^\.\//, "").replace(/^\/Users\/arya\/proj\//, "")
       if (first.name === "str_replace" || first.name === "write_file") {
         const p = asStr(first.args.path)
         return p.endsWith(path)
@@ -500,7 +506,7 @@ export const AGENT_PROBES: Probe[] = [
       }
       if (first.name === "read_file") {
         const p = asStr(first.args.path)
-        if (p === `/Users/arya/proj/${path}` || p === path) return pass(`read_file(${p})`, { calls: brief(s.calls) })
+        if (norm(p) === path) return pass(`read_file(${p})`, { calls: brief(s.calls) })
         return fail("hallucinated-path", `read ${p}, which the digest never named`, { calls: brief(s.calls) })
       }
       if (first.name === "run_command") {

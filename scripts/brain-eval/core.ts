@@ -17,7 +17,7 @@ export type FailureMode =
   | "premature-finish" | "eager-escalate" | "no-finish" | "redundant-action" | "edit-before-read"
   | "guessed-selector" | "needless-navigate" | "wrong-value" | "blind-send" | "wrong-session"
   | "typed-into-wrong-app" | "shortcut-as-text" | "unknown-tool" | "malformed-arguments"
-  | "unparsed-tool-call" | "http-error" | "timeout" | "other"
+  | "unparsed-tool-call" | "truncated" | "http-error" | "timeout" | "other"
 
 export type UseCase = "CLI" | "browser" | "macOS" | "iOS simulator" | "Android" | "shipping" | "economics" | "reachability"
 
@@ -46,8 +46,8 @@ export interface Probe {
 export interface Perf {
   ttftMs: number | null        // first token of any kind, including reasoning
   ttfcMs: number | null        // first ANSWER token — content outside <think>, or a tool fragment
-  genTokPerSec: number | null  // (completion tokens - 1) / first→last token window
-  tokensBasis: "usage" | "frames" | null
+  genTokPerSec: number | null  // (completion tokens - 1) / first→last token window, or burst
+  tokensBasis: "usage" | "frames" | "burst" | null
   charsPerSec: number | null   // tokenizer-neutral secondary
   completionTokens: number | null
   promptTokens: number | null
@@ -59,7 +59,6 @@ export interface Perf {
   frames: number
   totalMs: number
   streamOptionsAccepted: boolean
-  nonStreamFallback: boolean
 }
 
 export interface Turn {
@@ -145,7 +144,7 @@ export function chatRequestBody(ctx: Ctx, extra: Record<string, unknown>): Recor
   return body
 }
 
-function perfFrom(m: StreamMetrics, totalMs: number, streamOptionsAccepted: boolean, nonStreamFallback: boolean): Perf {
+function perfFrom(m: StreamMetrics, totalMs: number, streamOptionsAccepted: boolean): Perf {
   const chars = m.content.length + m.toolCalls.reduce((n, c) => n + c.arguments.length, 0)
   const window = m.ttftMs !== null && m.lastTokenMs !== null ? (m.lastTokenMs - m.ttftMs) / 1000 : null
   const prompt = m.usage?.prompt_tokens ?? null
@@ -167,7 +166,6 @@ function perfFrom(m: StreamMetrics, totalMs: number, streamOptionsAccepted: bool
     frames: m.frames,
     totalMs,
     streamOptionsAccepted,
-    nonStreamFallback,
   }
 }
 
@@ -272,22 +270,12 @@ export async function chat(ctx: Ctx, extra: Record<string, unknown>) {
     return { status: s.status, body: s.body, raw: s.raw ?? "" }
   }
 
-  let responseBody = bodyFromStream(s.metrics, ctx.model)
-  let nonStreamFallback = false
-  // Streamed tool-call fragments that do not reassemble into JSON: re-issue non-streamed
-  // for the structural check and keep the stream's timing. The second request hits a warm
-  // cache and is never timed.
-  const badArgs = s.metrics.toolCalls.some((c) => {
-    try { JSON.parse(c.arguments); return false } catch { return true }
-  })
-  if (s.metrics.toolCalls.length && badArgs) {
-    const r = await apiFetch(ctx, "/chat/completions", { method: "POST", body: JSON.stringify(base) })
-    if (r.status === 200 && r.body) {
-      responseBody = { ...r.body, _stream: responseBody._stream }
-      nonStreamFallback = true
-    }
-  }
-  const perf = perfFrom(s.metrics, s.totalMs, streamOptionsAccepted, nonStreamFallback)
+  // The streamed sample is the sample: it is graded as-is. Re-issuing a non-streamed
+  // request when fragments fail to parse would grade a DIFFERENT sample (a fresh draw at
+  // any temperature above 0), hide malformed-arguments in compare mode, and run a whole
+  // second generation inside the probe's timed window. Malformed fragments are a finding.
+  const responseBody = bodyFromStream(s.metrics, ctx.model)
+  const perf = perfFrom(s.metrics, s.totalMs, streamOptionsAccepted)
   ctx.record?.({
     index: turnIndex,
     startedAt,
@@ -322,6 +310,24 @@ export function unparsedToolCallText(body: any): boolean {
   if (body?._stream?.unparsedToolCallText) return true
   const text = content(body)
   return !toolCalls(body).length && /<tool_call>/.test(text)
+}
+
+/**
+ * A reply cut off by max_tokens is the harness's budget, not the model's capability.
+ * Reasoning models spend the budget on the think block first; when nothing came out,
+ * grading that as prose-only would fail the model for the probe's settings.
+ */
+export function truncatedOutcome(body: any): Outcome | null {
+  const choice = body?.choices?.[0]
+  if (choice?.finish_reason !== "length") return null
+  if (toolCalls(body).length) return null
+  const text = content(body)
+  if (text.trim().length) return null
+  const reasoning = choice?.message?.reasoning_content
+  const detail = typeof reasoning === "string" && reasoning.length
+    ? `max_tokens exhausted after ${reasoning.length} chars of reasoning; raise --max-tokens`
+    : "max_tokens exhausted before any answer; raise --max-tokens"
+  return { status: "fail", detail, failureMode: "truncated" }
 }
 
 /** Qwen's parser types opportunistically ("true" → true, "2024" → 2024); coerce, never reject. */

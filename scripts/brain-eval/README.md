@@ -51,13 +51,18 @@ which both servers honour), so each row carries **time-to-first-token and tokens
 alongside pass/fail. Reasoning models are handled: `<think>` blocks — whether they arrive
 as `reasoning_content`, `reasoning`, or inline tags — are split from the answer, and
 the reported TTFT is to the first *answer* token, which is what an agent loop waits for.
-A one-token reply shows `—` for tok/s: one token is not a rate.
+A one-token reply shows `—` for tok/s: one token is not a rate. A server that buffers a
+tool call and emits it in a burst is caught (far fewer deltas than tokens, or an impossible
+rate) and its rate is measured first-byte → done, labelled `burst` in the JSON.
 
 **Sequencing is what makes the numbers mean something.** Probes run one at a time, each
 fully on one endpoint then fully on the other, first-mover alternating per probe, never
 concurrent — our engine serves one generation at a time and keeps a single cached prefix,
-and both models share one GPU and one SSD. `--repeat 3` reports medians and flags a probe
-`nondeterministic` when its status differs between repeats.
+and both models share one GPU and one SSD. A probe's time is the sum of its turns'
+request→done windows, so harness work never reaches the speed rule. `--repeat 3` makes
+the status the **majority** over repeats (a tie is a fail; the table shows the pass rate),
+takes the speed median over passing repeats only, and flags `nondeterministic` when the
+repeats disagreed.
 
 **The verdict rule is deliberately dull**, per capability: more passes wins; then fewer
 fails — an honest "unsupported" beats a wrong action, which is why a text-only engine
@@ -71,6 +76,12 @@ assistant message and timing** — the seed of the dataset, and the failures are
 valuable rows. `--cache-bust` appends one nonce to every system prompt on both sides so
 TTFT is cold-prefill; `--no-warmup` skips the untimed warm-up request each endpoint gets
 first (LM Studio loads lazily, our engine's expert cache starts cold).
+
+**Budget.** `--max-tokens` defaults to 2048 on both, because a reasoning model spends it
+on the think block before answering. A reply the budget cut off before any answer is tagged
+`truncated`, listed under *not compared*, and never counted as a fail — raise the budget
+and re-run. The streamed sample is the sample that is graded: fragments that do not
+reassemble into JSON are tagged `malformed-arguments`, never quietly re-sampled.
 
 **Temperature.** Default 0 on both. Ornith's authors recommend 0.6 for coding and never 0
 (reasoning models can loop in the think block at 0); Mference defaults to 0.2 when unset,
