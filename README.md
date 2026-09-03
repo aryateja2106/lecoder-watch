@@ -65,6 +65,16 @@ fleet of four machines takes one code.
 There are no built-in machines and no shipped token. An empty list is the honest starting
 state.
 
+**Linux or a VPS?** You can also run only the daemon in Docker — same pairing, same API,
+no curl installer required. See [docs/docker.md](docs/docker.md) or:
+
+```sh
+docker compose up -d --build
+docker compose exec meshd mesh pair --address <tailscale-or-lan-ip>
+```
+
+Screen capture is still macOS-only; a container does not change that.
+
 Optionally, so a blocked agent reaches your wrist:
 
 ```sh
@@ -77,6 +87,9 @@ mesh hooks install
 mesh uninstall           # shows exactly what it will delete, and stops
 mesh uninstall --yes     # does it
 ```
+
+**Docker install:** `docker compose down -v` stops the container and deletes the
+persisted volume (token, paired hosts, local state). See [docs/docker.md](docs/docker.md).
 
 It removes the daemon and its service (launchd or systemd), your token, the paired-host
 list, the knowledge-base database, the hook entries it added to Claude Code's settings, and
@@ -185,6 +198,7 @@ full promise lives at [the privacy page](https://mesh.lesearch.ai/privacy).
 
 - **iPhone** on iOS 26 or later, **Apple Watch** on watchOS 10 or later
 - **Mac** on macOS 14 or later (the menu-bar app), or any **Linux** box, as a daemon host
+  (curl installer or [Docker](docs/docker.md) on Linux/VPS)
 - `bun` on each host — the installer fetches it if it is missing
 - A multiplexer: `tmux`, `rmux`, `herdr` or `zellij`
 - Screen control on a Mac needs Accessibility and Screen Recording permission. `mesh
@@ -228,7 +242,7 @@ MeshDesktop/       Mac menu bar app — status, permissions, pairing QR
 install/           the installer, the meshd payload, and the mesh CLI
 scripts/           self-checks, packaging, release
 web/               landing page (Vercel)
-docs/              runbooks and design notes
+docs/              runbooks and design notes (including [Docker](docs/docker.md))
 ```
 
 ## License

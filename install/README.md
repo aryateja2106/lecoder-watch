@@ -125,3 +125,15 @@ sh install.sh --uninstall            # stop services + remove components, keep t
 sh install.sh --uninstall --purge    # also remove the token and the whole prefix
 sh install.sh --only tools --uninstall   # remove just one component
 ```
+
+## Docker (meshd only)
+
+For a Linux host or VPS where you already run containers, see [docs/docker.md](../docs/docker.md).
+The curl installer above is unchanged; Docker is an alternative path for the daemon only.
+
+```sh
+docker compose up -d --build
+docker compose exec meshd mesh pair --address <tailscale-or-lan-ip>
+```
+
+Uninstall: `docker compose down -v`.

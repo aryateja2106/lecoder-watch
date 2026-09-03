@@ -64,7 +64,9 @@ more features adds nothing a person can touch, and no feedback can come back.
   [`docs/VOICE-INPUT-SPEC.md`](docs/VOICE-INPUT-SPEC.md) moves the heavy local-ASR
   models to the Mac with a bias-first vocabulary, keeping the watch thin.
 - **Linux parity.** Wayland input (X11 works today) and screen capture, so a Linux
-  box is a first-class citizen rather than "input and files only".
+  box is a first-class citizen rather than "input and files only". **Docker** for
+  `meshd` on Linux/VPS is shipped ([docs/docker.md](docs/docker.md)); it is the same
+  daemon, not a separate product.
 - **App Store release.** TestFlight is the beta channel; a proper listing is the
   goal once the beta stops teaching us surprising things.
 
