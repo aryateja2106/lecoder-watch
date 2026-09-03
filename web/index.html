@@ -3,16 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LeSearch Mesh — answer your coding agents from your wrist</title>
-<meta name="description" content="Your machines and the AI coding agents running on them, on your iPhone and Apple Watch. An agent stops to ask permission, your wrist buzzes, you tap Continue. Local-first: no cloud, no account.">
-<link rel="icon" href="/appicon.png">
+<title>LeSearch Mesh beta — supervise your coding agents from your wrist</title>
+<meta name="description" content="Your reachable machines and their AI coding agents, on your iPhone and Apple Watch over your LAN or an existing VPN. No account or LeSearch relay in the session path.">
+<link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/brand/apple-touch-icon.png">
 <meta name="theme-color" content="#191919">
-<meta property="og:title" content="LeSearch Mesh — answer your coding agents from your wrist">
-<meta property="og:description" content="Install one daemon on your Mac. Pair with an 8-character code. Then run your machines and your agents from your iPhone and Apple Watch. No cloud, no account.">
-<meta property="og:image" content="https://mesh.lesearch.ai/appicon.png">
+<meta property="og:title" content="LeSearch Mesh beta — supervise your coding agents from your wrist">
+<meta property="og:description" content="Install one daemon on your Mac or Linux machine, pair with an 8-character code, and connect from iPhone and Apple Watch over a reachable LAN or existing VPN. No account or LeSearch relay.">
+<meta property="og:image" content="https://mesh.lesearch.ai/brand/lesearch-mesh-social.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="LeSearch Mesh — Less Search. More Agents.">
 <meta property="og:url" content="https://mesh.lesearch.ai/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://mesh.lesearch.ai/brand/lesearch-mesh-social.png">
+<meta name="twitter:image:alt" content="LeSearch Mesh — Less Search. More Agents.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -22,8 +28,8 @@
 :root{
   --bg:#191919; --bg-2:#202020; --panel:#1f1f1f; --elev:#252525; --hover:#2a2a2a;
   --line:#2a2a2a; --line-2:#373737; --line-h:#525252;
-  --ink:#e9e9e7; --ink-2:#9b9b9b; --ink-3:#6b6b6b;
-  --ok:#4ade80; --danger:#ef4444;
+  --ink:#e9e9e7; --ink-2:#9b9b9b; --ink-3:#8f8f8f;
+  --ok:#4ade80; --danger:#bd3038;
   --mono:'JetBrains Mono','Fira Code','SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
   --radius:8px; --wrap:1040px;
 }
@@ -44,6 +50,11 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
 ::selection{background:var(--ink);color:var(--bg)}
 a{color:inherit}
 :focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:4px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.skip-link{position:fixed;top:12px;left:12px;z-index:100;padding:9px 13px;border-radius:var(--radius);
+  background:var(--ink);color:var(--bg);font-weight:700;text-decoration:none;transform:translateY(-200%)}
+.skip-link:focus{transform:none}
 .btn,.copy,.card,.beat,.nav a.link,.foot a,summary::after{transition:color .16s ease,background-color .16s ease,border-color .16s ease,box-shadow .2s ease,transform .2s cubic-bezier(.2,.7,.3,1)}
 .wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
 
@@ -254,8 +265,10 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 </head>
 <body>
 
+<a class="skip-link" href="#main-content">Skip to content</a>
+
 <header>
-  <div class="wrap nav">
+  <nav class="wrap nav" aria-label="Primary">
     <a class="brand" href="/"><img src="/logo.svg" alt=""> LeSearch Mesh</a>
     <div class="spacer"></div>
     <a class="link hide-sm" href="#how">How it works</a>
@@ -263,24 +276,26 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     <a class="link hide-sm" href="#faq">FAQ</a>
     <a class="link" href="https://github.com/LeSearch-AI/mesh">GitHub</a>
     <a class="btn btn-primary" href="https://testflight.apple.com/join/pVYPTxc7">Join the beta</a>
-  </div>
+  </nav>
 </header>
 
+<main id="main-content" tabindex="-1">
 <div class="wrap hero">
   <span class="eyebrow"><span class="dot"></span>Free TestFlight beta · iPhone + Apple Watch</span>
   <h1>Your agents stop and ask. You answer from your wrist.</h1>
   <p class="lede">
     Coding agents run for hours and then freeze on one question — <em>can I force-push?</em>,
     <em>overwrite this file?</em> — and sit there until you walk back to the machine.
-    LeSearch Mesh puts every machine you own, and every agent running on it, on your
-    iPhone and Apple&nbsp;Watch. The moment one blocks, your wrist buzzes. You tap
-    <strong>Continue</strong>. It carries on.
+    LeSearch Mesh connects the machines you can reach over your LAN or an existing VPN,
+    and the agents running on them, to your iPhone and Apple&nbsp;Watch. In the beta,
+    supported agent prompts can surface as actionable notifications; you can also open
+    the app to review the prompt and answer the real session.
   </p>
 
   <div class="cta">
     <a class="btn btn-primary" href="https://testflight.apple.com/join/pVYPTxc7">Join the TestFlight →</a>
     <a class="btn btn-ghost" href="https://github.com/LeSearch-AI/mesh">Read the source</a>
-    <span class="cta-note">Free · no account · no server of ours between you and your Mac</span>
+    <span class="cta-note">Free · no account · no LeSearch relay in your session path</span>
   </div>
 
   <div class="term">
@@ -288,7 +303,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
       <span class="term-title">you@your-mac</span>
       <span style="flex:1"></span>
-      <button class="copy" data-copy="#cmd-install">Copy</button>
+      <button class="copy" type="button" data-copy="#cmd-install">Copy</button>
     </div>
     <div class="term-body">
       <div class="term-line">
@@ -305,22 +320,23 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 <section id="moment">
   <div class="wrap">
     <span class="kicker">The whole point</span>
-    <h2>Three seconds instead of twenty minutes.</h2>
+    <h2>A short answer instead of a walk back.</h2>
     <p class="sub">This is the loop the app exists for. Everything else is in service of it.</p>
 
     <div class="beats">
       <div class="beat">
         <span class="n">01</span>
         <h3>An agent blocks</h3>
-        <p>Claude Code, Codex, whatever you run — it hits a permission prompt in a tmux
-           session on your Mac and stops dead. A hook fires the instant it does.</p>
+        <p>Claude Code can fire a hook the instant it hits a permission prompt in a tmux
+           session on your Mac and stops dead. Other agent tools can post the same event
+           to the daemon's <code>/events</code> endpoint.</p>
       </div>
       <div class="beat">
         <span class="n">02</span>
-        <h3>Your wrist buzzes</h3>
-        <p>The machine, the session, and the actual question, in a notification you can
-           act on. A question that would force-push or delete gets a red button naming
-           the verb — everything else is a calm Continue.</p>
+        <h3>Your wrist can alert you <span class="sr-only">in beta</span></h3>
+        <p>In supported beta notification flows, the machine, session, and question arrive
+           with actions. A question that would force-push or delete gets a red button
+           naming the verb — everything else is a calm Continue.</p>
         <div class="wristline">
           <span class="who">studio · deploy-api</span>
           <span class="ask">run git push --force?</span>
@@ -330,8 +346,9 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       <div class="beat">
         <span class="n">03</span>
         <h3>You answer</h3>
-        <p>Tap Continue and Enter lands in the real session. Or dictate a reply and it
-           gets typed in. The agent picks up where it stopped — you never got up.</p>
+        <p>Open the matched session to review the prompt, then send Continue, Stop, or a
+           dictated reply. Continue sends Return to the real session; session matching is
+           still being hardened in beta.</p>
         <div class="wristline">
           <span class="who">studio · docs-site</span>
           <span class="ask">edit vite.config.ts?</span>
@@ -378,8 +395,8 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     <span class="kicker">Setup</span>
     <h2>Three commands and an eight-character code.</h2>
     <p class="sub">
-      There is no signup, no dashboard and no server of ours in the path. You install a
-      small daemon on a machine you own, and your phone pairs with it directly.
+      There is no signup, no dashboard and no LeSearch relay in the session data path.
+      You install a small daemon on a machine you own, and your phone pairs with it directly.
       Or run <code class="inline">mesh setup</code> and let it walk you through
       permissions, pairing, and hooks.
     </p>
@@ -395,7 +412,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
           <div class="cmd">
             <span class="dollar">$</span>
             <code id="cmd-1">curl -fsSL https://mesh.lesearch.ai/install.sh | sh</code>
-            <button class="copy" data-copy="#cmd-1">Copy</button>
+            <button class="copy" type="button" data-copy="#cmd-1">Copy</button>
           </div>
         </div>
       </div>
@@ -411,7 +428,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
           <div class="cmd">
             <span class="dollar">$</span>
             <code id="cmd-2">mesh pair</code>
-            <button class="copy" data-copy="#cmd-2">Copy</button>
+            <button class="copy" type="button" data-copy="#cmd-2">Copy</button>
           </div>
         </div>
       </div>
@@ -420,13 +437,13 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
         <div class="num">3</div>
         <div>
           <h3>Let your agents tell you when they need you</h3>
-          <p>Registers a hook with Claude Code so a blocked agent reaches your wrist.
-             Merges into your existing hooks, backs up your settings first, and is safe to
-             run twice.</p>
+          <p>Registers a hook with Claude Code so a blocked agent can raise a beta alert.
+               Merges into your existing hooks, backs up your settings first, and is safe to
+             run twice. Physical-device push delivery is still being verified in beta.</p>
           <div class="cmd">
             <span class="dollar">$</span>
             <code id="cmd-3">mesh hooks install</code>
-            <button class="copy" data-copy="#cmd-3">Copy</button>
+            <button class="copy" type="button" data-copy="#cmd-3">Copy</button>
           </div>
         </div>
       </div>
@@ -454,16 +471,16 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       <div class="card">
         <span class="tag">Notifications</span>
         <h3>Answerable, not just readable</h3>
-        <p>Continue, Stop, or dictate a Reply straight from the notification. The reply is
-           typed into the real session on the real machine — and once the task is done,
-           the banner takes itself down.</p>
+        <p>When a beta notification is delivered and matched, Continue, Stop, and dictated
+           Reply actions target the real session. Cold-device delivery and automatic banner
+           dismissal are still under physical-device verification.</p>
       </div>
       <div class="card">
         <span class="tag">Live Activity</span>
         <h3>Lock Screen and Dynamic Island</h3>
-        <p>The one session that actually needs you, live on the Lock Screen and in the
-           Smart Stack — with how much of your fleet is online next to it. Blocked always
-           outranks merely busy.</p>
+        <p>The Live Activity can show the session that needs you on the Lock Screen and in
+           the Dynamic Island. It currently starts while the app is foregrounded; push-to-start
+           from a cold app is not yet shipped.</p>
       </div>
       <div class="card">
         <span class="tag">Terminal</span>
@@ -492,7 +509,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 <section id="local">
   <div class="wrap">
     <span class="kicker">Local-first, and it matters</span>
-    <h2>There is no cloud in the middle.</h2>
+    <h2>No LeSearch relay in your session path.</h2>
     <p class="sub">
       The comparable tools relay your sessions through their servers. That is the easy way
       to build this, and it means your terminal output, your prompts and your source code
@@ -502,10 +519,11 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     <div class="claims">
       <div class="claim">
         <div class="k">Where your data goes</div>
-        <div class="v">Phone → your machine, directly, over your own private network.
-          We run no relay, so your terminal output and your code never reach us. The one
-          thing that does is a daily count from the daemon — version, platform, uptime —
-          which you can switch off. <a href="/privacy">The exact payload</a>.</div>
+        <div class="v">Phone → your machine, directly, over a reachable LAN or existing VPN.
+          We run no session relay, so your terminal output and code never reach us. The daemon
+          may send a minimal telemetry heartbeat — a random, non-account-linked install ID,
+          version, platform, uptime, and fixed coarse counters — which you can switch off. Notification text
+          reaches Apple when push is enabled. <a href="/privacy">The exact details</a>.</div>
       </div>
       <div class="claim">
         <div class="k">What an account costs you</div>
@@ -515,8 +533,9 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       <div class="claim">
         <div class="k">How access is gated</div>
         <div class="v">A per-machine bearer token, minted by that machine, plus whatever
-          network you already trust — your Tailscale ACL or your LAN. Nothing is
-          port-forwarded and nothing is exposed to the public internet.</div>
+          network you already trust — your Tailscale ACL or your LAN. Transport is plain HTTP,
+          so use it only on a trusted private network; it is not safe on shared or public
+          networks until TLS ships. Nothing is port-forwarded or exposed to the public internet.</div>
       </div>
       <div class="claim">
         <div class="k">If this project disappears</div>
@@ -542,10 +561,9 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 
     <details>
       <summary>Does it work when I am away from home?</summary>
-      <p>Yes, if your phone and your machine are on the same private network — a Tailscale
-         tailnet is what this was built against, and it is what we use. There is no
-         hole-punching and no relay of ours, so if your phone cannot reach the machine,
-         neither can the app.</p>
+      <p>Yes, when your phone can reach the machine over the same LAN or a VPN you already
+         use, such as Tailscale. There is no LeSearch relay, so if your phone cannot reach
+         the machine, neither can the app.</p>
     </details>
 
     <details>
@@ -597,6 +615,10 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
   </div>
 </div>
 
+</main>
+
+<p class="sr-only" id="copy-status" aria-live="polite"></p>
+
 <footer>
   <div class="wrap foot">
     <span>LeSearch AI</span>
@@ -644,11 +666,26 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 document.querySelectorAll('.copy').forEach(function(btn){
   btn.addEventListener('click', function(){
     var el = document.querySelector(btn.dataset.copy);
+    var status = document.getElementById('copy-status');
+    var old = btn.textContent;
+    function feedback(label, message, succeeded){
+      status.textContent = message;
+      btn.textContent = label;
+      btn.classList.toggle('done', succeeded);
+      setTimeout(function(){
+        btn.textContent = old;
+        btn.classList.remove('done');
+        status.textContent = '';
+      }, 1600);
+    }
+    if (!el || !navigator.clipboard || !navigator.clipboard.writeText) {
+      feedback('Copy failed', 'Could not copy the command. Select it and copy it manually.', false);
+      return;
+    }
     navigator.clipboard.writeText(el.textContent.trim()).then(function(){
-      var old = btn.textContent;
-      btn.textContent = 'Copied';
-      btn.classList.add('done');
-      setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1600);
+      feedback('Copied', 'Command copied to the clipboard.', true);
+    }).catch(function(){
+      feedback('Copy failed', 'Could not copy the command. Select it and copy it manually.', false);
     });
   });
 });

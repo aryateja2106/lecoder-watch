@@ -1,0 +1,4555 @@
+{
+ "generated": "2026-09-01",
+ "scouts": {
+  "sessions": {
+   "summary": "Large stores that matter for Wake indexing: Codex sessions 1.1 GB (~/.codex/sessions, JSONL rollouts, active 08-31), Cursor chats 579 MB (~/.cursor/chats, per-session SQLite store.db, active today), Claude Code 540 MB (~/.claude/projects, per-project JSONL, active today), plus Codex root SQLite (thread_history_1.sqlite 45 MB, logs_2.sqlite 190 MB, session_index.jsonl). Mid-size: cmux real state is ~/Library/Application Support/cmux (87 MB incl. search.db, active today; ~/.cmux itself is just 6 hook scripts), Gemini ~/.gemini/tmp 76 MB (dormant since 07-12). Small: Copilot 3.4 MB SQLite store (dormant 08-12), Pi sessions 20 KB at ~/.pi/agent/sessions (dormant 08-11; ~/.config/pi absent), Omnara mostly app binary with 6.8 MB logs and an empty run-session-messages (daemon active), herdr state is tiny JSON in ~/.config/herdr (active; ~/.herdr empty). ~/.codex/history is actually history.jsonl (69 KB, dormant 07-24). Actively used tools (mtime <=7 days): Claude Code, Codex, Cursor, cmux, herdr, Omnara daemon. Dormant: Gemini, Copilot, Pi. Missing entirely: ~/.amp, ~/.opencode, ~/.antigravity (no alternate location found). AgentSessions.app installed, v3.9.3 (build 52). No secrets read; no files modified.",
+   "files": [
+    {
+     "path": "/Users/aryateja/.claude/projects",
+     "bytes": 540069888,
+     "tokens_est": 0,
+     "kind": "claude-code",
+     "note": "1480 files, newest 2026-09-01; per-project JSONL transcripts, ACTIVE"
+    },
+    {
+     "path": "/Users/aryateja/.claude/history.jsonl",
+     "bytes": 199741,
+     "tokens_est": 0,
+     "kind": "claude-code",
+     "note": "226 lines, newest 2026-09-01; prompt history, ACTIVE"
+    },
+    {
+     "path": "/Users/aryateja/.codex/sessions",
+     "bytes": 1100025856,
+     "tokens_est": 0,
+     "kind": "codex",
+     "note": "111 files, newest 2026-08-31; rollout JSONL, largest store, ACTIVE"
+    },
+    {
+     "path": "/Users/aryateja/.codex/history.jsonl",
+     "bytes": 69279,
+     "tokens_est": 0,
+     "kind": "codex",
+     "note": "1 file (600 lines), newest 2026-07-24; note ~/.codex/history does not exist. Codex root also has thread_history_1.sqlite 45MB, logs_2.sqlite 190MB, session_index.jsonl, archived_sessions/ 2.7MB (7 files)"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/tmp",
+     "bytes": 75718656,
+     "tokens_est": 0,
+     "kind": "gemini",
+     "note": "226 files, newest 2026-07-12; per-project dirs with logs.json, DORMANT"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/chats",
+     "bytes": 579076096,
+     "tokens_est": 0,
+     "kind": "cursor",
+     "note": "302 files, newest 2026-09-01; chats/<ws-hash>/<session-uuid>/store.db+meta.json (SQLite), ACTIVE; whole ~/.cursor is 940MB"
+    },
+    {
+     "path": "/Users/aryateja/.amp",
+     "bytes": 0,
+     "tokens_est": 0,
+     "kind": "amp",
+     "note": "0 files, MISSING - not installed"
+    },
+    {
+     "path": "/Users/aryateja/.opencode",
+     "bytes": 0,
+     "tokens_est": 0,
+     "kind": "opencode",
+     "note": "0 files, MISSING - not installed"
+    },
+    {
+     "path": "/Users/aryateja/.copilot",
+     "bytes": 3366912,
+     "tokens_est": 0,
+     "kind": "copilot",
+     "note": "410 files, newest 2026-08-12; session-store.db (164KB SQLite) + session-state/<uuid>/, DORMANT"
+    },
+    {
+     "path": "/Users/aryateja/.pi/agent/sessions",
+     "bytes": 20480,
+     "tokens_est": 0,
+     "kind": "pi",
+     "note": "4 files, newest 2026-08-11; per-cwd dirs (Claude-style), DORMANT; ~/.config/pi absent; whole ~/.pi is 7MB"
+    },
+    {
+     "path": "/Users/aryateja/.antigravity",
+     "bytes": 0,
+     "tokens_est": 0,
+     "kind": "antigravity",
+     "note": "0 files, MISSING - no alternate location found either"
+    },
+    {
+     "path": "/Users/aryateja/.cmux",
+     "bytes": 24576,
+     "tokens_est": 0,
+     "kind": "cmux",
+     "note": "6 files (hook scripts only), newest 2026-07-23; no transcripts here"
+    },
+    {
+     "path": "/Users/aryateja/Library/Application Support/cmux",
+     "bytes": 89346048,
+     "tokens_est": 0,
+     "kind": "cmux",
+     "note": "24 files, newest 2026-09-01; search.db + session JSON, ACTIVE (searchable scrollback, not per-message transcripts)"
+    },
+    {
+     "path": "/Users/aryateja/.herdr",
+     "bytes": 0,
+     "tokens_est": 0,
+     "kind": "herdr",
+     "note": "0 files, empty; real state in ~/.config/herdr"
+    },
+    {
+     "path": "/Users/aryateja/.config/herdr",
+     "bytes": 2080,
+     "tokens_est": 0,
+     "kind": "herdr",
+     "note": "session-history.json (1.2KB) + session.json (0.9KB), newest 2026-09-01, ACTIVE; herdr hosts other agents, no own transcripts"
+    },
+    {
+     "path": "/Users/aryateja/.omnara",
+     "bytes": 89886720,
+     "tokens_est": 0,
+     "kind": "omnara",
+     "note": "398 files, newest 2026-09-01; mostly Omnara.app (68MB)+bin; logs/ 6.8MB (15 files); run-session-messages/ EMPTY - marginal transcript source"
+    },
+    {
+     "path": "/Applications/AgentSessions.app",
+     "bytes": 54566912,
+     "tokens_est": 0,
+     "kind": "agentsessions-app",
+     "note": "EXISTS, version 3.9.3 (build 52)"
+    }
+   ]
+  },
+  "memory": {
+   "summary": "MEMORY INVENTORY (read-only scan, 2026-09-01). WHERE MEMORY ACTUALLY LIVES: (1) Claude Code auto-memory at /Users/aryateja/.claude/projects/*/memory \u2014 94 files, 257,677 bytes (~64.4k tokens) across 7 projects. The overwhelmingly active one is -Users-aryateja-Projects-lecoder-watch (49 files, 164 KB, MEMORY.md updated Aug 31); home-dir scope -Users-aryateja has 18 files/32 KB; lecoder, Projects, crm, shop, Personal-Software-Factory are smaller and quieter (Jun\u2013Aug). (2) Project-root MEMORY.md at /Users/aryateja/Projects/lecoder-watch/MEMORY.md (18.5 KB, Aug 27, 'decisions and dead ends' ledger), with a duplicate in the .omnara worktree earmuff-essential (Aug 28). (3) OMC .omc/project-memory.json in 3 projects \u2014 lecoder-watch (7.3 KB, rescanned TODAY Sep 1 = live), crm (Jul 8), Documents/SecondBrain (Jul 2); mostly auto-scanned tech-stack scaffolding, largely empty fields. NO .omc/notepad.md and NO .omc/wiki exist anywhere under $HOME depth 4 \u2014 those OMC memory surfaces are unused. (4) SecondBrain-OKF at /Users/aryateja/Documents/SecondBrain-OKF \u2014 10.8 MB total (4 MB of that is .obsidian; content ~6.8 MB across projects/resources/archives/areas + AGENTS.md/index.md/log.md); durable knowledge base, not per-session agent memory. ABANDONED MEMORY SYSTEMS (all dead since mid-June 2026, ~387 MB reclaimable): ~/.mempalace (208 MB, chroma.sqlite3 is 198.6 MB, last write Jun 16), ~/.gbrain (151 MB pglite Postgres, last touched Jun 16), ~/.agentmemory (27.7 MB, nearly all a 28 MB 'iii' binary, state frozen Jun 4-5), ~/.claude-mem (48 KB, only logs, last Jun 16). ~/.codex memory is plumbing-only: memories_1.sqlite has recent mtime (Aug 31) but its tables (jobs, stage1_outputs) contain 0 rows \u2014 nothing stored; history.jsonl is 69 KB (last Jul 24). TOTAL LIVE MEMORY (auto-memory + root MEMORY.md + 3 project-memory.json, excluding the worktree duplicate and OKF): ~292,900 bytes \u2248 73,200 tokens; of that, lecoder-watch alone accounts for ~190 KB (~47.5k tokens). Practical read: memory has consolidated onto Claude Code's native auto-memory (centered on lecoder-watch) plus the OKF vault; mempalace/gbrain/agentmemory/claude-mem are corpses from a June experiment phase, and Codex memory never accumulated content.",
+   "files": [
+    {
+     "path": "/Users/aryateja/.claude/projects/-Users-aryateja-Projects-lecoder-watch/memory",
+     "bytes": 164341,
+     "tokens_est": 41085,
+     "kind": "auto-memory",
+     "note": "Most active memory store: 49 topic files + MEMORY.md (10.8 KB index), updated through Aug 31. Launch/outage/infra notes for lecoder-watch/lesearch-mesh."
+    },
+    {
+     "path": "/Users/aryateja/.claude/projects/-Users-aryateja/memory",
+     "bytes": 31974,
+     "tokens_est": 7994,
+     "kind": "auto-memory",
+     "note": "Home-dir scope: 18 files incl. MEMORY.md index (the one loaded for $HOME sessions). Profile, policies, fleet, gateways. Last writes mid-Jul."
+    },
+    {
+     "path": "/Users/aryateja/.claude/projects/-Users-aryateja-Projects-lecoder/memory",
+     "bytes": 23151,
+     "tokens_est": 5788,
+     "kind": "auto-memory",
+     "note": "8 files, Jul 2026. lecoder cloud/deploy/analytics notes."
+    },
+    {
+     "path": "/Users/aryateja/.claude/projects/-Users-aryateja-Projects/memory",
+     "bytes": 12738,
+     "tokens_est": 3185,
+     "kind": "auto-memory",
+     "note": "6 files, Jul 2026. Portfolio/consolidation/security-baseline notes."
+    },
+    {
+     "path": "/Users/aryateja/.claude/projects/-Users-aryateja-Personal-Software-Factory/memory",
+     "bytes": 10351,
+     "tokens_est": 2588,
+     "kind": "auto-memory",
+     "note": "4 files, Aug 2026. Factory + consolidation notes."
+    },
+    {
+     "path": "/Users/aryateja/.claude/projects/-Users-aryateja-crm/memory",
+     "bytes": 9580,
+     "tokens_est": 2395,
+     "kind": "auto-memory",
+     "note": "6 files, Jun-Jul 2026. CRM system + WhatsApp routing rules."
+    },
+    {
+     "path": "/Users/aryateja/.claude/projects/-Users-aryateja-shop/memory",
+     "bytes": 5542,
+     "tokens_est": 1386,
+     "kind": "auto-memory",
+     "note": "3 files, Aug 2026. agentfirst.shop state."
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/MEMORY.md",
+     "bytes": 18519,
+     "tokens_est": 4630,
+     "kind": "memory-md",
+     "note": "Project-root decisions-and-dead-ends ledger (286 lines), updated Aug 27. Live, complements CONTEXT.md."
+    },
+    {
+     "path": "/Users/aryateja/.omnara/worktrees/lecoder-watch/earmuff-essential/MEMORY.md",
+     "bytes": 18519,
+     "tokens_est": 4630,
+     "kind": "memory-md",
+     "note": "Byte-identical duplicate of the lecoder-watch root MEMORY.md inside an omnara worktree (Aug 28). Not counted in live total."
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.omc/project-memory.json",
+     "bytes": 7304,
+     "tokens_est": 1826,
+     "kind": "tool-memory",
+     "note": "OMC project memory; lastScanned Sep 1 2026 (today) \u2014 live, but auto-scan fields mostly null."
+    },
+    {
+     "path": "/Users/aryateja/crm/.omc/project-memory.json",
+     "bytes": 5283,
+     "tokens_est": 1321,
+     "kind": "tool-memory",
+     "note": "OMC project memory, last written Jul 8 2026."
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.omc/project-memory.json",
+     "bytes": 4115,
+     "tokens_est": 1029,
+     "kind": "tool-memory",
+     "note": "OMC project memory for the older SecondBrain dir (not -OKF), Jul 2 2026."
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF",
+     "bytes": 11083776,
+     "tokens_est": 2770944,
+     "kind": "okf",
+     "note": "Durable knowledge vault, 10.8 MB total (~4 MB is .obsidian). Top dirs: resources 1.9 MB, projects 1.6 MB, archives 1.5 MB, areas 976 KB; AGENTS.md 7.4 KB, index.md, log.md; wiki/ only 16 KB. Has its own tiny .omc. Not per-session agent memory."
+    },
+    {
+     "path": "/Users/aryateja/.mempalace",
+     "bytes": 218578944,
+     "tokens_est": 54644736,
+     "kind": "tool-memory",
+     "note": "ABANDONED. 208 MB, of which palace/chroma.sqlite3 = 198.6 MB (Chroma vector store) + ~25k lock files. Last activity Jun 16 2026. Biggest reclaimable memory corpse."
+    },
+    {
+     "path": "/Users/aryateja/.gbrain",
+     "bytes": 158412800,
+     "tokens_est": 39603200,
+     "kind": "tool-memory",
+     "note": "ABANDONED. 151 MB pglite (embedded Postgres) brain + sync-failures.jsonl. Config from spring, last touch Jun 16 2026."
+    },
+    {
+     "path": "/Users/aryateja/.agentmemory",
+     "bytes": 28389376,
+     "tokens_est": 7097344,
+     "kind": "tool-memory",
+     "note": "ABANDONED. 27.7 MB, almost entirely bin/iii (28.4 MB binary); engine-state/preferences/pids frozen Jun 4-5 2026. No memory content."
+    },
+    {
+     "path": "/Users/aryateja/.claude-mem",
+     "bytes": 49152,
+     "tokens_est": 12288,
+     "kind": "tool-memory",
+     "note": "ABANDONED. 48 KB, settings.json + 3 log files only (Jun 5-16 2026). No stored memories."
+    },
+    {
+     "path": "/Users/aryateja/.codex/memories_1.sqlite",
+     "bytes": 40960,
+     "tokens_est": 10240,
+     "kind": "tool-memory",
+     "note": "Codex memory pipeline DB; mtime Aug 31 but tables jobs and stage1_outputs both have 0 rows \u2014 active plumbing, zero stored memories. Older 40 KB copy also at .codex/sqlite/memories_1.sqlite (Jun)."
+    },
+    {
+     "path": "/Users/aryateja/.codex/history.jsonl",
+     "bytes": 69279,
+     "tokens_est": 17320,
+     "kind": "tool-memory",
+     "note": "Codex CLI prompt history, last written Jul 24 2026. History, not curated memory."
+    }
+   ]
+  },
+  "dotdirs": {
+   "summary": "AGENT DOTDIR AUDIT \u2014 /Users/aryateja (2026-09-01). 19 of 27 candidates exist; missing: .amp .opencode .antigravity .openclaw-dev .factory .qwen .aider .goose (Antigravity lives inside .gemini/antigravity-cli).\n\nSIZES + BIGGEST CONSUMER + STATUS (STALE = newest file >30d old):\n- .claude 782M ACTIVE \u2014 projects/ 515M transcripts is the hog; plugins/ 203M (marketplaces 136M + cache 66M); uploads/ 44M; telemetry/ 13M\n- .codex 2.2G ACTIVE \u2014 sessions/ 1.05G, plugins/ 359M, logs_2.sqlite 190M, .codex-global-state.json 3.2M\n- .cursor 897M ACTIVE \u2014 chats/ 552M, extensions/ 237M, projects/ 79M\n- .gemini 235M ACTIVE \u2014 antigravity-cli/ 160M, tmp/ 72M\n- .jcode 226M STALE(2026-07-22) \u2014 builds/ 126M + models/ 87M (jcode multi-provider CLI, OpenRouter/Copilot/Fireworks auth)\n- .mempalace 208M STALE(2026-06-16) \u2014 palace/ 208M data + lock litter; no config files at all\n- .gbrain 151M STALE(2026-06-16) \u2014 brain.pglite 151M embedded PG database\n- .omnara 86M ACTIVE \u2014 Omnara.app 68M app bundle inside the dotdir\n- .agentmemory 27M STALE(2026-06-05) \u2014 bin/ 27M engine binary\n- .claude-free 11M STALE(2026-07-14) \u2014 secondary Claude Code profile, plugins/ 6.8M\n- .pi 6.7M ACTIVE, .agents 5.0M ACTIVE, .copilot 3.2M ACTIVE, .dsh 2.8M ACTIVE, .claude-mem 48K STALE(2026-06-17), .cmux 24K STALE(2026-07-23, 6 codex hook scripts only), .cf-agentic 20K STALE(2026-07-08, stray .omc session-state only, no configs), .claude-mc 8K STALE(2026-06-06, \"Mission Control\" clean profile), .herdr 0B empty (only empty worktrees/; real config at ~/.config/herdr).\n\nOTHER AI-AGENT DOTDIRS FOUND (not in candidate list): .hermes 2.1G ACTIVE (hermes-agent/ 2.07G), .paseo 988M STALE(2026-06-14, models/ 984M \u2014 biggest stale reclaim), .omp 770M ACTIVE (cache/ 585M, natives/ 154M), .ollama 774M, .lmstudio 10G (model store, live service), .notebooklm-mcp-cli 59M STALE(2026-05-25, chrome-profiles), .smolvm 109M STALE(2026-06-05), .omc 15M ACTIVE, .omx-runs 13M STALE(2026-05-19), .gjc 5.7M STALE(2026-07-11), .lescout 3.4M STALE(2026-07-11), .omx 1.2M STALE(2026-07-20), .mcpc 640K STALE(2026-06-06), .cagent 68K STALE(2026-06-02), .orca 60K ACTIVE, .playwright-mcp 64K STALE(2026-04-24), .cua-driver 16K ACTIVE, .headroom 8K STALE(2026-07-08).\n\nABANDONED (>30d): .claude-free .claude-mc .claude-mem .agentmemory .mempalace .cmux .herdr .gbrain .cf-agentic .jcode .omx .omx-runs .paseo .mcpc .playwright-mcp .notebooklm-mcp-cli .lescout .gjc .smolvm .headroom .cagent \u2014 stale reclaim potential ~1.8G ex-models (.paseo 988M + .jcode 226M + .mempalace 208M + .gbrain 151M + .smolvm 109M + .notebooklm-mcp-cli 59M + .agentmemory 27M).\n\n.CLAUDE SPECIFICS: projects/ 515M (transcripts incl. memory/ dir), plugins/ 203M, skills/ 3.3M (~44 skill dirs incl. delegates, cloudflare set, higgsfield set, svc/notify/checkpoint), PAI/ ABSENT. Top-level layout: dirs = backups cache daemon debug downloads file-history hooks hud ide image-cache jobs paste-cache plugins projects session-env sessions shell-snapshots skills tasks telemetry uploads .omc; files = CLAUDE.md (5.4K OMC orchestration), RTK.md, settings.json 23K (+4 backup variants), settings.local.json, .mcp.json (near-empty), .claude.json 140K, history.jsonl 200K, statusline-context.sh, .session-stats.json.\n\nCREDENTIAL-BEARING FILES (names only, NOT read): .gemini/oauth_creds.json, .gemini/google_accounts.json, .omnara/creds.json, .pi/agent/auth.json, .jcode/auth-validation.json, .jcode/openai-auth.json, .codex likely auth in global state. Nothing was modified; read-only scan excluding node_modules/.git/caches.",
+   "files": [
+    {
+     "path": "/Users/aryateja/.claude/CLAUDE.md",
+     "bytes": 5401,
+     "tokens_est": 1350,
+     "kind": "claude-code",
+     "note": "Global instructions: oh-my-claudecode orchestration layer, delegation/model routing rules; @-includes BASE.md and RTK.md"
+    },
+    {
+     "path": "/Users/aryateja/.claude/settings.json",
+     "bytes": 23134,
+     "tokens_est": 5784,
+     "kind": "claude-code",
+     "note": "Main harness settings (hooks, permissions); 4 backup copies alongside (settings.json.bak, .bak-20260707, .mesh-backup, settings.bak)"
+    },
+    {
+     "path": "/Users/aryateja/.claude/settings.local.json",
+     "bytes": 74,
+     "tokens_est": 19,
+     "kind": "claude-code",
+     "note": "Tiny local settings override"
+    },
+    {
+     "path": "/Users/aryateja/.claude/.mcp.json",
+     "bytes": 22,
+     "tokens_est": 6,
+     "kind": "claude-code",
+     "note": "Near-empty MCP config"
+    },
+    {
+     "path": "/Users/aryateja/.claude/RTK.md",
+     "bytes": 961,
+     "tokens_est": 240,
+     "kind": "claude-code",
+     "note": "RTK token-killer CLI proxy usage instructions"
+    },
+    {
+     "path": "/Users/aryateja/.claude/.claude.json",
+     "bytes": 140207,
+     "tokens_est": 35052,
+     "kind": "claude-code",
+     "note": "Harness state/project registry (large; onboarding+project map)"
+    },
+    {
+     "path": "/Users/aryateja/.agents/BASE.md",
+     "bytes": 2074,
+     "tokens_est": 519,
+     "kind": "agents-base",
+     "note": "Layer-0 base contract for ALL coding agents: identity, secrets/git policy, pointers; referenced by .claude, .gemini, .dsh"
+    },
+    {
+     "path": "/Users/aryateja/.agents/.skill-lock.json",
+     "bytes": 8141,
+     "tokens_est": 2035,
+     "kind": "agents-base",
+     "note": "Lockfile for 18 shared vendor skills in .agents/skills (cloudflare/supabase/higgsfield sets)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/AGENTS.md",
+     "bytes": 21671,
+     "tokens_est": 5418,
+     "kind": "codex",
+     "note": "Codex global instructions; opens with an all-caps AUTONOMY DIRECTIVE (execute without asking); large \u2014 5.4K tokens injected every session"
+    },
+    {
+     "path": "/Users/aryateja/.codex/config.toml",
+     "bytes": 11306,
+     "tokens_est": 2827,
+     "kind": "codex",
+     "note": "Codex CLI config (models, MCP servers); .bak alongside"
+    },
+    {
+     "path": "/Users/aryateja/.codex/agents/prometheus-strict-metis.toml",
+     "bytes": 36365,
+     "tokens_est": 9091,
+     "kind": "codex",
+     "note": "Largest of ~6 custom agent definitions (also code-reviewer, researcher, dependency-expert, test-engineer)"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/GEMINI.md",
+     "bytes": 334,
+     "tokens_est": 84,
+     "kind": "gemini",
+     "note": "Thin pointer to ~/.agents/BASE.md contract"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/settings.json",
+     "bytes": 3503,
+     "tokens_est": 876,
+     "kind": "gemini",
+     "note": "Gemini CLI settings; dir also holds antigravity-cli/ (160M) and oauth_creds.json + google_accounts.json (credentials, names only)"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/config/hooks.json",
+     "bytes": 2071,
+     "tokens_est": 518,
+     "kind": "gemini",
+     "note": "Gemini hooks config"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/mcp.json",
+     "bytes": 1104,
+     "tokens_est": 276,
+     "kind": "cursor",
+     "note": "Cursor global MCP servers (2 backups alongside); no ~/.cursor/rules dir \u2014 rules likely per-project"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/hooks.json",
+     "bytes": 4045,
+     "tokens_est": 1011,
+     "kind": "cursor",
+     "note": "Cursor hooks (herdr-agent-state.sh companion script present)"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/cli-config.json",
+     "bytes": 3345,
+     "tokens_est": 836,
+     "kind": "cursor",
+     "note": "Cursor CLI agent config; plans/ holds ~15 .plan.md docs (portfolio rebuild, lecoder, agentfirst.shop etc.)"
+    },
+    {
+     "path": "/Users/aryateja/.copilot/config.json",
+     "bytes": 195,
+     "tokens_est": 49,
+     "kind": "copilot",
+     "note": "GitHub Copilot CLI config; skills/ mirrors the Cloudflare skill set"
+    },
+    {
+     "path": "/Users/aryateja/.copilot/hooks/orca.json",
+     "bytes": 5773,
+     "tokens_est": 1443,
+     "kind": "copilot",
+     "note": "Orca integration hook for Copilot CLI"
+    },
+    {
+     "path": "/Users/aryateja/.pi/agent/settings.json",
+     "bytes": 221,
+     "tokens_est": 55,
+     "kind": "pi",
+     "note": "Pi CLI agent settings; auth.json + trust.json alongside (credentials, names only)"
+    },
+    {
+     "path": "/Users/aryateja/.pi/agent/models.json",
+     "bytes": 4259,
+     "tokens_est": 1065,
+     "kind": "pi",
+     "note": "Pi model registry"
+    },
+    {
+     "path": "/Users/aryateja/.dsh/settings.yaml",
+     "bytes": 1535,
+     "tokens_est": 384,
+     "kind": "dsh",
+     "note": "dsh agent-shell settings; dir has profiles/, rtk-shims/, sessions/, patches/"
+    },
+    {
+     "path": "/Users/aryateja/.dsh/skills/house-rules.md",
+     "bytes": 7527,
+     "tokens_est": 1882,
+     "kind": "dsh",
+     "note": "Non-negotiable machine rules skill; ~12 sibling skills (apple-tools, herdr, macos-harness, imessage, mesh-doctor...)"
+    },
+    {
+     "path": "/Users/aryateja/.omnara/daemon.json",
+     "bytes": 532,
+     "tokens_est": 133,
+     "kind": "omnara",
+     "note": "Omnara daemon config; creds.json alongside (credentials, name only); Omnara.app 68M bundled in dotdir"
+    },
+    {
+     "path": "/Users/aryateja/.cmux/hooks/cmux-codex-hook-session-start.sh",
+     "bytes": 1268,
+     "tokens_est": 317,
+     "kind": "cmux",
+     "note": "One of 6 cmux-to-codex event forwarder hooks; entire dir is just these scripts, stale since 2026-07-23"
+    },
+    {
+     "path": "/Users/aryateja/.claude-mc/CLAUDE.md",
+     "bytes": 623,
+     "tokens_est": 156,
+     "kind": "claude-mc",
+     "note": "'Mission Control' clean Claude profile (no PAI, minimal MCP); stale since June"
+    },
+    {
+     "path": "/Users/aryateja/.claude-mc/mcp.json",
+     "bytes": 229,
+     "tokens_est": 57,
+     "kind": "claude-mc",
+     "note": "context7 + gbrain only"
+    },
+    {
+     "path": "/Users/aryateja/.claude-mem/settings.json",
+     "bytes": 3261,
+     "tokens_est": 815,
+     "kind": "claude-mem",
+     "note": "claude-mem memory plugin config (haiku observer model, worker on :37701); stale since June"
+    },
+    {
+     "path": "/Users/aryateja/.claude-free/settings.json",
+     "bytes": 242,
+     "tokens_est": 61,
+     "kind": "claude-free",
+     "note": "Secondary/free-account Claude Code profile settings; stale since 2026-07-14"
+    },
+    {
+     "path": "/Users/aryateja/.claude-free/.claude.json",
+     "bytes": 31794,
+     "tokens_est": 7949,
+     "kind": "claude-free",
+     "note": "State file of the secondary profile"
+    },
+    {
+     "path": "/Users/aryateja/.gbrain/config.json",
+     "bytes": 84,
+     "tokens_est": 21,
+     "kind": "gbrain",
+     "note": "gbrain memory config; brain.pglite 151M is the payload; stale since 2026-06-16"
+    },
+    {
+     "path": "/Users/aryateja/.jcode/config.toml",
+     "bytes": 4306,
+     "tokens_est": 1077,
+     "kind": "jcode",
+     "note": "jcode multi-provider agent CLI config (2 dated .baks); auth-validation.json + openai-auth.json alongside (credentials, names only); dir stale since 2026-07-22"
+    },
+    {
+     "path": "/Users/aryateja/.jcode/mcp.json",
+     "bytes": 2779,
+     "tokens_est": 695,
+     "kind": "jcode",
+     "note": "jcode MCP server config"
+    },
+    {
+     "path": "/Users/aryateja/.agentmemory/preferences.json",
+     "bytes": 241,
+     "tokens_est": 60,
+     "kind": "agentmemory",
+     "note": "agentmemory engine prefs; bin/ 27M binary; stale since 2026-06-05"
+    }
+   ]
+  },
+  "factory_hunt": {
+   "report": "# Hunt result: the forgotten app is \"10x\" (not \"iMake\")\n\n## Best-candidate identification\n\n**Name:** `10x` \u2014 GitHub org/repo `10x-app-builder/10x` (github.com/10x-app-builder/10x.git)\n\n**What it is:** \"An AI-powered iOS app builder for macOS. Describe the app you want, and 10x generates production-quality SwiftUI code, scaffolds an Xcode project, and previews it on the iOS Simulator \u2014 all from a conversational interface.\" (verbatim from its README). Native macOS SwiftUI app (`10x-macos.xcodeproj`, entry `TenXAppApp.swift`) running a full client-side Claude agentic tool loop: NL prompt \u2192 plan mode \u2192 build mode \u2192 ToolExecutor writes Swift files \u2192 XcodeGen (bundled binary in `10x-macos/Resources/xcodegen`) \u2192 `xcodebuild` + `simctl` \u2192 screenshot back into the UI. Supabase auth, Claude via thin API proxy, projects persisted to `~/Library/Developer/TenXApp/{project}/`.\n\n**Where it lives (archived, retrievable):**\n- Archive: `/Volumes/External Storage/ARCHIVE/2026-09-01_work.tar.zst` (209 MB compressed / 272 MB raw), path inside: `work/personal/10x/` (~300 files excluding .git)\n- Manifest: `/Volumes/External Storage/ARCHIVE/2026-09-01_work.manifest.md`\n- Original path before archiving: `~/4-Archive/work/personal/10x`\n- Branch `main`, 1 local branch, **last commit 2026-04-19**\n\n**State when frozen:** Working MVP \u2014 ROADMAP.md says \"Core loop works end-to-end\" (describe \u2192 plan \u2192 build \u2192 simulator preview). It had a full release pipeline for the builder itself: notarized DMG + Sparkle updater + Vercel download site, CI workflows (release-beta/stable/channel.yml), release notes for 1.0.0-beta.7 \u2192 1.0.3. TestFlight was on the roadmap but NOT built: \"One-click TestFlight upload\", \"App Store metadata generation\", \"Code signing management\" sit under Distribution \u2192 **Later**. License: PolyForm Noncommercial 1.0.0. Repo notes say \"This is a private repo.\"\n\n**Evidence for the Cursor memory:** `ideas.md` is a competitive analysis of Bolt.new, v0, Lovable, **Cursor**, Replit Agent, Create.xyz, and the positioning line is literally: \"Cursor for app building \u2014 a native, professional-grade tool that gives developers control over the AI.\" That plus the autonomy-slider-from-Cursor idea is almost certainly where the \"built around Cursor\" memory comes from. The \"iMake\" name doesn't exist anywhere on disk (zero hits across all 28 manifests, both tar listings, and $HOME depth-3 find).\n\n**Live TestFlight tooling still on the machine** (separate from 10x but proves the ambition went live):\n- `~/.asc/` \u2014 App Store Connect CLI config, created 2026-05-01, last touched 2026-08-20. config.json keys (names only): key_id, issuer_id, private_key_path, default_key_name (\"Macbook-claude-1\"), app_id (empty), vendor_number (empty), timeouts/retries. A web session cache exists under `~/.asc/web/`.\n- `~/.appstoreconnect/private_keys/` \u2014 one AuthKey_*.p8 API key (created ~2026-05-01).\n\n## How to retrieve 10x\n\n```sh\nmkdir -p ~/restored\nzstd -d \"/Volumes/External Storage/ARCHIVE/2026-09-01_work.tar.zst\" --stdout | tar -xf - -C ~/restored/ \"work/personal/10x\"\n```\nOr check whether github.com/10x-app-builder/10x is still accessible (it was the `main` remote; archived copy has 1 local branch so the remote likely matches). I already extracted README.md, ROADMAP.md, ideas.md to the session scratchpad: `/private/tmp/claude-501/-Users-aryateja/5938522e-4a71-4d68-b7b0-92a13d159520/scratchpad/work/personal/10x/`.\n\n## Runner-up candidates (related but NOT the forgotten app)\n\n1. **Personal-Software-Factory** \u2014 `/Volumes/External Storage/ARCHIVE/2026-09-01_Personal-Software-Factory.tar.zst` (177 MB / 597 MB raw, from `~/4-Archive/Personal-Software-Factory`). This is the \"always-on software factory\" *generalized* (not iOS): top-level FACTORY.md, MASTER-PLAN.md, progress.md, Plans/psf-integration-plan.md, engine/ (harness-cli, spine), domains/ (all 4 businesses + nl2shell.com), docs/ (~20 planning docs incl. CURRENT-STATE.md, decisions.md, overnight-agents). Inside it: `factory/` = **aryateja2106/factory.git** (branch backup/2026-08-12, last commit 2026-08-13) \u2014 a disler-style ADW pipeline (adws/adw_plan.py, adw_build.py, adw_scout.py, adw_simple_sdlc.py, gates.py, agent_cc.py/agent_pi.py; scout/planner/documenter/reviewer session logs; specs/, requests/, app_docs/; has a `.env` \u2014 do not print). Also disler's super-simple-software-factory (branch fix/unwired-gates-must-fail) and inkwell-agent-sandboxes-and-software-factory, plus a `glaze-system-instructions/` copy. No TestFlight/xcodebuild/iOS content anywhere in the tar listing.\n2. **2026-09-01_factory.tar.zst** (1 MB) \u2014 just a clone of **addyosmani/factory** (docs/template repo), not Arya's system.\n3. The factory pattern lives on: the active project `~/Projects/lecoder-watch` (MeshWatch) has live `factory-implement/monitor/spec/triage/verify` skills in `.claude/skills`.\n\n## Glaze package summary \u2014 `/Users/aryateja/Downloads/glaze-system-instructions 2` (0.625 MB, ~160k tokens incl. the concatenation)\n\nVerbatim extraction of every system prompt/skill/rule powering the **Glaze macOS app builder** (a Claude-driven Electron-style builder: React/Tailwind renderer + Node main process + WKWebView, JSON-RPC 2.0 IPC). Extracted from a running Glaze install via `scripts/extract-glaze-system.py`; a second copy is inside the Personal-Software-Factory archive.\n\n- **README.md** (8.8K): 8-agent runtime \u2014 Main Orchestrator routes work; Context Gatherer reads project memory; Frontend/Backend Architects implement; Compliance Checker validates against skill checklists after every sub-agent; Error Investigator patches runtime errors from logs; SDK Upgrade agent; Issue Report agent. guides/CLAUDE.md injected into every agent's context; skills loaded just-in-time.\n- **ALL-SYSTEM-INSTRUCTIONS.md** (283.8K, ~71k tokens): single-file concat. Structure: Index \u2192 \"Combined Contents\" \u2192 Section 1 Agent Prompts (orchestrator workflow: Gather Context \u2192 Plan \u2192 Architecture Decision \u2192 Execution \u2192 Validation \u2192 Update Project Context, plus a Mandatory Post-Change Rule) \u2192 Section 2 Guides (CLAUDE.md: directory structure, path aliases, protected files, Tailwind v4 only, IPC security model, WKWebView caveat, bundling rules; GLAZE-APP-GUIDE.md: AI reading guide, critical rules, decision trees \"Where Should This Code Go?\" / \"Which IPC API Should I Use?\", backend window management, handlers, performance rules) \u2192 skills \u2192 rules.\n- **prompts/** 8 files, 49.8K total (~12.5k tokens): 01-main-orchestrator 12.6K, 07-upgrade 20.9K are the big two; architects/checker/investigator/gatherer/issue-report 2\u20133.5K each.\n- **guides/**: CLAUDE.md 14.9K, GLAZE-APP-GUIDE.md 42.3K (~10.6k tokens).\n- **skills/** 22 files, 166K total (~41.5k tokens): biggest are glaze-component-patterns 28.7K, glaze-native-components-migration 14.4K, glaze-browser-window-recipes 12.9K, glaze-core-imports 10.7K; the rest cover lifecycle, IPC, data storage (two-tier), drag-and-drop, file associations, native permissions, protocol/large files, window sizing, CLI deps via Homebrew, and 5 one-time SDK migrations.\n- **rules/** 4 files, 6.8K: bundling (native modules/CJS), common-tasks index, debugging runtime errors, WKWebView rendering caveat.\n\nNothing was modified; all extractions went to the session scratchpad only. No secret values were read or printed (only key/variable names from ~/.asc/config.json; the factory/.env inside the tar was left untouched)."
+  },
+  "instruction_files": {
+   "summary": "Found 212 agent instruction files under /Users/aryateja (excluding $HOME-root dot-dirs and ~/Library), totaling 1,246,468 bytes \u2248 311,622 tokens. Breakdown by kind: agents-md 102, claude-md 75, other (HANDOFF/copilot/CONVENTIONS/windsurf) 24, cursor-rules 13, gemini 4, context 3, memory 2. FULL AGENT-CONFIG STACKS: Projects/lecoder-watch is the deepest (dirs .claude+.codex+.cursor+.agents+.github plus AGENTS.md+CLAUDE.md+CONTEXT.md+MEMORY.md+HANDOFF.md quintet and ~65 project-scoped skills in .claude/skills); 1-Projects/cloudagi/crm has .claude+.codex+.cursor+.agents; 1-Projects/lesearch/lesearch has .claude+.codex+.gemini; both portfolio repos (ATR-main-portfolio, personal-website-SECOND-WIP) have .cursor+.agents+.github+.gemini; 3-Resources/reference/reference-projects/deepseek-harness has .claude+.agents+.github with 15 per-directory AGENTS.md files. NOTABLE DUPLICATION: (1) vercel-react-best-practices/AGENTS.md (81,716 B \u2248 20.4k tokens) duplicated verbatim in both portfolio repos \u2014 the two largest owned files on disk; (2) 2-Areas/agents/Personal-skills/vendor/gbrain/CLAUDE.md is the single biggest instruction file at 161 KB \u2248 40k tokens (vendored); (3) Downloads has \"glaze-system-instructions\" and \"glaze-system-instructions 2\" with identical 14,883 B CLAUDE.md; (4) ATR-main-portfolio .worktrees carry 4 extra copies of copilot-instructions.md + 1 AGENTS.md; lecoder-watch .claude/worktrees carry 2 extra AGENTS/HANDOFF pairs; (5) multica-arya vs multica-arya-latest are near-duplicate repos (25 KB vs 28 KB CLAUDE.md, same AGENTS.md); (6) skill-lab CLAUDE.md identical (12,147 B) at Personal-skills/skill-lab and Personal-skills/vendor/skill-lab; (7) hk-explore/main and hk-explore/mcp-ui have byte-identical AGENTS/CLAUDE/HANDOFF sets; (8) ml-intern AGENTS.md (2,967 B) appears in both gitrepo-kb and nl2shell/pipeline-v4/vendor; (9) reversa/templates/engines ships the same content 4 ways (AGENTS/CLAUDE/GEMINI/CONVENTIONS), as does third-brain-v5-skills (AGENTS/CLAUDE/GEMINI); (10) Documents/SecondBrain-OKF uses a deliberate paired-stub pattern \u2014 44 files (AGENTS.md + CLAUDE.md in every folder, ~7.6k tokens total), while legacy Documents/SecondBrain/CLAUDE.md is an explicit \"Superseded\" redirect to OKF. Good hygiene pattern: 8 repos use a tiny (11\u201315 B) CLAUDE.md that is just \"@AGENTS.md\", keeping one source of truth. Roughly 45% of total tokens sit in reference clones (3-Resources/reference, Jetson/reference) and vendored third-party repos (vendor/ dirs, go/pkg/mod) rather than active first-party projects \u2014 prime candidates if trimming agent-context weight. One stray: go/pkg/mod/github.com/air-verse/air@v1.65.1/AGENTS.md is Go module cache, not user config. Nothing was modified; no secrets read or printed.",
+   "files": [
+    {
+     "path": "/Users/aryateja/1-Projects/cloudagi/clients/abhishek/aqua-paisa/AGENTS.md",
+     "bytes": 3266,
+     "tokens_est": 816,
+     "kind": "agents-md",
+     "note": "Aqua Paisa client project agent map"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/cloudagi/clients/abhishek/aqua-paisa/HANDOFF.md",
+     "bytes": 4923,
+     "tokens_est": 1231,
+     "kind": "other",
+     "note": "Aqua Paisa \u2014 farmer feedback handoff"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/cloudagi/clients/abhishek/sovereign-agent-stack/AGENTS.md",
+     "bytes": 1087,
+     "tokens_est": 272,
+     "kind": "agents-md",
+     "note": "Agent Contract for sovereign-agent-stack client work"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/cloudagi/crm/AGENTS.md",
+     "bytes": 6209,
+     "tokens_est": 1552,
+     "kind": "agents-md",
+     "note": "Personal CRM operating rules (repo has full .claude/.codex/.cursor/.agents stack)"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/cloudagi/crm/alook/AGENTS.md",
+     "bytes": 4708,
+     "tokens_est": 1177,
+     "kind": "agents-md",
+     "note": "Alook daemon subproject rules"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/cloudagi/crm/alook/CLAUDE.md",
+     "bytes": 15,
+     "tokens_est": 4,
+     "kind": "claude-md",
+     "note": "One-line pointer to AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/cloudagi/crm/tools/whatsapp-cli/AGENTS.md",
+     "bytes": 2072,
+     "tokens_est": 518,
+     "kind": "agents-md",
+     "note": "whatsapp-cli tool agent guide"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/lesearch/lescout/AGENTS.md",
+     "bytes": 4542,
+     "tokens_est": 1136,
+     "kind": "agents-md",
+     "note": "Guidance for AI agents working in/with the lescout repo"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/lesearch/lesearch-ai/.agents/skills/watchos-design-guidelines/AGENTS.md",
+     "bytes": 2442,
+     "tokens_est": 610,
+     "kind": "agents-md",
+     "note": "watchOS Design Guidelines skill doc under .agents/skills"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/lesearch/lesearch/AGENTS.md",
+     "bytes": 1777,
+     "tokens_est": 444,
+     "kind": "agents-md",
+     "note": "Operating contract for LeSearch (repo also has .claude/.codex/.gemini dirs)"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/lesearch/mesh-install/AGENTS.md",
+     "bytes": 4896,
+     "tokens_est": 1224,
+     "kind": "agents-md",
+     "note": "Setting up the mesh for a user \u2014 install flow rules"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/lesearch/meshwatch-publish/AGENTS.md",
+     "bytes": 4973,
+     "tokens_est": 1243,
+     "kind": "agents-md",
+     "note": "MeshWatch publish repo: Mac vs non-Mac tasks, no-secrets rule"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/lesearch/meshwatch-publish/CLAUDE.md",
+     "bytes": 752,
+     "tokens_est": 188,
+     "kind": "claude-md",
+     "note": "Pointer to @AGENTS.md plus Claude Code specifics"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/nl2shell/model-repo-v2v3/CLAUDE.md",
+     "bytes": 804,
+     "tokens_est": 201,
+     "kind": "claude-md",
+     "note": "NL2Shell model repo guide"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/nl2shell/pipeline-v4/AGENTS.md",
+     "bytes": 1173,
+     "tokens_est": 293,
+     "kind": "agents-md",
+     "note": "Local Terminal Model Instructions for nl2shell pipeline"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/nl2shell/pipeline-v4/ops/portable-workspace/AGENTS.md",
+     "bytes": 682,
+     "tokens_est": 170,
+     "kind": "agents-md",
+     "note": "Portable Workspace Agent Rules"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/nl2shell/pipeline-v4/vendor/huggingface-skills/agents/AGENTS.md",
+     "bytes": 7166,
+     "tokens_est": 1792,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] HuggingFace skills catalog"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/nl2shell/pipeline-v4/vendor/ml-intern/AGENTS.md",
+     "bytes": 2967,
+     "tokens_est": 742,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] ml-intern Agent Notes (duplicate of gitrepo-kb copy)"
+    },
+    {
+     "path": "/Users/aryateja/1-Projects/nl2shell/synthetic-tb-corpus/HANDOFF.md",
+     "bytes": 5648,
+     "tokens_est": 1412,
+     "kind": "other",
+     "note": "HANDOFF \u2014 nl2shell / Terminal-Bench Lab"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-Agent-Set-up/multica-arya-latest/AGENTS.md",
+     "bytes": 1892,
+     "tokens_est": 473,
+     "kind": "agents-md",
+     "note": "Multica repository guidelines (same as multica-arya copy)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-Agent-Set-up/multica-arya-latest/CLAUDE.md",
+     "bytes": 27941,
+     "tokens_est": 6985,
+     "kind": "claude-md",
+     "note": "Multica monorepo Claude Code guide (naming/i18n conventions); near-dup of multica-arya"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-Agent-Set-up/multica-arya-latest/apps/mobile/CLAUDE.md",
+     "bytes": 46199,
+     "tokens_est": 11550,
+     "kind": "claude-md",
+     "note": "Mobile App Rules \u2014 locked tech-stack baseline for apps/mobile (very large)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-Agent-Set-up/multica-arya/AGENTS.md",
+     "bytes": 1892,
+     "tokens_est": 473,
+     "kind": "agents-md",
+     "note": "Multica repository guidelines (duplicate of -latest copy)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-Agent-Set-up/multica-arya/CLAUDE.md",
+     "bytes": 25177,
+     "tokens_est": 6294,
+     "kind": "claude-md",
+     "note": "Multica monorepo Claude guide \u2014 older near-duplicate of -latest"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-Agent-Set-up/prototype/HANDOFF.md",
+     "bytes": 12230,
+     "tokens_est": 3058,
+     "kind": "other",
+     "note": "Conductor Prototype \u2014 session handoff"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-k/CLAUDE.md",
+     "bytes": 2245,
+     "tokens_est": 561,
+     "kind": "claude-md",
+     "note": "Personal-skills batch agent instructions (identical across batches k/l/m)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-k/vendor/addyosmani-skills/AGENTS.md",
+     "bytes": 6848,
+     "tokens_est": 1712,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] addyosmani agent-skills repo guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-k/vendor/addyosmani-skills/CLAUDE.md",
+     "bytes": 2015,
+     "tokens_est": 504,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] addyosmani agent-skills"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-k/vendor/founder-marketing-skills/AGENTS.md",
+     "bytes": 571,
+     "tokens_est": 143,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] Founder Marketing Skills"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-k/vendor/founder-marketing-skills/CLAUDE.md",
+     "bytes": 1513,
+     "tokens_est": 378,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] ScaleBrick Marketing Skills"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-k/vendor/marketingskills/AGENTS.md",
+     "bytes": 9582,
+     "tokens_est": 2396,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] marketing skills repo guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-k/vendor/seomachine/CLAUDE.md",
+     "bytes": 4950,
+     "tokens_est": 1238,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] seomachine repo guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-l/CLAUDE.md",
+     "bytes": 2245,
+     "tokens_est": 561,
+     "kind": "claude-md",
+     "note": "Personal-skills batch agent instructions (identical across batches k/l/m)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-l/vendor/apple-build-tools/CLAUDE.md",
+     "bytes": 3047,
+     "tokens_est": 762,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] apple-build-tools guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-l/vendor/axiom-xos/AGENTS.md",
+     "bytes": 2971,
+     "tokens_est": 743,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] axiom-xos agent instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-l/vendor/hyperframes/AGENTS.md",
+     "bytes": 2921,
+     "tokens_est": 730,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] Hyperframes"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-l/vendor/hyperframes/CLAUDE.md",
+     "bytes": 3946,
+     "tokens_est": 986,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] Hyperframes"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-m/CLAUDE.md",
+     "bytes": 2245,
+     "tokens_est": 561,
+     "kind": "claude-md",
+     "note": "Personal-skills batch agent instructions (identical across batches k/l/m)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-m/vendor/dbt-skills/CLAUDE.md",
+     "bytes": 1946,
+     "tokens_est": 486,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] dbt Skills Repository"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-m/vendor/supabase-skills/AGENTS.md",
+     "bytes": 6136,
+     "tokens_est": 1534,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] Supabase skills repo guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-m/vendor/trailofbits-skills/CLAUDE.md",
+     "bytes": 9553,
+     "tokens_est": 2388,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] Trail of Bits contributing-skills guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/Personal-skills-batch-m/vendor/vercel-labs-skills/AGENTS.md",
+     "bytes": 3281,
+     "tokens_est": 820,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] vercel-labs skills repo guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-lab/CLAUDE.md",
+     "bytes": 12147,
+     "tokens_est": 3037,
+     "kind": "claude-md",
+     "note": "skill-lab: Python CLI that scores agent skills (37 static checks + LLM judge); identical copy in vendor/skill-lab"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-scanner/.cursor/rules/codeguard-0-additional-cryptography.mdc",
+     "bytes": 3358,
+     "tokens_est": 840,
+     "kind": "cursor-rules",
+     "note": "codeguard rule: additional cryptography"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-scanner/.cursor/rules/codeguard-0-framework-and-languages.mdc",
+     "bytes": 6285,
+     "tokens_est": 1571,
+     "kind": "cursor-rules",
+     "note": "codeguard rule: framework and languages"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-scanner/.cursor/rules/codeguard-0-iac-security.mdc",
+     "bytes": 6052,
+     "tokens_est": 1513,
+     "kind": "cursor-rules",
+     "note": "codeguard rule: IaC security"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-scanner/.cursor/rules/codeguard-0-mobile-apps.mdc",
+     "bytes": 4908,
+     "tokens_est": 1227,
+     "kind": "cursor-rules",
+     "note": "codeguard rule: mobile apps"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-scanner/.cursor/rules/codeguard-0-supply-chain-security.mdc",
+     "bytes": 2656,
+     "tokens_est": 664,
+     "kind": "cursor-rules",
+     "note": "codeguard rule: supply-chain security"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-scanner/.cursor/rules/codeguard-1-crypto-algorithms.mdc",
+     "bytes": 3943,
+     "tokens_est": 986,
+     "kind": "cursor-rules",
+     "note": "codeguard rule: crypto algorithms"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-scanner/.cursor/rules/codeguard-1-digital-certificates.mdc",
+     "bytes": 4944,
+     "tokens_est": 1236,
+     "kind": "cursor-rules",
+     "note": "codeguard rule: digital certificates"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-scanner/.cursor/rules/codeguard-1-hardcoded-credentials.mdc",
+     "bytes": 1766,
+     "tokens_est": 442,
+     "kind": "cursor-rules",
+     "note": "codeguard rule: hardcoded credentials detection (rule text only, no secrets)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/skill-scanner/.cursor/rules/no-cursor-co-author.mdc",
+     "bytes": 483,
+     "tokens_est": 121,
+     "kind": "cursor-rules",
+     "note": "No Cursor co-author trailer in commits"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/agent-style/agents/AGENTS.md",
+     "bytes": 4122,
+     "tokens_est": 1030,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] agent-style writing rules (CC-BY-4.0), same content 3 formats"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/agent-style/agents/copilot-instructions.md",
+     "bytes": 4253,
+     "tokens_est": 1063,
+     "kind": "other",
+     "note": "[vendored 3rd-party] agent-style rules, Copilot variant"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/agent-style/agents/cursor-rule.mdc",
+     "bytes": 4534,
+     "tokens_est": 1134,
+     "kind": "cursor-rules",
+     "note": "[vendored 3rd-party] agent-style rules, Cursor variant"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/gbrain/AGENTS.md",
+     "bytes": 3975,
+     "tokens_est": 994,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] Agents working on GBrain"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/gbrain/CLAUDE.md",
+     "bytes": 161339,
+     "tokens_est": 40335,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] GBrain personal knowledge brain \u2014 LARGEST instruction file found (~40k tokens)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/linus-torvalds-skills/CLAUDE.md",
+     "bytes": 5548,
+     "tokens_est": 1387,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] AI Coding Guidelines: Torvalds Doctrine"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/mizchi-skills/CLAUDE.md",
+     "bytes": 2350,
+     "tokens_est": 588,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] Skills repository maintainer notes"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/oh-my-design/AGENTS.md",
+     "bytes": 5764,
+     "tokens_est": 1441,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] oh-my-design repo guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/oh-my-design/agents/AGENT.md",
+     "bytes": 3616,
+     "tokens_est": 904,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] oh-my-design compact harness context (Ralph convention)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/oh-my-design/web/AGENTS.md",
+     "bytes": 327,
+     "tokens_est": 82,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] Next.js agent rules block"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/oh-my-design/web/CLAUDE.md",
+     "bytes": 11,
+     "tokens_est": 3,
+     "kind": "claude-md",
+     "note": "One-line pointer to AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/shots/CLAUDE.md",
+     "bytes": 2049,
+     "tokens_est": 512,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] Shots project instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/skill-lab/CLAUDE.md",
+     "bytes": 12147,
+     "tokens_est": 3037,
+     "kind": "claude-md",
+     "note": "[vendored] identical duplicate of Personal-skills/skill-lab/CLAUDE.md"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/third-brain-v5-skills/AGENTS.md",
+     "bytes": 1630,
+     "tokens_est": 408,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] Third Brain V5 guidelines (same content as CLAUDE/GEMINI variants)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/third-brain-v5-skills/CLAUDE.md",
+     "bytes": 1664,
+     "tokens_est": 416,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] Third Brain V5 guidelines, Claude variant"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/Personal-skills/vendor/third-brain-v5-skills/GEMINI.md",
+     "bytes": 1506,
+     "tokens_est": 376,
+     "kind": "gemini",
+     "note": "[vendored 3rd-party] Third Brain V5 guidelines, Gemini variant"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/orca/workspaces/agentfirst-platform/redfish/AGENTS.md",
+     "bytes": 678,
+     "tokens_est": 170,
+     "kind": "agents-md",
+     "note": "redfish (agentfirst platform): Next.js agent rules block"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/orca/workspaces/agentfirst-platform/redfish/CLAUDE.md",
+     "bytes": 11,
+     "tokens_est": 3,
+     "kind": "claude-md",
+     "note": "One-line pointer to AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/bright-data/AGENTS.md",
+     "bytes": 1379,
+     "tokens_est": 345,
+     "kind": "agents-md",
+     "note": "Bright Data Control Kit instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/bright-data/repo-starters/common/AGENTS.md",
+     "bytes": 408,
+     "tokens_est": 102,
+     "kind": "agents-md",
+     "note": "Bright Data repo-starter common agent instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/cognee/AGENTS.md",
+     "bytes": 5508,
+     "tokens_est": 1377,
+     "kind": "agents-md",
+     "note": "[reference clone] cognee repository guidelines"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/cognee/CLAUDE.md",
+     "bytes": 19856,
+     "tokens_est": 4964,
+     "kind": "claude-md",
+     "note": "[reference clone] cognee full Claude guide (~5k tokens)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/iii/.cursor/rules/docs.mdc",
+     "bytes": 2237,
+     "tokens_est": 559,
+     "kind": "cursor-rules",
+     "note": "iii: documentation agent capabilities rule"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/iii/AGENTS.md",
+     "bytes": 5731,
+     "tokens_est": 1433,
+     "kind": "agents-md",
+     "note": "iii tool repo agent guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/lememory/AGENTS.md",
+     "bytes": 2296,
+     "tokens_est": 574,
+     "kind": "agents-md",
+     "note": "Unified agent instructions (LeMemory / LeMem)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/lememory/mcp/CLAUDE.md",
+     "bytes": 2676,
+     "tokens_est": 669,
+     "kind": "claude-md",
+     "note": "LeMemory MCP: Bun-first project conventions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/lememory/vendor/GitNexus/.cursorrules",
+     "bytes": 194,
+     "tokens_est": 48,
+     "kind": "cursor-rules",
+     "note": "[vendored 3rd-party] deprecated pointer for Cursor Agent Mode"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/lememory/vendor/GitNexus/.windsurfrules",
+     "bytes": 209,
+     "tokens_est": 52,
+     "kind": "other",
+     "note": "[vendored 3rd-party] Windsurf AI agent rules pointer"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/lememory/vendor/GitNexus/AGENTS.md",
+     "bytes": 10639,
+     "tokens_est": 2660,
+     "kind": "agents-md",
+     "note": "[vendored 3rd-party] GitNexus agent rules v1.7.0"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/lememory/vendor/GitNexus/CLAUDE.md",
+     "bytes": 7337,
+     "tokens_est": 1834,
+     "kind": "claude-md",
+     "note": "[vendored 3rd-party] GitNexus Claude rules v1.3.0"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/notebooklm-mcp-cli/AGENTS.md",
+     "bytes": 10324,
+     "tokens_est": 2581,
+     "kind": "agents-md",
+     "note": "notebooklm-mcp-cli main agent guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/notebooklm-mcp-cli/CLAUDE.md",
+     "bytes": 11,
+     "tokens_est": 3,
+     "kind": "claude-md",
+     "note": "One-line pointer to AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/notebooklm-mcp-cli/GEMINI.md",
+     "bytes": 6115,
+     "tokens_est": 1529,
+     "kind": "gemini",
+     "note": "notebooklm-mcp-cli Gemini-specific guide"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/printing-press-library/AGENTS.md",
+     "bytes": 51184,
+     "tokens_est": 12796,
+     "kind": "agents-md",
+     "note": "printing-press-library development conventions \u2014 very large (~12.8k tokens)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/printing-press-library/CLAUDE.md",
+     "bytes": 11,
+     "tokens_est": 3,
+     "kind": "claude-md",
+     "note": "One-line pointer to AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/agents/tools/printing-press-library/cli-skills/AGENTS.md",
+     "bytes": 2072,
+     "tokens_est": 518,
+     "kind": "agents-md",
+     "note": "cli-skills/ generated mirror \u2014 do not hand-edit"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/CLAUDE.md",
+     "bytes": 7222,
+     "tokens_est": 1806,
+     "kind": "claude-md",
+     "note": "Jetson edge node + agent workflow"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/HANDOFF.md",
+     "bytes": 12567,
+     "tokens_est": 3142,
+     "kind": "other",
+     "note": "Jetson Orin Nano bring-up handoff (merged)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/docs/remote-access/HANDOFF.md",
+     "bytes": 8404,
+     "tokens_est": 2101,
+     "kind": "other",
+     "note": "Jetson remote access handoff"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/reference/cli-printing-press/AGENTS.md",
+     "bytes": 38883,
+     "tokens_est": 9721,
+     "kind": "agents-md",
+     "note": "[reference clone] CLI Printing Press dev conventions (~9.7k tokens)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/reference/cli-printing-press/CLAUDE.md",
+     "bytes": 11,
+     "tokens_est": 3,
+     "kind": "claude-md",
+     "note": "One-line pointer to AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/reference/html-anything/AGENTS.md",
+     "bytes": 1420,
+     "tokens_est": 355,
+     "kind": "agents-md",
+     "note": "[reference clone] html-anything Next.js agent rules"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/reference/html-anything/CLAUDE.md",
+     "bytes": 11,
+     "tokens_est": 3,
+     "kind": "claude-md",
+     "note": "One-line pointer to AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/reference/html-anything/e2e/AGENTS.md",
+     "bytes": 1002,
+     "tokens_est": 250,
+     "kind": "agents-md",
+     "note": "[reference clone] html-anything e2e test rules"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/reference/impeccable/AGENTS.md",
+     "bytes": 11366,
+     "tokens_est": 2842,
+     "kind": "agents-md",
+     "note": "[reference clone] impeccable repository guidelines"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/machine/Jetson/reference/impeccable/CLAUDE.md",
+     "bytes": 28942,
+     "tokens_est": 7236,
+     "kind": "claude-md",
+     "note": "[reference clone] impeccable project instructions (~7.2k tokens)"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/ATR-main-portfolio/.agents/skills/vercel-react-best-practices/AGENTS.md",
+     "bytes": 81716,
+     "tokens_est": 20429,
+     "kind": "agents-md",
+     "note": "Vercel React Best Practices \u2014 20.4k tokens; verbatim duplicate in personal-website-SECOND-WIP"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/ATR-main-portfolio/.github/copilot-instructions.md",
+     "bytes": 872,
+     "tokens_est": 218,
+     "kind": "other",
+     "note": "Portfolio Copilot instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/ATR-main-portfolio/.worktrees/release-contact/.github/copilot-instructions.md",
+     "bytes": 872,
+     "tokens_est": 218,
+     "kind": "other",
+     "note": "[worktree copy] Copilot instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/ATR-main-portfolio/.worktrees/release-readiness/.github/copilot-instructions.md",
+     "bytes": 872,
+     "tokens_est": 218,
+     "kind": "other",
+     "note": "[worktree copy] Copilot instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/ATR-main-portfolio/.worktrees/release-seo/.github/copilot-instructions.md",
+     "bytes": 872,
+     "tokens_est": 218,
+     "kind": "other",
+     "note": "[worktree copy] Copilot instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/ATR-main-portfolio/.worktrees/skills-pr-cleanup/.github/copilot-instructions.md",
+     "bytes": 872,
+     "tokens_est": 218,
+     "kind": "other",
+     "note": "[worktree copy] Copilot instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/ATR-main-portfolio/.worktrees/skills-pr-cleanup/AGENTS.md",
+     "bytes": 3673,
+     "tokens_est": 918,
+     "kind": "agents-md",
+     "note": "[worktree copy] AryaTeja.com agent instructions"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/ATR-main-portfolio/AGENTS.md",
+     "bytes": 3673,
+     "tokens_est": 918,
+     "kind": "agents-md",
+     "note": "AryaTeja.com \u2014 agent instructions for main portfolio"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/personal-website-SECOND-WIP/.agents/skills/vercel-react-best-practices/AGENTS.md",
+     "bytes": 81716,
+     "tokens_est": 20429,
+     "kind": "agents-md",
+     "note": "Vercel React Best Practices \u2014 verbatim duplicate of ATR-main-portfolio copy"
+    },
+    {
+     "path": "/Users/aryateja/2-Areas/portfolio/personal-website-SECOND-WIP/.github/copilot-instructions.md",
+     "bytes": 872,
+     "tokens_est": 218,
+     "kind": "other",
+     "note": "Copilot instructions (same as ATR portfolio)"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/.claude/CLAUDE.md",
+     "bytes": 1376,
+     "tokens_est": 344,
+     "kind": "claude-md",
+     "note": "[reference clone] project-level .claude/CLAUDE.md with CODEGRAPH block"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/AGENTS.md",
+     "bytes": 7313,
+     "tokens_est": 1828,
+     "kind": "agents-md",
+     "note": "[reference clone] gitrepo-kb guide with claude-mem context injection"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/CLAUDE.md",
+     "bytes": 2676,
+     "tokens_est": 669,
+     "kind": "claude-md",
+     "note": "[reference clone] Bun-first conventions"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/TUI-use/AGENTS.md",
+     "bytes": 3678,
+     "tokens_est": 920,
+     "kind": "agents-md",
+     "note": "[reference clone] TUI-use guide with claude-mem context"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/TUI-use/tui-use/CLAUDE.md",
+     "bytes": 1034,
+     "tokens_est": 258,
+     "kind": "claude-md",
+     "note": "[reference clone] tui-use contribution guidelines"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/lepet copy/CLAUDE.md",
+     "bytes": 1998,
+     "tokens_est": 500,
+     "kind": "claude-md",
+     "note": "[reference clone] LePet agent operating rules"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/ml-intern/AGENTS.md",
+     "bytes": 2967,
+     "tokens_est": 742,
+     "kind": "agents-md",
+     "note": "[reference clone] ml-intern agent notes (duplicate of pipeline-v4/vendor copy)"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/repokast/AGENTS.md",
+     "bytes": 724,
+     "tokens_est": 181,
+     "kind": "agents-md",
+     "note": "[reference clone] repokast guide with claude-mem context"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/reversa/templates/engines/AGENTS.md",
+     "bytes": 585,
+     "tokens_est": 146,
+     "kind": "agents-md",
+     "note": "[reference clone] Reversa engine template (same content 4 formats)"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/reversa/templates/engines/CLAUDE.md",
+     "bytes": 693,
+     "tokens_est": 173,
+     "kind": "claude-md",
+     "note": "[reference clone] Reversa engine template, Claude variant"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/reversa/templates/engines/CONVENTIONS.md",
+     "bytes": 553,
+     "tokens_est": 138,
+     "kind": "other",
+     "note": "[reference clone] Reversa engine template, Aider CONVENTIONS variant"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/reversa/templates/engines/GEMINI.md",
+     "bytes": 610,
+     "tokens_est": 152,
+     "kind": "gemini",
+     "note": "[reference clone] Reversa engine template, Gemini variant"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/routa/AGENTS.md",
+     "bytes": 7530,
+     "tokens_est": 1882,
+     "kind": "agents-md",
+     "note": "[reference clone] Routa.js multi-agent coordination platform guide"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/routa/crates/harness-monitor/AGENTS.md",
+     "bytes": 982,
+     "tokens_est": 246,
+     "kind": "agents-md",
+     "note": "[reference clone] harness-monitor four-layer model"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/terminal-bench/.github/copilot-instructions.md",
+     "bytes": 2898,
+     "tokens_est": 724,
+     "kind": "other",
+     "note": "[reference clone] Terminal-Bench PR/task Copilot rules"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/terminal-bench/CLAUDE.md",
+     "bytes": 3263,
+     "tokens_est": 816,
+     "kind": "claude-md",
+     "note": "[reference clone] terminal-bench Claude guide"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/tests/fixtures/mixed-repo/AGENTS.md",
+     "bytes": 173,
+     "tokens_est": 43,
+     "kind": "agents-md",
+     "note": "[test fixture] fixture agent instructions"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/vnc-use-cookbook/CONTEXT.md",
+     "bytes": 10093,
+     "tokens_est": 2523,
+     "kind": "context",
+     "note": "[reference clone] vnc-use-cookbook worktree study context"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/gitrepo-kb/vnc-use/CLAUDE.md",
+     "bytes": 7490,
+     "tokens_est": 1872,
+     "kind": "claude-md",
+     "note": "[reference clone] vnc-use project context"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/hk-explore/main/AGENTS.md",
+     "bytes": 5926,
+     "tokens_est": 1482,
+     "kind": "agents-md",
+     "note": "[reference clone] hk-explore hackathon guide (identical to mcp-ui copy)"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/hk-explore/main/CLAUDE.md",
+     "bytes": 813,
+     "tokens_est": 203,
+     "kind": "claude-md",
+     "note": "[reference clone] hk-explore Claude stub (identical to mcp-ui copy)"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/hk-explore/main/docs/HANDOFF.md",
+     "bytes": 6259,
+     "tokens_est": 1565,
+     "kind": "other",
+     "note": "[reference clone] InsForge hackathon agent-first shop handoff"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/hk-explore/mcp-ui/AGENTS.md",
+     "bytes": 5926,
+     "tokens_est": 1482,
+     "kind": "agents-md",
+     "note": "[reference clone] duplicate of hk-explore/main/AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/hk-explore/mcp-ui/CLAUDE.md",
+     "bytes": 813,
+     "tokens_est": 203,
+     "kind": "claude-md",
+     "note": "[reference clone] duplicate of hk-explore/main/CLAUDE.md"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/hk-explore/mcp-ui/docs/HANDOFF.md",
+     "bytes": 6259,
+     "tokens_est": 1565,
+     "kind": "other",
+     "note": "[reference clone] duplicate of hk-explore/main handoff"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/hk-explore/web-design-studio/AGENTS.md",
+     "bytes": 6226,
+     "tokens_est": 1556,
+     "kind": "agents-md",
+     "note": "[reference clone] web-design-studio agent guide"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/hk-explore/web-design-studio/CLAUDE.md",
+     "bytes": 686,
+     "tokens_est": 172,
+     "kind": "claude-md",
+     "note": "[reference clone] web-design-studio Claude stub"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/memresearch-mempalace/CLAUDE.md",
+     "bytes": 7463,
+     "tokens_est": 1866,
+     "kind": "claude-md",
+     "note": "[reference clone] MemPalace verbatim-memory system mission/context"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/.agents/notes/AGENTS.md",
+     "bytes": 803,
+     "tokens_est": 201,
+     "kind": "agents-md",
+     "note": "[reference clone] deepseek-harness .agents notes"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/.github/AGENTS.md",
+     "bytes": 1172,
+     "tokens_est": 293,
+     "kind": "agents-md",
+     "note": "[reference clone] GitHub Actions rules"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/AGENTS.md",
+     "bytes": 16439,
+     "tokens_est": 4110,
+     "kind": "agents-md",
+     "note": "[reference clone] deepseek-harness root guide; 15 per-dir AGENTS.md in repo"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/docs/AGENTS.md",
+     "bytes": 10626,
+     "tokens_est": 2656,
+     "kind": "agents-md",
+     "note": "[reference clone] documentation standard"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/native/landlock-run/AGENTS.md",
+     "bytes": 5125,
+     "tokens_est": 1281,
+     "kind": "agents-md",
+     "note": "[reference clone] landlock-run native package rules"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/packages/AGENTS.md",
+     "bytes": 5965,
+     "tokens_est": 1491,
+     "kind": "agents-md",
+     "note": "[reference clone] harness packages overview"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/packages/client/AGENTS.md",
+     "bytes": 24472,
+     "tokens_est": 6118,
+     "kind": "agents-md",
+     "note": "[reference clone] web client stack rules (~6.1k tokens)"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/packages/experimental/AGENTS.md",
+     "bytes": 1376,
+     "tokens_est": 344,
+     "kind": "agents-md",
+     "note": "[reference clone] experimental packages"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/packages/schedule/AGENTS.md",
+     "bytes": 1687,
+     "tokens_est": 422,
+     "kind": "agents-md",
+     "note": "[reference clone] schedule packages"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/packages/web/AGENTS.md",
+     "bytes": 581,
+     "tokens_est": 145,
+     "kind": "agents-md",
+     "note": "[reference clone] web packages"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/scripts/AGENTS.md",
+     "bytes": 397,
+     "tokens_est": 99,
+     "kind": "agents-md",
+     "note": "[reference clone] repository scripts"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/snapshots/AGENTS.md",
+     "bytes": 2138,
+     "tokens_est": 534,
+     "kind": "agents-md",
+     "note": "[reference clone] recorded-session snapshots"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/vendor/AGENTS.md",
+     "bytes": 657,
+     "tokens_est": 164,
+     "kind": "agents-md",
+     "note": "[reference clone] vendored packages policy"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/deepseek-harness/website/AGENTS.md",
+     "bytes": 1653,
+     "tokens_est": 413,
+     "kind": "agents-md",
+     "note": "[reference clone] documentation website adapter"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/orca/AGENTS.md",
+     "bytes": 7849,
+     "tokens_est": 1962,
+     "kind": "agents-md",
+     "note": "[reference clone] orca design system + repo guide"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/orca/CLAUDE.md",
+     "bytes": 11,
+     "tokens_est": 3,
+     "kind": "claude-md",
+     "note": "One-line pointer to AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/3-Resources/reference/reference-projects/orca/tests/e2e/AGENTS.md",
+     "bytes": 3292,
+     "tokens_est": 823,
+     "kind": "agents-md",
+     "note": "[reference clone] orca E2E test rules"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/AGENTS.md",
+     "bytes": 7557,
+     "tokens_est": 1889,
+     "kind": "agents-md",
+     "note": "OKF root agent guide \u2014 main SecondBrain operating rules"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/CLAUDE.md",
+     "bytes": 406,
+     "tokens_est": 102,
+     "kind": "claude-md",
+     "note": "OKF root Claude stub (paired with AGENTS.md)"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/archives/AGENTS.md",
+     "bytes": 1091,
+     "tokens_est": 273,
+     "kind": "agents-md",
+     "note": "OKF folder guide: archives"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/archives/CLAUDE.md",
+     "bytes": 335,
+     "tokens_est": 84,
+     "kind": "claude-md",
+     "note": "OKF folder stub: archives"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/areas/AGENTS.md",
+     "bytes": 899,
+     "tokens_est": 225,
+     "kind": "agents-md",
+     "note": "OKF folder guide: areas"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/areas/AI-Agents/AGENTS.md",
+     "bytes": 705,
+     "tokens_est": 176,
+     "kind": "agents-md",
+     "note": "OKF folder guide: areas/AI-Agents"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/areas/AI-Agents/CLAUDE.md",
+     "bytes": 349,
+     "tokens_est": 87,
+     "kind": "claude-md",
+     "note": "OKF folder stub: areas/AI-Agents"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/areas/CLAUDE.md",
+     "bytes": 329,
+     "tokens_est": 82,
+     "kind": "claude-md",
+     "note": "OKF folder stub: areas"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/areas/career/AGENTS.md",
+     "bytes": 827,
+     "tokens_est": 207,
+     "kind": "agents-md",
+     "note": "OKF folder guide: areas/career"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/areas/career/CLAUDE.md",
+     "bytes": 343,
+     "tokens_est": 86,
+     "kind": "claude-md",
+     "note": "OKF folder stub: areas/career"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/areas/sessions/AGENTS.md",
+     "bytes": 959,
+     "tokens_est": 240,
+     "kind": "agents-md",
+     "note": "OKF folder guide: areas/sessions"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/areas/sessions/CLAUDE.md",
+     "bytes": 347,
+     "tokens_est": 87,
+     "kind": "claude-md",
+     "note": "OKF folder stub: areas/sessions"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/backup-info/AGENTS.md",
+     "bytes": 838,
+     "tokens_est": 210,
+     "kind": "agents-md",
+     "note": "OKF folder guide: backup-info"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/backup-info/CLAUDE.md",
+     "bytes": 341,
+     "tokens_est": 85,
+     "kind": "claude-md",
+     "note": "OKF folder stub: backup-info"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/inbox/AGENTS.md",
+     "bytes": 906,
+     "tokens_est": 226,
+     "kind": "agents-md",
+     "note": "OKF folder guide: inbox"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/inbox/CLAUDE.md",
+     "bytes": 329,
+     "tokens_est": 82,
+     "kind": "claude-md",
+     "note": "OKF folder stub: inbox"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/journal/AGENTS.md",
+     "bytes": 796,
+     "tokens_est": 199,
+     "kind": "agents-md",
+     "note": "OKF folder guide: journal"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/journal/CLAUDE.md",
+     "bytes": 333,
+     "tokens_est": 83,
+     "kind": "claude-md",
+     "note": "OKF folder stub: journal"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/manual/AGENTS.md",
+     "bytes": 785,
+     "tokens_est": 196,
+     "kind": "agents-md",
+     "note": "OKF folder guide: manual"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/manual/CLAUDE.md",
+     "bytes": 331,
+     "tokens_est": 83,
+     "kind": "claude-md",
+     "note": "OKF folder stub: manual"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/maps/AGENTS.md",
+     "bytes": 940,
+     "tokens_est": 235,
+     "kind": "agents-md",
+     "note": "OKF folder guide: maps"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/maps/CLAUDE.md",
+     "bytes": 327,
+     "tokens_est": 82,
+     "kind": "claude-md",
+     "note": "OKF folder stub: maps"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/ops/AGENTS.md",
+     "bytes": 1014,
+     "tokens_est": 254,
+     "kind": "agents-md",
+     "note": "OKF folder guide: ops"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/ops/CLAUDE.md",
+     "bytes": 325,
+     "tokens_est": 81,
+     "kind": "claude-md",
+     "note": "OKF folder stub: ops"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/01-AryaTeja-Website/AGENTS.md",
+     "bytes": 781,
+     "tokens_est": 195,
+     "kind": "agents-md",
+     "note": "OKF folder guide: projects/01-AryaTeja-Website"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/01-AryaTeja-Website/CLAUDE.md",
+     "bytes": 375,
+     "tokens_est": 94,
+     "kind": "claude-md",
+     "note": "OKF folder stub: projects/01-AryaTeja-Website"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/02-LeSearch-AI/AGENTS.md",
+     "bytes": 1071,
+     "tokens_est": 268,
+     "kind": "agents-md",
+     "note": "OKF folder guide: projects/02-LeSearch-AI"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/02-LeSearch-AI/CLAUDE.md",
+     "bytes": 365,
+     "tokens_est": 91,
+     "kind": "claude-md",
+     "note": "OKF folder stub: projects/02-LeSearch-AI"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/AGENTS.md",
+     "bytes": 1168,
+     "tokens_est": 292,
+     "kind": "agents-md",
+     "note": "OKF folder guide: projects"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/CLAUDE.md",
+     "bytes": 335,
+     "tokens_est": 84,
+     "kind": "claude-md",
+     "note": "OKF folder stub: projects"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/CloudAGI-Launch/AGENTS.md",
+     "bytes": 778,
+     "tokens_est": 194,
+     "kind": "agents-md",
+     "note": "OKF folder guide: projects/CloudAGI-Launch"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/CloudAGI-Launch/CLAUDE.md",
+     "bytes": 367,
+     "tokens_est": 92,
+     "kind": "claude-md",
+     "note": "OKF folder stub: projects/CloudAGI-Launch"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/products/mconnect/AGENTS.md",
+     "bytes": 791,
+     "tokens_est": 198,
+     "kind": "agents-md",
+     "note": "OKF folder guide: projects/products/mconnect"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/projects/products/mconnect/CLAUDE.md",
+     "bytes": 371,
+     "tokens_est": 93,
+     "kind": "claude-md",
+     "note": "OKF folder stub: projects/products/mconnect"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/resources/AGENTS.md",
+     "bytes": 1084,
+     "tokens_est": 271,
+     "kind": "agents-md",
+     "note": "OKF folder guide: resources"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/resources/CLAUDE.md",
+     "bytes": 337,
+     "tokens_est": 84,
+     "kind": "claude-md",
+     "note": "OKF folder stub: resources"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/resources/github-refs/AGENTS.md",
+     "bytes": 1059,
+     "tokens_est": 265,
+     "kind": "agents-md",
+     "note": "OKF folder guide: resources/github-refs"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/resources/github-refs/CLAUDE.md",
+     "bytes": 361,
+     "tokens_est": 90,
+     "kind": "claude-md",
+     "note": "OKF folder stub: resources/github-refs"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/self/AGENTS.md",
+     "bytes": 783,
+     "tokens_est": 196,
+     "kind": "agents-md",
+     "note": "OKF folder guide: self"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/self/CLAUDE.md",
+     "bytes": 327,
+     "tokens_est": 82,
+     "kind": "claude-md",
+     "note": "OKF folder stub: self"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/templates/AGENTS.md",
+     "bytes": 939,
+     "tokens_est": 235,
+     "kind": "agents-md",
+     "note": "OKF folder guide: templates"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain-OKF/templates/CLAUDE.md",
+     "bytes": 337,
+     "tokens_est": 84,
+     "kind": "claude-md",
+     "note": "OKF folder stub: templates"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.github/copilot-instructions.md",
+     "bytes": 3358,
+     "tokens_est": 840,
+     "kind": "other",
+     "note": "Legacy SecondBrain BMAD copilot instructions (tree superseded by OKF)"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/CLAUDE.md",
+     "bytes": 254,
+     "tokens_est": 64,
+     "kind": "claude-md",
+     "note": "Superseded \u2014 redirects agents to ~/Documents/SecondBrain-OKF"
+    },
+    {
+     "path": "/Users/aryateja/Downloads/glaze-system-instructions 2/guides/CLAUDE.md",
+     "bytes": 14883,
+     "tokens_est": 3721,
+     "kind": "claude-md",
+     "note": "Glaze app architecture context \u2014 duplicate download of the sibling folder"
+    },
+    {
+     "path": "/Users/aryateja/Downloads/glaze-system-instructions/guides/CLAUDE.md",
+     "bytes": 14883,
+     "tokens_est": 3721,
+     "kind": "claude-md",
+     "note": "Glaze app architecture context for orchestrator and sub-agents"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/AGENTS.md",
+     "bytes": 2737,
+     "tokens_est": 684,
+     "kind": "agents-md",
+     "note": "MeshWatch Agent Notes (cmux bridge; same file as lecoder-watch worktrees)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/HANDOFF.md",
+     "bytes": 4518,
+     "tokens_est": 1130,
+     "kind": "other",
+     "note": "MeshWatch Mission Control handoff"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/worktrees/compassionate-cohen-53d9fb/AGENTS.md",
+     "bytes": 2737,
+     "tokens_est": 684,
+     "kind": "agents-md",
+     "note": "[worktree copy] MeshWatch Agent Notes"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/worktrees/compassionate-cohen-53d9fb/HANDOFF.md",
+     "bytes": 4227,
+     "tokens_est": 1057,
+     "kind": "other",
+     "note": "[worktree copy] MeshWatch handoff 2026-07-07"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/worktrees/youthful-booth-5d54b0/AGENTS.md",
+     "bytes": 2737,
+     "tokens_est": 684,
+     "kind": "agents-md",
+     "note": "[worktree copy] MeshWatch Agent Notes"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/worktrees/youthful-booth-5d54b0/HANDOFF.md",
+     "bytes": 4227,
+     "tokens_est": 1057,
+     "kind": "other",
+     "note": "[worktree copy] MeshWatch handoff 2026-07-07"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/AGENTS.md",
+     "bytes": 12471,
+     "tokens_est": 3118,
+     "kind": "agents-md",
+     "note": "MeshWatch single brief \u2014 'read this before you touch anything'; fullest config stack found"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/CLAUDE.md",
+     "bytes": 3953,
+     "tokens_est": 988,
+     "kind": "claude-md",
+     "note": "Points to AGENTS.md as the single brief, plus Claude specifics"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/CONTEXT.md",
+     "bytes": 7330,
+     "tokens_est": 1832,
+     "kind": "context",
+     "note": "CONTEXT \u2014 MeshWatch domain model"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/HANDOFF.md",
+     "bytes": 5623,
+     "tokens_est": 1406,
+     "kind": "other",
+     "note": "MeshWatch handoff (updated 2026-07-07)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/MEMORY.md",
+     "bytes": 18519,
+     "tokens_est": 4630,
+     "kind": "memory",
+     "note": "MEMORY \u2014 decisions and dead ends (~4.6k tokens)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/Mference/AGENTS.md",
+     "bytes": 5442,
+     "tokens_est": 1360,
+     "kind": "agents-md",
+     "note": "Mference: Swift/Metal MoE inference on Apple Silicon \u2014 subproject rules"
+    },
+    {
+     "path": "/Users/aryateja/go/pkg/mod/github.com/air-verse/air@v1.65.1/AGENTS.md",
+     "bytes": 6739,
+     "tokens_est": 1685,
+     "kind": "agents-md",
+     "note": "[Go module cache] air-verse/air upstream AGENTS.md \u2014 not user config"
+    }
+   ]
+  },
+  "skills": {
+   "summary": "SKILL INVENTORY \u2014 Arya's Mac, 2026-09-01 (read-only scan; no files touched, no secret values read or printed).\n\nTOTALS BY SCOPE (SKILL.md files individually listed = 349, + 6 Codex opsx prompts + 1 lockfile = 356 entries; plus ~218 more SKILL.md inside vendor plugin caches covered by 7 rollup entries, ~567 SKILL.md machine-wide):\n- global Claude (~/.claude/skills): 24 active skills + 1 legacy backup (_legacy_shadow_backup_2026-07-20/omc-reference) + 19 symlinks into ~/.agents/skills (higgsfield*, insforge*, herdr, hf-cli, computer-use, find-skills, orca-cli, orchestration \u2014 deduped, listed once under .agents). omc-learned/ exists but is empty.\n- shared pool (~/.agents/skills): 35 skills, the canonical copy; lock at /Users/aryateja/.agents/.skill-lock.json (v3, sources incl. vercel-labs/skills github).\n- Claude plugins (~/.claude/plugins): 2 installed \u2014 oh-my-claudecode@omc v4.15.4 (41 skills; each duplicated again in skill-bodies/ inside the same cache) and ponytail@ponytail v4.7.0 (5 skills; duplicated again under .openclaw/). Cache weight: omc cache 65M + omc marketplace clone 134M (76M of it .git) = ~200M, by far the heaviest; ponytail 1.3M cache + 2.1M marketplace.\n- Cowork plugins (cached under ~/.codex/plugins/cache/claude-cowork): anthropic-skills 1.0.0 (25 skills incl. docx/pptx/xlsx/pdf, skill-creator, tdd, triage, canvas-design) + cowork-plugin-management 0.2.2 (2 skills). 9.7M.\n- Codex (~/.codex): 15 user skills (mostly the Cloudflare pack, plus hatch-pet at 85.5K \u2014 largest single SKILL.md on the machine) + 6 .system skills (imagegen, openai-docs, plugin-creator, review-agent, skill-creator, skill-installer) + 6 opsx-* OpenSpec prompts in ~/.codex/prompts. Vendor caches (rollup entries): oh-my-codex 29 skills, openai-bundled 5, openai-primary-runtime 6, openai-curated-remote 105 SKILL.md across 14 bundles (openai-templates 20, remotion 12, hugging-face 11, build-macos-apps 11, product-design 10, build-ios-apps 9, canva 8...), 41M.\n- Cursor (~/.cursor): skills/ 15 (synced Cloudflare pack + tigerfs, manifest .sync-manifest.json), skills-cursor/ 22 Cursor-native skills, plugin cache 73 more SKILL.md (stripe 8, hf-mcp, cli-for-agents, vercel...), 7.4M.\n- Gemini (~/.gemini/skills): 35 \u2014 Cloudflare pack + tigerfs + ~20 Matt-Pocock-style engineering-practice skills.\n- project:lecoder-watch: 89 entries \u2014 the biggest project set: 80 SKILL.md in .claude/skills, near-mirrored physically in .agents/skills (only listed deltas: ask-matt, claude-design-to-meshwatch-swiftui, factory-status, factory-tune, tdd, teach, to-prd, writing-great-skills; .claude-only: 6 openspec-*, overnight-slice), plus skills-lock.json pinning 7 skills from mattpocock/skills.\n- project:lecoder-watch-cmux-bridge: 10; project:Projects-root (/Users/aryateja/Projects/.agents/skills): 2; project:SecondBrain: 26 (10 bmad-* stubs in .agents + 16 substantial vault-workflow skills in .claude: digest 35K, rethink 28K, connect 27K...).\n\nOVERLAP/DUPLICATES (68 byte-identical dups flagged \"dup\" in files[]):\n1. The Cloudflare pack (~15 skills: agents-sdk, cloudflare*, durable-objects, sandbox-*, turnstile-spin, use-railway, web-perf, workers-best-practices, wrangler) exists as byte-identical PHYSICAL copies in 5 global locations: ~/.claude/skills, ~/.agents/skills, ~/.codex/skills, ~/.cursor/skills, ~/.gemini/skills (~1.05MB duplicated x4). Only ~/.claude uses symlinks (for the other 19 skills); consolidating the CF pack to symlinks too would dedupe cleanly.\n2. Matt-Pocock engineering set duplicated across ~/.gemini/skills, lecoder-watch .claude+.agents (two full physical trees of ~80 skills each in one repo), cmux-bridge, and the anthropic-skills plugin (tdd, grill-*, handoff, prototype, to-prd, triage, setup-matt-pocock-skills appear 3-5x).\n3. omc plugin ships every skill twice in one cache (skills/ + skill-bodies/); ponytail three+ times (skills/, .openclaw/, plus 4 stale copies in ~/.codex/plugins/.marketplace-plugin-source-staging and ~/.codex/plugins/cache/ponytail 4.3M).\n4. Name collisions with different content: tdd, ralph, remember, code-review, autopilot, prototype, handoff, grill-with-docs each exist in 2-4 unrelated variants (e.g. SecondBrain ralph 21K vs OMC ralph 1K; lecoder-watch tdd 3.5K vs anthropic-skills tdd 4.4K).\n\nHEAVIEST PLUGIN CACHES: omc ~200M total (134M marketplace clone, 76M is .git), openai-curated-remote 41M, claude-cowork 9.7M, openai-bundled 8.8M, cursor plugins 7.4M, openai-primary-runtime 6.0M, codex-ponytail 4.3M, oh-my-codex 460K.\n\nNotes in files[] are truncated frontmatter descriptions (52 chars); \"dup\" = byte-identical to an earlier-listed copy of the same skill name. tokens_est = bytes/4.",
+   "files": [
+    {
+     "path": "/Users/aryateja/.claude/skills/agents-sdk/SKILL.md",
+     "bytes": 12195,
+     "tokens_est": 3049,
+     "kind": "global",
+     "note": "Build AI agents on Cloudflare Workers using the Agen"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/agy-delegate/SKILL.md",
+     "bytes": 8488,
+     "tokens_est": 2122,
+     "kind": "global",
+     "note": "Delegate a coding task to the Google Antigravity CLI"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/checkpoint/SKILL.md",
+     "bytes": 946,
+     "tokens_est": 236,
+     "kind": "global",
+     "note": "Use when asked to checkpoint, save WIP, or safely co"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/cloudflare-email-service/SKILL.md",
+     "bytes": 7956,
+     "tokens_est": 1989,
+     "kind": "global",
+     "note": "Send and receive transactional emails with Cloudflar"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/cloudflare-one-migrations/SKILL.md",
+     "bytes": 12363,
+     "tokens_est": 3091,
+     "kind": "global",
+     "note": "Plans migrations from Zscaler ZIA/ZPA, Palo Alto, le"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/cloudflare-one/SKILL.md",
+     "bytes": 22293,
+     "tokens_est": 5573,
+     "kind": "global",
+     "note": "Guides Cloudflare One Zero Trust and SASE work acros"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/cloudflare/SKILL.md",
+     "bytes": 8991,
+     "tokens_est": 2248,
+     "kind": "global",
+     "note": "Comprehensive Cloudflare platform skill covering Wor"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/codex-delegate/SKILL.md",
+     "bytes": 10127,
+     "tokens_est": 2532,
+     "kind": "global",
+     "note": "Delegate a coding task to the OpenAI Codex CLI as a"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/convert-docs/SKILL.md",
+     "bytes": 904,
+     "tokens_est": 226,
+     "kind": "global",
+     "note": "Convert Word/PowerPoint/Excel/PDF/EPUB/RTF/ODF/CSV f"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/durable-objects/SKILL.md",
+     "bytes": 5867,
+     "tokens_est": 1467,
+     "kind": "global",
+     "note": "Create and review Cloudflare Durable Objects. Use wh"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/macos-harness/SKILL.md",
+     "bytes": 4270,
+     "tokens_est": 1068,
+     "kind": "global",
+     "note": "Control a whole Mac from one persistent Python sessi"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/notify/SKILL.md",
+     "bytes": 1257,
+     "tokens_est": 314,
+     "kind": "global",
+     "note": "Use when asked to notify Arya, send a Telegram messa"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/omp-delegate/SKILL.md",
+     "bytes": 9106,
+     "tokens_est": 2276,
+     "kind": "global",
+     "note": "Delegate a coding task to Oh My Pi (`omp`) as a back"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/pi-delegate/SKILL.md",
+     "bytes": 6755,
+     "tokens_est": 1689,
+     "kind": "global",
+     "note": "Delegate a coding task to the Pi coding agent CLI"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/sandbox-migrate-to-next/SKILL.md",
+     "bytes": 8128,
+     "tokens_est": 2032,
+     "kind": "global",
+     "note": "Use when porting a Cloudflare Sandbox app from stabl"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/sandbox-next/SKILL.md",
+     "bytes": 7071,
+     "tokens_est": 1768,
+     "kind": "global",
+     "note": "Cloudflare Sandbox apps on @cloudflare/sandbox@next"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/sandbox-stable/SKILL.md",
+     "bytes": 9009,
+     "tokens_est": 2252,
+     "kind": "global",
+     "note": "Cloudflare Sandbox apps on stable @cloudflare/sandbox"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/svc/SKILL.md",
+     "bytes": 2642,
+     "tokens_est": 660,
+     "kind": "global",
+     "note": "Status/start/stop/logs of Arya's local services (CRM, LM Studio, meshd)"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/turnstile-spin/SKILL.md",
+     "bytes": 28708,
+     "tokens_est": 7177,
+     "kind": "global",
+     "note": "Set up Cloudflare Turnstile end-to-end in a project."
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/use-railway/SKILL.md",
+     "bytes": 28726,
+     "tokens_est": 7182,
+     "kind": "global",
+     "note": "Operate Railway infrastructure"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/web-perf/SKILL.md",
+     "bytes": 8198,
+     "tokens_est": 2050,
+     "kind": "global",
+     "note": "Analyzes web performance using Chrome DevTools MCP."
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/workers-best-practices/SKILL.md",
+     "bytes": 7092,
+     "tokens_est": 1773,
+     "kind": "global",
+     "note": "Reviews and authors Cloudflare Workers code"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/workflow-template/SKILL.md",
+     "bytes": 2492,
+     "tokens_est": 623,
+     "kind": "global",
+     "note": "Scaffold/rules for native Workflow tool scripts"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/wrangler/SKILL.md",
+     "bytes": 18359,
+     "tokens_est": 4590,
+     "kind": "global",
+     "note": "Cloudflare Workers CLI for deploying, developing"
+    },
+    {
+     "path": "/Users/aryateja/.claude/skills/_legacy_shadow_backup_2026-07-20/omc-reference/SKILL.md",
+     "bytes": 5670,
+     "tokens_est": 1418,
+     "kind": "global",
+     "note": "legacy shadow backup of OMC reference"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/agents-sdk/SKILL.md",
+     "bytes": 12195,
+     "tokens_est": 3049,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/cloudflare-email-service/SKILL.md",
+     "bytes": 7956,
+     "tokens_est": 1989,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/cloudflare-one-migrations/SKILL.md",
+     "bytes": 12363,
+     "tokens_est": 3091,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/cloudflare-one/SKILL.md",
+     "bytes": 22293,
+     "tokens_est": 5573,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/cloudflare/SKILL.md",
+     "bytes": 8991,
+     "tokens_est": 2248,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/computer-use/SKILL.md",
+     "bytes": 3667,
+     "tokens_est": 917,
+     "kind": "global",
+     "note": "Orca computer-use CLI for desktop app windows (symlinked from ~/.claude/skills)"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/durable-objects/SKILL.md",
+     "bytes": 5867,
+     "tokens_est": 1467,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/find-skills/SKILL.md",
+     "bytes": 5519,
+     "tokens_est": 1380,
+     "kind": "global",
+     "note": "Discover and install agent skills (vercel-labs/skills)"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/herdr/SKILL.md",
+     "bytes": 9004,
+     "tokens_est": 2251,
+     "kind": "global",
+     "note": "Control herdr from inside it: workspaces, tabs, panes"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/hf-cli/SKILL.md",
+     "bytes": 32492,
+     "tokens_est": 8123,
+     "kind": "global",
+     "note": "Hugging Face Hub CLI (hf) full-surface reference"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/higgsfield-brandkit/SKILL.md",
+     "bytes": 12693,
+     "tokens_est": 3173,
+     "kind": "global",
+     "note": "Create and extend complete visual brand systems"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/higgsfield-generate/SKILL.md",
+     "bytes": 24827,
+     "tokens_est": 6207,
+     "kind": "global",
+     "note": "Generate images/videos/3D/audio via Higgsfield AI"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/higgsfield-marketplace-cards/SKILL.md",
+     "bytes": 3754,
+     "tokens_est": 938,
+     "kind": "global",
+     "note": "Marketplace product image cards via Higgsfield"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/higgsfield-product-photoshoot/SKILL.md",
+     "bytes": 9438,
+     "tokens_est": 2360,
+     "kind": "global",
+     "note": "Brand-quality product images via Higgsfield"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/higgsfield-soul-id/SKILL.md",
+     "bytes": 3378,
+     "tokens_est": 844,
+     "kind": "global",
+     "note": "Train a Soul Character (personalized face model)"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/higgsfield-video-explainer/SKILL.md",
+     "bytes": 12533,
+     "tokens_est": 3133,
+     "kind": "global",
+     "note": "Narrated explainer/story videos from 10s blocks"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/higgsfield-websites/SKILL.md",
+     "bytes": 14951,
+     "tokens_est": 3738,
+     "kind": "global",
+     "note": "Build/deploy full-stack websites, apps, games via Higgsfield CLI"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/higgsfield-youtube-thumbnail/SKILL.md",
+     "bytes": 12011,
+     "tokens_est": 3003,
+     "kind": "global",
+     "note": "High-CTR YouTube thumbnails and video covers"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/insforge-cli/SKILL.md",
+     "bytes": 31688,
+     "tokens_est": 7922,
+     "kind": "global",
+     "note": "InsForge backend/cloud infra via CLI"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/insforge-debug/SKILL.md",
+     "bytes": 10599,
+     "tokens_est": 2650,
+     "kind": "global",
+     "note": "Diagnose problems in an InsForge project"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/insforge-integrations/SKILL.md",
+     "bytes": 5964,
+     "tokens_est": 1491,
+     "kind": "global",
+     "note": "External auth providers + x402 payments for InsForge"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/insforge/SKILL.md",
+     "bytes": 20196,
+     "tokens_est": 5049,
+     "kind": "global",
+     "note": "App code with InsForge / @insforge/sdk"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/mobbin-search/SKILL.md",
+     "bytes": 8640,
+     "tokens_est": 2160,
+     "kind": "global",
+     "note": "Search Mobbin for real app UI screenshots"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/orca-cli/SKILL.md",
+     "bytes": 3913,
+     "tokens_est": 978,
+     "kind": "global",
+     "note": "Public orca CLI to operate Orca-managed workspaces"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/orchestration/SKILL.md",
+     "bytes": 4220,
+     "tokens_est": 1055,
+     "kind": "global",
+     "note": "Orca orchestration for structured multi-agent work"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/sandbox-migrate-to-next/SKILL.md",
+     "bytes": 8128,
+     "tokens_est": 2032,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/sandbox-next/SKILL.md",
+     "bytes": 7071,
+     "tokens_est": 1768,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/sandbox-stable/SKILL.md",
+     "bytes": 9009,
+     "tokens_est": 2252,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/supabase-postgres-best-practices/SKILL.md",
+     "bytes": 2576,
+     "tokens_est": 644,
+     "kind": "global",
+     "note": "Postgres performance best practices from Supabase"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/supabase/SKILL.md",
+     "bytes": 11946,
+     "tokens_est": 2986,
+     "kind": "global",
+     "note": "Any task involving Supabase products"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/turnstile-spin/SKILL.md",
+     "bytes": 28708,
+     "tokens_est": 7177,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/use-railway/SKILL.md",
+     "bytes": 28726,
+     "tokens_est": 7182,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/web-perf/SKILL.md",
+     "bytes": 8198,
+     "tokens_est": 2050,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/workers-best-practices/SKILL.md",
+     "bytes": 7092,
+     "tokens_est": 1773,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.agents/skills/wrangler/SKILL.md",
+     "bytes": 18359,
+     "tokens_est": 4590,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/ai-slop-cleaner/SKILL.md",
+     "bytes": 1048,
+     "tokens_est": 262,
+     "kind": "plugin",
+     "note": "Clean AI-generated code slop, deletion-first"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/ask/SKILL.md",
+     "bytes": 993,
+     "tokens_est": 248,
+     "kind": "plugin",
+     "note": "Advisor routing Claude/Codex/Gemini via omc ask"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/autopilot/SKILL.md",
+     "bytes": 1021,
+     "tokens_est": 255,
+     "kind": "plugin",
+     "note": "Full autonomous execution from idea to working code"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/autoresearch/SKILL.md",
+     "bytes": 1148,
+     "tokens_est": 287,
+     "kind": "plugin",
+     "note": "Stateful single-mission improvement loop"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/cancel/SKILL.md",
+     "bytes": 1034,
+     "tokens_est": 258,
+     "kind": "plugin",
+     "note": "Cancel any active OMC mode"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/ccg/SKILL.md",
+     "bytes": 978,
+     "tokens_est": 244,
+     "kind": "plugin",
+     "note": "Claude-Codex-Gemini tri-model orchestration"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/configure-notifications/SKILL.md",
+     "bytes": 1336,
+     "tokens_est": 334,
+     "kind": "plugin",
+     "note": "Configure Telegram/Discord/Slack notifications"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/debug/SKILL.md",
+     "bytes": 959,
+     "tokens_est": 240,
+     "kind": "plugin",
+     "note": "Diagnose OMC session/repo state"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/deep-dive/SKILL.md",
+     "bytes": 1283,
+     "tokens_est": 321,
+     "kind": "plugin",
+     "note": "2-stage pipeline: trace -> deep-interview"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/deep-interview/SKILL.md",
+     "bytes": 1228,
+     "tokens_est": 307,
+     "kind": "plugin",
+     "note": "Socratic deep interview with ambiguity gating"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/deepinit/SKILL.md",
+     "bytes": 961,
+     "tokens_est": 240,
+     "kind": "plugin",
+     "note": "Deep codebase init with hierarchical AGENTS.md"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/external-context/SKILL.md",
+     "bytes": 1079,
+     "tokens_est": 270,
+     "kind": "plugin",
+     "note": "Parallel document-specialist agents for web/docs"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/hud/SKILL.md",
+     "bytes": 1120,
+     "tokens_est": 280,
+     "kind": "plugin",
+     "note": "Configure HUD display options"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/learner/SKILL.md",
+     "bytes": 937,
+     "tokens_est": 234,
+     "kind": "plugin",
+     "note": "Extract a learned skill from the conversation"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/local-build-reminder/SKILL.md",
+     "bytes": 1188,
+     "tokens_est": 297,
+     "kind": "plugin",
+     "note": "Remind to rebuild OMC after TS edits (local fork)"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/mcp-setup/SKILL.md",
+     "bytes": 959,
+     "tokens_est": 240,
+     "kind": "plugin",
+     "note": "Configure popular MCP servers"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/merge-readiness/SKILL.md",
+     "bytes": 1168,
+     "tokens_est": 292,
+     "kind": "plugin",
+     "note": "Post-task merge readiness gate"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/omc-doctor/SKILL.md",
+     "bytes": 958,
+     "tokens_est": 240,
+     "kind": "plugin",
+     "note": "Diagnose and fix OMC installation issues"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/omc-reference/SKILL.md",
+     "bytes": 1147,
+     "tokens_est": 287,
+     "kind": "plugin",
+     "note": "OMC agent catalog, tools, pipeline, registry"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/omc-setup/SKILL.md",
+     "bytes": 1001,
+     "tokens_est": 250,
+     "kind": "plugin",
+     "note": "Install or refresh oh-my-claudecode"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/omc-teams/SKILL.md",
+     "bytes": 1051,
+     "tokens_est": 263,
+     "kind": "plugin",
+     "note": "CLI-team runtime for multi-CLI workers in tmux"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/plan/SKILL.md",
+     "bytes": 1111,
+     "tokens_est": 278,
+     "kind": "plugin",
+     "note": "Strategic planning with optional interview"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/project-session-manager/SKILL.md",
+     "bytes": 1107,
+     "tokens_est": 277,
+     "kind": "plugin",
+     "note": "Worktree-first dev environment manager"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/ralph/SKILL.md",
+     "bytes": 1037,
+     "tokens_est": 259,
+     "kind": "plugin",
+     "note": "Self-referential loop until task completion"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/ralplan/SKILL.md",
+     "bytes": 1086,
+     "tokens_est": 272,
+     "kind": "plugin",
+     "note": "Consensus planning gate for vague requests"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/release/SKILL.md",
+     "bytes": 1003,
+     "tokens_est": 251,
+     "kind": "plugin",
+     "note": "Generic release assistant"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/remember/SKILL.md",
+     "bytes": 983,
+     "tokens_est": 246,
+     "kind": "plugin",
+     "note": "Route reusable knowledge to memory/notepad/docs"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/sciomc/SKILL.md",
+     "bytes": 987,
+     "tokens_est": 247,
+     "kind": "plugin",
+     "note": "Parallel scientist agents for analysis"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/self-improve/SKILL.md",
+     "bytes": 992,
+     "tokens_est": 248,
+     "kind": "plugin",
+     "note": "Evolutionary code improvement engine"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/setup/SKILL.md",
+     "bytes": 977,
+     "tokens_est": 244,
+     "kind": "plugin",
+     "note": "Install/update routing to correct OMC flow"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/skill/SKILL.md",
+     "bytes": 971,
+     "tokens_est": 243,
+     "kind": "plugin",
+     "note": "Manage local skills: list/add/remove/search/edit"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/skillify/SKILL.md",
+     "bytes": 984,
+     "tokens_est": 246,
+     "kind": "plugin",
+     "note": "Turn a session workflow into an OMC skill draft"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/team/SKILL.md",
+     "bytes": 1013,
+     "tokens_est": 253,
+     "kind": "plugin",
+     "note": "N coordinated agents on shared task list"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/trace/SKILL.md",
+     "bytes": 1027,
+     "tokens_est": 257,
+     "kind": "plugin",
+     "note": "Evidence-driven tracing with competing hypotheses"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/ultragoal/SKILL.md",
+     "bytes": 1081,
+     "tokens_est": 270,
+     "kind": "plugin",
+     "note": "Durable multi-goal workflow under .omc/ultragoal"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/ultraqa/SKILL.md",
+     "bytes": 1035,
+     "tokens_est": 259,
+     "kind": "plugin",
+     "note": "QA cycling: test, verify, fix, repeat"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/ultrawork/SKILL.md",
+     "bytes": 1020,
+     "tokens_est": 255,
+     "kind": "plugin",
+     "note": "Parallel execution engine"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/verify/SKILL.md",
+     "bytes": 929,
+     "tokens_est": 232,
+     "kind": "plugin",
+     "note": "Verify a change works before claiming completion"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/visual-verdict/SKILL.md",
+     "bytes": 1001,
+     "tokens_est": 250,
+     "kind": "plugin",
+     "note": "Structured visual QA verdict for screenshots"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/wiki/SKILL.md",
+     "bytes": 1020,
+     "tokens_est": 255,
+     "kind": "plugin",
+     "note": "LLM Wiki persistent markdown knowledge base"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/omc/oh-my-claudecode/4.15.4/skills/writer-memory/SKILL.md",
+     "bytes": 1095,
+     "tokens_est": 274,
+     "kind": "plugin",
+     "note": "Agentic memory system for writers"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/ponytail/ponytail/4.7.0/skills/ponytail/SKILL.md",
+     "bytes": 5164,
+     "tokens_est": 1291,
+     "kind": "plugin",
+     "note": "Forces the laziest solution that actually works"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/ponytail/ponytail/4.7.0/skills/ponytail-audit/SKILL.md",
+     "bytes": 1587,
+     "tokens_est": 397,
+     "kind": "plugin",
+     "note": "Whole-repo audit for over-engineering"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/ponytail/ponytail/4.7.0/skills/ponytail-debt/SKILL.md",
+     "bytes": 1706,
+     "tokens_est": 426,
+     "kind": "plugin",
+     "note": "Harvest ponytail: comments into a debt ledger"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/ponytail/ponytail/4.7.0/skills/ponytail-help/SKILL.md",
+     "bytes": 2485,
+     "tokens_est": 621,
+     "kind": "plugin",
+     "note": "Quick-reference card for ponytail modes"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/cache/ponytail/ponytail/4.7.0/skills/ponytail-review/SKILL.md",
+     "bytes": 2318,
+     "tokens_est": 580,
+     "kind": "plugin",
+     "note": "Code review focused on over-engineering"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/canvas-design/SKILL.md",
+     "bytes": 12068,
+     "tokens_est": 3017,
+     "kind": "plugin",
+     "note": "Visual art in .png/.pdf using design philosophy"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/caveman/SKILL.md",
+     "bytes": 1916,
+     "tokens_est": 479,
+     "kind": "plugin",
+     "note": "Ultra-compressed communication mode"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/consolidate-memory/SKILL.md",
+     "bytes": 1983,
+     "tokens_est": 496,
+     "kind": "plugin",
+     "note": "Reflective pass over memory files"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/diagnose/SKILL.md",
+     "bytes": 7163,
+     "tokens_est": 1791,
+     "kind": "plugin",
+     "note": "Disciplined diagnosis loop for hard bugs"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/docx/SKILL.md",
+     "bytes": 20159,
+     "tokens_est": 5040,
+     "kind": "plugin",
+     "note": "Create/read/edit Word documents"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/grill-me/SKILL.md",
+     "bytes": 635,
+     "tokens_est": 159,
+     "kind": "plugin",
+     "note": "Relentless interview about a plan or design"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/grill-with-docs/SKILL.md",
+     "bytes": 3639,
+     "tokens_est": 910,
+     "kind": "plugin",
+     "note": "Grilling that updates CONTEXT.md/ADRs inline"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/handoff/SKILL.md",
+     "bytes": 719,
+     "tokens_est": 180,
+     "kind": "plugin",
+     "note": "Compact conversation into a handoff document"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/improve-codebase-architecture/SKILL.md",
+     "bytes": 5140,
+     "tokens_est": 1285,
+     "kind": "plugin",
+     "note": "Find deepening opportunities in a codebase"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/pdf/SKILL.md",
+     "bytes": 8072,
+     "tokens_est": 2018,
+     "kind": "plugin",
+     "note": "Anything with PDF files"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/pptx/SKILL.md",
+     "bytes": 10329,
+     "tokens_est": 2582,
+     "kind": "plugin",
+     "note": "Any task involving .pptx files"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/prototype/SKILL.md",
+     "bytes": 3251,
+     "tokens_est": 813,
+     "kind": "plugin",
+     "note": "Throwaway prototype to flesh out a design"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/schedule/SKILL.md",
+     "bytes": 2263,
+     "tokens_est": 566,
+     "kind": "plugin",
+     "note": "Create/update scheduled automatic tasks"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/setup-cowork/SKILL.md",
+     "bytes": 7423,
+     "tokens_est": 1856,
+     "kind": "plugin",
+     "note": "Guided Cowork setup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/setup-matt-pocock-skills/SKILL.md",
+     "bytes": 6861,
+     "tokens_est": 1715,
+     "kind": "plugin",
+     "note": "Set up Agent skills block in AGENTS.md/CLAUDE.md"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/skill-creator/SKILL.md",
+     "bytes": 33168,
+     "tokens_est": 8292,
+     "kind": "plugin",
+     "note": "Create/modify/measure skills"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/tdd/SKILL.md",
+     "bytes": 4395,
+     "tokens_est": 1099,
+     "kind": "plugin",
+     "note": "TDD with red-green-refactor loop"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/to-issues/SKILL.md",
+     "bytes": 3576,
+     "tokens_est": 894,
+     "kind": "plugin",
+     "note": "Break a plan/spec/PRD into tracker issues"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/to-prd/SKILL.md",
+     "bytes": 3113,
+     "tokens_est": 778,
+     "kind": "plugin",
+     "note": "Turn conversation into a PRD on the tracker"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/triage/SKILL.md",
+     "bytes": 4883,
+     "tokens_est": 1221,
+     "kind": "plugin",
+     "note": "Triage issues via role-driven state machine"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/write-a-skill/SKILL.md",
+     "bytes": 3056,
+     "tokens_est": 764,
+     "kind": "plugin",
+     "note": "Create skills with progressive disclosure"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/xlsx/SKILL.md",
+     "bytes": 11679,
+     "tokens_est": 2920,
+     "kind": "plugin",
+     "note": "Spreadsheet-primary tasks"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/anthropic-skills/1.0.0/skills/zoom-out/SKILL.md",
+     "bytes": 430,
+     "tokens_est": 108,
+     "kind": "plugin",
+     "note": "Zoom out for broader context"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/cowork-plugin-management/0.2.2/skills/cowork-plugin-customizer/SKILL.md",
+     "bytes": 9702,
+     "tokens_est": 2426,
+     "kind": "plugin",
+     "note": "Customize a Claude Code plugin for an org"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/claude-cowork/cowork-plugin-management/0.2.2/skills/create-cowork-plugin/SKILL.md",
+     "bytes": 13354,
+     "tokens_est": 3338,
+     "kind": "plugin",
+     "note": "Guide creating a new plugin from scratch"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/agents-sdk/SKILL.md",
+     "bytes": 12195,
+     "tokens_est": 3049,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/cloudflare-email-service/SKILL.md",
+     "bytes": 7956,
+     "tokens_est": 1989,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/cloudflare-one-migrations/SKILL.md",
+     "bytes": 12363,
+     "tokens_est": 3091,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/cloudflare-one/SKILL.md",
+     "bytes": 22293,
+     "tokens_est": 5573,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/cloudflare/SKILL.md",
+     "bytes": 8991,
+     "tokens_est": 2248,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/durable-objects/SKILL.md",
+     "bytes": 5867,
+     "tokens_est": 1467,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/hatch-pet/SKILL.md",
+     "bytes": 85522,
+     "tokens_est": 21380,
+     "kind": "global",
+     "note": "Codex v2 animated pets - largest SKILL.md on machine"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/sandbox-migrate-to-next/SKILL.md",
+     "bytes": 8128,
+     "tokens_est": 2032,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/sandbox-next/SKILL.md",
+     "bytes": 7071,
+     "tokens_est": 1768,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/sandbox-stable/SKILL.md",
+     "bytes": 9009,
+     "tokens_est": 2252,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/turnstile-spin/SKILL.md",
+     "bytes": 28708,
+     "tokens_est": 7177,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/use-railway/SKILL.md",
+     "bytes": 28726,
+     "tokens_est": 7182,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/web-perf/SKILL.md",
+     "bytes": 8198,
+     "tokens_est": 2050,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/workers-best-practices/SKILL.md",
+     "bytes": 7092,
+     "tokens_est": 1773,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/wrangler/SKILL.md",
+     "bytes": 18359,
+     "tokens_est": 4590,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/.system/imagegen/SKILL.md",
+     "bytes": 19201,
+     "tokens_est": 4800,
+     "kind": "global",
+     "note": "Codex system: generate/edit raster images"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/.system/openai-docs/SKILL.md",
+     "bytes": 5446,
+     "tokens_est": 1362,
+     "kind": "global",
+     "note": "Codex system: Codex docs/pricing/settings"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/.system/plugin-creator/SKILL.md",
+     "bytes": 11467,
+     "tokens_est": 2867,
+     "kind": "global",
+     "note": "Codex system: scaffold Codex plugins"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/.system/review-agent/SKILL.md",
+     "bytes": 2661,
+     "tokens_est": 665,
+     "kind": "global",
+     "note": "Codex system: read-only defect-first review"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/.system/skill-creator/SKILL.md",
+     "bytes": 15311,
+     "tokens_est": 3828,
+     "kind": "global",
+     "note": "Codex system: create/update Codex skills"
+    },
+    {
+     "path": "/Users/aryateja/.codex/skills/.system/skill-installer/SKILL.md",
+     "bytes": 3367,
+     "tokens_est": 842,
+     "kind": "global",
+     "note": "Codex system: install skills into CODEX_HOME"
+    },
+    {
+     "path": "/Users/aryateja/.codex/prompts/opsx-apply.md",
+     "bytes": 5207,
+     "tokens_est": 1302,
+     "kind": "global",
+     "note": "Codex prompt (OpenSpec opsx command)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/prompts/opsx-archive.md",
+     "bytes": 5836,
+     "tokens_est": 1459,
+     "kind": "global",
+     "note": "Codex prompt (OpenSpec opsx command)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/prompts/opsx-explore.md",
+     "bytes": 7358,
+     "tokens_est": 1840,
+     "kind": "global",
+     "note": "Codex prompt (OpenSpec opsx command)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/prompts/opsx-propose.md",
+     "bytes": 5155,
+     "tokens_est": 1289,
+     "kind": "global",
+     "note": "Codex prompt (OpenSpec opsx command)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/prompts/opsx-sync.md",
+     "bytes": 4983,
+     "tokens_est": 1246,
+     "kind": "global",
+     "note": "Codex prompt (OpenSpec opsx command)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/prompts/opsx-update.md",
+     "bytes": 5534,
+     "tokens_est": 1384,
+     "kind": "global",
+     "note": "Codex prompt (OpenSpec opsx command)"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/agents-sdk/SKILL.md",
+     "bytes": 12195,
+     "tokens_est": 3049,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/cloudflare-email-service/SKILL.md",
+     "bytes": 7956,
+     "tokens_est": 1989,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/cloudflare-one-migrations/SKILL.md",
+     "bytes": 12363,
+     "tokens_est": 3091,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/cloudflare-one/SKILL.md",
+     "bytes": 22293,
+     "tokens_est": 5573,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/cloudflare/SKILL.md",
+     "bytes": 8991,
+     "tokens_est": 2248,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/durable-objects/SKILL.md",
+     "bytes": 5867,
+     "tokens_est": 1467,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/sandbox-migrate-to-next/SKILL.md",
+     "bytes": 8128,
+     "tokens_est": 2032,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/sandbox-next/SKILL.md",
+     "bytes": 7071,
+     "tokens_est": 1768,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/sandbox-stable/SKILL.md",
+     "bytes": 9009,
+     "tokens_est": 2252,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/tigerfs/SKILL.md",
+     "bytes": 6535,
+     "tokens_est": 1634,
+     "kind": "global",
+     "note": "TigerFS-mounted PostgreSQL via file tools"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/turnstile-spin/SKILL.md",
+     "bytes": 28708,
+     "tokens_est": 7177,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/use-railway/SKILL.md",
+     "bytes": 28726,
+     "tokens_est": 7182,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/web-perf/SKILL.md",
+     "bytes": 8198,
+     "tokens_est": 2050,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/workers-best-practices/SKILL.md",
+     "bytes": 7092,
+     "tokens_est": 1773,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills/wrangler/SKILL.md",
+     "bytes": 18359,
+     "tokens_est": 4590,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/autopilot/SKILL.md",
+     "bytes": 3901,
+     "tokens_est": 975,
+     "kind": "global",
+     "note": "Cursor: keep a PR merge-ready"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/canvas/SKILL.md",
+     "bytes": 8342,
+     "tokens_est": 2086,
+     "kind": "global",
+     "note": "Cursor canvas skill"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/create-hook/SKILL.md",
+     "bytes": 9192,
+     "tokens_est": 2298,
+     "kind": "global",
+     "note": "Create Cursor hooks"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/create-rule/SKILL.md",
+     "bytes": 3636,
+     "tokens_est": 909,
+     "kind": "global",
+     "note": "Create Cursor rules"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/create-skill/SKILL.md",
+     "bytes": 14412,
+     "tokens_est": 3603,
+     "kind": "global",
+     "note": "Create Cursor Agent Skills"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/create-subagent/SKILL.md",
+     "bytes": 6454,
+     "tokens_est": 1614,
+     "kind": "global",
+     "note": "Create custom Cursor subagents"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/goal/SKILL.md",
+     "bytes": 5017,
+     "tokens_est": 1254,
+     "kind": "global",
+     "note": "Set a goal Cursor pursues to completion"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/loop/SKILL.md",
+     "bytes": 7602,
+     "tokens_est": 1900,
+     "kind": "global",
+     "note": "Run a prompt/skill on a recurring interval"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/migrate-to-skills/SKILL.md",
+     "bytes": 6439,
+     "tokens_est": 1610,
+     "kind": "global",
+     "note": "Convert Cursor rules to skills"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/new-repo/SKILL.md",
+     "bytes": 2825,
+     "tokens_est": 706,
+     "kind": "global",
+     "note": "Create a Cursor-hosted repo"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/origin/SKILL.md",
+     "bytes": 3890,
+     "tokens_est": 972,
+     "kind": "global",
+     "note": "Install/repair the origin CLI"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/rename-chat/SKILL.md",
+     "bytes": 793,
+     "tokens_est": 198,
+     "kind": "global",
+     "note": "Rename the current chat"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/review/SKILL.md",
+     "bytes": 587,
+     "tokens_est": 147,
+     "kind": "global",
+     "note": "Review changes with Bugbot or Security Review"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/review-bugbot/SKILL.md",
+     "bytes": 3695,
+     "tokens_est": 924,
+     "kind": "global",
+     "note": "Review code changes with Bugbot subagent"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/review-security/SKILL.md",
+     "bytes": 3757,
+     "tokens_est": 939,
+     "kind": "global",
+     "note": "Review changes with Security Review subagent"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/sdk/SKILL.md",
+     "bytes": 19586,
+     "tokens_est": 4896,
+     "kind": "global",
+     "note": "Build apps/CI on the Cursor SDK"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/share/SKILL.md",
+     "bytes": 3740,
+     "tokens_est": 935,
+     "kind": "global",
+     "note": "Save/back up/share project on Cursor"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/shell/SKILL.md",
+     "bytes": 867,
+     "tokens_est": 217,
+     "kind": "global",
+     "note": "Run /shell request as a literal shell command"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/split-to-prs/SKILL.md",
+     "bytes": 2261,
+     "tokens_est": 565,
+     "kind": "global",
+     "note": "Split current work into small reviewable PRs"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/statusline/SKILL.md",
+     "bytes": 7200,
+     "tokens_est": 1800,
+     "kind": "global",
+     "note": "Configure a custom CLI status line"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/update-cli-config/SKILL.md",
+     "bytes": 4682,
+     "tokens_est": 1170,
+     "kind": "global",
+     "note": "View/modify Cursor CLI configuration"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/skills-cursor/update-cursor-settings/SKILL.md",
+     "bytes": 4296,
+     "tokens_est": 1074,
+     "kind": "global",
+     "note": "Modify Cursor/VSCode settings.json"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/agents-sdk/SKILL.md",
+     "bytes": 12195,
+     "tokens_est": 3049,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/api-and-interface-design/SKILL.md",
+     "bytes": 10307,
+     "tokens_est": 2577,
+     "kind": "global",
+     "note": "Guides stable API and interface design"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/browser-testing-with-devtools/SKILL.md",
+     "bytes": 12501,
+     "tokens_est": 3125,
+     "kind": "global",
+     "note": "Tests in real browsers"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/ci-cd-and-automation/SKILL.md",
+     "bytes": 11332,
+     "tokens_est": 2833,
+     "kind": "global",
+     "note": "Automates CI/CD pipeline setup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/cloudflare-email-service/SKILL.md",
+     "bytes": 7956,
+     "tokens_est": 1989,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/cloudflare-one-migrations/SKILL.md",
+     "bytes": 12363,
+     "tokens_est": 3091,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/cloudflare-one/SKILL.md",
+     "bytes": 22293,
+     "tokens_est": 5573,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/cloudflare/SKILL.md",
+     "bytes": 8991,
+     "tokens_est": 2248,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/code-review-and-quality/SKILL.md",
+     "bytes": 14285,
+     "tokens_est": 3571,
+     "kind": "global",
+     "note": "Multi-axis code review"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/code-simplification/SKILL.md",
+     "bytes": 13545,
+     "tokens_est": 3386,
+     "kind": "global",
+     "note": "Simplifies code for clarity"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/context-engineering/SKILL.md",
+     "bytes": 11070,
+     "tokens_est": 2768,
+     "kind": "global",
+     "note": "Optimizes agent context setup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/debugging-and-error-recovery/SKILL.md",
+     "bytes": 10604,
+     "tokens_est": 2651,
+     "kind": "global",
+     "note": "Systematic root-cause debugging"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/deprecation-and-migration/SKILL.md",
+     "bytes": 9000,
+     "tokens_est": 2250,
+     "kind": "global",
+     "note": "Manages deprecation and migration"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/documentation-and-adrs/SKILL.md",
+     "bytes": 8734,
+     "tokens_est": 2184,
+     "kind": "global",
+     "note": "Records decisions and documentation"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/durable-objects/SKILL.md",
+     "bytes": 5867,
+     "tokens_est": 1467,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/frontend-ui-engineering/SKILL.md",
+     "bytes": 10639,
+     "tokens_est": 2660,
+     "kind": "global",
+     "note": "Builds production-quality UIs"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/git-workflow-and-versioning/SKILL.md",
+     "bytes": 10530,
+     "tokens_est": 2632,
+     "kind": "global",
+     "note": "Structures git workflow practices"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/idea-refine/SKILL.md",
+     "bytes": 7921,
+     "tokens_est": 1980,
+     "kind": "global",
+     "note": "Refines ideas iteratively"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/incremental-implementation/SKILL.md",
+     "bytes": 8469,
+     "tokens_est": 2117,
+     "kind": "global",
+     "note": "Delivers changes incrementally"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/performance-optimization/SKILL.md",
+     "bytes": 11593,
+     "tokens_est": 2898,
+     "kind": "global",
+     "note": "Optimizes application performance"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/planning-and-task-breakdown/SKILL.md",
+     "bytes": 7011,
+     "tokens_est": 1753,
+     "kind": "global",
+     "note": "Breaks work into ordered tasks"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/sandbox-migrate-to-next/SKILL.md",
+     "bytes": 8128,
+     "tokens_est": 2032,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/sandbox-next/SKILL.md",
+     "bytes": 7071,
+     "tokens_est": 1768,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/sandbox-stable/SKILL.md",
+     "bytes": 9009,
+     "tokens_est": 2252,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/security-and-hardening/SKILL.md",
+     "bytes": 11301,
+     "tokens_est": 2825,
+     "kind": "global",
+     "note": "Hardens code against vulnerabilities"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/shipping-and-launch/SKILL.md",
+     "bytes": 9912,
+     "tokens_est": 2478,
+     "kind": "global",
+     "note": "Prepares production launches"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/source-driven-development/SKILL.md",
+     "bytes": 8204,
+     "tokens_est": 2051,
+     "kind": "global",
+     "note": "Grounds decisions in official documentation"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/spec-driven-development/SKILL.md",
+     "bytes": 7660,
+     "tokens_est": 1915,
+     "kind": "global",
+     "note": "Creates specs before coding"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/test-driven-development/SKILL.md",
+     "bytes": 14469,
+     "tokens_est": 3617,
+     "kind": "global",
+     "note": "Drives development with tests"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/tigerfs/SKILL.md",
+     "bytes": 6535,
+     "tokens_est": 1634,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/turnstile-spin/SKILL.md",
+     "bytes": 28708,
+     "tokens_est": 7177,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/using-agent-skills/SKILL.md",
+     "bytes": 8585,
+     "tokens_est": 2146,
+     "kind": "global",
+     "note": "Meta-skill for discovering/invoking skills"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/web-perf/SKILL.md",
+     "bytes": 8198,
+     "tokens_est": 2050,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/workers-best-practices/SKILL.md",
+     "bytes": 7092,
+     "tokens_est": 1773,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/.gemini/skills/wrangler/SKILL.md",
+     "bytes": 18359,
+     "tokens_est": 4590,
+     "kind": "global",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/api-and-interface-design/SKILL.md",
+     "bytes": 14884,
+     "tokens_est": 3721,
+     "kind": "project:lecoder-watch",
+     "note": "API and interface design"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/ask-matt/SKILL.md",
+     "bytes": 11417,
+     "tokens_est": 2854,
+     "kind": "project:lecoder-watch",
+     "note": "Router: which skill or flow fits"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/brandkit/SKILL.md",
+     "bytes": 15992,
+     "tokens_est": 3998,
+     "kind": "project:lecoder-watch",
+     "note": "Premium brand-kit image generation"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/browser-testing-with-devtools/SKILL.md",
+     "bytes": 14539,
+     "tokens_est": 3635,
+     "kind": "project:lecoder-watch",
+     "note": "Browser testing via Chrome DevTools MCP"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/ci-cd-and-automation/SKILL.md",
+     "bytes": 11332,
+     "tokens_est": 2833,
+     "kind": "project:lecoder-watch",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/code-review/SKILL.md",
+     "bytes": 6589,
+     "tokens_est": 1647,
+     "kind": "project:lecoder-watch",
+     "note": "Two-axis review: Standards + Spec, parallel subagents"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/code-review-and-quality/SKILL.md",
+     "bytes": 20555,
+     "tokens_est": 5139,
+     "kind": "project:lecoder-watch",
+     "note": "Multi-axis code review"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/code-simplification/SKILL.md",
+     "bytes": 13545,
+     "tokens_est": 3386,
+     "kind": "project:lecoder-watch",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/codebase-design/SKILL.md",
+     "bytes": 6446,
+     "tokens_est": 1612,
+     "kind": "project:lecoder-watch",
+     "note": "Vocabulary for designing deep modules"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/constraint-driven-development/SKILL.md",
+     "bytes": 20880,
+     "tokens_est": 5220,
+     "kind": "project:lecoder-watch",
+     "note": "Quality bar as written contract (CONSTRAINTS.md)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/context-engineering/SKILL.md",
+     "bytes": 11070,
+     "tokens_est": 2768,
+     "kind": "project:lecoder-watch",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/debugging-and-error-recovery/SKILL.md",
+     "bytes": 10837,
+     "tokens_est": 2709,
+     "kind": "project:lecoder-watch",
+     "note": "Systematic root-cause debugging"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/deprecation-and-migration/SKILL.md",
+     "bytes": 12516,
+     "tokens_est": 3129,
+     "kind": "project:lecoder-watch",
+     "note": "Deprecation and migration"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/design-taste-frontend/SKILL.md",
+     "bytes": 87253,
+     "tokens_est": 21813,
+     "kind": "project:lecoder-watch",
+     "note": "Anti-slop frontend skill - largest project SKILL.md"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/diagnosing-bugs/SKILL.md",
+     "bytes": 8529,
+     "tokens_est": 2132,
+     "kind": "project:lecoder-watch",
+     "note": "Diagnosis loop for hard bugs/perf regressions"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/documentation-and-adrs/SKILL.md",
+     "bytes": 9782,
+     "tokens_est": 2446,
+     "kind": "project:lecoder-watch",
+     "note": "Decisions and documentation"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/domain-modeling/SKILL.md",
+     "bytes": 3331,
+     "tokens_est": 833,
+     "kind": "project:lecoder-watch",
+     "note": "Build/sharpen a project domain model"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/doubt-driven-development/SKILL.md",
+     "bytes": 16499,
+     "tokens_est": 4125,
+     "kind": "project:lecoder-watch",
+     "note": "Fresh-context adversarial review of decisions"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/factory-implement/SKILL.md",
+     "bytes": 7151,
+     "tokens_est": 1788,
+     "kind": "project:lecoder-watch",
+     "note": "Factory: claim queue item, implement, draft PR"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/factory-monitor/SKILL.md",
+     "bytes": 4543,
+     "tokens_est": 1136,
+     "kind": "project:lecoder-watch",
+     "note": "Factory: scheduled health sweep"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/factory-spec/SKILL.md",
+     "bytes": 4951,
+     "tokens_est": 1238,
+     "kind": "project:lecoder-watch",
+     "note": "Factory: spec item into approved plan"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/factory-triage/SKILL.md",
+     "bytes": 5995,
+     "tokens_est": 1499,
+     "kind": "project:lecoder-watch",
+     "note": "Factory: classify issues into label queue"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/factory-verify/SKILL.md",
+     "bytes": 3037,
+     "tokens_est": 759,
+     "kind": "project:lecoder-watch",
+     "note": "Factory: verify open PR before human review"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/from-recording/SKILL.md",
+     "bytes": 1876,
+     "tokens_est": 469,
+     "kind": "project:lecoder-watch",
+     "note": "Watch recording/screenshots then route"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/frontend-ui-engineering/SKILL.md",
+     "bytes": 10711,
+     "tokens_est": 2678,
+     "kind": "project:lecoder-watch",
+     "note": "Production-quality accessible UIs"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/full-output-enforcement/SKILL.md",
+     "bytes": 2592,
+     "tokens_est": 648,
+     "kind": "project:lecoder-watch",
+     "note": "Overrides LLM truncation behavior"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/git-workflow-and-versioning/SKILL.md",
+     "bytes": 14063,
+     "tokens_est": 3516,
+     "kind": "project:lecoder-watch",
+     "note": "Git workflow practices"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/gpt-taste/SKILL.md",
+     "bytes": 7857,
+     "tokens_est": 1964,
+     "kind": "project:lecoder-watch",
+     "note": "UX/UI + GSAP motion engineering"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/grill-me/SKILL.md",
+     "bytes": 157,
+     "tokens_est": 39,
+     "kind": "project:lecoder-watch",
+     "note": "Relentless plan interview (stub)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/grill-with-docs/SKILL.md",
+     "bytes": 247,
+     "tokens_est": 62,
+     "kind": "project:lecoder-watch",
+     "note": "Interview + creates ADRs/glossary (stub)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/grilling/SKILL.md",
+     "bytes": 1987,
+     "tokens_est": 497,
+     "kind": "project:lecoder-watch",
+     "note": "Grill the user about a plan/decision"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/handoff/SKILL.md",
+     "bytes": 894,
+     "tokens_est": 224,
+     "kind": "project:lecoder-watch",
+     "note": "Compact conversation into handoff doc"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/high-end-visual-design/SKILL.md",
+     "bytes": 10561,
+     "tokens_est": 2640,
+     "kind": "project:lecoder-watch",
+     "note": "High-end agency design standards"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/idea-refine/SKILL.md",
+     "bytes": 8111,
+     "tokens_est": 2028,
+     "kind": "project:lecoder-watch",
+     "note": "Refine raw ideas into sharp concepts"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/image-to-code/SKILL.md",
+     "bytes": 36442,
+     "tokens_est": 9110,
+     "kind": "project:lecoder-watch",
+     "note": "Generate design images then implement to match"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/imagegen-frontend-mobile/SKILL.md",
+     "bytes": 40326,
+     "tokens_est": 10082,
+     "kind": "project:lecoder-watch",
+     "note": "Mobile app screen-concept image generation"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/imagegen-frontend-web/SKILL.md",
+     "bytes": 36854,
+     "tokens_est": 9214,
+     "kind": "project:lecoder-watch",
+     "note": "Website design-reference image generation"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/impeccable/SKILL.md",
+     "bytes": 10662,
+     "tokens_est": 2666,
+     "kind": "project:lecoder-watch",
+     "note": "Frontend design/polish/audit umbrella"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/implement/SKILL.md",
+     "bytes": 433,
+     "tokens_est": 108,
+     "kind": "project:lecoder-watch",
+     "note": "Implement from spec/tickets (stub)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/improve-codebase-architecture/SKILL.md",
+     "bytes": 5993,
+     "tokens_est": 1498,
+     "kind": "project:lecoder-watch",
+     "note": "Scan codebase for deepening opportunities"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/incremental-implementation/SKILL.md",
+     "bytes": 9507,
+     "tokens_est": 2377,
+     "kind": "project:lecoder-watch",
+     "note": "Deliver changes incrementally"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/industrial-brutalist-ui/SKILL.md",
+     "bytes": 8456,
+     "tokens_est": 2114,
+     "kind": "project:lecoder-watch",
+     "note": "Swiss print x military terminal aesthetics"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/interview-me/SKILL.md",
+     "bytes": 14359,
+     "tokens_est": 3590,
+     "kind": "project:lecoder-watch",
+     "note": "One-question-at-a-time intent extraction"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/mesh-workflows/SKILL.md",
+     "bytes": 483,
+     "tokens_est": 121,
+     "kind": "project:lecoder-watch",
+     "note": "Router for MeshWatch sessions"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/meshwatch-ui-taste/SKILL.md",
+     "bytes": 3469,
+     "tokens_est": 867,
+     "kind": "project:lecoder-watch",
+     "note": "Native Apple UI taste guard for MeshWatch"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/minimalist-ui/SKILL.md",
+     "bytes": 7901,
+     "tokens_est": 1975,
+     "kind": "project:lecoder-watch",
+     "note": "Clean editorial-style interfaces"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/observability-and-instrumentation/SKILL.md",
+     "bytes": 11053,
+     "tokens_est": 2763,
+     "kind": "project:lecoder-watch",
+     "note": "Logging/metrics/tracing instrumentation"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/openspec-apply-change/SKILL.md",
+     "bytes": 5465,
+     "tokens_est": 1366,
+     "kind": "project:lecoder-watch",
+     "note": "OpenSpec: implement change tasks"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/openspec-archive-change/SKILL.md",
+     "bytes": 4965,
+     "tokens_est": 1241,
+     "kind": "project:lecoder-watch",
+     "note": "OpenSpec: archive completed change"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/openspec-explore/SKILL.md",
+     "bytes": 11428,
+     "tokens_est": 2857,
+     "kind": "project:lecoder-watch",
+     "note": "OpenSpec: explore/thinking-partner mode"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/openspec-propose/SKILL.md",
+     "bytes": 5465,
+     "tokens_est": 1366,
+     "kind": "project:lecoder-watch",
+     "note": "OpenSpec: propose change with artifacts"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/openspec-sync-specs/SKILL.md",
+     "bytes": 5187,
+     "tokens_est": 1297,
+     "kind": "project:lecoder-watch",
+     "note": "OpenSpec: sync delta specs to main"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/openspec-update-change/SKILL.md",
+     "bytes": 5791,
+     "tokens_est": 1448,
+     "kind": "project:lecoder-watch",
+     "note": "OpenSpec: revise change artifacts"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/overnight-slice/SKILL.md",
+     "bytes": 1738,
+     "tokens_est": 434,
+     "kind": "project:lecoder-watch",
+     "note": "Unattended one-slice-at-a-time work"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/performance-optimization/SKILL.md",
+     "bytes": 21717,
+     "tokens_est": 5429,
+     "kind": "project:lecoder-watch",
+     "note": "Frontend/backend/query performance"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/planning-and-task-breakdown/SKILL.md",
+     "bytes": 10564,
+     "tokens_est": 2641,
+     "kind": "project:lecoder-watch",
+     "note": "Break work into ordered tasks"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/prototype/SKILL.md",
+     "bytes": 2931,
+     "tokens_est": 733,
+     "kind": "project:lecoder-watch",
+     "note": "Throwaway prototype for a design question"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/redesign-existing-projects/SKILL.md",
+     "bytes": 15060,
+     "tokens_est": 3765,
+     "kind": "project:lecoder-watch",
+     "note": "Upgrade existing sites/apps to premium quality"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/research/SKILL.md",
+     "bytes": 794,
+     "tokens_est": 198,
+     "kind": "project:lecoder-watch",
+     "note": "Investigate against primary sources, save MD"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/resolving-merge-conflicts/SKILL.md",
+     "bytes": 918,
+     "tokens_est": 230,
+     "kind": "project:lecoder-watch",
+     "note": "Resolve in-progress merge/rebase conflicts"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/scrollcraft/SKILL.md",
+     "bytes": 21963,
+     "tokens_est": 5491,
+     "kind": "project:lecoder-watch",
+     "note": "Scroll-driven interactive landing pages"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/security-and-hardening/SKILL.md",
+     "bytes": 24192,
+     "tokens_est": 6048,
+     "kind": "project:lecoder-watch",
+     "note": "Harden code against vulnerabilities"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/setup-matt-pocock-skills/SKILL.md",
+     "bytes": 6841,
+     "tokens_est": 1710,
+     "kind": "project:lecoder-watch",
+     "note": "Configure repo for the engineering skill set"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/shipping-and-launch/SKILL.md",
+     "bytes": 10137,
+     "tokens_est": 2534,
+     "kind": "project:lecoder-watch",
+     "note": "Production launch preparation"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/source-driven-development/SKILL.md",
+     "bytes": 9949,
+     "tokens_est": 2487,
+     "kind": "project:lecoder-watch",
+     "note": "Ground decisions in official docs"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/spec-driven-development/SKILL.md",
+     "bytes": 12163,
+     "tokens_est": 3041,
+     "kind": "project:lecoder-watch",
+     "note": "Specs before coding"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/stitch-design-taste/SKILL.md",
+     "bytes": 11851,
+     "tokens_est": 2963,
+     "kind": "project:lecoder-watch",
+     "note": "DESIGN.md generator for Google Stitch"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/tdd/SKILL.md",
+     "bytes": 3549,
+     "tokens_est": 887,
+     "kind": "project:lecoder-watch",
+     "note": "Test-first development"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/teach/SKILL.md",
+     "bytes": 9506,
+     "tokens_est": 2376,
+     "kind": "project:lecoder-watch",
+     "note": "Teach a skill or concept in-workspace"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/test-driven-development/SKILL.md",
+     "bytes": 16483,
+     "tokens_est": 4121,
+     "kind": "project:lecoder-watch",
+     "note": "Drives development with tests"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/to-questionnaire/SKILL.md",
+     "bytes": 2904,
+     "tokens_est": 726,
+     "kind": "project:lecoder-watch",
+     "note": "Turn an open decision into a questionnaire"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/to-spec/SKILL.md",
+     "bytes": 3043,
+     "tokens_est": 761,
+     "kind": "project:lecoder-watch",
+     "note": "Turn conversation into a published spec"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/to-tickets/SKILL.md",
+     "bytes": 5671,
+     "tokens_est": 1418,
+     "kind": "project:lecoder-watch",
+     "note": "Break plan/spec into tickets"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/triage/SKILL.md",
+     "bytes": 6557,
+     "tokens_est": 1639,
+     "kind": "project:lecoder-watch",
+     "note": "Move issues/PRs through a state machine"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/using-agent-skills/SKILL.md",
+     "bytes": 10426,
+     "tokens_est": 2606,
+     "kind": "project:lecoder-watch",
+     "note": "Meta-skill: discover/invoke skills"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/wait-what/SKILL.md",
+     "bytes": 394,
+     "tokens_est": 98,
+     "kind": "project:lecoder-watch",
+     "note": "Re-pitch the last message that did not land"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/wayfinder/SKILL.md",
+     "bytes": 11908,
+     "tokens_est": 2977,
+     "kind": "project:lecoder-watch",
+     "note": "Plan multi-session chunks of work"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/wizard/SKILL.md",
+     "bytes": 4123,
+     "tokens_est": 1031,
+     "kind": "project:lecoder-watch",
+     "note": "Generate interactive bash wizard for human steps"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.claude/skills/writing-for-agents/SKILL.md",
+     "bytes": 10886,
+     "tokens_est": 2722,
+     "kind": "project:lecoder-watch",
+     "note": "Writing documents for agents"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.agents/skills/ask-matt/SKILL.md",
+     "bytes": 11417,
+     "tokens_est": 2854,
+     "kind": "project:lecoder-watch",
+     "note": "dup (whole .agents/skills tree mirrors .claude/skills)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.agents/skills/claude-design-to-meshwatch-swiftui/SKILL.md",
+     "bytes": 3549,
+     "tokens_est": 887,
+     "kind": "project:lecoder-watch",
+     "note": "Convert Claude design/prototype to SwiftUI"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.agents/skills/factory-status/SKILL.md",
+     "bytes": 424,
+     "tokens_est": 106,
+     "kind": "project:lecoder-watch",
+     "note": "Factory control room from live labels (.agents only)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.agents/skills/factory-tune/SKILL.md",
+     "bytes": 436,
+     "tokens_est": 109,
+     "kind": "project:lecoder-watch",
+     "note": "Tune factory gates from evidence (.agents only)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.agents/skills/tdd/SKILL.md",
+     "bytes": 4345,
+     "tokens_est": 1086,
+     "kind": "project:lecoder-watch",
+     "note": "TDD variant (differs from .claude tdd copy)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.agents/skills/teach/SKILL.md",
+     "bytes": 9507,
+     "tokens_est": 2377,
+     "kind": "project:lecoder-watch",
+     "note": "Teach variant"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.agents/skills/to-prd/SKILL.md",
+     "bytes": 3027,
+     "tokens_est": 757,
+     "kind": "project:lecoder-watch",
+     "note": "PRD to tracker (.claude/skills/to-prd symlinks here)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/.agents/skills/writing-great-skills/SKILL.md",
+     "bytes": 9063,
+     "tokens_est": 2266,
+     "kind": "project:lecoder-watch",
+     "note": "Skill-authoring reference (.claude symlinks here)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch/skills-lock.json",
+     "bytes": 1738,
+     "tokens_est": 434,
+     "kind": "project:lecoder-watch",
+     "note": "lockfile: 7 skills pinned from mattpocock/skills"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.agents/skills/claude-design-to-meshwatch-swiftui/SKILL.md",
+     "bytes": 3549,
+     "tokens_est": 887,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.agents/skills/grill-with-docs/SKILL.md",
+     "bytes": 245,
+     "tokens_est": 61,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "Interview + ADRs/glossary (stub)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.agents/skills/handoff/SKILL.md",
+     "bytes": 878,
+     "tokens_est": 220,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "Handoff document"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.agents/skills/meshwatch-ui-taste/SKILL.md",
+     "bytes": 3469,
+     "tokens_est": 867,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.agents/skills/prototype/SKILL.md",
+     "bytes": 3039,
+     "tokens_est": 760,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "Throwaway prototype"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.agents/skills/tdd/SKILL.md",
+     "bytes": 4345,
+     "tokens_est": 1086,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.agents/skills/teach/SKILL.md",
+     "bytes": 9507,
+     "tokens_est": 2377,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.agents/skills/to-prd/SKILL.md",
+     "bytes": 3027,
+     "tokens_est": 757,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.agents/skills/writing-great-skills/SKILL.md",
+     "bytes": 9063,
+     "tokens_est": 2266,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Projects/lecoder-watch-cmux-bridge/.claude/skills/overnight-slice/SKILL.md",
+     "bytes": 1738,
+     "tokens_est": 434,
+     "kind": "project:lecoder-watch-cmux-bridge",
+     "note": "dup (.claude also symlinks 7 skills to .agents)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/.agents/skills/handoff/SKILL.md",
+     "bytes": 847,
+     "tokens_est": 212,
+     "kind": "project:Projects-root",
+     "note": "Handoff document (Projects-root shared)"
+    },
+    {
+     "path": "/Users/aryateja/Projects/.agents/skills/setup-matt-pocock-skills/SKILL.md",
+     "bytes": 6861,
+     "tokens_est": 1715,
+     "kind": "project:Projects-root",
+     "note": "dup"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-bmm-create-architecture/SKILL.md",
+     "bytes": 437,
+     "tokens_est": 109,
+     "kind": "project:SecondBrain",
+     "note": "BMAD: architecture solution design"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-bmm-domain-research/SKILL.md",
+     "bytes": 906,
+     "tokens_est": 226,
+     "kind": "project:SecondBrain",
+     "note": "BMAD: domain and industry research"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-bmm-quick-dev/SKILL.md",
+     "bytes": 425,
+     "tokens_est": 106,
+     "kind": "project:SecondBrain",
+     "note": "BMAD: implement a Quick Tech Spec"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-bmm-quick-spec/SKILL.md",
+     "bytes": 402,
+     "tokens_est": 100,
+     "kind": "project:SecondBrain",
+     "note": "BMAD: quick implementation-ready specs"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-bmm-technical-research/SKILL.md",
+     "bytes": 931,
+     "tokens_est": 233,
+     "kind": "project:SecondBrain",
+     "note": "BMAD: technical research"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-brainstorming/SKILL.md",
+     "bytes": 386,
+     "tokens_est": 96,
+     "kind": "project:SecondBrain",
+     "note": "BMAD: interactive brainstorming"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-editorial-review-prose/SKILL.md",
+     "bytes": 264,
+     "tokens_est": 66,
+     "kind": "project:SecondBrain",
+     "note": "BMAD stub: editorial-review-prose"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-editorial-review-structure/SKILL.md",
+     "bytes": 280,
+     "tokens_est": 70,
+     "kind": "project:SecondBrain",
+     "note": "BMAD stub: editorial-review-structure"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-help/SKILL.md",
+     "bytes": 191,
+     "tokens_est": 48,
+     "kind": "project:SecondBrain",
+     "note": "BMAD stub: help"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.agents/skills/bmad-shard-doc/SKILL.md",
+     "bytes": 212,
+     "tokens_est": 53,
+     "kind": "project:SecondBrain",
+     "note": "BMAD stub: shard-doc"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/check/SKILL.md",
+     "bytes": 11977,
+     "tokens_est": 2994,
+     "kind": "project:SecondBrain",
+     "note": "Vault: schema check for notes"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/connect/SKILL.md",
+     "bytes": 27304,
+     "tokens_est": 6826,
+     "kind": "project:SecondBrain",
+     "note": "Vault: find connections between notes"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/digest/SKILL.md",
+     "bytes": 35474,
+     "tokens_est": 8868,
+     "kind": "project:SecondBrain",
+     "note": "Vault: digest knowledge from source material"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/graph/SKILL.md",
+     "bytes": 18620,
+     "tokens_est": 4655,
+     "kind": "project:SecondBrain",
+     "note": "Vault: interactive knowledge graph analysis"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/learn/SKILL.md",
+     "bytes": 7680,
+     "tokens_est": 1920,
+     "kind": "project:SecondBrain",
+     "note": "Vault: research a topic, grow the graph"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/next/SKILL.md",
+     "bytes": 19256,
+     "tokens_est": 4814,
+     "kind": "project:SecondBrain",
+     "note": "Vault: surface most valuable next action"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/pipeline/SKILL.md",
+     "bytes": 9429,
+     "tokens_est": 2357,
+     "kind": "project:SecondBrain",
+     "note": "Vault: end-to-end source processing"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/ralph/SKILL.md",
+     "bytes": 21056,
+     "tokens_est": 5264,
+     "kind": "project:SecondBrain",
+     "note": "Vault: queue processing, fresh context per phase (name-collides with OMC ralph)"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/refactor/SKILL.md",
+     "bytes": 17209,
+     "tokens_est": 4302,
+     "kind": "project:SecondBrain",
+     "note": "Vault: plan restructuring from config changes"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/remember/SKILL.md",
+     "bytes": 19931,
+     "tokens_est": 4983,
+     "kind": "project:SecondBrain",
+     "note": "Vault: capture friction as methodology notes"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/rethink/SKILL.md",
+     "bytes": 28230,
+     "tokens_est": 7058,
+     "kind": "project:SecondBrain",
+     "note": "Vault: challenge system assumptions"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/review/SKILL.md",
+     "bytes": 22702,
+     "tokens_est": 5676,
+     "kind": "project:SecondBrain",
+     "note": "Vault: combined recite + check review"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/revisit/SKILL.md",
+     "bytes": 22216,
+     "tokens_est": 5554,
+     "kind": "project:SecondBrain",
+     "note": "Vault: update old notes with new connections"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/seed/SKILL.md",
+     "bytes": 9515,
+     "tokens_est": 2379,
+     "kind": "project:SecondBrain",
+     "note": "Vault: add source file to processing queue"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/stats/SKILL.md",
+     "bytes": 11913,
+     "tokens_est": 2978,
+     "kind": "project:SecondBrain",
+     "note": "Vault: statistics and graph metrics"
+    },
+    {
+     "path": "/Users/aryateja/Documents/SecondBrain/.claude/skills/tasks/SKILL.md",
+     "bytes": 11050,
+     "tokens_est": 2762,
+     "kind": "project:SecondBrain",
+     "note": "Vault: task stack and processing queue"
+    },
+    {
+     "path": "/Users/aryateja/.agents/.skill-lock.json",
+     "bytes": 8192,
+     "tokens_est": 2048,
+     "kind": "global",
+     "note": "lockfile v3 for ~/.agents/skills (sources incl. vercel-labs/skills)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/oh-my-codex-local/oh-my-codex/0.20.2/skills",
+     "bytes": 471040,
+     "tokens_est": 117760,
+     "kind": "plugin",
+     "note": "rollup: 29 oh-my-codex skills (autopilot 21K, team 26K, deep-interview 42K, plan 23K...)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/openai-bundled",
+     "bytes": 9227468,
+     "tokens_est": 2306867,
+     "kind": "plugin",
+     "note": "rollup: 5 skills (visualize, computer-use, sites-building, sites-hosting, control-in-app-browser)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/openai-primary-runtime",
+     "bytes": 6291456,
+     "tokens_est": 1572864,
+     "kind": "plugin",
+     "note": "rollup: 6 skills (documents, pdf, presentations, spreadsheets, excel-live-control, template-creator)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/openai-curated-remote",
+     "bytes": 42991616,
+     "tokens_est": 10747904,
+     "kind": "plugin",
+     "note": "rollup: 105 SKILL.md across 14 bundles (openai-templates 20, remotion 12, hugging-face 11, build-macos-apps 11, product-design 10, build-ios-apps 9, canva 8...)"
+    },
+    {
+     "path": "/Users/aryateja/.codex/plugins/cache/ponytail",
+     "bytes": 4508876,
+     "tokens_est": 1127219,
+     "kind": "plugin",
+     "note": "rollup: duplicate ponytail cache for Codex (+4 stale staging copies in .marketplace-plugin-source-staging)"
+    },
+    {
+     "path": "/Users/aryateja/.cursor/plugins",
+     "bytes": 7759462,
+     "tokens_est": 1939866,
+     "kind": "plugin",
+     "note": "rollup: 73 SKILL.md in cursor-public plugin cache (stripe 8, hf-mcp, cli-for-agents, vercel...)"
+    },
+    {
+     "path": "/Users/aryateja/.claude/plugins/marketplaces/omc",
+     "bytes": 140509184,
+     "tokens_est": 35127296,
+     "kind": "plugin",
+     "note": "rollup: heaviest cache on machine - 134M OMC marketplace clone (76M .git) duplicating the 41 plugin skills again in skills/ and src/skills"
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">LeSearch Mesh</title>
+  <desc id="description">Less Search. More Agents.</desc>
+  <rect width="1200" height="630" fill="#191919"/>
+  <g fill="none" stroke="#373737" stroke-width="1" opacity=".72">
+    <path d="M0 104H1200M0 526H1200M76 0V630M1124 0V630"/>
+    <path d="M76 104H1124V526H76Z"/>
+  </g>
+  <svg x="92" y="82" width="122" height="122" viewBox="872 397 246 246" aria-hidden="true">
+    <g fill="none" stroke="#e9e9e7" stroke-miterlimit="10">
+      <path stroke-width="6" d="M1106.5 522.2c0 62.3-50.5 112.8-112.8 112.8S881 584.5 881 522.2c0-44 27.9-74.5 32.2-79 4.1-4.2 35.2-34.9 80.5-33.8 53 1.4 112.8 45.8 112.8 112.8Z"/>
+      <path stroke-width="2" d="M913 440c-4-.3-12.9-.5-21 5-9 6.1-11.8 15.7-13 20-7.5 26.2 13.1 76.9 55 107 11.5 8.3 34 21.7 68 26"/>
+      <path stroke-width="2" d="M920 496c-26.9 6.4-45.7 30.8-45 58 .7 26.1 19.2 48.9 45 55M932 544c-.5 7.5-.3 20 5 34 3.2 8.6 7.4 15.3 11 20M1061 469c-7.1 7.6-18.6 18.2-35 27-15.6 8.4-30 12.2-40 14M976 445c6.8.5 46.7 4 73 38 16.2 21 19.3 43.2 20 53M1065 434c.1-.7 1.7-13.4-5-18-6.7-4.6-21.3-.8-30 14M1012 604c2.7 6.8 9.3 20.6 24 29 5.6 3.2 15.3 8.7 25 5 7.4-2.8 10.6-9.2 11-10 4.7-9.6-.5-19.1-1-20"/>
+    </g>
+    <g fill="#e9e9e7"><circle cx="927" cy="494" r="8"/><circle cx="933" cy="537" r="8"/><circle cx="951" cy="604" r="8"/><circle cx="1008" cy="598" r="8"/><circle cx="1069" cy="544" r="8"/><circle cx="979" cy="511" r="8"/><circle cx="969" cy="445" r="8"/><circle cx="1065" cy="464" r="8"/><circle cx="1028" cy="437" r="8"/></g>
+  </svg>
+  <g font-family="JetBrains Mono, SFMono-Regular, Menlo, Consolas, monospace">
+    <text x="92" y="266" fill="#8f8f8f" font-size="18" font-weight="600" letter-spacing="2">LESEARCH AI</text>
+    <text x="92" y="388" fill="#e9e9e7" font-size="90" font-weight="700" letter-spacing="-5">LeSearch Mesh</text>
+    <text x="92" y="456" fill="#e9e9e7" font-size="34" font-weight="600" letter-spacing="-1.4">Less Search. <tspan fill="#4ade80">More Agents.</tspan></text>
+    <text x="92" y="568" fill="#8f8f8f" font-size="18" font-weight="500">YOUR MACHINES. YOUR AGENTS. YOUR ATTENTION.</text>
+  </g>
+  <circle cx="1092" cy="104" r="7" fill="#4ade80"/>
+</svg>

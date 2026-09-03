@@ -1,0 +1,14 @@
+/* LeSearch Mesh launch identity tokens. Brand source, not an imported app dependency. */
+:root {
+  --mesh-ink: #191919;
+  --mesh-surface: #202020;
+  --mesh-panel: #1f1f1f;
+  --mesh-line: #373737;
+  --mesh-paper: #e9e9e7;
+  --mesh-muted: #8f8f8f;
+  --mesh-online: #4ade80;
+  --mesh-danger: #bd3038;
+  --mesh-radius: 8px;
+  --mesh-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --mesh-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}

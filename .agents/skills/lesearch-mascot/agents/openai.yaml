@@ -1,0 +1,4 @@
+interface:
+  display_name: "LeSearch Mesh Mascot"
+  short_description: "Create consistent LeSearch Mesh mascot directions"
+  default_prompt: "Use $lesearch-mascot to develop or extend the LeSearch Mesh mascot system."
