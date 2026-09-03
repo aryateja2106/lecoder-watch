@@ -31,10 +31,13 @@ And one flow that exercises all three, which is also the first thing Arya needs
 personally: **a job posting goes in, a working internal tool for that company comes out,
 installed on the phone, with the supervision loop visible on the watch.** Section 5.
 
-The product's only structural rule, already true and worth keeping: **every capability is
-one daemon module, one `mesh` verb, and one `scripts/check-*` that proves it.** No second
-daemon, no server of ours in the data path, no account. Pillars 2 and 3 are built by
-adding modules to the daemon that already exists, not by starting another product.
+The product's structural rule, from `ROADMAP.md` and worth keeping: **every capability is
+one daemon module and one `scripts/check-*` that proves it.** This map adds a third clause
+as a proposal, not a fact: **and one `mesh` verb.** Today `kb`, `files`, `push`, `wake` and
+`input` have no verb in `install/payload/bin/mesh`; the CLI-first stance in
+`docs/CLI-FIRST-ROADMAP.md` says they should. No second daemon, no server of ours in the
+data path, no account. Pillars 2 and 3 are built by adding modules to the daemon that
+already exists, not by starting another product.
 
 ---
 
@@ -54,19 +57,21 @@ Four findings change what to build next:
    0 were replyable: agents run in bare terminals and Cursor, not inside a multiplexer
    the daemon can type into. Every "answer from the wrist" feature is correct and idle.
    (`TASKS-2026-09-01.md` section A; `openspec/changes/one-session-runtime`.)
-2. **Multiplexer support is tmux and rmux, not the five the docs claim.** `server.ts`
-   issues tmux-syntax commands through `MESH_MUX`; `herdr` and `zellij` appear only as
-   process names. The deployed daemon on this Mac advertises `herdr` and `cmux`
-   capabilities the repo's `server.ts` does not have, so the deployed lineage is ahead of
-   the repo again (CONTEXT.md, "three lineages have drifted").
-3. **The fleet lags the repo.** Repo daemon says `0.5.0`; `mesh-install` latest is
-   `v0.5.2` (2026-08-27); three machines (this Mac, `dataflow`, `pi`) run whatever was
-   last installed. An old daemon answers 200 with the old shape. (AGENTS.md rule 6.)
-4. **32 confirmed code defects are open** (`gh issue list`), the loudest being #80 (an
-   attention banner is raised then deleted), #100 (pairing hands out every token
-   verbatim), #101 (reinstall is not a reset), #90/#91 (routes answer `ok:true`
-   regardless). Two draft PRs wait on Arya: #119 (local inference) and #120 (one Live
-   Activity per event).
+2. **Multiplexer support is tmux, rmux and cmux, not the five the docs claim.**
+   `server.ts` issues tmux-syntax commands through `MESH_MUX` and carries a cmux path;
+   `herdr` appears only as a process name and `zellij` not at all. The deployed daemon on
+   this Mac advertises a `herdr` capability the repo's `server.ts` does not have, so the
+   deployed lineage is ahead of the repo again (CONTEXT.md, "three lineages have
+   drifted").
+3. **Three daemon versions disagree.** Repo `server.ts` says `0.5.0`; `mesh-install`'s
+   latest release is `v0.5.2` (2026-08-27); the daemon running on this Mac reports
+   `0.5.4`. Three machines (this Mac, `dataflow`, `pi`) run whatever was last installed
+   on each. An old daemon answers 200 with the old shape. (AGENTS.md rule 6.)
+4. **107 issues are open, 17 with a severity label** (2 blocker, 9 high, 5 medium,
+   1 low; `gh issue list --limit 300`). The loudest: #80 (an attention banner is raised
+   then deleted), #100 (pairing hands out every token verbatim), #101 (reinstall is not
+   a reset), #90/#91 (routes answer `ok:true` regardless). Two draft PRs wait on Arya:
+   #119 (local inference) and #120 (one Live Activity per event).
 
 Verified absent, on purpose: accounts, a cloud relay, Android, a Windows daemon, restart
 or shutdown from the wrist.
@@ -89,7 +94,11 @@ route that reports which model server is reachable, and `scripts/brain-eval/` th
 grades any OpenAI-compatible endpoint on function calling, terminal actions, browser
 sequencing, images, and prefix-cache economics. `loop.ts`, `tools.ts` and `model.ts`
 (about 840 lines) duplicate what `dsh` already runs in `~/deepseek-harness`; the rest is
-harness-agnostic and worth keeping.
+harness-agnostic and worth keeping. The PR is 673 files and 146K lines, 144K of them
+vendored under `references/`; the verdict to land it stands, and the vendored tree
+should leave the daemon's "reviewable in one sitting" claim untouched because it is
+not the daemon. `dsh` itself lives outside this repo and is not installed by
+`install.sh`; nothing ships it to a user's machine today.
 
 Measured, on this Mac:
 
@@ -110,7 +119,7 @@ Nothing in this repo builds an app for a user. What exists is every ingredient:
 
 | Ingredient | Where | What it gives P3 |
 |---|---|---|
-| Static hosting behind the bearer token | `server.ts` routes to `desktop.html`, `files.html` | The daemon already serves HTML to the phone over the tailnet. An app is one more directory. |
+| Static hosting behind the bearer token | `input.ts:436` serves `desktop.html`, `files.ts:92` serves `files.html`; `server.ts` gates both | The daemon already serves HTML to the phone over the tailnet. An app is one more directory. |
 | On-device SQLite | `kb.ts` (`bun:sqlite`, FTS5, `~/.mesh/kb.sqlite`) | The storage pattern for a per-app database, no new dependency. |
 | Pairing and claim links | `pair.ts`, `qr.ts` | A one-use claim URL is exactly how a home-screen app gets its token without typing. |
 | The risk classifier | `Shared/RiskClassifier.swift`, `agent/risk.ts` (parity-checked) | Approval semantics for a build step that publishes or spends. |
@@ -149,10 +158,16 @@ one runs on.
 
 ### 3.1 P1 additions (small, and they unblock everything)
 
-- **`mesh run <agent> [--cwd]`**: launch a harness *inside* the daemon's multiplexer so
-  hooks fire with a session the daemon can type into. This is the reply-route decision
-  in `TASKS-2026-09-01.md` made concrete: agents the product supervises are agents the
-  product started. IDE and bare-terminal sessions stay view-only, and the app says so.
+- **The reply route is a decision, not a design, and it is open.** The daemon can only
+  type into a session it can address, which today means a tmux-compatible multiplexer.
+  `TASKS-2026-09-01.md` names two options: run agents under a multiplexer the daemon
+  knows and teach the hook about that socket, or accept IDE and bare-terminal sessions
+  as view-only. A third, proposed here: **`mesh run <agent> [--cwd]`**, which starts the
+  harness inside whatever `MESH_MUX` names, so the sessions the product supervises are
+  the sessions the product started, and everything else is honestly view-only. That
+  keeps AGENTS.md's "multiplexer-agnostic, the user's choice" principle only if
+  `MESH_MUX` really is a choice, and the scout found it is tmux-syntax underneath. The
+  `one-session-runtime` change owns this; section 9 asks for the answer.
 - **Codex hook installed the same way as the Claude Code hook** (today it prints
   instructions). One backlog item, still open.
 - **`mesh upgrade` on every machine** before any daemon-side feature is judged. The
@@ -163,10 +178,12 @@ one runs on.
 ### 3.2 P2 — brain and factory
 
 **Brain (land, do not rebuild).** Merge #119. Keep `exec.ts`, `meshd.ts`, `mobile.ts`,
-`risk.ts`, `brain.ts`, `brain-eval/`; treat `loop.ts`, `tools.ts`, `model.ts` as a
-fallback harness and let `dsh` be the primary local runner, since it already runs, is
-measured, and is one process. `GET /brain` is the single source of truth for "is a local
-model available and what can it do"; the watch shows it next to each machine.
+`risk.ts`, `brain.ts`, `brain-eval/`. Then pick **one** local runner to ship, which is a
+decision for Arya (section 9): the in-repo loop from #119 (840 lines, measured 9/0/1 with
+Qwen 3.6, shipped by `install.sh` like everything else) or `dsh` (already running here,
+measured, but outside the repo and unpackaged). Do not write a third. `GET /brain` is the
+single source of truth for "is a local model available and what can it do"; the watch
+shows it next to each machine.
 
 Model routing, by cost not by ideology: local models take the cheap, frequent steps
 (triage an issue, digest a build log, classify a command's risk, summarize a session
@@ -187,8 +204,19 @@ module because that is where always-on already lives:
 - **`mesh factory run`** (module `factory.ts`): claim exactly one `factory:ready` issue,
   open a mux session named for it, run the chosen harness with the `factory-implement`
   skill, run the gates, open a draft PR, write the immutable run record, close the
-  session. One run per machine at a time. Concurrency across the fleet is capped at five
-  agents total, the number below which the session-limit deaths stopped.
+  session. One run per machine at a time.
+- **Multi-machine means routing, and the queue is GitHub.** Issues are the queue
+  (`factory:*` labels, per `docs/agents/issue-tracker.md`). Each machine's `/doctor` and
+  `/brain` say what it can do: Xcode present, a local model live, Linux, free memory.
+  A run claims only issues whose needs it meets (`needs:xcode`, `needs:local-model`,
+  `needs:linux`, added at triage), so the Mac takes app builds and `dataflow` takes
+  daemon and Linux work. The watch lists runs on every machine because they are
+  sessions. Cross-machine *resumption* of one run is epic #114 and stays there.
+- **Concurrency starts at five across the fleet and is written down, not measured.**
+  The three fleet deaths this week were OMC subagent fleets of 8 to 13 inside one
+  session, and a 3-to-5-agent workflow completed; nothing established a threshold. A
+  launchd timer does not cap subagents, so two knobs, both recorded in the run record:
+  the workflow size guideline for in-session fleets, and one factory run per machine.
 - **Scheduling**: a launchd interval on macOS and a systemd timer on Linux, installed by
   `install.sh` next to the daemon it already installs, off by default, on with
   `mesh factory enable`.
@@ -227,6 +255,18 @@ iOS home-screen web app keeps its own cookie jar, so the claim exchange must hap
 *inside* the installed app, not in Safari; and web push to a home-screen app needs the
 user's permission and iOS 16.4 or later. Neither blocks v0.
 
+**Tier A+ — the second person, which is what "your company" means.** An internal tool
+has a team, not a user. Without accounts of ours: the app's owner issues each colleague
+their own claim link (`mesh apps share <slug> --to <name>`), each link becomes a cookie
+bound to that name, and `mesh apps revoke` ends it. The app's `data.sqlite` gains one
+`identities` table the daemon writes on claim, so every row an app stores can carry who
+wrote it. Reachability is the company's own tailnet, which Tailscale already lets an
+admin share machines on. The enterprise shape is therefore **single-tenant per machine,
+many people per app**: a company's Mac mini runs `meshd`, the tool lives on it, the
+team reaches it over the company network. What this costs: one table, two verbs, and
+the same claim mechanism `pair.ts` already has. What it is not: multi-tenant accounts
+run by us, which stays in the "not" list below.
+
 **Tier B — the user's own Apple developer account.** `mesh apple connect` stores the
 user's App Store Connect API key in their Keychain (the way `release-testflight.sh`
 already expects `ASC_KEY_ID` and `ASC_ISSUER_ID`). The build lane is 10x's pipeline,
@@ -238,11 +278,17 @@ Apple's rules (`docs/app-store-submission.md`) apply to every generated app, whi
 what Glaze's compliance-checker role is for.
 
 **The ladders.** Storage: `data.sqlite` by default; `mesh apps connect supabase <slug>`
-exports the schema and points the API at the user's own project when an app needs to
-be shared across people or devices. Front end: served by the daemon by default;
-`mesh apps deploy vercel <slug>` when the app must be reachable without the mesh. The two
-are coupled and the CLI should refuse the second without the first: a front end on
-Vercel talking to a database on a laptop is a promise the product cannot keep.
+exports the schema and points the API at the user's own project when an app's data
+must outlive one machine. Identity does not change on that rung: the daemon stays the
+app's only client of Supabase, so the user's project holds data, not accounts, and no
+row-level policy has to know who a person is. Front end: served by the daemon by
+default; `mesh apps deploy vercel <slug>` when the app must be reachable without the
+mesh. The two are coupled and the CLI should refuse the second without the first: a
+front end on Vercel talking to a database on a laptop is a promise the product cannot
+keep. And the second rung changes identity for real: an app reachable without the
+mesh cannot use the daemon's claim cookies, so it uses the user's own Supabase Auth,
+which is their account system, not ours. `ROADMAP.md` lists an account system as a
+non-goal, and this keeps it one.
 
 **The builder.** Glaze's roles, run through the factory loop: context gatherer (the
 brief), architect (the spec and screens), builder (the code), compliance checker
@@ -253,7 +299,8 @@ apply, and a checkpoint to roll back to. Every app run is a factory run, so it h
 record, a gate, and a stop condition.
 
 **Not Mesh Apps:** hosting of ours, an app store, a drag-and-drop editor, multi-tenant
-accounts, Android. The app the user gets is a directory on a machine they own.
+accounts run by us, Android. The app the user gets is a directory on a machine they own,
+shared with the people they hand a link to.
 
 ---
 
@@ -262,7 +309,7 @@ accounts, Android. The app the user gets is a directory on a machine they own.
 | Include | Because |
 |---|---|
 | The three modules (`brain`, `factory`, `apps`) as daemon modules with `mesh` verbs | It is the shape everything else already has; one patch to `server.ts` each. |
-| `mesh run` so supervised agents are mux-hosted | The reply path has had zero targets in 312 events. |
+| A decided reply route before any more notification work | The reply path has had zero targets in 312 events; every option needs a yes from Arya first. |
 | Restoring `cc81c8c` before any new factory code | It is designed and written; it is just not on `main`. |
 | Local model for the cheap steps, cloud for implement and review | Measured: local tool calls at 12 to 21 s are fine for triage and unbearable for a 200-step build. |
 | Tier A apps before Tier B | Tier A needs nothing from Apple and is the tier a non-developer can use on day one. |
@@ -275,7 +322,7 @@ accounts, Android. The app the user gets is a directory on a machine they own.
 | A second daemon, a monorepo migration, merging `lecoder`/`lesearch-factory` code | `one-workspace` covers consolidation; CODEBASE-SURVEY says take assets, never lineages. |
 | A visual builder, Android, Windows, a TUI | Later or never, per `ROADMAP.md`. |
 | Building the harness loop again | `dsh` and #119 both exist; pick, do not write a third. |
-| More than five concurrent agents | Three fleets died at 8 to 13. |
+| Unrecorded concurrency | Three fleets died at 8 to 13; start at five and write every run down. |
 | Any Tier B work before one Tier A app is installed on a phone | Tier B needs Apple, a Mac with Xcode, and review waits; it proves nothing Tier A does not. |
 
 ---
@@ -321,7 +368,7 @@ No dates. Each phase ends with a command that proves it and a thing Arya can tou
 
 | Phase | Work | Proof |
 |---|---|---|
-| 0. Ship what exists | DNS CNAME for `mesh.lesearch.ai`; submit the newest build for Beta App Review; merge #119; prove #120 on the real phone; `mesh upgrade` all three machines; realign local `main` with `origin/main` | `curl https://mesh.lesearch.ai/install.sh` resolves; `asc testflight distribution view` shows the new external build; `/health` on all three machines reports the same version |
+| 0. Ship what exists | Confirm `mesh.lesearch.ai` serves (the CNAME resolved to Vercel on 2026-09-03; the install script was not reachable from this session's network, so nobody has proven it end to end); submit the newest build for Beta App Review; merge #119; prove #120 on the real phone; `mesh upgrade` all three machines; realign local `main` with `origin/main` | `curl -fsSL https://mesh.lesearch.ai/install.sh \| head -3` prints the installer; `asc testflight distribution view` shows the new external build; `/health` on all three machines reports the same version |
 | 1. Factory restored | Merge `cc81c8c` (contract, charter, gates, hook, agents, runs); add `CONSTRAINTS.md` floor to the gates; run the factory **once** by hand on one small `factory:ready` issue | `docs/factory/runs/` holds one record; the draft PR exists; the merge hook refused a merge when tried |
 | 2. Reply path real | `mesh run` lands agents in the mux; Codex hook installs; one permission prompt reaches the watch and its answer reaches the agent | one event in `agent-events.jsonl` with `replyable:true` and the agent's transcript showing the wrist's answer |
 | 3. Always-on | `mesh factory run` module, launchd timer, cost fields in the run record; five runs unattended on the Mac, one on `dataflow` | five run records with cost; zero merges by an agent; concurrency never above five |
@@ -353,8 +400,10 @@ The honest inputs:
 
 - The factory has run zero times. Its design exists and was never merged. Until phase 1
   is done, "the agents will build it" is a plan without a single data point.
-- The three failures this week were all the same failure: too many concurrent agents on
-  one subscription. That is a scheduling problem, and section 3.2 schedules.
+- The three failures this week were all the same failure: too many concurrent subagents
+  in one session on one subscription. A factory that runs one job per machine from a
+  timer does not have that failure; in-session fleets still can, which is why the
+  workflow size guideline is a knob in section 3.2 and not an afterthought.
 - Two kinds of work cannot be delegated: **verification on the physical iPhone and
   Watch** (AGENTS.md says so, and three features shipped dead because it was skipped) and
   **anything Apple reviews**. Both are hours a week, not a hire.
@@ -367,12 +416,30 @@ The honest inputs:
   yet been shown to need people.
 
 **Recommendation.** Run the agent route for eight weeks with a number on it, then decide.
-The number: **merged pull requests per week that closed a confirmed defect or a phase gate,
-with zero regressions in `check-all.sh` and zero merges by an agent**, read from the run
-records. Phase 1 gives the first record within days. If by week eight the factory clears
-phases 2 to 5, the raise story is "a solo founder with a working factory", which is
-stronger than "a founder who needs engineers". If it does not, the run records say
-exactly where it stalled, which is a hiring spec.
+The number: **merged pull requests per week that closed a severity-labelled issue or a
+phase gate, with zero regressions in `check-all.sh` and zero merges by an agent**, read
+from the run records.
+
+The baseline, measured today so the experiment has one: **3 merged pull requests in the
+trailing four weeks**, all on 2026-08-27, all by Arya, all release work. Call it under
+one a week. The ceiling is review time, not agent time: if an hour a day reviews about
+two draft PRs, the factory cannot usefully produce more than ten a week whatever it
+costs, and the charter's "more than two awaiting review" stop already throttles at that
+point. So the pass line is modest and the rule is explicit:
+
+- **Pass:** four or more qualifying merges a week by week six, sustained to week eight,
+  and phases 2 to 5 cleared. The raise story becomes "a solo founder with a working
+  factory", which is stronger than "a founder who needs engineers".
+- **Fail:** fewer than two a week by week six, or a run-record cost per qualifying merge
+  above the number Arya sets before week one (a subscription-month divided by the
+  merges it produced is the honest unit; no number is offered here because none was
+  measured). Then the run records say where it stalled, which is a hiring spec.
+- **Middle:** phases 2 and 3 clear and 4 stalls. That is the case the records are for;
+  decide on what stalled, not on the count.
+
+Price the counterfactual before week one, not after: one contractor for eight weeks on
+the same phase list, against the subscription spend the run records will show. That
+comparison is what this recommendation is actually making, and it cannot be made yet.
 
 Spend money first on the two things agents provably cannot do: a few hours a week of
 physical-device QA, and design-partner conversations for the launch brief. Not engineers.
@@ -400,6 +467,9 @@ paid for, scheduled instead of stampeded.
 7. **`CONSTRAINTS.md`**: read the four defaults it took and the two exceptions it
    recorded; change any number you disagree with, and add its one-line pointer to
    `AGENTS.md`.
+8. **The local runner to ship:** #119's in-repo loop, or `dsh` packaged into
+   `install.sh`. One, not both.
+9. **The pass and fail numbers for section 8**, and the cost per merge you will stop at.
 
 ---
 
@@ -414,4 +484,7 @@ Scouting passes on 2026-09-03 over: `AGENTS.md`, `CONTEXT.md`, `ROADMAP.md`,
 `scripts/check-all.sh`, `gh issue list`, `gh pr view 119`, `gh repo list LeSearch-AI`,
 `git log --all` for `cc81c8c`, `~/deepseek-harness/AGENTS.md`, and live probes of
 `127.0.0.1:8899`, `:8080`, `:1234`. Nothing in this file was taken from a document dated
-before August 2026 without a newer source agreeing.
+before August 2026 without a newer source agreeing. Two sources are untracked on `main`
+(`TASKS-2026-09-01.md`, `references/glaze-system-instructions/`); both are committed on
+`backup/2026-09-03`, so realigning `main` (decision 6) does not lose them. An
+independent critic re-measured this map on 2026-09-03 and its corrections are in.

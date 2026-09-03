@@ -16,12 +16,17 @@ cd "$ROOT" || exit 2
 BASE="${FLOOR_BASE:-origin/main}"
 
 mb="$(git merge-base "$BASE" HEAD 2>/dev/null)"
-if [ -z "$mb" ] && [ -n "${CI:-}" ] && [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-  git fetch --quiet --unshallow origin main 2>/dev/null || git fetch --quiet origin main 2>/dev/null
+if [ -z "$mb" ] && [ -n "${CI:-}" ] && [ "$BASE" = "origin/main" ]; then
+  # actions/checkout writes a single-branch refspec, so refs/remotes/origin/main never
+  # exists on a runner and a plain `git fetch origin main` only updates FETCH_HEAD.
+  # Fetch main into the remote-tracking ref explicitly; 50 commits reaches the merge
+  # base of any branch that is not weeks stale (AGENTS.md rule 2 says those are wrong anyway).
+  git fetch --quiet --depth=50 origin '+refs/heads/main:refs/remotes/origin/main' 2>/dev/null
+  git fetch --quiet --deepen=50 origin 2>/dev/null   # HEAD's own ancestry is depth 1 on a runner
   mb="$(git merge-base "$BASE" HEAD 2>/dev/null)"
 fi
 if [ -z "$mb" ]; then
-  echo "check-floor: no merge base against $BASE (shallow clone? run: git fetch --unshallow origin main)"
+  echo "check-floor: no merge base against $BASE (run: git fetch --depth=50 origin '+refs/heads/main:refs/remotes/origin/main')"
   exit 2
 fi
 
@@ -30,7 +35,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 # Tracked changes (committed + working tree) and untracked files, one unified diff.
 # Only the paths that ship are diffed; prose trees are out of scope by construction.
-SCOPE="install Shared iOS Watch MeshDesktop MeshWatchWidgets WatchWidgets scripts web CONSTRAINTS.md"
+SCOPE="install Shared iOS Watch MeshDesktop MeshWatchWidgets WatchWidgets scripts web CONSTRAINTS.md .github/workflows"
 # shellcheck disable=SC2086
 git diff --unified=0 --no-color "$mb" -- $SCOPE >"$TMP/diff"
 # shellcheck disable=SC2086
@@ -51,7 +56,7 @@ awk -v constraints_is_new="$constraints_is_new" '
     n++; printf "  [%s] %s: %s\n", rule, file, substr(text, 1, 110)
   }
   function in_scope(f) {
-    return f ~ /^(install|Shared|iOS|Watch|MeshDesktop|MeshWatchWidgets|WatchWidgets|scripts)\// || f ~ /^web\/.*\.(html|js)$/ || f == "CONSTRAINTS.md"
+    return f ~ /^(install|Shared|iOS|Watch|MeshDesktop|MeshWatchWidgets|WatchWidgets|scripts)\// || f ~ /^web\/.*\.(html|js)$/ || f == "CONSTRAINTS.md" || f ~ /^\.github\/workflows\/.*\.yml$/
   }
   BEGIN {
     n = 0
@@ -59,6 +64,7 @@ awk -v constraints_is_new="$constraints_is_new" '
     STUBS    = "(^|[^A-Za-z])TODO([^A-Za-z]|$)|FIXME|[Nn]ot implemented|fatalError\\(\"TODO|catch[ \t]*(\\([^)]*\\))?[ \t]*\\{[ \t]*\\}"
     SKIPS    = "\\.skip\\(|\\.only\\(|(^|[^A-Za-z])xit\\(|xdescribe\\(|XCTSkip"
     ASSERT   = "assert\\(|assert |expect\\(|XCTAssert|check\\(|fail\\("
+    HARDCODE = "/Users/[A-Za-z]|testtoken"
   }
   /^\+\+\+ / { f = $2; sub(/^b\//, "", f); next }
   /^--- /    { next }
@@ -74,6 +80,7 @@ awk -v constraints_is_new="$constraints_is_new" '
     if (t ~ SUPPRESS) flag("silenced-checker", f, t)
     if (t ~ STUBS)    flag("unfinished-work", f, t)
     if (t ~ SKIPS)    flag("test-made-easier", f, t)
+    if (t ~ HARDCODE && f !~ /^scripts\/check-/) flag("hardcoded-path-or-token", f, t)
     next
   }
   /^-/ {
@@ -81,6 +88,7 @@ awk -v constraints_is_new="$constraints_is_new" '
     t = substr($0, 2)
     if (f ~ /^scripts\/check-/ && t ~ ASSERT) flag("assertion-removed", f, t)
     if (f == "CONSTRAINTS.md" && t ~ /^- /)   flag("floor-bullet-removed", f, t)
+    if (f ~ /^\.github\/workflows\// && t ~ /run: sh scripts\/check-/) flag("ci-check-removed", f, t)
     next
   }
   END {
