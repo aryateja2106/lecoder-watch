@@ -145,7 +145,8 @@ function streamed(message: Msg, messages: any[], includeUsage: boolean): Respons
   const frame = (delta: Record<string, unknown>, finish: string | null = null, extra: Record<string, unknown> = {}) =>
     enc.encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: finish }], ...extra })}\n\n`)
   const deltas: Array<Record<string, unknown>> = [{ role: "assistant" }]
-  if (persona === "vision") deltas.push({ reasoning_content: "Let me think" }, { reasoning_content: " carefully." })
+  // The exact text is asserted by check-brain-eval-sse.sh's live stage.
+  if (persona === "vision") deltas.push({ reasoning_content: "Let me count" }, { reasoning_content: " carefully." })
   let tokens = 0
   if (message.content) {
     const words = message.content.split(/(?<= )/)
