@@ -58,8 +58,12 @@ grep -q 'path === "/wake"' "$ROOT/install/payload/meshd/server.ts" || {
   echo "FAIL: server.ts does not route POST /wake"
   exit 1
 }
-grep -q '"wake"' "$ROOT/install/payload/meshd/server.ts" || {
+grep -q '"wake"' "$ROOT/install/payload/meshd/capabilities.ts" || {
   echo "FAIL: capabilities do not advertise wake"
+  exit 1
+}
+grep -q 'advertisedCapabilities' "$ROOT/install/payload/meshd/server.ts" || {
+  echo "FAIL: /health does not call advertisedCapabilities()"
   exit 1
 }
 grep -q 'mac: primaryMac()' "$ROOT/install/payload/meshd/server.ts" || {
