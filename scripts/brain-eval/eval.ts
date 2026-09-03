@@ -17,24 +17,21 @@
  * measurement, not a script error. Use --strict to exit 1 on any failure.
  */
 
-type Status = "pass" | "fail" | "unsupported" | "skip"
-
-interface ProbeResult {
-  id: string
-  title: string
-  capability: string
-  status: Status
-  detail: string
-  ms: number
-  meta?: Record<string, unknown>
-}
-
-interface Ctx {
-  endpoint: string
-  model: string
-  apiKey?: string
-  timeoutMs: number
-}
+import {
+  apiFetch,
+  chat,
+  chatRequestBody,
+  content,
+  parseArgs,
+  toolCalls,
+  type Ctx,
+  type FailureMode,
+  type Probe,
+  type ProbeResult,
+  type Status,
+} from "./core.ts"
+import { AGENT_PROBES, BROWSER_TOOLS, TERMINAL_TOOLS } from "./probes-agent.ts"
+import { runCompare, type CompareSettings, type Side } from "./compare.ts"
 
 // A 1x1 PNG. Content does not matter — we are probing whether the endpoint
 // accepts an image part at all, which is the line between a text-only engine
@@ -42,70 +39,9 @@ interface Ctx {
 const TINY_PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 
-function parseArgs(argv: string[]): Record<string, string | boolean> {
-  const out: Record<string, string | boolean> = {}
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (!a.startsWith("--")) continue
-    const key = a.slice(2)
-    const next = argv[i + 1]
-    if (next === undefined || next.startsWith("--")) out[key] = true
-    else {
-      out[key] = next
-      i++
-    }
-  }
-  return out
-}
-
-async function apiFetch(
-  ctx: Ctx,
-  path: string,
-  init?: RequestInit,
-): Promise<{ status: number; body: any; raw: string }> {
-  const headers: Record<string, string> = { "content-type": "application/json" }
-  if (ctx.apiKey) headers.authorization = `Bearer ${ctx.apiKey}`
-  const res = await fetch(`${ctx.endpoint}${path}`, {
-    ...init,
-    headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
-    signal: AbortSignal.timeout(ctx.timeoutMs),
-  })
-  const raw = await res.text()
-  let body: any = null
-  try {
-    body = JSON.parse(raw)
-  } catch {
-    /* non-JSON (SSE or an error page) stays in raw */
-  }
-  return { status: res.status, body, raw }
-}
-
+/** The request body as a string, for the one probe that streams by hand. */
 function chatBody(ctx: Ctx, extra: Record<string, unknown>) {
-  return JSON.stringify({ model: ctx.model, temperature: 0, max_tokens: 512, ...extra })
-}
-
-async function chat(ctx: Ctx, extra: Record<string, unknown>) {
-  return apiFetch(ctx, "/chat/completions", { method: "POST", body: chatBody(ctx, extra) })
-}
-
-/** Pull tool calls out of a response in the shape every OpenAI-compatible server emits. */
-function toolCalls(body: any): Array<{ name: string; args: any; rawArgs: string }> {
-  const calls = body?.choices?.[0]?.message?.tool_calls
-  if (!Array.isArray(calls)) return []
-  return calls.map((c: any) => {
-    const rawArgs = c?.function?.arguments ?? ""
-    let args: any = null
-    try {
-      args = typeof rawArgs === "string" ? JSON.parse(rawArgs) : rawArgs
-    } catch {
-      /* leave null; malformed arguments is itself a finding */
-    }
-    return { name: c?.function?.name ?? "", args, rawArgs }
-  })
-}
-
-function content(body: any): string {
-  return body?.choices?.[0]?.message?.content ?? ""
+  return JSON.stringify(chatRequestBody(ctx, extra))
 }
 
 const WEATHER_TOOL = {
@@ -124,92 +60,10 @@ const WEATHER_TOOL = {
   },
 }
 
-// Shaped after meshd's real session routes, so a pass here means the model
-// could actually drive our daemon.
-const TERMINAL_TOOLS = [
-  {
-    type: "function",
-    function: {
-      name: "agent_output",
-      description: "Read the visible text of a terminal session's pane.",
-      parameters: {
-        type: "object",
-        properties: { session: { type: "string" }, lines: { type: "integer" } },
-        required: ["session"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "agent_send",
-      description:
-        "Send keystrokes to a terminal session. Use text for literal typing, key for a named key.",
-      parameters: {
-        type: "object",
-        properties: {
-          session: { type: "string" },
-          text: { type: "string" },
-          key: {
-            type: "string",
-            enum: ["enter", "ctrl-c", "ctrl-d", "up", "down", "tab", "escape"],
-          },
-        },
-        required: ["session"],
-      },
-    },
-  },
-]
-
-const BROWSER_TOOLS = [
-  {
-    type: "function",
-    function: {
-      name: "browser_navigate",
-      description: "Navigate the browser to a URL.",
-      parameters: {
-        type: "object",
-        properties: { url: { type: "string" } },
-        required: ["url"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "browser_type",
-      description: "Type text into an element matched by a CSS selector.",
-      parameters: {
-        type: "object",
-        properties: { selector: { type: "string" }, text: { type: "string" } },
-        required: ["selector", "text"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "browser_click",
-      description: "Click an element matched by a CSS selector.",
-      parameters: {
-        type: "object",
-        properties: { selector: { type: "string" } },
-        required: ["selector"],
-      },
-    },
-  },
-]
-
-interface Probe {
-  id: string
-  title: string
-  capability: string
-  run(ctx: Ctx): Promise<Omit<ProbeResult, "id" | "title" | "capability" | "ms">>
-}
-
 const PROBES: Probe[] = [
   {
     id: "models",
+    useCase: "reachability",
     title: "Endpoint lists a model",
     capability: "reachability",
     async run(ctx) {
@@ -225,6 +79,7 @@ const PROBES: Probe[] = [
   },
   {
     id: "chat-basic",
+    useCase: "reachability",
     title: "Answers a plain prompt",
     capability: "reachability",
     async run(ctx) {
@@ -243,6 +98,7 @@ const PROBES: Probe[] = [
   },
   {
     id: "stream",
+    useCase: "reachability",
     title: "Streams SSE and terminates",
     capability: "reachability",
     async run(ctx) {
@@ -271,6 +127,7 @@ const PROBES: Probe[] = [
   },
   {
     id: "tools-single",
+    useCase: "CLI",
     title: "Emits one correct function call",
     capability: "function calling",
     async run(ctx) {
@@ -303,6 +160,7 @@ const PROBES: Probe[] = [
   },
   {
     id: "tools-loop",
+    useCase: "CLI",
     title: "Completes a two-turn tool loop",
     capability: "function calling",
     async run(ctx) {
@@ -342,6 +200,7 @@ const PROBES: Probe[] = [
   },
   {
     id: "tools-terminal",
+    useCase: "macOS",
     title: "Answers a blocked terminal prompt",
     capability: "terminal actions",
     async run(ctx) {
@@ -383,6 +242,7 @@ const PROBES: Probe[] = [
   },
   {
     id: "tools-browser",
+    useCase: "browser",
     title: "Sequences browser actions",
     capability: "browser actions",
     async run(ctx) {
@@ -421,6 +281,7 @@ const PROBES: Probe[] = [
   },
   {
     id: "vision",
+    useCase: "macOS",
     title: "Accepts an image in the prompt",
     capability: "reads images",
     async run(ctx) {
@@ -458,6 +319,7 @@ const PROBES: Probe[] = [
   },
   {
     id: "prompt-cache",
+    useCase: "economics",
     title: "Reuses a conversation prefix",
     capability: "long-running economics",
     async run(ctx) {
@@ -489,6 +351,7 @@ const PROBES: Probe[] = [
   },
   {
     id: "stop",
+    useCase: "economics",
     title: "Honours a stop sequence",
     capability: "long-running economics",
     async run(ctx) {
@@ -522,32 +385,80 @@ const MARK: Record<Status, string> = {
   skip: "SKIP",
 }
 
+const ALL_PROBES: Probe[] = [...PROBES, ...AGENT_PROBES]
+
+const HELP = [
+  "brain-eval — capability scorecard for an OpenAI-compatible endpoint, or two",
+  "",
+  "single endpoint:",
+  "  --endpoint URL   default http://127.0.0.1:8080/v1 (LM Studio: :1234/v1)",
+  "  --model NAME     default: first model the endpoint lists",
+  "  --api-key KEY    sent as a bearer token when set",
+  "",
+  "compare two (enters compare mode when either is given):",
+  "  --a URL          endpoint A, default http://127.0.0.1:8080/v1 (our inference)",
+  "  --b URL          endpoint B, default http://127.0.0.1:1234/v1 (LM Studio)",
+  "  --model-a/--model-b, --api-key-a/--api-key-b, --label-a/--label-b",
+  "  --repeat N       run each probe N times per endpoint; medians reported (default 1)",
+  "  --no-warmup      skip the untimed warm-up request per endpoint",
+  "  --cache-bust     append a per-run nonce to every system prompt so TTFT is cold on both",
+  "  --jsonl PATH     one row per (endpoint, probe, turn): the flat dataset export",
+  "",
+  "both modes:",
+  "  --temperature T  default 0. Reasoning models (Ornith) are recommended at 0.6; state it",
+  "  --max-tokens N   default 512",
+  "  --timeout MS     per-request timeout, default 120000",
+  "  --only IDS       comma-separated probe ids",
+  "  --json PATH      write full results as JSON",
+  "  --strict         exit 1 if any probe fails",
+].join("\n")
+
+function ctxFrom(args: Record<string, string | boolean>, endpoint: string, suffix: string): Ctx {
+  const get = (k: string) => (args[`${k}${suffix}`] !== undefined ? args[`${k}${suffix}`] : args[k])
+  return {
+    endpoint: endpoint.replace(/\/$/, ""),
+    model: String(get("model") ?? ""),
+    apiKey: get("api-key") ? String(get("api-key")) : undefined,
+    timeoutMs: Number(args.timeout ?? 120000),
+    temperature: Number(args.temperature ?? 0),
+    maxTokens: Number(args["max-tokens"] ?? 512),
+    cacheBust: args["cache-bust"] ? Math.random().toString(36).slice(2, 10) : null,
+    streamPerf: false,
+  }
+}
+
 async function main() {
   const args = parseArgs(Bun.argv.slice(2))
   if (args.help) {
-    console.log(
-      [
-        "brain-eval — capability scorecard for an OpenAI-compatible endpoint",
-        "",
-        "  --endpoint URL   default http://127.0.0.1:8080/v1 (LM Studio: :1234/v1)",
-        "  --model NAME     default: first model the endpoint lists",
-        "  --api-key KEY    sent as a bearer token when set",
-        "  --timeout MS     per-request timeout, default 120000",
-        "  --only IDS       comma-separated probe ids",
-        "  --json PATH      write full results as JSON",
-        "  --strict         exit 1 if any probe fails",
-      ].join("\n"),
-    )
+    console.log(HELP)
+    return
+  }
+  const only = args.only ? String(args.only).split(",").map((s) => s.trim()) : null
+  const probes = only ? ALL_PROBES.filter((p) => only.includes(p.id)) : ALL_PROBES
+
+  if (args.a !== undefined || args.b !== undefined) {
+    const a: Side = { ctx: ctxFrom(args, String(args.a ?? "http://127.0.0.1:8080/v1"), "-a"), label: String(args["label-a"] ?? "") }
+    const b: Side = { ctx: ctxFrom(args, String(args.b ?? "http://127.0.0.1:1234/v1"), "-b"), label: String(args["label-b"] ?? "") }
+    // One nonce for both sides: the point is identical bodies.
+    if (a.ctx.cacheBust) b.ctx.cacheBust = a.ctx.cacheBust
+    const settings: CompareSettings = {
+      temperature: a.ctx.temperature,
+      maxTokens: a.ctx.maxTokens,
+      timeoutMs: a.ctx.timeoutMs,
+      repeat: Math.max(1, Number(args.repeat ?? 1)),
+      cacheBust: a.ctx.cacheBust,
+      only,
+      warmup: !args["no-warmup"],
+    }
+    await runCompare(a, b, probes, settings, {
+      json: args.json ? String(args.json) : undefined,
+      jsonl: args.jsonl ? String(args.jsonl) : undefined,
+      strict: Boolean(args.strict),
+    })
     return
   }
 
-  const endpoint = String(args.endpoint ?? "http://127.0.0.1:8080/v1").replace(/\/$/, "")
-  const ctx: Ctx = {
-    endpoint,
-    model: String(args.model ?? ""),
-    apiKey: args["api-key"] ? String(args["api-key"]) : undefined,
-    timeoutMs: Number(args.timeout ?? 120000),
-  }
+  const ctx = ctxFrom(args, String(args.endpoint ?? "http://127.0.0.1:8080/v1"), "")
 
   // Resolve the model up front so every probe names the same one.
   if (!ctx.model) {
@@ -559,36 +470,46 @@ async function main() {
     }
   }
 
-  const only = args.only ? String(args.only).split(",").map((s) => s.trim()) : null
-  const probes = only ? PROBES.filter((p) => only.includes(p.id)) : PROBES
-
-  console.log(`\nbrain-eval → ${endpoint}   model=${ctx.model}\n`)
+  console.log(`\nbrain-eval → ${ctx.endpoint}   model=${ctx.model}   temperature=${ctx.temperature}\n`)
 
   const results: ProbeResult[] = []
   for (const probe of probes) {
     const started = Date.now()
-    let outcome: Omit<ProbeResult, "id" | "title" | "capability" | "ms">
+    ctx.turnIndex = 0
+    let status: Status
+    let detail: string
+    let failureMode: FailureMode | null
+    let meta: Record<string, unknown> | undefined
     try {
-      outcome = await probe.run(ctx)
+      const out = await probe.run(ctx)
+      status = out.status
+      detail = out.detail
+      meta = out.meta
+      failureMode = out.failureMode ?? (out.status === "fail" ? "other" : null)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      outcome = { status: "fail", detail: `threw: ${msg}` }
+      status = "fail"
+      detail = `threw: ${msg}`
+      failureMode = /timeout|abort/i.test(msg) ? "timeout" : "other"
     }
     const result: ProbeResult = {
       id: probe.id,
       title: probe.title,
       capability: probe.capability,
+      useCase: probe.useCase,
       ms: Date.now() - started,
-      ...outcome,
+      status,
+      detail,
+      failureMode,
+      meta,
     }
     results.push(result)
-    console.log(
-      `  ${MARK[result.status]}  ${pad(result.title, 34)} ${pad(`${result.ms}ms`, 9)} ${result.detail}`,
-    )
+    const tag = failureMode ? ` [${failureMode}]` : ""
+    console.log(`  ${MARK[status]}  ${pad(probe.title, 40)} ${pad(`${result.ms}ms`, 9)} ${detail}${tag}`)
   }
 
-  // Roll the probes up into the four questions that decide whether this brain
-  // can run a long task on a Mac.
+  // Roll the probes up into the questions that decide whether this brain can run a long
+  // task on a Mac.
   const caps = new Map<string, Status[]>()
   for (const r of results) {
     if (!caps.has(r.capability)) caps.set(r.capability, [])
@@ -606,6 +527,12 @@ async function main() {
     console.log(`    ${pad(cap, 24)} ${verdict}`)
   }
 
+  const modes: Partial<Record<FailureMode, number>> = {}
+  for (const r of results) if (r.failureMode) modes[r.failureMode] = (modes[r.failureMode] ?? 0) + 1
+  if (Object.keys(modes).length) {
+    console.log(`\n  failure modes: ${Object.entries(modes).map(([k, v]) => `${k} x${v}`).join(", ")}`)
+  }
+
   const failed = results.filter((r) => r.status === "fail").length
   console.log(
     `\n  ${results.filter((r) => r.status === "pass").length} pass · ${failed} fail · ` +
@@ -615,10 +542,12 @@ async function main() {
 
   if (args.json) {
     const payload = {
-      endpoint,
+      endpoint: ctx.endpoint,
       model: ctx.model,
       recordedAt: new Date().toISOString(),
+      settings: { temperature: ctx.temperature, maxTokens: ctx.maxTokens, timeoutMs: ctx.timeoutMs },
       summary,
+      failureModes: modes,
       results,
     }
     await Bun.write(String(args.json), JSON.stringify(payload, null, 2) + "\n")

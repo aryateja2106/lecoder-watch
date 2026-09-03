@@ -64,7 +64,8 @@ async function* shredded(frames: string[], at: number) {
   check("mference: ttfc == ttft when there is no reasoning", m.ttfcMs === 200, String(m.ttfcMs))
   check("mference: last token", m.lastTokenMs === 400, String(m.lastTokenMs))
   check("mference: usage + cached", m.usage?.completion_tokens === 3 && m.usage?.cached_tokens === 19, JSON.stringify(m.usage))
-  check("mference: tok/s on usage basis", m.tokPerSecBasis === "usage" && Math.abs((m.tokPerSec ?? 0) - 15) < 1e-9, `${m.tokPerSec} ${m.tokPerSecBasis}`)
+  // 3 usage tokens, first one paid for in TTFT: (3-1) over 200 ms = 10 tok/s
+  check("mference: tok/s on usage basis, n-1", m.tokPerSecBasis === "usage" && Math.abs((m.tokPerSec ?? 0) - 10) < 1e-9, `${m.tokPerSec} ${m.tokPerSecBasis}`)
   check("mference: finish + done", m.finishReason === "stop" && m.done)
 }
 
@@ -110,8 +111,8 @@ async function* shredded(frames: string[], at: number) {
   check("inline-think: bare <think> tag is not a token", m.ttftMs === 200, String(m.ttftMs))
   check("inline-think: ttfc after the close tag", m.ttfcMs === 400, String(m.ttfcMs))
   check("inline-think: no usage → frames basis", m.usage === null && m.tokPerSecBasis === "frames", `${m.usage} ${m.tokPerSecBasis}`)
-  // 4 counted deltas (hmm, yes, Sure, !) over 300 ms
-  check("inline-think: frames rate", Math.abs((m.tokPerSec ?? 0) - 4 / 0.3) < 1e-9, String(m.tokPerSec))
+  // 4 counted deltas (hmm, yes, Sure, !) over 300 ms, n-1 → 3 / 0.3
+  check("inline-think: frames rate, n-1", Math.abs((m.tokPerSec ?? 0) - 3 / 0.3) < 1e-9, String(m.tokPerSec))
 }
 
 // ---- 4. Fragmented tool calls by index, two calls interleaved; finish_reason tool_calls

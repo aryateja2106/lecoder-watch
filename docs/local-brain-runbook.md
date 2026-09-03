@@ -132,33 +132,45 @@ Write all six into
 [openspec/changes/local-native-inference/tasks.md](../openspec/changes/local-native-inference/tasks.md)
 Stage 2, with this host's RAM stated alongside, since the slot profile is chosen from it.
 
-## 6. Grade it
+## 6. Grade it — and compare it against Ornith
+
+Single scorecard first, so a number exists at all:
 
 ```sh
 mkdir -p docs/results
 bun run scripts/brain-eval/eval.ts \
   --endpoint http://127.0.0.1:8080/v1 \
-  --json docs/results/qwen36-2026-09-01.json
+  --json docs/results/qwen36-mference-2026-09-02.json
 ```
-
-`--only IDS` re-runs single probes, `--strict` exits 1 on any failure, `--timeout MS`
-defaults to 120000. Full flags: `bun run scripts/brain-eval/eval.ts --help`.
 
 **Expect `reads images: UNSUPPORTED`.** Mference strips vision towers at repack
 (`RepackPlanner.isExcludedTensorName`) in every family. That is the engine being text-only,
 correctly detected — not a failed run.
 
-Then grade LM Studio identically, with a vision model loaded, and confirm the image probe
-flips to PASS:
+Then the comparison the whole exercise is for. Load Ornith in LM Studio (it did not
+appear in Activity Monitor's top processes — start it), then:
 
 ```sh
 bun run scripts/brain-eval/eval.ts \
-  --endpoint http://127.0.0.1:1234/v1 \
-  --json docs/results/lmstudio-2026-09-01.json
+  --a http://127.0.0.1:8080/v1 --label-a qwen36-mference \
+  --b http://127.0.0.1:1234/v1 --label-b ornith-lmstudio \
+  --repeat 3 \
+  --json  docs/results/compare-2026-09-02.json \
+  --jsonl docs/results/compare-2026-09-02.jsonl
 ```
 
-LM Studio did not appear in Activity Monitor's top processes — start it first, and commit
-both JSON files so the two scorecards can be read side by side.
+Run it twice: once as above at temperature 0, once with `--temperature 0.6` (Ornith's
+recommended setting for coding; 0 can loop a reasoning model). Commit both JSONs. Write
+the two servers' RSS from Activity Monitor into the commit message — the harness cannot
+see them.
+
+What the output gives you, per capability: a *better for* line with the rule that decided
+it, the *unsupported on A, passing on B* boundary (expect `vision` there), and each
+endpoint's failure modes — `hallucinated-path`, `non-unique-find`, `blind-send` and so on.
+Those tags, not the pass counts, are the answer to "what is it good at and what is it
+not", and the `.jsonl` is the seed of the dataset to build from them.
+
+Flags: `bun run scripts/brain-eval/eval.ts --help`.
 
 ## 7. Point the daemon at it
 

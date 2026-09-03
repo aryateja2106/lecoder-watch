@@ -1,17 +1,27 @@
-# brain-eval — grade any local brain on the four things that matter
+# brain-eval — grade any local brain, or compare two, on the things that matter
 
 One scorecard, two engines. `eval.ts` speaks plain OpenAI Chat Completions, so the
 same probes grade **our own inference** (MferenceServer) and **LM Studio** and print
-comparable results. It answers the only questions that decide whether a local model
-can run a long task on a Mac:
+comparable results. It answers the questions that decide whether a local model can run
+a long task on a Mac — and, in compare mode, **which of two models is better for what**.
 
-| Capability | What the probe actually does |
+| Capability | What the probes actually do |
 |---|---|
 | function calling | one correct call, then a full two-turn tool loop with `tool_call_id` |
-| terminal actions | given meshd-shaped `agent_output`/`agent_send` tools, answer a blocked `[y/N]` prompt |
-| browser actions | given navigate/type/click, sequence them for a real instruction |
+| terminal actions | answer a known `[y/N]` prompt; **read the pane before typing into a quiet session** |
+| browser actions | sequence navigate/type/click; **use only selectors from a page outline, not priors** |
+| cli agent | with the seven tools `mesh-code` really gives the model: write a script without a multi-line command; list before editing an unnamed file; `str_replace` with a **unique** anchor; change approach after exit 127; call `finish` when done |
+| ios simulator | boot the right device by **listed UDID** (the `booted` alias is the trap); read the file a **test digest** names |
+| macos control | activate Notes **before** typing — keystrokes go to the frontmost app |
 | reads images | send an `image_url` part and classify: supported, or refused as text-only |
 | long-running economics | prefix reuse (`cached_tokens`) and stop-sequence discipline |
+
+The use-case probes are one decision each on a fixed history, shaped byte-for-byte like
+the tool results `install/payload/agent/tools.ts` emits. Every one targets a specific
+small-model failure and reports it as a **tag** — `heredoc`, `hallucinated-path`,
+`non-unique-find`, `repeated-failing-command`, `no-finish`, `guessed-selector`,
+`blind-send`, `wrong-target`, `typed-into-wrong-app`, and so on — because the tags, not the
+pass counts, say which dataset to build.
 
 A model failing a probe is a **measurement**, not a script error — the run still exits 0.
 Use `--strict` to fail a CI job on it.
@@ -23,20 +33,67 @@ bun run scripts/brain-eval/eval.ts --endpoint … --json docs/results/qwen36.jso
 ```
 
 `--model` (defaults to whatever the endpoint lists first), `--api-key`, `--timeout`
-(default 120 s — local models are slow), `--only ids`, `--strict`.
+(default 120 s — local models are slow), `--temperature` (default 0), `--max-tokens`
+(512), `--only ids`, `--strict`.
+
+## Comparing two brains
+
+```sh
+bun run scripts/brain-eval/eval.ts \
+  --a http://127.0.0.1:8080/v1 --label-a qwen36-mference \
+  --b http://127.0.0.1:1234/v1 --label-b ornith-lmstudio \
+  --repeat 3 --json docs/results/compare-$(date +%Y%m%d).json \
+  --jsonl docs/results/compare-$(date +%Y%m%d).jsonl
+```
+
+Compare mode streams every probe (identical bodies plus `stream_options.include_usage`,
+which both servers honour), so each row carries **time-to-first-token and tokens/sec**
+alongside pass/fail. Reasoning models are handled: `<think>` blocks — whether they arrive
+as `reasoning_content`, `reasoning`, or inline tags — are split from the answer, and
+the reported TTFT is to the first *answer* token, which is what an agent loop waits for.
+A one-token reply shows `—` for tok/s: one token is not a rate.
+
+**Sequencing is what makes the numbers mean something.** Probes run one at a time, each
+fully on one endpoint then fully on the other, first-mover alternating per probe, never
+concurrent — our engine serves one generation at a time and keeps a single cached prefix,
+and both models share one GPU and one SSD. `--repeat 3` reports medians and flags a probe
+`nondeterministic` when its status differs between repeats.
+
+**The verdict rule is deliberately dull**, per capability: more passes wins; then fewer
+fails — an honest "unsupported" beats a wrong action, which is why a text-only engine
+loses *reads images* without being penalised elsewhere; then a ≥20 % median-speed edge on
+paired passes; otherwise the literal word *tie*. No overall winner is computed. Two more
+lines always print: *unsupported on A, passing on B* (the capability boundary) and
+*failure modes by endpoint* (what to fix, or what to train on).
+
+`--jsonl` writes one row per (endpoint, probe, turn) with the **full request, tools,
+assistant message and timing** — the seed of the dataset, and the failures are its most
+valuable rows. `--cache-bust` appends one nonce to every system prompt on both sides so
+TTFT is cold-prefill; `--no-warmup` skips the untimed warm-up request each endpoint gets
+first (LM Studio loads lazily, our engine's expert cache starts cold).
+
+**Temperature.** Default 0 on both. Ornith's authors recommend 0.6 for coding and never 0
+(reasoning models can loop in the think block at 0); Mference defaults to 0.2 when unset,
+LM Studio to the model's own default. Set it explicitly, and it is recorded in
+`settings`. For a like-for-like, run once at 0 and once at 0.6 rather than mixing.
 
 ## Verifying the harness itself
 
-`stub-server.ts` is a deliberately dumb endpoint that imitates a **text-only** engine,
-so every branch — including the image-refusal path — gets exercised without a model:
+`stub-server.ts` is a deliberately dumb endpoint with three personas, so every branch —
+including every failure branch — gets exercised without a model:
+
+| Persona | Imitates | Used to prove |
+|---|---|---|
+| `textonly` (default) | MferenceServer: refuses images, reports `cached_tokens`, no reasoning | the baseline: **19 pass · 0 fail · 1 unsupported**, the unsupported one being images |
+| `vision` | LM Studio with a reasoning model: accepts images, streams `reasoning_content`, no `cached_tokens`, 20× slower frames | compare mode detects the capability boundary and the speed gap |
+| `dumb` | a small model at its worst | each use-case probe fails **for its designed reason** — a probe failing for the wrong reason is a harness bug |
 
 ```sh
-bun run scripts/brain-eval/stub-server.ts --port 8099 &
-bun run scripts/brain-eval/eval.ts --endpoint http://127.0.0.1:8099/v1
-# 9 pass · 0 fail · 1 unsupported   ← the unsupported one is images, correctly classified
+sh scripts/check-brain-eval-compare.sh   # boots all three, runs both modes, ~50 assertions
+sh scripts/check-brain-eval-sse.sh       # the stream accumulator, synthetic + live
 ```
 
-Point it at a dead port to confirm it can fail: `--endpoint http://127.0.0.1:8098/v1 --timeout 3000`.
+Point the eval at a dead port to confirm it can fail: `--endpoint http://127.0.0.1:8098/v1 --timeout 3000`.
 
 ## Running it against our own inference (on the Mac)
 

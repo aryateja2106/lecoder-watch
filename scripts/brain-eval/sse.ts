@@ -224,16 +224,18 @@ export async function accumulateSSE(
   // harness must not grade that as "answered in prose".
   m.unparsedToolCallText = m.toolCalls.length === 0 && /<tool_call>/.test(m.content)
 
-  // tokens/sec is over the GENERATION window (first token → last token), which excludes
-  // prefill by construction. Fewer than two tokens is not a rate.
+  // tokens/sec is over the GENERATION window (first token → last token). The first
+  // token's cost is already in TTFT, so the decode rate is (n - 1) tokens over that
+  // window — otherwise a two-token reply would report double its real rate. Fewer than
+  // two tokens is not a rate.
   if (m.ttftMs !== null && m.lastTokenMs !== null && m.lastTokenMs > m.ttftMs) {
     const secs = (m.lastTokenMs - m.ttftMs) / 1000
     const usageTokens = m.usage?.completion_tokens ?? null
     if (usageTokens !== null && usageTokens > 1) {
-      m.tokPerSec = usageTokens / secs
+      m.tokPerSec = (usageTokens - 1) / secs
       m.tokPerSecBasis = "usage"
     } else if (m.deltaCount > 1) {
-      m.tokPerSec = m.deltaCount / secs
+      m.tokPerSec = (m.deltaCount - 1) / secs
       m.tokPerSecBasis = "frames"
     }
   }
