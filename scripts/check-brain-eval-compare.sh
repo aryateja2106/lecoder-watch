@@ -40,6 +40,7 @@ bun run "$E" --endpoint "http://127.0.0.1:$PT/v1" --timeout 8000 --json "$TMP/si
 bun run "$E" --endpoint "http://127.0.0.1:$PD/v1" --timeout 8000 --json "$TMP/single-d.json" >"$TMP/single-d.out" 2>&1
 bun run "$E" --a "http://127.0.0.1:$PT/v1" --b "http://127.0.0.1:$PV/v1" --timeout 8000 --json "$TMP/tv.json" --jsonl "$TMP/tv.jsonl" >"$TMP/tv.out" 2>&1
 bun run "$E" --a "http://127.0.0.1:$PT/v1" --b "http://127.0.0.1:$PD/v1" --timeout 8000 --no-warmup --json "$TMP/td.json" >"$TMP/td.out" 2>&1
+bun run "$E" --a "http://127.0.0.1:$PT/v1" --b "http://127.0.0.1:$PV/v1" --timeout 8000 --no-warmup --repeat 2 --only cli-unique-anchor,tools-loop --json "$TMP/rep.json" --jsonl "$TMP/rep.jsonl" >"$TMP/rep.out" 2>&1
 
 cat > "$TMP/assert.ts" <<'TS'
 import { readFileSync } from "node:fs"
@@ -128,6 +129,22 @@ check("compare td: B failure modes match the design", modes["hallucinated-path"]
 check("compare td: A has none", Object.keys(td.a.failureModes).length === 0)
 check("compare td: warm-up skipped when asked", td.a.warmupMs === null && td.b.warmupMs === null)
 check("compare tv: warm-up recorded by default", typeof tv.a.warmupMs === "number" && typeof tv.b.warmupMs === "number")
+
+// 5. --repeat: every repeat runs, medians are reported, turns are all kept, determinism is measured
+const rep = load("rep.json")
+check("repeat: settings.repeat recorded", rep.settings.repeat === 2)
+check("repeat: --only narrowed to two probes", rep.a.probes.length === 2 && rep.b.probes.length === 2, `${rep.a.probes.length}`)
+for (const side of ["a", "b"]) {
+  const loop = rep[side].probes.find((p: any) => p.id === "tools-loop")
+  const anchor = rep[side].probes.find((p: any) => p.id === "cli-unique-anchor")
+  check(`repeat ${side}: repeats=2 on both probes`, loop.repeats === 2 && anchor.repeats === 2)
+  check(`repeat ${side}: a two-turn probe keeps 4 turns, a one-turn probe keeps 2`, loop.turns.length === 4 && anchor.turns.length === 2, `${loop.turns.length} ${anchor.turns.length}`)
+  check(`repeat ${side}: deterministic stub → nondeterministic=false`, loop.nondeterministic === false && anchor.nondeterministic === false)
+  check(`repeat ${side}: turn indexes encode repeat and turn`, JSON.stringify(loop.turns.map((t: any) => t.index)) === "[0,1,100,101]", JSON.stringify(loop.turns.map((t: any) => t.index)))
+}
+const repRows = readFileSync(`${dir}/rep.jsonl`, "utf8").trim().split("\n").map((l) => JSON.parse(l))
+check("repeat: jsonl has 12 rows ((4+2) turns × 2 endpoints)", repRows.length === 12, String(repRows.length))
+check("repeat: rows carry repeat 0 and 1", new Set(repRows.map((r) => r.repeat)).size === 2 && repRows.every((r) => r.turn < 100))
 
 if (failed) { console.log(`\n${failed} assertion(s) failed`); process.exit(1) }
 console.log("check-brain-eval-compare: all assertions passed")

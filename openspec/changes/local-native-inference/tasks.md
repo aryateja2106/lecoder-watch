@@ -13,6 +13,20 @@ cannot run in CI or a cloud agent container.
       *Verified by running: against `stub-server.ts`, 9 pass · 0 fail · 1 unsupported,
       the unsupported one being images, correctly classified from the endpoint's 400.
       Negative control against a dead port reports 3 fails, so the harness can fail.*
+- [x] **Make the scorecard answer "which model is better for what"** — ten use-case probes
+      shaped like the owner's real day (CLI with mesh-code's seven tools, a page outline
+      for the browser, `xcrun simctl` and a test digest for iOS, frontmost-app discipline
+      for macOS), each reporting a failure-mode *tag*; a compare mode (`--a`/`--b`) that
+      streams every probe for TTFT and tok/s with reasoning split from the answer,
+      sequences strictly for a single-tenant server, and prints a per-capability *better
+      for* line with the rule that decided it; and a `--jsonl` dataset export.
+      *Verified by running, 2026-09-02: `check-brain-eval-compare.sh` boots three stub
+      personas and asserts 65 things — textonly alone 19/0/1, dumb alone fails exactly the
+      ten probes for exactly their designed reasons, textonly-vs-vision detects the image
+      boundary and a 20× speed gap, textonly-vs-dumb hands every use-case capability to A
+      with B's failure modes listed, `--repeat 2` keeps every turn and reports medians.
+      `check-brain-eval-sse.sh` covers the stream accumulator (45). Nothing has touched a
+      real model.*
 
 ## Stage 1 — the fork, and the patch that pays for it
 
@@ -65,9 +79,15 @@ cannot run in CI or a cloud agent container.
       --json docs/results/qwen36-<date>.json`.
       *Verify by running: commit the JSON. Expect `reads images: UNSUPPORTED` — that is
       the engine being text-only, not a failure of the run.*
-- [ ] **Grade LM Studio the same way** on `:1234/v1`, with a vision model loaded, and
-      confirm the image probe flips to PASS.
-      *Verify by running: commit that JSON too, and put the two scorecards side by side.*
+- [ ] **Compare it against Ornith in LM Studio** — the question this whole change exists
+      to answer. Ornith-1.5-35B-A3B is the same 35B-A3B class as Qwen 3.6, a reasoning
+      model, recommended at temperature 0.6, never 0. Run
+      `eval.ts --a :8080/v1 --b :1234/v1 --repeat 3 --json docs/results/compare-<date>.json
+      --jsonl …` twice, at temperature 0 and 0.6, and commit both. Expect `vision` under
+      *unsupported on A, passing on B* if Ornith accepts images, and read the failure-mode
+      lines, not the pass counts, for what each is good at.
+      *Verify by running: both JSONs committed, each server's RSS from Activity Monitor
+      in the commit message, and the per-capability verdict lines pasted here.*
 
 ## Stage 3 — the daemon and the clients
 
