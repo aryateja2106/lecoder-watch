@@ -54,6 +54,9 @@ jobs:
       - name: check-mesh-pair.sh
         run: sh scripts/check-mesh-pair.sh
 
+      - name: check-mesh-capabilities.sh
+        run: sh scripts/check-mesh-capabilities.sh
+
       - name: check-mesh-push.sh
         run: sh scripts/check-mesh-push.sh
 

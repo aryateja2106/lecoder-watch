@@ -2,6 +2,9 @@
 #   docker compose exec meshd mesh pair --address <tailscale-or-lan-ip>
 #
 # Uninstall: docker compose down -v   (removes the persisted volume)
+#
+# The container runs as uid 1000 (bun). A bind-mounted /data must be writable
+# by that uid. Named volumes created by compose inherit the image ownership.
 services:
   meshd:
     build: .
@@ -15,15 +18,20 @@ services:
       MESHD_HOST: "0.0.0.0"
       MESHD_PORT: "8899"
       MESH_MUX: "tmux"
+      HOME: "/data"
+      MESH_HOME: "/data/.mesh"
       # Explicit marker so /health does not advertise desktop input/screen in a container.
       MESHD_CONTAINER: "1"
       # Set to "off" to disable the daily anonymized heartbeat (see README Telemetry).
       MESHD_TELEMETRY: "${MESHD_TELEMETRY:-on}"
       # Optional: pin a token instead of letting the entrypoint mint one on first boot.
       # MESHD_TOKEN: ""
+    user: "1000:1000"
+    mem_limit: 256m
+    cpus: "0.5"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8899/health"]
+      test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:8899/health'); if (!r.ok) process.exit(1)"]
       interval: 30s
       timeout: 5s
       retries: 3

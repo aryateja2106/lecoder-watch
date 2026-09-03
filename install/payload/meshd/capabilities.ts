@@ -3,7 +3,6 @@
 // against DaemonCapabilities.expected). advertisedCapabilities() is the honest list
 // for this process: Linux drops screen routes; containers drop desktop input too.
 import { existsSync } from "node:fs";
-import os from "node:os";
 
 const IS_MAC = process.platform === "darwin";
 

@@ -40,8 +40,8 @@ docker run -d --name "$NAME" \
   -p "127.0.0.1:${PORT}:8899" \
   meshd:smoke >/dev/null
 
-# Wait for a stable /health 200. During startup we have seen transient 403s and
-# connection failures even though meshd is healthy a few seconds later.
+# Wait for a stable /health 200. Connection refused / empty body are retried;
+# /health itself is unauthenticated and should not 403.
 deadline=$(( $(date +%s) + MAX_WAIT_SEC ))
 code="000"
 while [ "$(date +%s)" -lt "$deadline" ]; do
@@ -52,11 +52,10 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
         break
       fi
       ;;
-    403|000|421|502|503)
+    000|421|502|503)
       : # retry — meshd still booting or port not ready
       ;;
     *)
-      # Any other non-200: keep trying until the deadline; fail only if it persists.
       :
       ;;
   esac
@@ -78,9 +77,14 @@ grep -q '"meshdVersion"' /tmp/meshd-health.json || { echo "check-docker-meshd: F
 grep -q '"screenPeek"' /tmp/meshd-health.json && { echo "check-docker-meshd: FAIL (advertised screenPeek in container)"; cat /tmp/meshd-health.json; exit 1; }
 grep -q '"input"' /tmp/meshd-health.json && { echo "check-docker-meshd: FAIL (advertised input in container)"; cat /tmp/meshd-health.json; exit 1; }
 
-# Pairing mint works on loopback without a bearer token.
-pair_code="$(curl_http "http://127.0.0.1:${PORT}/pair/new" /tmp/meshd-pair.json)"
-[ "$pair_code" = "200" ] || { echo "check-docker-meshd: FAIL (/pair/new HTTP $pair_code)"; cat /tmp/meshd-pair.json 2>/dev/null; exit 1; }
-grep -q '"code"' /tmp/meshd-pair.json || { echo "check-docker-meshd: FAIL (/pair/new body)"; cat /tmp/meshd-pair.json; exit 1; }
+# Must not run as root — the image USER is bun (uid 1000).
+uid="$(docker exec "$NAME" id -u)"
+[ "$uid" != "0" ] || { echo "check-docker-meshd: FAIL (container runs as root)"; exit 1; }
 
-log "ok ($(tr -d '\n' < /tmp/meshd-health.json | head -c 120)…)"
+# Pairing mint is loopback-only (pair.ts 403s off-loopback). Host-mapped curl
+# arrives from the Docker bridge, so mint from inside the container.
+pair_json="$(docker exec "$NAME" bun -e "const r=await fetch('http://127.0.0.1:8899/pair/new'); const t=await r.text(); console.log(t); if (!r.ok) process.exit(1)")" \
+  || { echo "check-docker-meshd: FAIL (/pair/new via docker exec)"; docker logs "$NAME" 2>&1 | tail -20; exit 1; }
+echo "$pair_json" | grep -q '"code"' || { echo "check-docker-meshd: FAIL (/pair/new body)"; echo "$pair_json"; exit 1; }
+
+log "ok uid=$uid ($(tr -d '\n' < /tmp/meshd-health.json | head -c 120)…)"

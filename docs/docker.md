@@ -30,6 +30,20 @@ The entrypoint persists state under a Docker volume at `/data/.mesh` (token,
 `hosts.json`, knowledge base, push tokens, event log). On first boot it mints a
 bearer token when `MESHD_TOKEN` is not set.
 
+The image is `oven/bun:1-slim` (Debian slim — Hub has no `1-debian-slim` tag)
+and runs as uid **1000** (`bun`), not root.
+A named volume created by compose inherits that ownership. If you bind-mount a
+host directory onto `/data`, it must be writable by uid 1000. Compose also
+limits the container to 256&nbsp;MB of RAM and half a CPU — enough for the daemon
+and a few tmux sessions, not a compile farm.
+
+`meshd` writes to `homedir()/.mesh` and **ignores `MESH_HOME`**. The image sets
+`HOME=/data` so that path is `/data/.mesh` on the volume. Keep `HOME=/data` if
+you override environment.
+
+Terminal sessions live in tmux inside the container and **do not survive**
+`docker compose restart`. Token, hosts, and the knowledge base do.
+
 ## Pair your phone
 
 Pairing still uses the same eight-character code and QR as `mesh pair` on a normal
@@ -83,16 +97,21 @@ The phone app keeps its entry for this machine until you remove it there — sam
 sh scripts/check-docker-meshd.sh
 ```
 
-Builds the image, starts a throwaway container on a spare port, hits `/health`, and
-tears it down.
+Builds the image, starts a throwaway container on a spare port, hits `/health`,
+mints a pairing code **inside** the container (`/pair/new` is loopback-only),
+and tears it down.
 
 ## Multi-architecture images
 
-The Dockerfile targets `linux/amd64` and `linux/arm64` via Buildx:
+`oven/bun:1-slim` is a multi-arch Debian tag (`linux/amd64` and `linux/arm64`).
+A plain `docker build` produces **this host's** architecture. To publish both:
 
 ```sh
 docker buildx build --platform linux/amd64,linux/arm64 -t your-registry/meshd:latest --push .
 ```
+
+`buildx` was not available in the cloud agent that wrote this file; run the
+command on a Docker host that has the Buildx plugin if you need both arches.
 
 ## curl installer still works
 
