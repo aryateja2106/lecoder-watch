@@ -28,6 +28,7 @@ those three.
 | [XCODE-WATCH-DEVICE-RUNBOOK.md](XCODE-WATCH-DEVICE-RUNBOOK.md) | Running on the physical watch | Signing and device traps. |
 | [VOICE-INPUT-SPEC.md](VOICE-INPUT-SPEC.md) | Any voice or dictation work | **Read the 2026-08-21 addendum first:** watchOS ships no Speech.framework, so the watch half of the original spec is not buildable as written. |
 | [competitive-position.md](competitive-position.md) | Deciding what to build next | Aug 2026 research. Changes what is worth doing. |
+| [product/PRODUCT-MAP-2026-09-03.md](product/PRODUCT-MAP-2026-09-03.md) | Deciding what the whole product is, or whether to build it with agents or hire | 2026-09-03. Three promises (reach, local factory, owned apps), what exists per pillar with evidence, the target shape, the job-to-tool flow, and the decisions still open. Pairs with the root `CONSTRAINTS.md`. |
 | [CLI-FIRST-ROADMAP.md](CLI-FIRST-ROADMAP.md) | Questioning the product shape | 2026-08-21 decision doc: daemon+CLI as the product. |
 | [CODEBASE-SURVEY.md](CODEBASE-SURVEY.md) | Tempted to merge code from another LeCoder/LeSearch folder | Verdicts on all 12. The rule it lands on: take assets, never merge old code lineages. |
 | [native-limits-recipe-2026-07-07.md](native-limits-recipe-2026-07-07.md) | Working on usage limits | Dated, but the recipe still describes the shipped path. |

@@ -17,6 +17,11 @@ implements it, proves it, and opens a **draft** PR. Two files are the policy:
 
 Setup and the local dry run: [docs/factory/README.md](docs/factory/README.md).
 
+## The bar
+
+Read [CONSTRAINTS.md](CONSTRAINTS.md) before writing code. Do not weaken it to make a change
+pass. `scripts/check-floor.sh` enforces its floor on the diff and runs inside `check-all.sh`.
+
 ## The gate
 
 ```sh
