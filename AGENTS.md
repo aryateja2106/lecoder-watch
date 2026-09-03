@@ -121,8 +121,11 @@ next steps that were correct in June and July and are wrong now; the index says 
 | `WatchWidgets/`, `MeshWatchWidgets/` | Complication; iOS Live Activity. |
 | `install/payload/meshd/` | **The daemon.** Bun + TypeScript. The only copy. |
 | `install/payload/bin/mesh` | The CLI: setup, pair, doctor, upgrade, uninstall. |
+| `install/payload/agent/` | **mesh-code**: the local coding agent. Read its README before changing `exec.ts`. |
 | `install/install.sh` | The `curl \| sh` installer. |
 | `scripts/check-*.{swift,sh}` | Self-checks. `check-all.sh` runs every one. |
+| `scripts/brain-eval/` | Capability scorecard for any OpenAI-compatible local endpoint. |
+| `references/` | Vendored third-party codebases, for study only. Nothing builds against them. |
 | `project.yml` | Canonical Xcode project. Run `xcodegen generate` after editing. |
 | `openspec/` | Specs and change proposals. |
 | `web/` | Landing page (Vercel). |
@@ -156,6 +159,7 @@ Sessions are real, persistent multiplexer sessions. State survives between calls
 GET    /health                       no auth; identity + capabilities
 GET    /doctor                       setup truth: token, input, screen, mux, push
 GET    /stats /agents /usage /tailnet /displays /events
+GET    /brain[?probe=1|need=images]  local model server: reachable, model, capabilities
 POST   /agents/new                   {name,cwd,cmd,initialText}
 GET    /agents/:n/panes              panes, each with currentPath
 GET    /agents/:n/output?lines&pane  the pane's screen as TEXT

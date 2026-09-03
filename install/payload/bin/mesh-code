@@ -1,0 +1,19 @@
+#!/usr/bin/env bun
+// mesh-code — thin entry point. The implementation lives beside the daemon in
+// install/payload/agent/ so the CLI and meshd ship and version as one payload.
+import { join, dirname } from "path";
+import { existsSync } from "fs";
+
+// Installed layout puts agent/ next to bin/; the repo layout is the same shape, so one
+// resolution works for both without a build step.
+const here = dirname(Bun.fileURLToPath(import.meta.url));
+const candidates = [
+  join(here, "..", "agent", "cli.ts"),
+  join(here, "..", "..", "agent", "cli.ts"),
+];
+const entry = candidates.find((p) => existsSync(p));
+if (!entry) {
+  console.error("mesh-code: cannot find agent/cli.ts next to this script");
+  process.exit(1);
+}
+await import(entry);

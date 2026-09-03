@@ -1,0 +1,226 @@
+# Runbook — getting a local model answering, on the Mac
+
+Every command in this file needs the Mac. None of it has been run: the session that wrote
+it had no Swift toolchain, no Metal and no access to this machine. **Treat each step's
+output as the evidence, not this file's expectations** (AGENTS.md rule 1).
+
+Context and the decisions behind these choices:
+[handoff-2026-09-01-local-inference.md](handoff-2026-09-01-local-inference.md) ·
+[openspec/changes/local-native-inference/tasks.md](../openspec/changes/local-native-inference/tasks.md)
+
+Record what actually happens in the task list, next to the step it verifies.
+
+---
+
+## 0. Confirm you are where you think you are
+
+```sh
+cd ~/Projects/lecoder-watch
+git log -1 --date=short --format='%h %cd %s'      # date should be recent — rule 2
+git branch --show-current
+```
+
+Work continues on `claude/local-model-inference-g3i08e` unless PR #119 has merged, in which
+case branch fresh from `main`.
+
+## 1. Consolidate the two fork clones, and push the paged-KV port
+
+The patch is already on GitHub as fork branch `claude/expert-cache-slots` (verified
+byte-identical to `references/patches/0001-…`). What is **not** pushed is the bigger
+thing: the Qwen 3.6 paged-KV port a Cursor session made in `~/deepseek-harness/Mference`.
+That clone is ahead of `~/Projects/lecoder-watch/Mference`, which only has the patch.
+
+```sh
+# keep the one that is ahead; push it
+cd ~/deepseek-harness/Mference
+git log --oneline -5                 # expect the patch commit plus the paged-KV work
+git status --short | head            # commit anything the Cursor session left loose
+git add -A && git commit -m "feat: paged full-attention KV for Qwen 3.6, server-side paged-KV flags"
+git push -u origin HEAD:claude/qwen36-paged-kv
+
+# then remove the stale copy that sits inside this repo
+rm -rf ~/Projects/lecoder-watch/Mference
+```
+
+If you would rather keep the fork under `~/Projects`, `mv ~/deepseek-harness/Mference
+~/Projects/Mference` first — but move it, do not re-clone, or the port is lost.
+
+## 2. Build
+
+Already done once on this machine — release build clean, `swift test` 1102 tests / 179
+suites, zero failures. Repeat only if the tree changed:
+
+```sh
+cd ~/Projects/Mference
+swift build -c release --product MferenceServer
+```
+
+Expect ~96 s. Warnings are pre-existing upstream (`DFlash2Int4Slab`, `KVPageStore`,
+`RealForwardRunner`, `MTPAttachTool`, `MapleAddRMSNormTests`). If a warning names
+`ServerArguments.swift`, `ServerInference.swift` or `main.swift`, that one is ours.
+
+Confirm the flag actually exists in the binary — this is what `start-brain.sh` checks:
+
+```sh
+.build/release/MferenceServer --help | grep -- --expert-cache-slots
+```
+
+## 3. Install a model
+
+Disk is no longer the constraint: **175.21 GB free** as of 2026-09-01. Start with Qwen 3.6
+because it is the one the whole proposal is written against.
+
+```sh
+df -h /                       # record before
+swift run -c release MferenceRepack --model qwen36 --output ~/models/qwen36.gturbo
+df -h /                       # record after; expect ~19.6 GB consumed
+```
+
+Resumable — re-run it if interrupted, do not restart from scratch. It should never need
+2× the final size in transient space; if it does, that is a finding worth writing down.
+
+Other families upstream supports, with this machine's verdict at 175 GB free:
+
+| Family | Disk | Verdict here |
+|---|---|---|
+| `qwen36` (35B-A3B) | ~19.6 GB | Install first |
+| `gemma4` | ~14.3 GB | Fits |
+| `maple` | ~6.6 GB | Fits |
+| `qwen38` (27B dense) | fits disk | **~15 GB RAM** — see the memory note below |
+| `deepseekV4Flash` | ~91 GB | Now fits (did not at 30–40 GB free) |
+| `inklingSmall` | ~148 GB | Would leave ~27 GB on the boot volume — do not |
+
+## 4. Start the server
+
+**Do not stop LM Studio to free the port** (AGENTS.md rule 5). `start-brain.sh` refuses to
+start on a port something already answers on, deliberately.
+
+```sh
+cd ~/Projects/lecoder-watch
+scripts/start-brain.sh --model ~/models/qwen36.gturbo --slots 32 \
+  --bin ~/Projects/Mference/.build/release/MferenceServer
+```
+
+**Reported, not yet measured by this harness:** the Cursor session ran this model at
+**16 slots with paged KV at 32K context and saw 1.14 GiB RSS** after two chats. That is
+the first real number anyone has for this stack. It came from `run-qwen-server.sh` in
+`~/deepseek-harness/Mference`, which passes paged-KV flags the upstream server does not
+have. `start-brain.sh` does not pass them, so until that script is vendored, 32 slots
+without paged KV is what this command starts.
+
+**Why 32 and not the built-in rule.** On a ≥24 GiB host the engine picks 96 slots
+(~6.8 GB wired). Activity Monitor on 2026-09-01 showed 16.39 GB of 24 GB already in use
+with 4.26 GB compressed — roughly 7.6 GB of real headroom. 96 slots would take nearly all
+of it on a laptop you are also working on. 16 is the floor chunked prefill can schedule
+`(maxPendingDepth + 1) * tileExperts` and has zero headroom, and it is also the slowest
+rung. 32 (~2.2 GB) is the working default.
+
+## 5. Measure it — six numbers, honestly
+
+This is the step that turns every borrowed figure in the proposal into ours. Run the same
+model twice and record **both** memory and speed, because a footprint win that thirds
+throughput is not a win.
+
+For each of `--slots 32` and `--slots auto`:
+
+- **peak RSS** — Activity Monitor's Memory column for `MferenceServer`, or
+  `/usr/bin/time -l` on the process
+- **tokens/sec** — generation, from the eval output
+- **time to first token** — prefill
+
+Write all six into
+[openspec/changes/local-native-inference/tasks.md](../openspec/changes/local-native-inference/tasks.md)
+Stage 2, with this host's RAM stated alongside, since the slot profile is chosen from it.
+
+## 6. Grade it — and compare it against Ornith
+
+Single scorecard first, so a number exists at all:
+
+```sh
+mkdir -p docs/results
+bun run scripts/brain-eval/eval.ts \
+  --endpoint http://127.0.0.1:8080/v1 \
+  --json docs/results/qwen36-mference-2026-09-02.json
+```
+
+**Expect `reads images: UNSUPPORTED`.** Mference strips vision towers at repack
+(`RepackPlanner.isExcludedTensorName`) in every family. That is the engine being text-only,
+correctly detected — not a failed run.
+
+Then the comparison the whole exercise is for. Load Ornith in LM Studio (it did not
+appear in Activity Monitor's top processes — start it), then:
+
+```sh
+bun run scripts/brain-eval/eval.ts \
+  --a http://127.0.0.1:8080/v1 --label-a qwen36-mference \
+  --b http://127.0.0.1:1234/v1 --label-b ornith-lmstudio \
+  --repeat 3 \
+  --json  docs/results/compare-2026-09-02.json \
+  --jsonl docs/results/compare-2026-09-02.jsonl
+```
+
+Run it twice: once as above at temperature 0, once with `--temperature 0.6` (Ornith's
+recommended setting for coding; 0 can loop a reasoning model). Commit both JSONs. Write
+the two servers' RSS from Activity Monitor into the commit message — the harness cannot
+see them.
+
+What the output gives you, per capability: a *better for* line with the rule that decided
+it, the *unsupported on A, passing on B* boundary (expect `vision` there), and each
+endpoint's failure modes — `hallucinated-path`, `non-unique-find`, `blind-send` and so on.
+Those tags, not the pass counts, are the answer to "what is it good at and what is it
+not", and the `.jsonl` is the seed of the dataset to build from them.
+
+Flags: `bun run scripts/brain-eval/eval.ts --help`.
+
+## 7. Point the daemon at it
+
+Boot a **second** daemon on a spare port rather than touching the running one — rule 5:
+
+```sh
+MESHD_PORT=8898 MESHD_HOST=127.0.0.1 MESHD_TOKEN=throwaway \
+  bun run install/payload/meshd/server.ts
+```
+
+```sh
+curl -s 127.0.0.1:8898/brain | python3 -m json.tool            # fast path
+curl -s '127.0.0.1:8898/brain?probe=1' | python3 -m json.tool  # measures image support
+curl -s '127.0.0.1:8898/brain?need=images' | python3 -m json.tool
+```
+
+`reachable:false` is a 200, not an error — a missing brain is a state. Read tokens from
+`~/.mesh/token` into a shell variable; never print or paste one.
+
+## 8. Drive one real task through it
+
+```sh
+mesh-code brain
+mesh-code run "…one real multi-step task…" --cwd ~/Projects/<something>
+mesh-code show <id>
+```
+
+Paste the transcript **including failures** into Stage 4 of the task list. A run that needed
+three corrections is a more useful record than one that worked.
+
+---
+
+## Before any commit
+
+```sh
+sh scripts/check-all.sh
+```
+
+Not optional. `check-docs-index.sh` will fail if a doc lands in `docs/` without a row in
+[docs/README.md](README.md); `check-agent-risk-parity.sh` fails if `risk.ts` drifts from
+`Shared/RiskClassifier.swift`.
+
+## If something looks broken daemon-side
+
+Ask the machine what it is actually running before debugging app code — AGENTS.md rule 6
+cost a week once:
+
+```sh
+curl -s http://127.0.0.1:8899/health | python3 -m json.tool | head -20
+```
+
+An old daemon answers **200 with the old shape**, which is indistinguishable from the
+feature being broken.
