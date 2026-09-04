@@ -106,6 +106,19 @@ struct TerminalTab: View {
                                 Circle().fill(snap.authError != nil ? .orange : (snap.reachable ? .green : .secondary)).frame(width: 7, height: 7)
                                 Text(snap.host)
                                 Spacer()
+                                // meshd 0.6+ ("apps"): an agent on this machine can
+                                // publish a PWA or build a native app — this is where
+                                // it shows up outside of whatever chat card built it.
+                                if snap.capabilities?.contains("apps") == true {
+                                    NavigationLink {
+                                        MeshAppsScreen(machine: m)
+                                    } label: {
+                                        Label("Apps", systemImage: "square.grid.2x2")
+                                    }
+                                    .labelStyle(.iconOnly)
+                                    .buttonStyle(.borderless)
+                                    .disabled(!terminalReady(snap))
+                                }
                                 // Browsing the machine's own filesystem is the fastest
                                 // way to answer "where do I start this?" — and the one
                                 // question a phone keyboard is worst at.
@@ -200,6 +213,102 @@ private struct ManualBridgeScreen: View {
         if host.contains("pi") { return ["pi-shell", "watch-shell", "mesh-smoke"] }
         if host.contains("mac") { return ["mesh-smoke", "codex", "claude"] }
         return ["shell", "codex", "claude"]
+    }
+}
+
+// MARK: - Hosted apps (meshd 0.6+, capability "apps")
+
+/// What an agent built and published on this machine — a PWA or a native app — listed
+/// outside of whatever chat card first showed it. The same two actions as the chat
+/// artifact card: PWA opens in real Safari (Add to Home Screen only exists there),
+/// native posts to the machine's own install route.
+private struct MeshAppsScreen: View {
+    @EnvironmentObject var store: MeshStore
+    let machine: Machine
+
+    @State private var apps: [MeshApp] = []
+    @State private var loading = false
+    @State private var loadError: String?
+    @State private var installMessage: String?
+
+    var body: some View {
+        List {
+            if let loadError {
+                Text(loadError).font(.caption).foregroundStyle(.orange)
+            } else if apps.isEmpty && !loading {
+                ContentUnavailableView(
+                    "No apps yet",
+                    systemImage: "square.grid.2x2",
+                    description: Text("Ask an agent to build one — a native app or a web app — and it appears here.")
+                )
+            }
+            ForEach(apps) { app in
+                HStack(spacing: 12) {
+                    Image(systemName: app.kind == "native" ? "iphone.badge.play" : "globe")
+                        .foregroundStyle(app.kind == "native" ? Color.blue : Color.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(app.name).font(.headline)
+                        Text("\(app.kind == "native" ? "Native" : "Web") · \(updatedLabel(app.updated))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if app.kind == "native" {
+                        Button("Install") { Task { await install(app) } }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    } else {
+                        Button("Open") { open(app) }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                }
+            }
+            if let installMessage {
+                Text(installMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Apps")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if loading { ProgressView().controlSize(.small) }
+        }
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func updatedLabel(_ iso: String) -> String {
+        guard let date = parseISO(iso) else { return iso }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private func load() async {
+        loading = true
+        defer { loading = false }
+        do {
+            apps = try await store.client(for: machine).meshApps()
+            loadError = nil
+        } catch {
+            loadError = "Couldn't reach \(machine.host)."
+        }
+    }
+
+    private func open(_ app: MeshApp) {
+        guard let url = URL(string: app.url) else { return }
+        // Real Safari, not SFSafariViewController: Add to Home Screen only exists there.
+        UIApplication.shared.open(url)
+    }
+
+    private func install(_ app: MeshApp) async {
+        installMessage = nil
+        do {
+            let result = try await store.client(for: machine).installMeshApp(slug: app.slug, target: "device")
+            installMessage = result.ok ? "\(app.name) installed." : (result.error ?? "Install failed.")
+        } catch {
+            installMessage = "Couldn't reach \(machine.host) to install."
+        }
     }
 }
 
