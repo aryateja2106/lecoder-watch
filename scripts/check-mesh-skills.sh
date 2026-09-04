@@ -31,12 +31,19 @@ if [ -d "$SKILLS_SRC/apple-native-apis/references" ]; then
 fi
 
 # ---- 2. the repo's own symlinks resolve to real content ----
+# .claude/skills and .cursor/skills pointers are committed. .agents/skills/* is per-machine
+# by .gitignore policy (only factory-* rides into PRs), so on a fresh checkout — CI — those
+# links are absent, which is fine; a real directory there would be a stale copy, which is not.
 for name in apple-native-apis native-app-builder pwa-local-app-builder; do
-  for dir in .agents/skills .cursor/skills .claude/skills; do
+  for dir in .cursor/skills .claude/skills; do
     link="$ROOT/$dir/$name"
     [ -L "$link" ] || { bad "$dir/$name is not a symlink"; continue; }
     [ -f "$link/SKILL.md" ] || bad "$dir/$name does not resolve to a SKILL.md"
   done
+  local_copy="$ROOT/.agents/skills/$name"
+  if [ -e "$local_copy" ] && [ ! -L "$local_copy" ]; then
+    bad ".agents/skills/$name is a real directory — a stale copy; the canonical skill is install/payload/share/skills/$name"
+  fi
 done
 
 command -v bun >/dev/null 2>&1 || { echo "check-mesh-skills: SKIP (no bun) — string/symlink checks above still ran"; [ "$fail" -eq 0 ] && exit 0 || exit 1; }
