@@ -76,9 +76,24 @@ const pem = ["-----BEGIN OPENSSH PRIVATE KEY-----", "b3BlbnNzaC1rZXktdjEAAAAABG5
 expect("pem begin masked", pem[0].text.includes("PRIVATE KEY ••••••[") && pem[0].findings.length === 1, JSON.stringify(pem[0]));
 expect("pem body hidden", pem[1].text === "" && pem[2].text === "", JSON.stringify([pem[1], pem[2]]));
 expect("after pem passes", pem[3].text === "echo after", pem[3].text);
-const wrapped = lr("echo TOKEN_IS ghp_ABCDEFGHIJKLMNOPQRST \rUVWXYZabcdefghij123456 done");
-expect("wrapped echo redacted", wrapped.findings.length === 1 && !wrapped.text.includes("UVWXYZabcdefghij123456") && wrapped.text.includes("ghp_••••••["), JSON.stringify(wrapped));
-expect("plain line keeps its CR", lr("plain \rline").text === "plain \rline");
+const wrapped = redact("echo TOKEN_IS ghp_ABCDEFGHIJKLMNOPQRST \rUVWXYZabcdefghij123456 done");
+expect("wrapped echo redacted (plain redact)", wrapped.findings.length === 1 && !wrapped.text.includes("UVWXYZabcdefghij123456") && wrapped.text.includes("ghp_••••••["), JSON.stringify(wrapped));
+expect("plain line keeps its CR", redact("plain \rline").text === "plain \rline");
+
+// Re-redacting redacted text must change nothing: stored events are cleaned again on every
+// read, and a fingerprint that drifts no longer matches its ledger row.
+for (const line of [
+  "postgres://user:s3cretPassw0rd@db.example.com:5432/app",
+  "Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345",
+  "api_key = abcdefghijklmnop1234",
+  "token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij123456 pushed",
+  "curl -H 'Authorization: Bearer " + meshToken + "'",
+  "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+]) {
+  const once = redact(line).text;
+  const twice = redact(once);
+  expect("idempotent: " + line.slice(0, 24), twice.text === once && twice.findings.length === 0, once + " -> " + twice.text);
+}
 
 // ledger: distinct fingerprints, dedupe window on polled channels, status changes
 const f1 = redact("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij123456").findings;

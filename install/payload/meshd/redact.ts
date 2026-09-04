@@ -56,7 +56,9 @@ const RULES: Rule[] = [
   { kind: "npm-token", re: /\bnpm_[A-Za-z0-9]{36}\b/g, keep: 4 },
   { kind: "jwt", re: /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, keep: 3 },
   { kind: "bearer", re: /(\bBearer\s+)([A-Za-z0-9._~+/=-]{16,})/g, keep: 0, groups: true },
-  { kind: "url-credentials", re: /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/]+:)([^\s@/]+)(?=@)/gi, keep: 0, groups: true },
+  // `•` is excluded so an already-redacted value is never matched again (re-redacting a
+  // stored event must be a no-op, or its fingerprint drifts away from the ledger's).
+  { kind: "url-credentials", re: /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:@/•]+:)([^\s@/•\[\]]+)(?=@)/gi, keep: 0, groups: true },
   // `API_KEY=…`, `password: …`, `"token": "…"` — a value of 16+ characters after a
   // secret-shaped name. Paths are excluded below (looksLikePath) so
   // `TOKEN_FILE=/Users/x/.mesh/token` stays readable.
@@ -109,6 +111,17 @@ export function envSecrets(env: NodeJS.ProcessEnv = process.env): Array<[string,
 
 // ---------- redact ----------
 export function redact(text: string): { text: string; findings: Finding[] } {
+  const direct = redactOnce(text);
+  if (direct.findings.length || !/\r(?!\n)/.test(text)) return direct;
+  // A shell's line editor redraws a long typed line with " \r" at the wrap column,
+  // splitting a token in two (seen live: `ghp_ABCDEFGHIJKLMNOPQRST \rUVWXYZ…`). Match
+  // the flattened text; when that finds something, the flattened text is what ships —
+  // a wrap marker is cosmetic, a leaked token is not.
+  const flattened = redactOnce(text.replace(/ ?\r(?!\n)/g, ""));
+  return flattened.findings.length ? flattened : direct;
+}
+
+function redactOnce(text: string): { text: string; findings: Finding[] } {
   if (!text) return { text, findings: [] };
   const findings: Finding[] = [];
   let out = text;
@@ -149,16 +162,7 @@ export function createLineRedactor(): (line: string) => { text: string; findings
       const fp = fingerprint(line);
       return { text: `-----PRIVATE KEY ${MASK}[${fp}]-----`, findings: [{ kind: "private-key", hint: "PEM", fp }] };
     }
-    const direct = redact(line);
-    if (direct.findings.length) return direct;
-    // A shell's line editor redraws a long typed line with " \r" at the wrap column,
-    // splitting a token in two (seen live: `ghp_ABCDEFGHIJKLMNOPQRST \rUVWXYZ…`). Match
-    // the flattened line; when that finds something, the flattened text is what ships —
-    // a wrap marker is cosmetic, a leaked token is not.
-    const flat = line.replace(/ ?\r(?!\n)/g, "");
-    if (flat === line) return direct;
-    const flattened = redact(flat);
-    return flattened.findings.length ? flattened : direct;
+    return redact(line);
   };
 }
 
