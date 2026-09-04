@@ -75,12 +75,18 @@ final class SmokeTests: XCTestCase {
             XCTFail("no 'Pair a machine' button — the pairing entry point moved")
             return
         }
-        pair.tap()
-        let fieldShown = app.textFields.firstMatch.waitForExistence(timeout: 10)
-        // On failure, say what WAS on screen: a red line without the hierarchy has
-        // cost an evening before.
-        if !fieldShown { print("SMOKE: pairing sheet hierarchy after tap:\n\(app.debugDescription)") }
-        XCTAssertTrue(fieldShown, "the pairing sheet showed no text fields")
+        // Up to three taps: with machines paired, the toolbar button sits beside a refresh
+        // icon that redraws on every poll, and a tap landing mid-redraw is dropped. One
+        // dropped tap is a test artefact; a sheet that never opens is the app's bug.
+        var fieldShown = false
+        for attempt in 1...3 {
+            pair.tap()
+            fieldShown = app.textFields.firstMatch.waitForExistence(timeout: 6)
+            if fieldShown { break }
+            // Say what WAS on screen: a red line without the hierarchy has cost an evening before.
+            print("SMOKE: no text field after tap \(attempt); hierarchy:\n\(app.debugDescription)")
+        }
+        XCTAssertTrue(fieldShown, "the pairing sheet showed no text fields after three taps")
         XCTAssertEqual(app.state, .runningForeground, "the app died presenting the pairing sheet")
     }
 }
