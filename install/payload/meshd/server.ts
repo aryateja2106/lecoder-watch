@@ -837,13 +837,27 @@ function noteSessionEvent(event: AgentEvent) {
 const transcriptBySession = new Map<string, string>();
 
 /// What the chat route needs from the mux: the pane's cwd and what runs in it.
+/// herdr panes are where this machine's long-lived agents actually run; their rows already
+/// carry the pane's cwd and agent type (herdr.ts), so the chat route reads those instead of
+/// asking a mux that does not know them. cmux sessions expose neither and fall back to output.
+async function herdrRow(name: string): Promise<any | undefined> {
+  try { return (await listAgents()).find((s: any) => s?.name === name); } catch { return undefined; }
+}
 async function paneCwd(name: string): Promise<string | null> {
-  if (isHerdrAgent(name) || isCmuxAgent(name)) return null;
+  if (isCmuxAgent(name)) return null;
+  if (isHerdrAgent(name)) {
+    const cwd = (await herdrRow(name))?.cwd;
+    return typeof cwd === "string" && cwd.startsWith("/") ? cwd : null;
+  }
   const out = (await sh(`${MUX} display -p -t ${shq(name)} '#{pane_current_path}' 2>/dev/null`)).trim();
   return out.startsWith("/") ? out : null;
 }
 async function paneAgentType(name: string): Promise<string | undefined> {
-  if (isHerdrAgent(name) || isCmuxAgent(name)) return undefined;
+  if (isCmuxAgent(name)) return undefined;
+  if (isHerdrAgent(name)) {
+    const t = (await herdrRow(name))?.agentType;
+    return typeof t === "string" ? t.toLowerCase() : undefined;
+  }
   const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{pane_current_command}' 2>/dev/null`);
   const cmds = out.split("\n").filter(Boolean);
   const hit = cmds.map(mapAgent).find((a) => a === "Claude" || a === "Codex" || a === "Cursor");
