@@ -120,6 +120,73 @@ struct MachinesListView: View {
     @EnvironmentObject var store: WatchMeshStore
 
     var body: some View {
+        Group {
+            if WatchScreen.isCompact {
+                compactList
+            } else {
+                fullList
+            }
+        }
+        .overlay {
+            // "Connecting…" forever is what an unpaired watch used to show, because an
+            // empty list and an unanswered poll looked the same from here. The
+            // no-machines case is a row now, not an overlay: as an overlay it was drawn
+            // straight over the live Usage and Events rows and they showed through it.
+            if !store.hasNoMachines && store.snaps.isEmpty {
+                ProgressView("Connecting…")
+            }
+        }
+        // ponytail: pull-to-refresh instead of a toolbar button — on watchOS a bare
+        // .toolbar Button renders as a full-width top button that covered the first
+        // machine and showed no managed spinner. .refreshable self-dismisses.
+        .refreshable { await store.refresh() }
+    }
+
+    /// 40–41mm home: attention-first, one machine at most, everything else in More.
+    @ViewBuilder
+    private var compactList: some View {
+        List {
+            if store.hasNoMachines { noMachines }
+            connectionBanner
+            if !store.hasNoMachines, !store.needsAttention.isEmpty {
+                Section {
+                    ForEach(store.needsAttention, id: \.self) { item in
+                        AttentionRow(item: item, compact: true)
+                    }
+                } header: {
+                    Label("Needs you", systemImage: "exclamationmark.bubble.fill")
+                        .foregroundStyle(.orange)
+                }
+            } else if !store.hasNoMachines {
+                Section {
+                    Label("Nothing waiting on you", systemImage: "checkmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let primary = activeFirst(store.snaps).first {
+                    Section {
+                        NavigationLink {
+                            SessionsView(host: primary.host).environmentObject(store)
+                        } label: {
+                            compactMachineRow(primary)
+                        }
+                    }
+                }
+            }
+            if !store.hasNoMachines {
+                Section {
+                    NavigationLink {
+                        CompactMoreView().environmentObject(store)
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var fullList: some View {
         List {
             if store.hasNoMachines { noMachines }
             // Above even "Needs you": if the link is down, every row below is a memory
@@ -238,19 +305,22 @@ struct MachinesListView: View {
                 Text("Link")
             }
         }
-        .overlay {
-            // "Connecting…" forever is what an unpaired watch used to show, because an
-            // empty list and an unanswered poll looked the same from here. The
-            // no-machines case is a row now, not an overlay: as an overlay it was drawn
-            // straight over the live Usage and Events rows and they showed through it.
-            if !store.hasNoMachines && store.snaps.isEmpty {
-                ProgressView("Connecting…")
+    }
+
+    @ViewBuilder
+    private func compactMachineRow(_ snap: MachineSnapshot) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(statusColor(snap)).frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(shortName(snap.host)).font(.caption.weight(.semibold)).lineLimit(1)
+                if let auth = snap.authError {
+                    Text(auth).font(.caption2).foregroundStyle(.orange).lineLimit(1)
+                } else {
+                    Text("\(snap.agents.count) session\(snap.agents.count == 1 ? "" : "s") · \(store.routeLabel(for: snap.host))")
+                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
         }
-        // ponytail: pull-to-refresh instead of a toolbar button — on watchOS a bare
-        // .toolbar Button renders as a full-width top button that covered the first
-        // machine and showed no managed spinner. .refreshable self-dismisses.
-        .refreshable { await store.refresh() }
     }
 
     /// "Is what I am looking at still true?" — answered in place, at the top, whenever
@@ -316,34 +386,149 @@ struct MachinesListView: View {
     }
 
     /// Machines whose meshd advertises input injection and answered this poll.
+    private var controllable: [Machine] { watchControllable(store: store) }
+
+    private var limitsGlance: [LimitGlanceRow]? { watchLimitsGlance(store: store) }
+}
+
+/// Secondary destinations on a 40–41mm watch — control, usage, events, screen peek, link.
+private struct CompactMoreView: View {
+    @EnvironmentObject var store: WatchMeshStore
+
+    var body: some View {
+        List {
+            if store.snaps.count > 1 {
+                Section("Machines") {
+                    ForEach(activeFirst(store.snaps)) { m in
+                        NavigationLink {
+                            SessionsView(host: m.host).environmentObject(store)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Circle().fill(statusColor(m)).frame(width: 6, height: 6)
+                                Text(shortName(m.host)).lineLimit(1)
+                            }
+                        }
+                    }
+                }
+            }
+            if !controllable.isEmpty {
+                Section {
+                    ForEach(controllable) { m in
+                        NavigationLink {
+                            RemoteView(machine: m).environmentObject(store)
+                        } label: {
+                            Label("Control \(shortName(m.host))", systemImage: "cursorarrow.motionlines")
+                        }
+                    }
+                }
+            }
+            if let glance = watchLimitsGlance(store: store) {
+                Section {
+                    ForEach(glance, id: \.providerId) { row in
+                        HStack {
+                            if let mark = WatchScreen.providerMark(for: row.providerId) {
+                                Image(systemName: mark.symbol)
+                                    .foregroundStyle(row.blocked ? .red : .green)
+                                    .accessibilityLabel(row.title)
+                            } else {
+                                Image(systemName: row.blocked ? "flame.fill" : "checkmark.circle")
+                                    .foregroundStyle(row.blocked ? .red : .green)
+                            }
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(row.title).font(.caption2).lineLimit(1)
+                                Text(row.detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            if let pin = store.pinnedLimitSessions.first(where: { $0.providerId.lowercased() == row.providerId.lowercased() }) {
+                                Spacer()
+                                Button("Continue") { store.sendToPinned(pin) }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    .frame(minHeight: WatchTouch.minHeight)
+                                    .disabled(row.blocked)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Limits")
+                }
+            }
+            NavigationLink {
+                UsageView().environmentObject(store)
+            } label: {
+                Label("Usage", systemImage: "gauge.with.dots.needle.67percent")
+            }
+            NavigationLink {
+                EventsView().environmentObject(store)
+            } label: {
+                Label("Events", systemImage: "bell")
+            }
+            if !screenPeekHosts.isEmpty {
+                Section("Screen peek") {
+                    ForEach(screenPeekHosts, id: \.self) { host in
+                        NavigationLink {
+                            ScreenPeekView(host: host).environmentObject(store)
+                        } label: {
+                            Label(shortName(host), systemImage: "display")
+                        }
+                        .disabled(!screenPeekReachable(host))
+                    }
+                }
+            }
+            Section {
+                Text(store.linkStatusLine)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Link")
+            }
+        }
+        .navigationTitle("More")
+    }
+
     private var controllable: [Machine] {
-        store.machines.filter { machine in
-            guard let snap = store.snaps.first(where: { $0.host == machine.host }) else { return false }
-            return snap.reachable && snap.authError == nil && (snap.capabilities?.contains("input") ?? false)
-        }
+        watchControllable(store: store)
     }
 
-    private struct LimitGlanceRow {
-        var providerId: String
-        var title: String
-        var detail: String
-        var blocked: Bool
+    /// Mac hosts that advertise screen capture — not offered on Linux meshd.
+    private var screenPeekHosts: [String] {
+        store.snaps.filter { snap in
+            snap.capabilities?.contains("screenPeek") == true
+        }.map(\.host)
     }
 
-    private var limitsGlance: [LimitGlanceRow]? {
-        guard let providers = store.effectiveUsage?.providers else { return nil }
-        let rows = ["claude", "codex"].compactMap { id -> LimitGlanceRow? in
-            guard let p = providers.first(where: { $0.id.lowercased() == id }),
-                  let limit = p.limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }) else { return nil }
-            let blocked = LimitHelpers.isBlocked(limit)
-            let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) ?? "—"
-            let left = LimitHelpers.remainingPct(usedPct: limit.usedPct).map { "\($0)% left" } ?? "—"
-            return LimitGlanceRow(providerId: id,
-                                  title: "\(p.displayName) session",
-                                  detail: blocked ? "Limit reached · \(countdown)" : "\(left) · \(countdown)",
-                                  blocked: blocked)
-        }
-        return rows.isEmpty ? nil : rows
+    private func screenPeekReachable(_ host: String) -> Bool {
+        guard let snap = store.snaps.first(where: { $0.host == host }) else { return false }
+        return snap.reachable && snap.authError == nil
+    }
+}
+
+private struct LimitGlanceRow {
+    var providerId: String
+    var title: String
+    var detail: String
+    var blocked: Bool
+}
+
+private func watchLimitsGlance(store: WatchMeshStore) -> [LimitGlanceRow]? {
+    guard let providers = store.effectiveUsage?.providers else { return nil }
+    let rows = ["claude", "codex"].compactMap { id -> LimitGlanceRow? in
+        guard let p = providers.first(where: { $0.id.lowercased() == id }),
+              let limit = p.limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }) else { return nil }
+        let blocked = LimitHelpers.isBlocked(limit)
+        let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) ?? "—"
+        let left = LimitHelpers.remainingPct(usedPct: limit.usedPct).map { "\($0)% left" } ?? "—"
+        return LimitGlanceRow(providerId: id,
+                              title: "\(p.displayName) session",
+                              detail: blocked ? "Limit reached · \(countdown)" : "\(left) · \(countdown)",
+                              blocked: blocked)
+    }
+    return rows.isEmpty ? nil : rows
+}
+
+private func watchControllable(store: WatchMeshStore) -> [Machine] {
+    store.machines.filter { machine in
+        guard let snap = store.snaps.first(where: { $0.host == machine.host }) else { return false }
+        return snap.reachable && snap.authError == nil && (snap.capabilities?.contains("input") ?? false)
     }
 }
 
@@ -362,6 +547,7 @@ struct MachinesListView: View {
 private struct AttentionRow: View {
     @EnvironmentObject var store: WatchMeshStore
     let item: LiveSessionPick
+    var compact: Bool = false
     @State private var answered = false
     /// This row's own copy of the failure, not the store's — `lastError` is
     /// mesh-wide, and three blocked agents all showing one machine's error is worse
@@ -369,6 +555,76 @@ private struct AttentionRow: View {
     @State private var failure: String?
 
     var body: some View {
+        if compact {
+            compactBody
+        } else {
+            standardBody
+        }
+    }
+
+    @ViewBuilder
+    private var compactBody: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: item.state.symbol)
+                    .font(.caption2)
+                    .foregroundStyle(item.state.tint)
+                if let mark = WatchScreen.providerMark(for: item.agentType) {
+                    Image(systemName: mark.symbol)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(mark.label)
+                }
+                Text(shortName(item.host))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if let since = item.blockedSince {
+                    Text(since, style: .timer)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+
+            Text(item.session)
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+
+            if !item.lastLine.isEmpty {
+                Text(item.lastLine)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            if item.risk.isDestructive, let why = item.risk.consequence {
+                Label(why, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+            }
+
+            attentionActions
+
+            if let failure {
+                Text(failure)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 1)
+        .onChange(of: store.lastError) { _, error in
+            guard answered, let error else { return }
+            failure = error
+            answered = false
+        }
+    }
+
+    @ViewBuilder
+    private var standardBody: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
                 Image(systemName: item.state.symbol)
@@ -405,34 +661,7 @@ private struct AttentionRow: View {
                     .lineLimit(2)
             }
 
-            HStack(spacing: 8) {
-                // The affirmative control on the highest-stakes row in the app: it
-                // presses Return in a live shell. It gets a full-height target, and
-                // `respondToAgent` now reports what actually happened rather than
-                // leaving "Sent" as an unbacked claim.
-                Button(answered ? "Sent" : item.risk.verb) {
-                    failure = nil
-                    answered = true
-                    store.respondToAgent(host: item.host, session: item.session,
-                                         text: nil, key: "enter")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(item.risk.isDestructive ? .red : .orange)
-                .controlSize(.small)
-                .disabled(answered)
-                .frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight)
-
-                NavigationLink {
-                    AgentLiveView(host: item.host, agent: item.session).environmentObject(store)
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .frame(width: WatchTouch.minWidth, height: WatchTouch.minHeight)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .fixedSize()
-                .accessibilityLabel("Open \(item.session)")
-            }
+            attentionActions
 
             // Answering is the point of this row; the send failing is the other half of
             // that, and it used to go nowhere on this screen — the button said "Sent"
@@ -450,6 +679,38 @@ private struct AttentionRow: View {
             guard answered, let error else { return }
             failure = error
             answered = false
+        }
+    }
+
+    @ViewBuilder
+    private var attentionActions: some View {
+        HStack(spacing: 8) {
+            // The affirmative control on the highest-stakes row in the app: it
+            // presses Return in a live shell. It gets a full-height target, and
+            // `respondToAgent` now reports what actually happened rather than
+            // leaving "Sent" as an unbacked claim.
+            Button(answered ? "Sent" : item.risk.verb) {
+                failure = nil
+                answered = true
+                store.respondToAgent(host: item.host, session: item.session,
+                                     text: nil, key: "enter")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(item.risk.isDestructive ? .red : .orange)
+            .controlSize(.small)
+            .disabled(answered)
+            .frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight)
+
+            NavigationLink {
+                AgentLiveView(host: item.host, agent: item.session).environmentObject(store)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: WatchTouch.minWidth, height: WatchTouch.minHeight)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .fixedSize()
+            .accessibilityLabel("Open \(item.session)")
         }
     }
 }
@@ -941,23 +1202,104 @@ struct AgentLiveView: View {
     }
 
     var body: some View {
-        List {
-            if continueBlocked, let providerId = LimitHelpers.providerId(for: currentAgent?.agentType),
-               let limit = sessionLimit(for: providerId) {
-                Section {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Session limit reached", systemImage: "flame.fill")
-                            .foregroundStyle(.red)
-                            .font(.caption)
-                        if let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) {
-                            Text(countdown).font(.caption2).foregroundStyle(.secondary)
-                        }
-                        Text("Continue is disabled until the limit resets.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+        Group {
+            if WatchScreen.isCompact {
+                compactLiveList
+            } else {
+                fullLiveList
+            }
+        }
+        .navigationTitle("Session")
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Interrupt agent?", isPresented: $confirmInterrupt, titleVisibility: .visible) {
+            Button("Send Ctrl-C", role: .destructive) { store.send(key: "ctrl-c") }
+            Button("Kill session", role: .destructive) { store.killSession(host: host, agent: agent); dismiss() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Ctrl-C stops the current turn; Kill ends the whole session on \(currentAgent?.displayName ?? agent).")
+        }
+        .onAppear { selectDefaultPaneAndWatch() }
+        .onChange(of: panes) { _, _ in
+            if selectedPane == nil {
+                selectDefaultPaneAndWatch()
+            }
+        }
+        .onDisappear { store.stopWatching() }
+        .sheet(isPresented: $showReply) { replySheet }
+        .sheet(isPresented: $showMore) { terminalScreen }
+    }
+
+    @ViewBuilder
+    private var limitBanner: some View {
+        if continueBlocked, let providerId = LimitHelpers.providerId(for: currentAgent?.agentType),
+           let limit = sessionLimit(for: providerId) {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Session limit reached", systemImage: "flame.fill")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                    if let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) {
+                        Text(countdown).font(.caption2).foregroundStyle(.secondary)
                     }
+                    Text("Continue is disabled until the limit resets.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    /// 40–41mm session screen: answer first; monitor and tinkering live under More.
+    @ViewBuilder
+    private var compactLiveList: some View {
+        List {
+            limitBanner
+            Section {
+                Button { store.send(text: "continue\n") } label: {
+                    Label("Continue", systemImage: "play.fill")
+                        .frame(minHeight: WatchTouch.minHeight)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(continueBlocked)
+                Button { showReply = true } label: {
+                    Label("Reply", systemImage: "square.and.pencil")
+                        .frame(minHeight: WatchTouch.minHeight)
+                }
+                .buttonStyle(.bordered)
+                Button { showMore = true } label: {
+                    Label("Open terminal", systemImage: "terminal")
+                        .frame(minHeight: WatchTouch.minHeight)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityHint("Full-screen, scrollable output with a key bar")
+                Button(role: .destructive) { confirmInterrupt = true } label: {
+                    Label("Interrupt", systemImage: "xmark.octagon")
+                        .frame(minHeight: WatchTouch.minHeight)
+                }
+                .buttonStyle(.bordered)
+            }
+            if !previewLines.isEmpty {
+                Section {
+                    Text(previewLines.suffix(4).joined(separator: "\n"))
+                        .font(.system(size: 12, design: .monospaced))
+                        .lineLimit(4)
+                        .focusable(false)
+                }
+            }
+            Section {
+                NavigationLink {
+                    agentLiveMore
+                } label: {
+                    Label("More", systemImage: "ellipsis.circle")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var fullLiveList: some View {
+        List {
+            limitBanner
 
             Section("Monitor") {
                 VStack(alignment: .leading, spacing: 6) {
@@ -1061,24 +1403,94 @@ struct AgentLiveView: View {
                 .accessibilityHint("Full-screen, scrollable output with a key bar")
             }
         }
-        .navigationTitle("Session")
-        .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("Interrupt agent?", isPresented: $confirmInterrupt, titleVisibility: .visible) {
-            Button("Send Ctrl-C", role: .destructive) { store.send(key: "ctrl-c") }
-            Button("Kill session", role: .destructive) { store.killSession(host: host, agent: agent); dismiss() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Ctrl-C stops the current turn; Kill ends the whole session on \(currentAgent?.displayName ?? agent).")
-        }
-        .onAppear { selectDefaultPaneAndWatch() }
-        .onChange(of: panes) { _, _ in
-            if selectedPane == nil {
-                selectDefaultPaneAndWatch()
+    }
+
+    /// Secondary session controls on a compact watch — monitor chrome, Enter, clipboard, panes.
+    private var agentLiveMore: some View {
+        List {
+            Section("Monitor") {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Circle().fill(store.sending ? .orange : .green).frame(width: 6, height: 6)
+                        Text("\(shortName(host)) · \(store.routeLabel(for: host))")
+                            .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Text(currentAgent?.displayName ?? agent)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                    if let agent = currentAgent {
+                        SessionStateChip(state: store.displayState(of: agent, host: host))
+                    }
+                    Text(statusText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    if let pane = currentPane {
+                        Text(pane.label)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    if let error = store.lastError {
+                        Text(error)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .lineLimit(2)
+                    }
+                }
+            }
+            Section {
+                Button { store.send(key: "enter") } label: {
+                    Label("Enter", systemImage: "return")
+                        .frame(minHeight: WatchTouch.minHeight)
+                }
+                .buttonStyle(.bordered)
+                Button { Task { await store.insertPhoneClipboard() } } label: {
+                    Label("Insert iPhone clipboard", systemImage: "doc.on.clipboard")
+                        .frame(minHeight: WatchTouch.minHeight)
+                }
+                .buttonStyle(.bordered)
+                OpenOnMacButton(host: host, url: visibleLink)
+            }
+            if !panes.isEmpty {
+                Section("pane") {
+                    ForEach(panes) { pane in
+                        Button {
+                            selectedPane = pane.paneId
+                            store.watch(host: host, agent: agent, pane: pane.paneId)
+                        } label: {
+                            HStack {
+                                Image(systemName: pane.paneId == currentPane?.paneId ? "checkmark.circle.fill" : "circle")
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(pane.label).lineLimit(1)
+                                    if let path = pane.currentPath, !path.isEmpty {
+                                        Text(path).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Section("Output") {
+                if previewLines.isEmpty {
+                    Text("No output yet.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(previewLines.joined(separator: "\n"))
+                        .font(.system(size: fontSize, design: .monospaced))
+                        .lineLimit(8)
+                }
+                NavigationLink {
+                    terminalOptions
+                } label: {
+                    Label("Text size & view", systemImage: "textformat.size")
+                }
             }
         }
-        .onDisappear { store.stopWatching() }
-        .sheet(isPresented: $showReply) { replySheet }
-        .sheet(isPresented: $showMore) { terminalScreen }
+        .navigationTitle("More")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private func selectDefaultPaneAndWatch() {

@@ -9,6 +9,14 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Added
+- **Smaller Apple Watches get a tighter home screen.** On 40–41mm watches the app
+  leads with anything that needs your answer, shows at most one machine when all is
+  clear, and moves Control Mac, Usage, Events, screen peek, and link debug into
+  **More**. Session view on a small watch keeps Continue, Reply, Open terminal, and
+  Interrupt up front; monitor details and text-size controls sit under More. Larger
+  watches keep the full layout.
+
 ## [0.5.2] — 2026-08-27 (installer only)
 
 ### Fixed
