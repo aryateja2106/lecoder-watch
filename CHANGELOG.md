@@ -32,6 +32,23 @@ each entry as you ship the slice, not at release time.
   the open count.
 
 ### Added
+- **Hand a task to a different agent mid-session.** From a session's menu, pick codex,
+  claude, cursor-agent, OMP, Antigravity or Hermes: the conversation so far is written to
+  `HANDOFF.md` in the working directory, the current agent is interrupted, and the chosen
+  one starts in the same pane with the instruction to continue from that file. OMP imports
+  the Claude Code transcript directly.
+- **Resume a conversation from the phone.** Type a working directory in the new-session
+  sheet and the conversations Claude Code, Codex and cursor-agent kept for it appear with a
+  title and a time; tapping one reopens it with that CLI's own resume command.
+- **Voice that survives a pause.** Speaking, stopping to think, and speaking again now
+  produces one transcript: finished segments are kept and the recognizer restarts under
+  the same microphone. Every recording is also saved as audio on the phone (last five),
+  with "Transcribe again" when recognition returned nothing. One sheet: a live, editable
+  transcript, Stop/Resume, Send.
+- **Monitor leads with usage.** Session limits for Claude and Codex sit at the top; events
+  can be dismissed one by one or cleared at once (on this phone only).
+- **Your quick commands in Chat.** The pills above the composer are the quick commands
+  you keep in Settings, plus Restart Claude.
 - **Ask for an app and get interviewed first.** A new `app-brief` skill runs before any
   scaffolding: it reads your saved preferences and the apps you already have, asks at most
   six short questions in one message (answer by voice if you like), writes a brief, picks
@@ -61,6 +78,13 @@ each entry as you ship the slice, not at release time.
 - **Chat could not submit.** The composer typed a line feed after your prompt, which
   Claude Code reads as a new line inside the prompt, not as Enter. A trailing newline now
   sends the Enter key, and Chat carries the Esc/Tab/arrows/Enter/Ctrl-C row.
+- **The keyboard stayed up after leaving Settings.** The quick-command field on a tab that
+  is never torn down kept the keyboard as first responder across tab switches; it now
+  resigns when the tab goes away. Chat's own keyboard-dismiss button, which overlapped, is
+  gone; tapping the conversation dismisses the keyboard instead.
+- **Chat carried the terminal's keys.** Esc, Tab and the arrows belong to the terminal;
+  Chat keeps the text field, the mic and Stop. The duplicate "Terminal" button inside Chat
+  is gone — the Chat/Terminal switch is the one way across.
 - **A machine whose terminal bridge now asks for a token showed "no bridge".** The
   reachability probe treated the 401 as absence; a 401 is the bridge answering.
 - **Pair again and Remove machine now live on the machine's own screen.** The screen
