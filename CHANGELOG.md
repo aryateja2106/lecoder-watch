@@ -78,6 +78,28 @@ each entry as you ship the slice, not at release time.
   `mesh apps ota --url https://…` for your own HTTPS front instead of Tailscale.
 
 ### Fixed
+- **Hand-off typed the new agent's launch line into the old agent.** The first version
+  sent Ctrl-C twice and then the command, and on the phone that command landed inside
+  cursor-agent as a prompt: an approval dialog eats the first interrupt, and no CLI here
+  promises to exit on the second. The daemon now asks the multiplexer to replace the
+  pane's process (`respawn-pane -k`) — the one interrupt no agent can swallow — on the
+  pane that actually runs the agent, found from the process tree, not the pane beside it
+  the user split off. Leftover processes are ended. Where the pane cannot be respawned
+  (herdr, cmux) the keystroke path remains, marked best effort.
+- **Hand-off resumes the other agent's own conversation.** Handing a task to Claude Code,
+  Codex or cursor-agent reopens the newest conversation that CLI kept for the directory
+  (within a day) and lands the hand-off on top of it, so "hand it back to Claude" keeps
+  everything Claude already knew. OMP, Antigravity and Hermes start fresh.
+- **Live agents showed as "shell".** Claude Code's pane command is its version number and
+  cursor-agent's is `node`, so the session list and the hand-off could not see either.
+  Agents are now recognised from the process tree.
+- **Chat showed cursor-agent's `<timestamp>` and `<user_query>` wrappers.** Only the
+  words you typed show now.
+- **A self-check switched off the live wireless-install mapping.** `mesh apps ota
+  --disable` undid the Tailscale path for any `.ts.net` base, including the fake one a
+  check sets in a temp home; it now only undoes a mapping `--enable` itself made. This is
+  what broke the first Habits install on the phone: iOS showed the prompt, and by the time
+  Install was tapped the package address answered 404.
 - **A reverse proxy on the Mac no longer inherits the loopback token exemption.** Tailscale
   Serve (and Caddy, cloudflared) connect to meshd from 127.0.0.1 on behalf of whoever is on
   the other end, and meshd trusted 127.0.0.1 without a token. Any request carrying

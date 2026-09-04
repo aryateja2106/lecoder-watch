@@ -148,7 +148,12 @@ export function parseClaudeTranscript(raw: string): ChatMessage[] {
     for (const block of blocks) {
       const id = `${base}:${i++}`;
       if (block?.type === "text" && line.type === "user") {
-        const text = String(block.text ?? "").trim();
+        // cursor-agent stores what the user typed as `<timestamp>…</timestamp>` followed by
+        // `<user_query>…</user_query>`; the phone wants the words, not the wrapper.
+        const text = String(block.text ?? "")
+          .replace(/<timestamp>[^<]*<\/timestamp>\s*/g, "")
+          .replace(/^\s*<user_query>\s*([\s\S]*?)\s*<\/user_query>\s*$/, "$1")
+          .trim();
         // Claude Code injects its own bracketed system notes into the user turn.
         if (!text || /^<(system-reminder|command-|local-command)/.test(text)) continue;
         out.push({ id, ts, role: "user", text: clip(text, TEXT_CAP) });

@@ -28,6 +28,11 @@ export const HANDOFF_TARGETS = ["claude", "codex", "cursor-agent", "omp", "agy",
 export type HandoffTarget = (typeof HANDOFF_TARGETS)[number];
 
 const CONTINUE = "Read HANDOFF.md in this folder and continue the task from where it stopped.";
+/// A target's own conversation in this directory is resumed when it is this fresh —
+/// the hand-off then lands on top of the context that CLI already had, which is what
+/// "hand it back to Claude" means. Older than this, a fresh start reads better than a
+/// week-old chat.
+const RESUME_WINDOW_MS = 24 * 3600_000;
 
 function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
@@ -36,18 +41,35 @@ function shellQuote(s: string): string {
 /// The command that launches `to` with the hand-off already in hand. CLIs that take an
 /// initial prompt get it on the command line; the rest are started bare and told after
 /// their prompt appears (see handoff()). OMP imports a Claude Code transcript directly.
-export function launchCommand(to: HandoffTarget, source: ChatPage["source"], transcriptPath?: string): { cmd: string; tellAfter: boolean } {
+/// `resumeId` reopens the target's own recent conversation first; `bin` is the absolute
+/// path, since a respawned pane does not have the user's shell PATH.
+export function launchCommand(to: HandoffTarget, source: ChatPage["source"], transcriptPath?: string, resumeId?: string, bin?: string): { cmd: string; tellAfter: boolean } {
+  const b = bin ?? to;
   switch (to) {
-    case "claude": return { cmd: `claude ${shellQuote(CONTINUE)}`, tellAfter: false };
-    case "codex": return { cmd: `codex ${shellQuote(CONTINUE)}`, tellAfter: false };
-    case "cursor-agent": return { cmd: `cursor-agent ${shellQuote(CONTINUE)}`, tellAfter: false };
+    case "claude": return { cmd: `${b} ${resumeId ? `--resume ${shellQuote(resumeId)} ` : ""}${shellQuote(CONTINUE)}`, tellAfter: false };
+    case "codex": return resumeId
+      ? { cmd: `${b} resume ${shellQuote(resumeId)}`, tellAfter: true }
+      : { cmd: `${b} ${shellQuote(CONTINUE)}`, tellAfter: false };
+    case "cursor-agent": return { cmd: `${b} ${resumeId ? `--resume ${shellQuote(resumeId)} ` : ""}${shellQuote(CONTINUE)}`, tellAfter: false };
     case "omp":
       return source === "claude" && transcriptPath
-        ? { cmd: `omp --from-claude ${shellQuote(transcriptPath)}`, tellAfter: true }
-        : { cmd: "omp", tellAfter: true };
-    case "agy": return { cmd: "agy", tellAfter: true };
-    case "hermes": return { cmd: "hermes", tellAfter: true };
+        ? { cmd: `${b} --from-claude ${shellQuote(transcriptPath)}`, tellAfter: true }
+        : { cmd: b, tellAfter: true };
+    case "agy": return { cmd: b, tellAfter: true };
+    case "hermes": return { cmd: b, tellAfter: true };
   }
+}
+
+const RESUME_KIND: Partial<Record<HandoffTarget, ResumableKind>> = { claude: "claude", codex: "codex", "cursor-agent": "cursor" };
+
+/// The target's newest conversation for this directory, if it is recent enough to resume.
+export async function resumeFor(to: HandoffTarget, cwd: string, now = Date.now()): Promise<Resumable | undefined> {
+  const kind = RESUME_KIND[to];
+  if (!kind) return undefined;
+  const mine = (await listResumable(cwd)).filter((r) => r.kind === kind);
+  const newest = mine[0];
+  if (!newest || now - Date.parse(newest.updated) > RESUME_WINDOW_MS) return undefined;
+  return newest;
 }
 
 /// HANDOFF.md: enough for a fresh agent to continue, short enough to read in one screen.
@@ -152,28 +174,75 @@ export async function listResumable(cwd: string): Promise<Resumable[]> {
 }
 
 // ---------- the hand-off itself ----------
+/// One pane of a session, with the agent the daemon found running in it (from the
+/// process tree, not the pane title: Claude Code's pane command reads as its version
+/// number and cursor-agent's as `node`).
+export type PaneInfo = { id: string; active: boolean; agent?: string };
+
 export type HandoffDeps = {
   cwdOf: (session: string) => Promise<string | null>;
   transcriptHint: (session: string) => string | undefined;
   chat: (session: string) => Promise<ChatPage | null>;
-  send: (session: string, text?: string, key?: string) => Promise<{ ok: boolean; error?: string }>;
+  send: (session: string, text?: string, key?: string, pane?: string) => Promise<{ ok: boolean; error?: string }>;
   which: (bin: string) => string | null;
+  /// The session's panes, or null when the multiplexer cannot be asked (herdr, cmux).
+  panes?: (session: string) => Promise<PaneInfo[] | null>;
+  /// Replace whatever runs in a pane with `cmd`, in `cwd` — the multiplexer kills the
+  /// old process itself, so nothing depends on how an agent reacts to Ctrl-C.
+  respawn?: (pane: string, cwd: string, cmd: string) => Promise<{ ok: boolean; error?: string }>;
 };
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function handoff(session: string, to: string, deps: HandoffDeps): Promise<{ ok: boolean; error?: string; file?: string; cmd?: string }> {
+/// The pane to hand over: the one running the agent whose conversation is being handed
+/// off, else the active pane if an agent runs there, else the first pane with an agent,
+/// else the active pane. A session can hold two agents (the one handed off earlier is
+/// often still there) plus a shell pane split off from the phone; the hand-off must
+/// land on the agent that owns the conversation.
+export function pickPane(panes: PaneInfo[], source?: ChatPage["source"]): PaneInfo | undefined {
+  const owner = source === "claude" ? "claude" : source === "codex" ? "codex" : source === "cursor" ? "cursor-agent" : undefined;
+  return (owner && panes.find((p) => p.agent === owner))
+    ?? panes.find((p) => p.active && p.agent) ?? panes.find((p) => p.agent) ?? panes.find((p) => p.active) ?? panes[0];
+}
+
+export type HandoffResult = { ok: boolean; error?: string; file?: string; cmd?: string; pane?: string; resumed?: string };
+
+export async function handoff(session: string, to: string, deps: HandoffDeps): Promise<HandoffResult> {
   if (!(HANDOFF_TARGETS as readonly string[]).includes(to)) return { ok: false, error: `unknown agent: ${to}` };
   const target = to as HandoffTarget;
-  if (!deps.which(target)) return { ok: false, error: `${target} is not installed on this machine` };
+  const bin = deps.which(target);
+  if (!bin) return { ok: false, error: `${target} is not installed on this machine` };
   const cwd = await deps.cwdOf(session);
   if (!cwd) return { ok: false, error: "the session's working directory is unknown" };
   const page = await deps.chat(session);
   if (!page || !page.messages.length) return { ok: false, error: "nothing to hand off yet — the session has no conversation" };
   const file = join(cwd, "HANDOFF.md");
-  await writeFile(file, handoffMarkdown(session, page), { mode: 0o644 });
-  const { cmd, tellAfter } = launchCommand(target, page.source, deps.transcriptHint(session));
-  // Leave the current agent: two interrupts is how every CLI here exits to the shell.
+  try {
+    await writeFile(file, handoffMarkdown(session, page), { mode: 0o644 });
+  } catch (e: any) {
+    return { ok: false, error: `could not write ${file}: ${e?.message ?? e}` };
+  }
+  const resume = await resumeFor(target, cwd);
+  const { cmd, tellAfter } = launchCommand(target, page.source, deps.transcriptHint(session), resume?.id, bin);
+
+  // The sure path: the multiplexer replaces the pane's process with the new agent.
+  // The first version typed Ctrl-C twice and then the launch line, and on a phone that
+  // line landed INSIDE the old agent as a prompt — an approval dialog eats the first
+  // interrupt, and no CLI here promises to exit on the second.
+  const panes = deps.panes ? await deps.panes(session) : null;
+  if (panes?.length && deps.respawn) {
+    const pane = pickPane(panes, page.source)!;
+    const r = await deps.respawn(pane.id, cwd, cmd);
+    if (!r.ok) return { ok: false, error: r.error ?? "could not restart the pane" };
+    if (tellAfter) {
+      await wait(5000);
+      await deps.send(session, CONTINUE, undefined, pane.id);
+      await deps.send(session, undefined, "enter", pane.id);
+    }
+    return { ok: true, file, cmd, pane: pane.id, resumed: resume?.id };
+  }
+
+  // Panes the daemon cannot respawn (herdr, cmux): keystrokes, best effort.
   for (const _ of [0, 1]) {
     const r = await deps.send(session, undefined, "ctrl-c");
     if (!r.ok) return { ok: false, error: r.error };
@@ -189,7 +258,7 @@ export async function handoff(session: string, to: string, deps: HandoffDeps): P
     await deps.send(session, CONTINUE);
     await deps.send(session, undefined, "enter");
   }
-  return { ok: true, file, cmd };
+  return { ok: true, file, cmd, resumed: resume?.id };
 }
 
 function json(body: unknown, status = 200): Response {

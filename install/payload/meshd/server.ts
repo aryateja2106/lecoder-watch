@@ -198,15 +198,18 @@ async function rmuxSessions(): Promise<any[]> {
   const rows = out.trim().split("\n").map((l) => l.split("|"));
   const sessions = [] as any[];
   const HIDDEN = new Set(["meshd", "rmux-bridge"]); // infra, not user agents
-  const table = await procTable();
+  const [table, cmds] = await Promise.all([procTable(), cmdTable()]);
   for (const r of rows) {
     const name = r[0];
     if (HIDDEN.has(name)) continue;
-    // One pass over this session's panes: agent type (first pane) + all pane pids.
+    // One pass over this session's panes: agent type + all pane pids. The agent is
+    // found in the process tree of any pane (see agentFromTree); the pane command
+    // name is only the fallback.
     const panesOut = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{pane_pid}|#{pane_current_command}' 2>/dev/null`);
     const paneRows = panesOut.trim().split("\n").filter(Boolean).map((l) => l.split("|"));
     const panePids = paneRows.map((p) => num(p[0])).filter((n) => n > 0);
-    const agentType = paneRows[0]?.[1] ? mapAgent(paneRows[0][1]) : undefined;
+    const found = panePids.map((pid) => agentFromTree(pid, cmds)).find(Boolean);
+    const agentType = found ? agentLabel(found) : paneRows[0]?.[1] ? mapAgent(paneRows[0][1]) : undefined;
     const { memMB, cpuPct } = sumSubtrees(panePids, table);
     sessions.push({
       name,
@@ -219,6 +222,11 @@ async function rmuxSessions(): Promise<any[]> {
     });
   }
   return sessions;
+}
+/// The row label for an agent basename from agentFromTree: the three the phone knows
+/// keep their 0.5 spellings, the rest are shown as their command name.
+function agentLabel(agent: string): string {
+  return agent === "claude" ? "Claude" : agent === "codex" ? "Codex" : agent === "cursor-agent" ? "Cursor" : agent;
 }
 function mapAgent(cmd: string): string {
   const c = cmd.toLowerCase();
@@ -862,10 +870,94 @@ async function paneAgentType(name: string): Promise<string | undefined> {
     const t = (await herdrRow(name))?.agentType;
     return typeof t === "string" ? t.toLowerCase() : undefined;
   }
-  const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{pane_current_command}' 2>/dev/null`);
-  const cmds = out.split("\n").filter(Boolean);
-  const hit = cmds.map(mapAgent).find((a) => a === "Claude" || a === "Codex" || a === "Cursor");
-  return hit?.toLowerCase();
+  const panes = await paneAgents(name);
+  const hit = panes?.map((p) => p.agent).find((a) => a === "claude" || a === "codex" || a === "cursor-agent");
+  return hit === "cursor-agent" ? "cursor" : hit;
+}
+
+/// The CLI agents this daemon recognises in a process tree, by the basename of the
+/// command's first word. Order matters only for the label; one process, one agent.
+const AGENT_BINS = ["claude", "codex", "cursor-agent", "omp", "agy", "hermes", "pi", "gemini", "aider"];
+
+/// Which agent runs under a pane, walking the pane process and its descendants.
+/// The pane's own command name is not enough: Claude Code's shows as its version
+/// number ("2.1.260"), cursor-agent's as "node" — both read as "shell" by name alone,
+/// which is why the phone badged live agents idle.
+function agentFromTree(root: number, table: Map<number, { ppid: number; cmd: string }>): string | undefined {
+  const children = new Map<number, number[]>();
+  for (const [pid, p] of table) children.set(p.ppid, [...(children.get(p.ppid) ?? []), pid]);
+  const stack = [root];
+  const seen = new Set<number>();
+  while (stack.length) {
+    const pid = stack.shift()!;
+    if (seen.has(pid)) continue;
+    seen.add(pid);
+    const first = (table.get(pid)?.cmd ?? "").trim().split(/\s+/)[0] ?? "";
+    const base = first.split("/").pop() ?? "";
+    if (AGENT_BINS.includes(base)) return base;
+    for (const c of children.get(pid) ?? []) stack.push(c);
+  }
+  return undefined;
+}
+
+async function cmdTable(): Promise<Map<number, { ppid: number; cmd: string }>> {
+  const out = await sh(`ps -A -o pid=,ppid=,command= 2>/dev/null`);
+  const t = new Map<number, { ppid: number; cmd: string }>();
+  for (const line of out.split("\n")) {
+    const m = line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/);
+    if (m) t.set(num(m[1]), { ppid: num(m[2]), cmd: m[3] });
+  }
+  return t;
+}
+
+/// Every pane of a mux session with the agent found in it (see handoff.ts PaneInfo).
+/// null for sessions the daemon cannot enumerate this way (herdr, cmux).
+async function paneAgents(name: string): Promise<{ id: string; active: boolean; agent?: string }[] | null> {
+  if (isCmuxAgent(name) || isHerdrAgent(name)) return null;
+  const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{pane_id}|#{pane_pid}|#{pane_active}|#{pane_current_command}' 2>/dev/null`);
+  const rows = out.split("\n").filter(Boolean).map((l) => l.split("|"));
+  if (!rows.length) return null;
+  const table = await cmdTable();
+  return rows.map((r) => {
+    const byName = mapAgent(r[3] ?? "");
+    const agent = agentFromTree(num(r[1]), table) ?? (byName === "Claude" ? "claude" : byName === "Codex" ? "codex" : byName === "Cursor" ? "cursor-agent" : undefined);
+    return { id: r[0], active: r[2] === "1", agent };
+  });
+}
+
+/// Replace a pane's process with `cmd` in `cwd`. `-k` makes the multiplexer kill what
+/// runs there first — the one interrupt no agent can swallow. Whatever the old pane's
+/// process tree left behind (a wrapper's child that missed the hangup) is ended too,
+/// so a handed-off agent never keeps working blind in the background.
+async function respawnPane(pane: string, cwd: string, cmd: string): Promise<{ ok: boolean; error?: string }> {
+  const before = await cmdTable();
+  const panePid = num((await sh(`${MUX} display -p -t ${shq(pane)} '#{pane_pid}' 2>/dev/null`)).trim());
+  const old = panePid > 0 ? subtreePids(panePid, before) : [];
+  const r = await shChecked(`${MUX} respawn-pane -k -t ${shq(pane)} -c ${shq(cwd)} ${shq(cmd)}`).catch((e) => ({ code: 1, out: "", err: String(e) }));
+  if (r.code !== 0) return { ok: false, error: `respawn-pane failed: ${r.err.trim().split("\n").pop() || r.code}` };
+  if (old.length) {
+    await new Promise((res) => setTimeout(res, 700));
+    const alive = (pids: number[]) => pids.filter((p) => { try { process.kill(p, 0); return true; } catch { return false; } });
+    for (const p of alive(old)) { try { process.kill(p, "SIGTERM"); } catch { /* gone */ } }
+    await new Promise((res) => setTimeout(res, 1500));
+    for (const p of alive(old)) { try { process.kill(p, "SIGKILL"); } catch { /* gone */ } }
+  }
+  return { ok: true };
+}
+
+/// A pid and every descendant, from one ps snapshot.
+function subtreePids(root: number, table: Map<number, { ppid: number }>): number[] {
+  const children = new Map<number, number[]>();
+  for (const [pid, p] of table) children.set(p.ppid, [...(children.get(p.ppid) ?? []), pid]);
+  const out: number[] = [];
+  const stack = [root];
+  while (stack.length) {
+    const pid = stack.pop()!;
+    if (out.includes(pid)) continue;
+    out.push(pid);
+    for (const c of children.get(pid) ?? []) stack.push(c);
+  }
+  return out;
 }
 async function agentChat(name: string, since: string | null, limit: number | null) {
   const structured = await chatFor(name, since, limit, {
@@ -1197,8 +1289,10 @@ Bun.serve({
         cwdOf: paneCwd,
         transcriptHint: (s) => transcriptBySession.get(s),
         chat: (s) => agentChat(s, null, 60),
-        send: (s, text, key) => agentSend(s, text, key),
+        send: (s, text, key, pane) => agentSend(s, text, key, pane),
         which: (bin) => Bun.which(bin),
+        panes: paneAgents,
+        respawn: respawnPane,
       });
       if (handed) return handed;
       // Setup truth: what this daemon can actually do right now — see doctor.ts.

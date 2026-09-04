@@ -1408,7 +1408,7 @@ const APPS_CONFIG_FILE = join(MESH_HOME, "apps.json");
 const APPS_DIR = join(MESH_HOME, "apps");
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
 
-type AppsConfig = { team?: string; prefix?: string; otaBase?: string };
+type AppsConfig = { team?: string; prefix?: string; otaBase?: string; otaVia?: "tailscale" };
 type AppMeta = {
   slug: string; name: string; kind: "pwa" | "native"; updated: string;
   key?: string; url?: string; app?: string; bundleId?: string;
@@ -1486,9 +1486,14 @@ function cmdAppsOta(flags: Record<string, string>, bools: Set<string>) {
   const c = loadAppsConfig();
   const port = Number(process.env.MESHD_PORT) || 8899;
   if (bools.has("disable")) {
+    // Only undo a mapping THIS command made. A base set with --url (or by a self-check
+    // against a temp MESH_HOME) never touches the machine's real Tailscale config — the
+    // first version keyed on the ".ts.net" suffix and a self-check tore down the live
+    // mapping while a phone was mid-download.
     const ts = tailscaleBin();
-    if (ts && c.otaBase?.endsWith(".ts.net")) Bun.spawnSync([ts, "serve", "--bg", "--set-path", "/a", "off"], { stdout: "pipe", stderr: "pipe" });
+    if (ts && c.otaVia === "tailscale") Bun.spawnSync([ts, "serve", "--bg", "--set-path", "/a", "off"], { stdout: "pipe", stderr: "pipe" });
     delete c.otaBase;
+    delete c.otaVia;
     saveAppsConfig(c);
     appsOk("ota disabled", { otaBase: null });
   }
@@ -1496,6 +1501,7 @@ function cmdAppsOta(flags: Record<string, string>, bools: Set<string>) {
     const base = flags.url.replace(/\/+$/, "");
     if (!/^https:\/\/[^/\s]+$/.test(base)) appsErr(`--url must be an https origin with no path, e.g. https://mac.example.com — got ${flags.url}`);
     c.otaBase = base;
+    delete c.otaVia;
     saveAppsConfig(c);
     appsOk("ota enabled", { otaBase: base, note: `make ${base}/a/ reach http://127.0.0.1:${port}/a/ yourself` });
   }
@@ -1509,6 +1515,7 @@ function cmdAppsOta(flags: Record<string, string>, bools: Set<string>) {
     try { dns = String(JSON.parse(status.stdout.toString())?.Self?.DNSName ?? "").replace(/\.$/, ""); } catch { /* handled below */ }
     if (!dns) appsErr("tailscale gave this machine no MagicDNS name — enable MagicDNS in the Tailscale admin console");
     c.otaBase = `https://${dns}`;
+    c.otaVia = "tailscale";
     saveAppsConfig(c);
     say(`  ${c.otaBase}/a/ -> http://127.0.0.1:${port}/a/ (tailnet only)`);
     appsOk("ota enabled", { otaBase: c.otaBase });

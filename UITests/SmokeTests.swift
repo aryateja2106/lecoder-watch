@@ -76,8 +76,11 @@ final class SmokeTests: XCTestCase {
             return
         }
         pair.tap()
-        XCTAssertTrue(app.textFields.firstMatch.waitForExistence(timeout: 10),
-                      "the pairing sheet showed no text fields")
+        let fieldShown = app.textFields.firstMatch.waitForExistence(timeout: 10)
+        // On failure, say what WAS on screen: a red line without the hierarchy has
+        // cost an evening before.
+        if !fieldShown { print("SMOKE: pairing sheet hierarchy after tap:\n\(app.debugDescription)") }
+        XCTAssertTrue(fieldShown, "the pairing sheet showed no text fields")
         XCTAssertEqual(app.state, .runningForeground, "the app died presenting the pairing sheet")
     }
 }
