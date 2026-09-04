@@ -1273,6 +1273,16 @@ private struct SettingsTab: View {
                     }
                 }
 
+                if !store.machines.isEmpty {
+                    Section {
+                        NavigationLink {
+                            ExposedSecretsScreen()
+                        } label: {
+                            Label("Exposed secrets", systemImage: "eye.trianglebadge.exclamationmark")
+                        }
+                    }
+                }
+
                 Section {
                     Toggle(isOn: $lock.enabled) {
                         Label("Require \(AppLock.methodName)", systemImage: "lock.fill")
