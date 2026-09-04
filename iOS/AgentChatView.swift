@@ -324,10 +324,12 @@ struct AgentChatView: View {
 
     @State private var inputText = ""
     @State private var isDictating = false
+    @State private var showingVoiceRecording = false
+    @State private var showingTranscriptionCorrection = false
+    @State private var correctionText = ""
     @State private var selectedArtifact: AgentArtifact?
     @State private var showSafari = false
     @State private var safariUrl: URL?
-
     private var agentKind: AgentCLIKind {
         AgentCLIKind.detect(from: session.name, agentType: session.agentType)
     }
@@ -396,6 +398,35 @@ struct AgentChatView: View {
             if let url = safariUrl {
                 SafariView(url: url)
             }
+        }
+        .sheet(isPresented: $showingVoiceRecording) {
+            VoiceRecordingSheet(
+                machineHost: machine.host,
+                agentKind: agentKind,
+                onFinish: { text in
+                    correctionText = text
+                    showingVoiceRecording = false
+                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        showingTranscriptionCorrection = true
+                    }
+                },
+                onCancel: {
+                    showingVoiceRecording = false
+                }
+            )
+        }
+        .sheet(isPresented: $showingTranscriptionCorrection) {
+            TranscriptionCorrectionSheet(
+                initialText: correctionText,
+                agentKind: agentKind,
+                onSend: { text in
+                    showingTranscriptionCorrection = false
+                    onSendText(text + "\n")
+                },
+                onCancel: {
+                    showingTranscriptionCorrection = false
+                }
+            )
         }
     }
 
@@ -481,6 +512,17 @@ struct AgentChatView: View {
                 }
 
             if inputText.isEmpty {
+                Button {
+                    showingVoiceRecording = true
+                } label: {
+                    Image(systemName: "mic.fill")
+                        .font(.subheadline.bold())
+                        .frame(width: 34, height: 34)
+                        .background(agentKind.brandColor.opacity(0.18))
+                        .foregroundStyle(agentKind.brandColor)
+                        .clipShape(Circle())
+                }
+
                 Button {
                     // Quick confirmation keystroke Y
                     onSendText("y\n")
@@ -726,7 +768,7 @@ struct ArtifactDetailSheet: View {
     let onInstall: () -> Void
     let onPreview: () -> Void
     @Environment(\.dismiss) private var dismiss
-
+    @State private var showingWirelessGuide = false
     var body: some View {
         NavigationStack {
             VStack(spacing: 24) {
@@ -762,6 +804,14 @@ struct ArtifactDetailSheet: View {
                 .padding(16)
                 .background(Color(.secondarySystemGroupedBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
+
+                Button {
+                    showingWirelessGuide = true
+                } label: {
+                    Label("How wireless installation works without cables", systemImage: "questionmark.circle")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.accentColor)
+                }
 
                 Spacer()
 
@@ -801,6 +851,9 @@ struct ArtifactDetailSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showingWirelessGuide) {
+                WirelessInstallGuideView()
             }
         }
     }
@@ -843,5 +896,211 @@ struct SuggestionChip: View {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Voice Recording & Transcription Correction Sheets
+
+struct VoiceRecordingSheet: View {
+    let machineHost: String
+    let agentKind: AgentCLIKind
+    let onFinish: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var transcriber = VoiceTranscriber.shared
+    @State private var animationScale: CGFloat = 1.0
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 28) {
+                // Engine selector
+                Picker("Transcription Engine", selection: $transcriber.selectedEngine) {
+                    ForEach(TranscriptionEngine.allCases) { engine in
+                        Text(engine.rawValue).tag(engine)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+
+                Spacer()
+
+                // Audio Waveform Visualization
+                ZStack {
+                    Circle()
+                        .fill(agentKind.brandColor.opacity(0.12))
+                        .frame(width: 140 * animationScale, height: 140 * animationScale)
+                        .animation(.easeInOut(duration: 0.2), value: animationScale)
+
+                    Circle()
+                        .fill(agentKind.brandColor.opacity(0.25))
+                        .frame(width: 100, height: 100)
+
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 42))
+                        .foregroundStyle(agentKind.brandColor)
+                }
+
+                // Live Streaming Transcript Box
+                VStack(spacing: 8) {
+                    Text("Listening to your voice...")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+
+                    ScrollView {
+                        Text(transcriber.recognizedText.isEmpty ? "Speak your prompt or instructions to \(agentKind.rawValue)..." : transcriber.recognizedText)
+                            .font(.body)
+                            .foregroundStyle(transcriber.recognizedText.isEmpty ? .secondary : .primary)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 120)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .padding(.horizontal, 24)
+
+                Spacer()
+
+                // Stop Recording Button
+                HStack(spacing: 24) {
+                    Button {
+                        transcriber.cancelRecording()
+                        onCancel()
+                    } label: {
+                        Label("Cancel", systemImage: "xmark")
+                            .font(.subheadline)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(Color(.tertiarySystemFill))
+                            .clipShape(Capsule())
+                    }
+
+                    Button {
+                        Task {
+                            await transcriber.stopRecording(machineHost: machineHost)
+                            onFinish(transcriber.recognizedText)
+                        }
+                    } label: {
+                        Label("Stop & Review", systemImage: "stop.fill")
+                            .font(.headline)
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 14)
+                            .background(Color.red)
+                            .foregroundStyle(.white)
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding(.bottom, 30)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Voice Input")
+            .navigationBarTitleDisplayMode(.inline)
+            .task {
+                await transcriber.startRecording(machineHost: machineHost)
+            }
+            .onChange(of: transcriber.state) { _, newState in
+                if case .recording(let level, _) = newState {
+                    animationScale = 1.0 + CGFloat(level) * 0.4
+                }
+            }
+        }
+    }
+}
+
+struct TranscriptionCorrectionSheet: View {
+    let initialText: String
+    let agentKind: AgentCLIKind
+    let onSend: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var editableText: String = ""
+
+    private let commonKeywords = [
+        "SwiftUI", "XcodeGen", "PWA", "IndexedDB", "TestFlight", "xcodebuild", "git status", "run tests"
+    ]
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Review and correct transcription before sending to \(agentKind.rawValue):")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextEditor(text: $editableText)
+                        .font(.body)
+                        .padding(10)
+                        .frame(maxHeight: .infinity)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+
+                // Quick keyword chips to insert
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Insert keywords:")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(commonKeywords, id: \.self) { kw in
+                                Button {
+                                    editableText = editableText.isEmpty ? kw : "\(editableText) \(kw)"
+                                } label: {
+                                    Text(kw)
+                                        .font(.caption.monospaced())
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color(.tertiarySystemFill))
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                }
+
+                // Action buttons
+                HStack(spacing: 16) {
+                    Button {
+                        onCancel()
+                    } label: {
+                        Text("Discard")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(.tertiarySystemFill))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+
+                    Button {
+                        let trimmed = editableText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        onSend(trimmed)
+                    } label: {
+                        Label("Send to Agent", systemImage: "arrow.up.circle.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(agentKind.brandColor)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 20)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Transcription Review")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                editableText = initialText
+            }
+        }
     }
 }
