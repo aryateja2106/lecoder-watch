@@ -370,7 +370,11 @@ private struct SessionPeekScreen: View {
     /// Links the session printed — a dev server, a PR, an auth callback. Computed once
     /// per poll rather than per body pass: scanning is cheap, but not once a scroll.
     @State private var links: [URL] = []
-
+    enum ViewMode: String, CaseIterable {
+        case chat = "Chat"
+        case terminal = "Terminal"
+    }
+    @State private var viewMode: ViewMode = .chat
     /// The store's constructor, never a bare `MeshClient(machine:)`: one built without
     /// capabilities silently switches every 0.5.0 feature off.
     private var client: MeshClient { store.client(for: machine) }
@@ -414,23 +418,50 @@ private struct SessionPeekScreen: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                headerCard
-                paneCard
-                outputCard
-                controlsCard
-                presetsCard
+        Group {
+            if viewMode == .chat {
+                AgentChatView(
+                    machine: machine,
+                    session: session,
+                    rawLines: output,
+                    onSendText: { text in
+                        Task { await send(text: text) }
+                    },
+                    onOpenTerminal: {
+                        viewMode = .terminal
+                    }
+                )
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        headerCard
+                        paneCard
+                        outputCard
+                        controlsCard
+                        presetsCard
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                }
+                .background(Color(.systemGroupedBackground))
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
         }
-        .background(Color(.systemGroupedBackground))
         .navigationTitle(session.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            Button { Task { await refresh() } } label: {
-                Image(systemName: loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+            ToolbarItem(placement: .principal) {
+                Picker("Mode", selection: $viewMode) {
+                    ForEach(ViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 150)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { Task { await refresh() } } label: {
+                    Image(systemName: loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                }
             }
         }
         .task(id: session.name) {

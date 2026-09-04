@@ -651,6 +651,9 @@ struct SessionsView: View {
                 Button { openNewSession(cmd: "codex") } label: {
                     Label("Codex", systemImage: "curlybraces")
                 }
+                Button { openNewSession(cmd: "cursor-agent") } label: {
+                    Label("Cursor", systemImage: "cursorarrow.rays")
+                }
                 Button { taskAgent = "claude"; showTask = true } label: {
                     Label("Claude task", systemImage: "text.bubble")
                 }
@@ -932,6 +935,32 @@ struct AgentLiveView: View {
             .limits.first { $0.label.lowercased().contains("session") }
     }
 
+    private var detectedApprovalQuestion: String? {
+        for line in meaningfulLines.suffix(10) {
+            let lower = line.lowercased()
+            if lower.contains("[y/n]") || lower.contains("(y/n)") || lower.contains("allow?") || lower.contains("proceed?") {
+                return line.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return nil
+    }
+
+    private struct ArtifactGlance {
+        let title: String
+        let isNative: Bool
+    }
+
+    private var detectedArtifactInfo: ArtifactGlance? {
+        for line in meaningfulLines.suffix(15) {
+            if line.contains("APP_READY") {
+                return ArtifactGlance(title: "iOS App Ready", isNative: true)
+            }
+            if line.contains("PWA_READY") {
+                return ArtifactGlance(title: "PWA Ready", isNative: false)
+            }
+        }
+        return nil
+    }
     var body: some View {
         List {
             if continueBlocked, let providerId = LimitHelpers.providerId(for: currentAgent?.agentType),
@@ -948,6 +977,57 @@ struct AgentLiveView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                }
+            }
+
+            if let question = detectedApprovalQuestion {
+                Section("Decision Needed") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text("Agent Asks")
+                                .font(.headline)
+                        }
+                        Text(question)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                        HStack(spacing: 8) {
+                            Button {
+                                store.send(text: "y\n")
+                            } label: {
+                                Label("Allow", systemImage: "checkmark.circle.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.green)
+                            }
+                            Button {
+                                store.send(text: "n\n")
+                            } label: {
+                                Label("Deny", systemImage: "xmark.circle.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
+            if let artifact = detectedArtifactInfo {
+                Section("Artifact") {
+                    HStack(spacing: 8) {
+                        Image(systemName: artifact.isNative ? "iphone.badge.play" : "globe")
+                            .foregroundStyle(artifact.isNative ? .blue : .green)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(artifact.title)
+                                .font(.headline)
+                            Text(artifact.isNative ? "Native IPA built" : "Web app ready")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
                 }
             }
 
