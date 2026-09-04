@@ -44,6 +44,7 @@ redacted("anthropic-key", "sk-ant-", "ANTHROPIC_API_KEY=sk-ant-api03-abcdefghijk
 redacted("openai-key", "sk-", "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz0123456789", "OPENAI_API_KEY=sk-", "proj-abcdefghijklmnopqrstuvwxyz");
 redacted("slack-token", "xoxb-", "xoxb-123456789012-abcdefghijkl", "xoxb-", "123456789012-abcdefghijkl");
 redacted("google-api-key", "AIza", "AIzaSyA1234567890abcdefghijklmnopqrstuv", "AIza", "SyA1234567890abcdefghijklmnopqrstuv");
+// Built at runtime: a literal that looks like a live Stripe key trips GitHub push protection.
 redacted("stripe-key", "sk_live_", "sk_" + "live_" + "abcdefghijklmnopqrstuvwxyz", "sk_live_", "abcdefghijklmnopqrstuvwxyz");
 redacted("hf-token", "hf_", "HF_TOKEN=hf_ABCDEFGHIJKLMNOPQRSTUVWXYZabcd012345", "HF_TOKEN=hf_", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcd012345");
 redacted("npm-token", "npm_", "npm_abcdefghijklmnopqrstuvwxyz0123456789", "npm_", "abcdefghijklmnopqrstuvwxyz0123456789");
