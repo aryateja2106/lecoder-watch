@@ -24,6 +24,7 @@ those three.
 | [local-first-ade.md](local-first-ade.md) | Building or changing the app-building skills, or `mesh apps`/`mesh skills` | The two build routes (native via Xcode+devicectl, PWA via `mesh apps publish`) and the daemon underneath both. |
 | [launch-0.6.md](launch-0.6.md) | Writing the TestFlight notes, the launch posts or the demo recording for 0.6 | Launch kit for 0.6: TestFlight notes, X thread, LinkedIn, Show HN, demo script, and the claims not to make. |
 | [compare-moshi.md](compare-moshi.md) | Writing landing copy, a pricing page or a "vs" post | The sourced Moshi comparison: what they have that we lack (gestures, voice), what we have that they do not (redaction, built apps, fleet), and the claims we never make. |
+| [ux-audit.md](ux-audit.md) | Finding every rough screen without tapping through the app by hand | The crawl → grade → fix loop, the three copy-paste prompts for any agent, and the list of what the device day already found. |
 | [release-workflow.md](release-workflow.md) | Cutting a release | See the warning below — the fleet lags the repo. |
 | [backlog.md](backlog.md) | Asking "do we already have X?" before building it | 75 items graded against the code as done/partial/buried/missing. Generated — edit `.github/backlog.json`, not this. |
 | [updating.md](updating.md) | Anyone asks "how do I get the new version?" | Three components, three routes, no cable. Includes the internal-vs-external TestFlight trap. |

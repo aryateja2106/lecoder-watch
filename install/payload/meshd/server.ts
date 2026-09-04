@@ -13,6 +13,7 @@ import { isAuthorized } from "./auth";
 import { redact, redactAndRecord, record, addKnownSecrets, envSecrets, handleExposures, listExposures, type Finding } from "./redact";
 import { chatFor, outputPage } from "./chat";
 import { handleApps, serveApp } from "./apps";
+import { handleHandoff } from "./handoff";
 import { handleDoctor, tokenWeakness } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
@@ -39,7 +40,10 @@ const VERSION = "0.6.0";
 // web apps are served token-free at /a/<slug>-<key>/ (Safari cannot send a header);
 // POST /built-apps/<slug>/install pushes a native
 // build to the paired iPhone or a simulator through the same CLI the terminal uses.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps"];
+// "handoff": POST /agents/<s>/handoff {to} writes HANDOFF.md from the conversation and
+// relaunches the pane under another CLI agent; GET /resumable?cwd= and
+// GET /agents/<s>/resumable list the conversations each CLI can reopen, with the command.
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -1181,6 +1185,15 @@ Bun.serve({
       // Apps an agent built for this owner — list, and install a native build.
       const apps = await handleApps(req, url, { host: primaryIPv4()?.address ?? "127.0.0.1", port: PORT, meshBin: MESH_BIN });
       if (apps) return apps;
+      // Hand a task to another agent, or list what can be resumed (see handoff.ts).
+      const handed = await handleHandoff(req, url, {
+        cwdOf: paneCwd,
+        transcriptHint: (s) => transcriptBySession.get(s),
+        chat: (s) => agentChat(s, null, 60),
+        send: (s, text, key) => agentSend(s, text, key),
+        which: (bin) => Bun.which(bin),
+      });
+      if (handed) return handed;
       // Setup truth: what this daemon can actually do right now — see doctor.ts.
       // The token is judged here and only a verdict travels on, so a doctor report can
       // never leak the thing it is reporting on.
