@@ -307,9 +307,15 @@
         });
       });
 
+      // An HTML attribute does not decode JavaScript escapes: data-send="\u001b[A" is the
+      // literal six characters, and that is what Claude Code's prompt received from the
+      // arrow buttons. Decode the way a JS string literal would.
+      function decodeKey(s) {
+        try { return JSON.parse('"' + s.replace(/"/g, '\\"') + '"'); } catch (_) { return s; }
+      }
       document.querySelectorAll("[data-send]").forEach((button) => {
         button.addEventListener("click", () => {
-          sendInput(button.getAttribute("data-send") || "");
+          sendInput(decodeKey(button.getAttribute("data-send") || ""));
           term.focus();
         });
       });
@@ -340,6 +346,14 @@
 
       ws.addEventListener("close", (event) => {
         setStatus(`closed (${event.code})`, "var(--danger)");
+        // A phone puts this page to sleep and the socket dies; without this the terminal
+        // just sat there "closed". 1008 is the bridge saying the session is gone — no
+        // point retrying that. Everything else reconnects by reloading the page, which
+        // re-runs the attach with the same cookie.
+        if (event.code !== 1008) setTimeout(() => location.reload(), 1500);
+      });
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible" && ws.readyState !== WebSocket.OPEN) location.reload();
       });
 
       ws.addEventListener("error", () => {
