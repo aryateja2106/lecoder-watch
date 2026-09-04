@@ -12,6 +12,7 @@ import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
 import { redact, redactAndRecord, record, addKnownSecrets, envSecrets, handleExposures, listExposures, type Finding } from "./redact";
 import { chatFor, outputPage } from "./chat";
+import { handleApps, serveApp } from "./apps";
 import { handleDoctor, tokenWeakness } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
@@ -34,7 +35,10 @@ const VERSION = "0.5.4";
 // this machine, and GET /exposures lists what was seen (fingerprints, never values).
 // "chat": GET /agents/<s>/chat serves the session's conversation read from the agent's own
 // transcript (Claude Code, Codex), falling back to capture-pane lines as one system block.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat"];
+// "apps": GET /apps lists what `mesh apps` registered; web apps are served token-free at
+// /a/<slug>-<key>/ (Safari cannot send a header); POST /apps/<slug>/install pushes a native
+// build to the paired iPhone or a simulator through the same CLI the terminal uses.
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -42,6 +46,8 @@ const CMUX = process.env.CMUX_BIN ?? "cmux";
 const CMUX_SOCKET_HINT = process.env.CMUX_SOCKET_HINT ?? "/tmp/cmux-last-socket-path";
 const CMUX_BRIDGE = process.env.CMUX_BRIDGE ?? "http://127.0.0.1:8901";
 const EVENTS_PATH = process.env.MESHD_EVENTS_PATH ?? join(homedir(), ".mesh", "agent-events.jsonl");
+// The mesh CLI, for the one thing the daemon delegates to it (installing a built app).
+const MESH_BIN = process.env.MESH_BIN ?? join(process.env.MESH_HOME ?? join(homedir(), ".mesh"), "bin", "mesh");
 
 async function sh(cmd: string): Promise<string> {
   const p = Bun.spawn(["/bin/sh", "-c", cmd], { stdout: "pipe", stderr: "ignore" });
@@ -1142,6 +1148,12 @@ Bun.serve({
       const net = primaryIPv4();
       return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES, mac: primaryMac(), ipv4: net?.address ?? null, netmask: net?.netmask ?? null });
     }
+    // A web app an agent built: token-free by necessity (Safari, Add to Home Screen), gated
+    // by the unguessable key in its path instead. See apps.ts.
+    if (path.startsWith("/a/") && req.method === "GET") {
+      const served = await serveApp(path);
+      if (served) return served;
+    }
     // Pairing is the one route that must answer without a token — it is how the
     // phone gets one. See pair.ts for why that is safe.
     const paired = await handlePair(req, url, server, { port: PORT, token: TOKEN });
@@ -1151,6 +1163,9 @@ Bun.serve({
       // Secrets seen in agent/terminal text — fingerprints and counts, never values.
       const exposures = await handleExposures(req, url);
       if (exposures) return exposures;
+      // Apps an agent built for this owner — list, and install a native build.
+      const apps = await handleApps(req, url, { host: primaryIPv4()?.address ?? "127.0.0.1", port: PORT, meshBin: MESH_BIN });
+      if (apps) return apps;
       // Setup truth: what this daemon can actually do right now — see doctor.ts.
       // The token is judged here and only a verdict travels on, so a doctor report can
       // never leak the thing it is reporting on.

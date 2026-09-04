@@ -9,6 +9,40 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Security
+- **The terminal bridge now asks who you are.** The live terminal on port 7820 could type
+  into any session on the machine and answered anyone who could reach the port — no
+  token, no origin check, on every network interface. It now requires the same token as
+  the rest of the daemon (the phone app sends it as a cookie, since a browser cannot put a
+  header on a WebSocket), trusts only the Mac itself without one, and refuses everything
+  when no token is configured. A phone app older than 0.6 has to update before its
+  Terminal mode opens again.
+- **Secrets an agent prints never leave your Mac.** `cat .env`, a failing `curl` with its
+  bearer header, a connection string in a stack trace — until now those bytes went to the
+  Lock Screen through Apple's push servers, into the events file and to the watch. Every
+  line is now redacted on the way out: `ghp_ABCD…` becomes `ghp_••••••[902dd5]`, and the
+  six characters are a fingerprint, not part of the key. The daemon's own token and every
+  paired machine's token are caught exactly. Rules cover GitHub, AWS, Anthropic, OpenAI,
+  Slack, Google, Stripe, Hugging Face, npm, JWTs, `Authorization: Bearer`, URLs with
+  passwords, `KEY=value` assignments and private-key blocks.
+- **Exposed secrets are counted so you can rotate them.** Each distinct secret the daemon
+  had to redact is one row in `mesh exposures` / the phone's Exposed secrets screen: what
+  kind, its prefix, its fingerprint, how many times and where (event, terminal output,
+  live terminal), and whether you have rotated it. Never the value. `mesh doctor` mentions
+  the open count.
+
+### Added
+- **Chat with your coding agent, not its terminal.** A session's peek screen has a
+  Chat view beside Terminal. It shows the real conversation — your prompt, the agent's
+  text, its thinking, each tool call with its result and status — read from the transcript
+  the agent itself writes (Claude Code, Codex, cursor-agent), so nothing about how the
+  agent runs changes and no output is guessed at with patterns. Sessions without a
+  transcript show their screen as one block.
+- **The apps your agent builds have a home.** A web app it publishes with
+  `mesh apps publish` is served from your Mac at an unguessable address you can add to
+  your Home Screen; a native app it registers with `mesh apps add` installs onto your
+  paired iPhone (or a simulator) from a button on the phone. `GET /apps` lists them.
+
 ### Fixed
 - **Pair again and Remove machine now live on the machine's own screen.** The screen
   that diagnosed "token rejected" told you to pair again while the only pairing form
