@@ -41,7 +41,7 @@ each entry as you ship the slice, not at release time.
 - **The apps your agent builds have a home.** A web app it publishes with
   `mesh apps publish` is served from your Mac at an unguessable address you can add to
   your Home Screen; a native app it registers with `mesh apps add` installs onto your
-  paired iPhone (or a simulator) from a button on the phone. `GET /apps` lists them.
+  paired iPhone (or a simulator) from a button on the phone. `GET /built-apps` lists them.
 
 ### Fixed
 - **Pair again and Remove machine now live on the machine's own screen.** The screen

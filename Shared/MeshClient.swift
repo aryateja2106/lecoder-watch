@@ -454,7 +454,7 @@ struct MeshClient {
     // `apps()`/`activateApp(_:)` above, which list and front *running Mac processes*.
 
     func meshApps() async throws -> [MeshApp] {
-        let data = try await request("/apps")
+        let data = try await request("/built-apps")
         return try JSONDecoder().decode(MeshAppList.self, from: data).apps
     }
 
@@ -462,7 +462,7 @@ struct MeshClient {
     @discardableResult
     func installMeshApp(slug: String, target: String) async throws -> MeshAppInstallResult {
         let body = try JSONSerialization.data(withJSONObject: ["target": target])
-        let data = try await request("/apps/\(Self.pathSegment(slug))/install", method: "POST", body: body)
+        let data = try await request("/built-apps/\(Self.pathSegment(slug))/install", method: "POST", body: body)
         return try JSONDecoder().decode(MeshAppInstallResult.self, from: data)
     }
 

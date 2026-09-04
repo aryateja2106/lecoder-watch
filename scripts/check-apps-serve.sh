@@ -1,7 +1,7 @@
 #!/bin/sh
 # apps.ts self-check: a registered web app is served token-free at /a/<slug>-<key>/ with
 # the right content types, the bare path redirects to the slash form, a wrong key, an
-# unknown slug and every path-traversal spelling answer 404, GET /apps lists the app
+# unknown slug and every path-traversal spelling answer 404, GET /built-apps lists the app
 # without leaking its key or a Mac path, and a native app refuses to be "opened" while a
 # web app refuses to be "installed". Runs a throwaway daemon on a free port against a
 # temp MESH_HOME; nothing touches ~/.mesh.
@@ -58,17 +58,17 @@ expect "symlink out of site"    404 "$(code "$B/a/notes-0123abcd/link.txt")"
 expect "meta.json not reachable" 404 "$(code "$B/a/notes-0123abcd/../../notes/meta.json")"
 
 A="Authorization: Bearer $TOKEN"
-LIST="$(curl -s -m 5 -H "$A" "$B/apps")"
+LIST="$(curl -s -m 5 -H "$A" "$B/built-apps")"
 expect "list has both apps"     2 "$(printf '%s' "$LIST" | grep -o '"slug"' | wc -l | tr -d ' ')"
 expect "list skips bad meta"    0 "$(printf '%s' "$LIST" | grep -c 'bad-meta')"
 expect "list carries pwa url"   1 "$(printf '%s' "$LIST" | grep -c '/a/notes-0123abcd/')"
 expect "list hides .app path"   0 "$(printf '%s' "$LIST" | grep -c 'Counter.app')"
 expect "list hides raw key"     0 "$(printf '%s' "$LIST" | grep -c '"key"')"
 expect "newest first"           "notes" "$(printf '%s' "$LIST" | sed -n 's/.*"apps":\[{"slug":"\([a-z]*\)".*/\1/p')"
-expect "install native via cli" 200 "$(code -H "$A" -X POST -d '{"target":"sim"}' "$B/apps/counter/install")"
-expect "install passes --sim"   1 "$(curl -s -m 20 -H "$A" -X POST -d '{"target":"sim"}' "$B/apps/counter/install" | grep -c 'fake-install apps install counter --sim')"
-expect "install pwa refused"    400 "$(code -H "$A" -X POST -d '{}' "$B/apps/notes/install")"
-expect "install unknown 400"    400 "$(code -H "$A" -X POST -d '{}' "$B/apps/nothing/install")"
+expect "install native via cli" 200 "$(code -H "$A" -X POST -d '{"target":"sim"}' "$B/built-apps/counter/install")"
+expect "install passes --sim"   1 "$(curl -s -m 20 -H "$A" -X POST -d '{"target":"sim"}' "$B/built-apps/counter/install" | grep -c 'fake-install apps install counter --sim')"
+expect "install pwa refused"    400 "$(code -H "$A" -X POST -d '{}' "$B/built-apps/notes/install")"
+expect "install unknown 400"    400 "$(code -H "$A" -X POST -d '{}' "$B/built-apps/nothing/install")"
 
 [ "$fail" -eq 0 ] || { echo "check-apps-serve: FAILED"; tail -5 "$TMP/meshd.log"; exit 1; }
 echo "check-apps-serve: OK"

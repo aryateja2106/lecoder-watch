@@ -35,8 +35,9 @@ const VERSION = "0.6.0";
 // this machine, and GET /exposures lists what was seen (fingerprints, never values).
 // "chat": GET /agents/<s>/chat serves the session's conversation read from the agent's own
 // transcript (Claude Code, Codex), falling back to capture-pane lines as one system block.
-// "apps": GET /apps lists what `mesh apps` registered; web apps are served token-free at
-// /a/<slug>-<key>/ (Safari cannot send a header); POST /apps/<slug>/install pushes a native
+// "apps": GET /built-apps lists what `mesh apps` registered (/apps is the Mac app switcher);
+// web apps are served token-free at /a/<slug>-<key>/ (Safari cannot send a header);
+// POST /built-apps/<slug>/install pushes a native
 // build to the paired iPhone or a simulator through the same CLI the terminal uses.
 const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps"];
 const IS_MAC = process.platform === "darwin";

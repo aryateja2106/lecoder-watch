@@ -5,7 +5,7 @@
 // Safari cannot send one and "Add to Home Screen" needs a plain URL; the 8-hex key in the
 // path is what stands in for auth — unguessable, and only ever shown to the owner. A native
 // app (kind "native") is a built .app the `mesh apps install` CLI pushes onto the paired
-// iPhone (devicectl) or a booted simulator (simctl); POST /apps/<slug>/install shells out to
+// iPhone (devicectl) or a booted simulator (simctl); POST /built-apps/<slug>/install shells out to
 // that one implementation so the phone button and the terminal do the identical thing.
 //
 // The CLI (install/payload/bin/mesh) owns writing ~/.mesh/apps; this file only reads it.
@@ -117,7 +117,7 @@ export async function serveApp(pathname: string): Promise<Response | null> {
   });
 }
 
-/// POST /apps/<slug>/install {target: "device"|"sim"} → runs `mesh apps install`, the
+/// POST /built-apps/<slug>/install {target: "device"|"sim"} → runs `mesh apps install`, the
 /// single implementation the terminal uses too. The CLI's last stdout line is the verdict.
 export async function installApp(slug: string, target: string, meshBin: string): Promise<{ ok: boolean; error?: string; detail?: string }> {
   const meta = await readMeta(slug);
@@ -135,11 +135,12 @@ export async function installApp(slug: string, target: string, meshBin: string):
   return { ok: false, error: last || err.trim().split("\n").at(-1) || `mesh apps install exited ${code}` };
 }
 
-/// Mounted by server.ts AFTER the auth gate: GET /apps, POST /apps/<slug>/install.
+/// Mounted by server.ts AFTER the auth gate: GET /built-apps, POST /built-apps/<slug>/install.
+/// (`/apps` is taken: it lists and activates Mac applications — see input.ts.)
 /// (serveApp is mounted BEFORE it — see the comment at the top.)
 export async function handleApps(req: Request, url: URL, ctx: { host: string; port: number; meshBin: string }): Promise<Response | null> {
-  if (url.pathname === "/apps" && req.method === "GET") return json(await listApps(ctx.host, ctx.port));
-  const m = url.pathname.match(/^\/apps\/([a-z0-9][a-z0-9-]{1,40})\/install$/);
+  if (url.pathname === "/built-apps" && req.method === "GET") return json(await listApps(ctx.host, ctx.port));
+  const m = url.pathname.match(/^\/built-apps\/([a-z0-9][a-z0-9-]{1,40})\/install$/);
   if (m && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as { target?: string };
     const target = body.target === "sim" ? "sim" : "device";
