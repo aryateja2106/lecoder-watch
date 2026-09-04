@@ -1,6 +1,6 @@
 # Xcode + real Apple Watch runbook
 
-This captures current signing/device issues and the likely fixes. Use this before trying to run MeshWatch on Arya's physical watch.
+This captures current signing/device issues and the likely fixes. Use this before trying to run LeSearch Mesh on Arya's physical watch.
 
 ## Current observed environment
 
@@ -69,7 +69,7 @@ Do not do this blindly: first confirm the Team ID from Xcode account settings or
 
 The prompt saying:
 
-> The project “MeshWatch” does not have a remote repository.
+> The project “LeSearch Mesh” does not have a remote repository.
 
 is for Xcode Cloud workflows. It is not required to build/run locally on iPhone/watch.
 
@@ -100,7 +100,7 @@ Try in this order:
 4. Reboot Mac or restart Xcode.
 5. Open Xcode → Window → Devices and Simulators.
 6. Select the paired iPhone/watch and wait for indexing/preparation.
-7. Delete MeshWatch from iPhone and Watch.
+7. Delete LeSearch Mesh from iPhone and Watch.
 8. Re-run from Xcode with the iOS app scheme first.
 9. If still blocked, disable/re-enable Developer Mode on iPhone and Watch, then reboot both.
 10. If on developer beta and Xcode stable lacks support, either update Xcode beta or move devices to compatible public beta/stable.

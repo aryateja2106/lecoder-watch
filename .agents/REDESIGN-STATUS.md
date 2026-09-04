@@ -1,4 +1,4 @@
-# MeshWatch Redesign — Loop Status (overnight build, branch codex/redesign-exp-1)
+# LeSearch Mesh Redesign — Loop Status (overnight build, branch codex/redesign-exp-1)
 
 Last updated: 2026-06-17, autonomous /loop. Internal (.agents gitignored). **Not pushed.**
 

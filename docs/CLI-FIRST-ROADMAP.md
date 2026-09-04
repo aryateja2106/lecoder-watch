@@ -1,6 +1,6 @@
 # CLI-first roadmap — mesh as the product
 
-*2026-08-21. The decision doc for turning MeshWatch's daemon+CLI into a standalone,
+*2026-08-21. The decision doc for turning LeSearch Mesh's daemon+CLI into a standalone,
 FOSS, reviewable product — the way `hermes` is a CLI with a TUI and desktop shell
 around it, not an app with a CLI bolted on.*
 

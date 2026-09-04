@@ -67,7 +67,7 @@ signature or a case name.
 
 ---
 
-## 4. How MeshWatch itself uses these
+## 4. How LeSearch Mesh itself uses these
 
 This app is a working example of most of the frameworks above. Read the real code before
 inventing a pattern from scratch:

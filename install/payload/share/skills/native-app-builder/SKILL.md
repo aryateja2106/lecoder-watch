@@ -184,7 +184,7 @@ Nothing above uploads anywhere. If the user explicitly asks for TestFlight or an
 Store submission, that is a different, heavier pipeline (archive, export, `asc` upload,
 Beta App Review) — this skill does not do it automatically. Ask before spending the time,
 and check whether this repo already has a release script (`scripts/release-testflight.sh`
-in MeshWatch itself, for example) before writing a new one.
+in LeSearch Mesh itself, for example) before writing a new one.
 
 ---
 

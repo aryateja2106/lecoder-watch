@@ -105,7 +105,7 @@ MESH_SMOKE_REQUIRED=1 sh scripts/check-ios-smoke.sh
 2. **Create a workflow**:
    - Start condition: branch changes on `feat/apns-push` (current default branch)
      or `main`, whichever should auto-release.
-   - Action: **Archive**, scheme **MeshWatch** (this also builds and embeds
+   - Action: **Archive**, scheme **LeSearch Mesh** (this also builds and embeds
      `MeshWatch Watch App` and both widget extensions — same dependency graph
      `xcodebuild -scheme MeshWatch` builds locally).
    - Post-Action: **TestFlight (Internal Testing)** — internal testers get every

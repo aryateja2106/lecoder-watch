@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// mesh — command-line control for a MeshWatch mesh (the meshd HTTP API).
+// mesh — command-line control for a LeSearch Mesh fleet (the meshd HTTP API).
 // Dependency-free (bun's built-in fetch). Config: ~/.mesh/hosts.json.
 // Human output by default; --json for agents/scripts. `mesh help <cmd>` for details.
 
@@ -454,7 +454,7 @@ async function cmdPair(flags: Record<string, string>, cfg: Config) {
     if (qr) console.log(qr);
     // No QR on this install (no qr.ts) — the deep link itself is still the fallback.
     else { console.log(`    Link      ${url}`); console.log(""); }
-    console.log(`  Open MeshWatch on your iPhone -> Machines -> Add machine,`);
+    console.log(`  Open LeSearch Mesh on your iPhone -> Machines -> Add machine,`);
     console.log(`  and enter those two. Expires in ${Math.round(r.ttlSec / 60)} minutes, one use.`);
     console.log("");
     if (!address) console.log("  No address found. Pass one: mesh pair --address <ip>");
@@ -1183,7 +1183,7 @@ async function cmdSetup(cfg: Config) {
   console.log(`  3/4  Pairing your phone.`);
   await cmdPair({}, cfg);
   console.log(`       Open the Camera app on your iPhone, point it at the square above, tap the banner.`);
-  console.log(`       (No QR? Type the code into MeshWatch → Machines → Add machine.)`);
+  console.log(`       (No QR? Type the code into LeSearch Mesh → Machines → Add machine.)`);
   if (tty) prompt("       Press Enter once the phone shows this machine…");
 
   // 4 — the fleet, so the last thing on screen is the truth.
@@ -1709,7 +1709,7 @@ function cmdUninstall(bools: Set<string>, cfg: Config) {
   }, { ok: true, removed });
 }
 
-const HELP = `mesh ${VERSION} — control a MeshWatch mesh from the command line
+const HELP = `mesh ${VERSION} — control a LeSearch Mesh fleet from the command line
 
 USAGE
   mesh <command> [args] [-H host] [--json]

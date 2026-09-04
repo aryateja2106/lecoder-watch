@@ -1,4 +1,4 @@
-// MeshDesktopApp.swift — MeshWatch in the Mac menu bar.
+// MeshDesktopApp.swift — LeSearch Mesh in the Mac menu bar.
 //
 // Three jobs, and deliberately no fourth: show whether this machine's daemon is up,
 // put every permission it needs behind one button, and print a pairing QR. No settings,
@@ -25,7 +25,7 @@ struct MeshDesktopApp: App {
         // A filled dot when this Mac's daemon answered recently, a hollow one when it
         // has gone quiet. Nothing else belongs in the menu bar: a number there would be
         // read a hundred times a day and acted on once.
-        MenuBarExtra("MeshWatch", systemImage: daemon.up ? "circle.fill" : "circle") {
+        MenuBarExtra("LeSearch Mesh", systemImage: daemon.up ? "circle.fill" : "circle") {
             MenuContent()
                 .environmentObject(daemon)
                 .environmentObject(login)
@@ -68,7 +68,7 @@ private struct MenuContent: View {
 
         Divider()
 
-        Button("Quit MeshWatch") { NSApp.terminate(nil) }
+        Button("Quit LeSearch Mesh") { NSApp.terminate(nil) }
             .keyboardShortcut("q")
     }
 

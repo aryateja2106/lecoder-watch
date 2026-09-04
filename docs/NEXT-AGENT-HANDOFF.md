@@ -1,4 +1,4 @@
-# Next agent handoff — MeshWatch / LeScout
+# Next agent handoff — LeSearch Mesh / LeScout
 
 ## Prime directive
 

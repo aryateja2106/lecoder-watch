@@ -1,4 +1,4 @@
-# MeshWatch Relaunch Plan — 2026-06-29
+# LeSearch Mesh Relaunch Plan — 2026-06-29
 
 Resuming after ~10 days away. Context: moved to India for good, fewer resources,
 pi is offline (left behind), only the Mac + a VPS remain. Goal is to stop

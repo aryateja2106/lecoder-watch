@@ -61,7 +61,7 @@ installer `v0.5.2` (`gh release list -R LeSearch-AI/mesh-install`), `mesh.lesear
 
 This section originally recommended staying `LeSearch Mesh` (20/20 strings agreed, the
 ASC record matched, a rename costs a review cycle). The owner heard that case in the
-spec interview and decided the other way: **MeshWatch, published by LeSearch AI** —
+spec interview and decided the other way: **LeSearch Mesh, published by LeSearch AI** —
 the watch-first identity is the wedge nobody else owns, and the binary, bundle id and
 URL scheme already said meshwatch. `CONTEXT.md`'s Names section is the canonical record.
 
@@ -75,7 +75,7 @@ story: `Your Mac, from your wrist`.
 
 ## 2. The product, in one sentence
 
-**MeshWatch puts every machine you own — and every coding agent running on it — on
+**LeSearch Mesh puts every machine you own — and every coding agent running on it — on
 your iPhone and Apple Watch, over your own network, with no account and no server of ours
 in the path: one pasted command in, one command out.**
 

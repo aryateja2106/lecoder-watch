@@ -1,6 +1,6 @@
 # Roadmap
 
-Where MeshWatch is going, in the order it is going there. Shipped work moves to
+Where LeSearch Mesh is going, in the order it is going there. Shipped work moves to
 [`CHANGELOG.md`](CHANGELOG.md); this file only holds the future. Dates are guesses,
 sequence is the commitment.
 

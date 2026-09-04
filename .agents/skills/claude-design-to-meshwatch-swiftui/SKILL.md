@@ -1,13 +1,13 @@
 ---
 name: claude-design-to-meshwatch-swiftui
-description: Convert a Claude design URL, HTML/CSS prototype, local prototype archive, screenshot, or mockup into a MeshWatch SwiftUI view for the watch app, iPhone app, widgets, or shared components. Use when the user asks to translate a visual prototype into this repo's SwiftUI code, adapt a web mockup to watchOS/iOS, or create a narrow redesign experiment from a design reference.
+description: Convert a Claude design URL, HTML/CSS prototype, local prototype archive, screenshot, or mockup into a LeSearch Mesh SwiftUI view for the watch app, iPhone app, widgets, or shared components. Use when the user asks to translate a visual prototype into this repo's SwiftUI code, adapt a web mockup to watchOS/iOS, or create a narrow redesign experiment from a design reference.
 ---
 
-# Claude Design To MeshWatch SwiftUI
+# Claude Design To LeSearch Mesh SwiftUI
 
 ## Overview
 
-Translate prototypes into native MeshWatch SwiftUI without assuming plugin MCPs, Chrome tooling, or Xcode automation are available. Keep the output narrow: one new view or a small patch to the existing screen that proves the design direction.
+Translate prototypes into native LeSearch Mesh SwiftUI without assuming plugin MCPs, Chrome tooling, or Xcode automation are available. Keep the output narrow: one new view or a small patch to the existing screen that proves the design direction.
 
 This is adapted for this repo from the workflow in https://github.com/heyadam/claudedesign-to-swiftui.
 
@@ -35,7 +35,7 @@ iPhone:
 xcodebuild -project MeshWatch.xcodeproj -scheme "MeshWatch" -destination 'generic/platform=iOS Simulator' build
 ```
 
-## MeshWatch Targets
+## LeSearch Mesh Targets
 
 - Watch redesign experiments should usually land in `Watch/WatchViews.swift`.
 - iPhone terminal-session polish should usually land in `iOS/TerminalView.swift`, especially `SessionPeekScreen`.

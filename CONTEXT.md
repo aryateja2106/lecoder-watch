@@ -1,10 +1,10 @@
-# CONTEXT — MeshWatch
+# CONTEXT — LeSearch Mesh
 
 ## Names (canonical, decided 2026-08-28)
 
-- **MeshWatch** — the product and app. The only name that appears as an app name
+- **LeSearch Mesh** — the product and app. The only name that appears as an app name
   anywhere: App Store, TestFlight, home screen, landing page, README.
-- **LeSearch AI** — the company/brand that publishes MeshWatch. Appears as
+- **LeSearch AI** — the company/brand that publishes LeSearch Mesh. Appears as
   "by LeSearch AI" in lockups, never as part of the app name itself.
 - **"LeSearch Mesh"** — retired. Wherever it still appears, it is a rename not yet
   applied, not a second product.
