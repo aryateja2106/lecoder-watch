@@ -21,6 +21,7 @@ those three.
 | [playbooks/](playbooks/README.md) | Before touching Xcode, simulators, devices, releases, asc, or the daemon from any agent harness | Six imperative playbooks; every trap in them was paid for at least once here. |
 | [mac-remote-control.md](mac-remote-control.md) | Touching pointer, keyboard, media, windows or power | The control surface, end to end. Referenced from CONTEXT.md. |
 | [mesh-cli-and-remote-install.md](mesh-cli-and-remote-install.md) | Adding a machine, the `mesh` CLI, upgrade/uninstall | Start here for anything installer-shaped. |
+| [local-first-ade.md](local-first-ade.md) | Building or changing the app-building skills, or `mesh apps`/`mesh skills` | The two build routes (native via Xcode+devicectl, PWA via `mesh apps publish`) and the daemon underneath both. |
 | [release-workflow.md](release-workflow.md) | Cutting a release | See the warning below — the fleet lags the repo. |
 | [backlog.md](backlog.md) | Asking "do we already have X?" before building it | 75 items graded against the code as done/partial/buried/missing. Generated — edit `.github/backlog.json`, not this. |
 | [updating.md](updating.md) | Anyone asks "how do I get the new version?" | Three components, three routes, no cable. Includes the internal-vs-external TestFlight trap. |
