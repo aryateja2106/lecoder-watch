@@ -611,6 +611,9 @@ private struct MachinePowerSection: View {
                     }
                     .disabled(running != nil)
                 }
+                Text("The daemon starts at login. After a restart nothing answers from the phone until someone logs in at the Mac (or auto-login is on).")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             } else {
                 Text("Restart and Shut Down need a newer agent on this machine. Re-run the install command on it.")
                     .font(.caption2)
