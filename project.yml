@@ -77,6 +77,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
+        NSSpeechRecognitionUsageDescription: "Turn what you say into text for your agents, on this device."
         NSFaceIDUsageDescription: "Unlock MeshWatch so only you can reach your machines."
         NSCameraUsageDescription: "Scan a machine's pairing QR code."
         UIBackgroundModes:
