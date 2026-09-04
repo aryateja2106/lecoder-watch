@@ -540,6 +540,23 @@ install_agent_hooks() {
   fi
 }
 
+# Skills teach a coding agent working through mesh how to build an app for the user's
+# phone — native (Xcode + devicectl) or a local PWA (mesh apps publish). The payload
+# already staged share/skills/ into $MESH_HOME/share above; this is the step that makes
+# every CLI (Claude Code, Codex, Cursor) actually see it, by copying into
+# ~/.agents/skills and symlinking each CLI's own skills directory to it. Idempotent, and
+# never overwrites a directory it did not create itself.
+install_skills() {
+  want_component tools || return 0
+  command -v bun >/dev/null 2>&1 || return 0
+  [ -x "$MESH_HOME/bin/mesh" ] || return 0
+  if "$MESH_HOME/bin/mesh" skills install >/dev/null 2>&1; then
+    log "Installed agent skills into ~/.agents/skills (mesh skills status to check)"
+  else
+    log "Could not install agent skills — run: $MESH_HOME/bin/mesh skills install"
+  fi
+}
+
 install_deps() { ( cd "$1" && bun install ); }
 
 # ---------- PATH onboarding ----------
@@ -784,6 +801,7 @@ chmod 600 "$MESH_HOME/token" 2>/dev/null || true
 want_component meshd && install_deps "$MESH_HOME/meshd"
 want_component bridge && install_deps "$MESH_HOME/rmux-bridge"
 install_agent_hooks
+install_skills
 
 MESHD_STATUS="skipped"; BRIDGE_STATUS="skipped"
 if [ "$NO_START" = "1" ]; then
