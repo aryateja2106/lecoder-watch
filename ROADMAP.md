@@ -37,6 +37,38 @@ more features adds nothing a person can touch, and no feedback can come back.
   `mesh-install` **v0.5.0 is published** (27 Aug); machines update with `mesh upgrade`
   or a fresh curl of the GitHub release. Phones do not.
 
+## Now — 0.6.x, from the first device test (2026-09-04)
+
+The owner drove 0.6 from a real iPhone against a live Claude Code session and built a
+habit tracker from the phone. Everything below is what that hour taught, in the order it
+hurt. Shipped fixes are already in the changelog; this is what is left.
+
+- **Terminal gestures and chords.** Swipe to switch pane/window, pinch to zoom, a D-pad
+  with custom corners, and a chord builder (`C-b, S-t`) on the same key route the daemon
+  already has. This is the gap a tmux user feels in the first minute; Moshi has it, we
+  have a key row. See [`docs/compare-moshi.md`](docs/compare-moshi.md).
+- **Hold-to-talk with a correction step.** On-device speech into the chat composer, the
+  transcript shown for a fix before it is sent — long thoughts, spoken, without typing.
+  The watch already dictates; the phone gets the same with review.
+- **Model choice at launch.** A picker in the new-session sheet (`claude --model …`,
+  Codex's equivalent), because "which model am I talking to" was the first question asked.
+- **Mac permissions at setup, not mid-build.** Building and installing an app from the
+  phone triggered macOS prompts (App Management, Accessibility) that only a person at the
+  Mac can answer. `mesh setup` and `mesh doctor --fix` should surface every grant an
+  agent will need, once, with a plain explanation of each.
+- **Friendly app addresses.** Built web apps are served at the Mac's IP today; use the
+  machine's `.local` name or MagicDNS so the URL a user adds to their Home Screen reads
+  like a name, not an address.
+- **What the agent is doing when the session looks idle.** Claude Code spawns background
+  jobs and worktrees that the transcript only hints at; the chat should say "2 background
+  jobs running" instead of looking asleep while tests loop out of sight.
+- **Preferences that compound.** `app-brief` now writes `~/.mesh/app-preferences.md`;
+  the next step is showing and editing that memory from the phone, and letting the
+  interview draw on every app you have built.
+- **Terminal legibility.** A phone-width terminal that does not require pinching to
+  read a permission prompt: reader mode on the phone like the watch has, and the
+  approval card rendered from the prompt text rather than the raw screen.
+
 ## Now — beta hardening (0.5)
 
 - **APNs proven on real devices, end to end.** The signing path ships; delivery to a
