@@ -90,7 +90,8 @@ before it runs. Nothing about setting this up should feel like a one-way door.
 | Surface | What is on it |
 |---|---|
 | **Watch** | **Needs you** — every blocked agent across every machine, with the question and a one-tap answer. Live sessions, a real terminal with the full key bar, one-tap dictation, a trackpad for the Mac, usage limits. |
-| **iPhone** | Machines and stats, sessions and terminals, a native trackpad + keyboard + screen for the Mac, pairing, settings. |
+| **iPhone** | Machines and stats, sessions with a **Chat** view (the agent's own conversation: prompt, reply, thinking, tool calls) beside the terminal, a native trackpad + keyboard + screen for the Mac, pairing, settings, the secrets the daemon redacted. |
+| **Apps your agent builds** | Ask for an app from the phone; the `app-brief` skill interviews you, then the agent builds a native iOS app installed to your paired iPhone, or a home-screen web app your Mac serves. |
 | **Complication** | How many agents are waiting, which one, and what it asked. Says when its reading is stale rather than asserting a count it cannot stand behind. |
 | **Notifications** | Continue / Reply / Stop, answerable without opening anything. Sent by *your* machine straight to APNs. |
 | **Live Activity** | The session that needs you, on the Lock Screen and in the Dynamic Island. Blocked outranks merely busy. |
@@ -124,10 +125,17 @@ everything trains the eye to skip the warning.
 ```
 Apple Watch ──WatchConnectivity── iPhone ──HTTP over your LAN or VPN──┬─ mac:   meshd
   needs-you · sessions · terminal   (polls every machine)             ├─ linux: meshd
-  trackpad · complication                                            └─ …:     meshd
+  trackpad · complication · chat                                     └─ …:     meshd
                                                                            │
-   agent blocks ─> mesh-hook ─> POST /events ─> meshd signs APNs ─> your phone + watch
+   agent blocks ─> mesh-hook ─> POST /events ─> redact ─> meshd signs APNs ─> phone + watch
+   agent writes its transcript ─> GET /agents/<s>/chat ─> redact ─> the Chat view
 ```
+
+Every line that leaves the Mac — an event, a terminal screen, a chat message, the live
+terminal stream — passes through the daemon's redaction first. `ghp_ABCD…` reaches the
+phone as `ghp_••••••[902dd5]`, and `mesh exposures` (or Settings → Exposed secrets) lists
+each distinct secret the daemon had to hide — kind, prefix, fingerprint, count — so you
+know what to rotate. Never the value.
 
 The watch reaches the mesh through the paired iPhone when it cannot reach a machine itself,
 so install the iPhone app first; the watch app follows from the Watch app on your phone.
@@ -158,8 +166,20 @@ adequate on a network you trust and **not adequate on a shared or public one** �
 that way until TLS lands.
 
 **Capabilities are honest per machine.** `/health` advertises what each daemon can actually
-do (`screenPeek`, `input`, `files`, `push`, `pair`, …) and the app greys out what a machine
-cannot do. Linux hosts have input and files but no screen capture, and say so.
+do (`screenPeek`, `input`, `files`, `push`, `pair`, `redact`, `chat`, `apps`, …) and the app
+greys out what a machine cannot do. Linux hosts have input and files but no screen capture,
+and say so.
+
+**The live terminal requires your token now.** Until 0.6 the terminal bridge on port 7820
+answered anyone who could reach it. It now wants the same token as the daemon; the app
+sends it as a cookie. A phone app older than 0.6 loses Terminal mode until it updates.
+
+**Built apps, honestly.** A native app needs an Apple developer account, a paired iPhone in
+Developer Mode, and — today — the phone reachable from the Mac (a cable when Wi-Fi pairing
+is not up). A web app is served by your Mac over plain HTTP on your network at an
+unguessable address; it keeps its data in the browser and works while the Mac is on, and it
+only works offline when you host it on HTTPS you own. Chat reads transcripts from Claude
+Code, Codex and cursor-agent; other agents show as terminals.
 
 **A green build proves very little here.** Three features have shipped correct and
 completely dead — one because no hook was ever registered, one because event hostnames never
