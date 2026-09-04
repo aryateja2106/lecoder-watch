@@ -5,6 +5,11 @@ description: Autonomous Progressive Web App (PWA) builder for Route 2 (users wit
 
 # Route 2: Progressive Web App (PWA) Builder (local-first storage)
 
+Do not start here from a bare "build me an app": run the `app-brief` skill first and come
+here only when the brief chose **web** (no Apple developer account, or the user wants it in
+a minute). Build one app, once — never a native app "as well" unless asked. The icon
+(`apple-touch-icon`, 180×180) is mandatory, not optional.
+
 Use this skill when the user has no Apple Developer account, or just wants an app running
 immediately without any signing or device pairing at all. Zero fees, zero provisioning
 profiles, zero Xcode.
@@ -81,7 +86,7 @@ published.
   <!-- In-app Add to Home Screen guidance (shown until installed) -->
   <div id="install-banner" class="install-banner hidden">
     <div class="banner-content">
-      <p>Install this app on your iPhone: tap <strong>Share</strong> <span class="share-icon">⎋</span> then <strong>Add to Home Screen</strong></p>
+      <p>Install this app on your iPhone: long-press the address bar, tap <strong>Share</strong> <span class="share-icon">⎋</span>, then <strong>Add to Home Screen</strong></p>
       <button onclick="dismissBanner()">Dismiss</button>
     </div>
   </div>
@@ -244,7 +249,8 @@ This copies `<app-dir>` to `~/.mesh/apps/{{APP_SLUG}}/site/` and prints a URL li
 http://192.168.1.23:8899/a/{{APP_SLUG}}-a1b2c3d4/
 ```
 
-Open that in Safari on the phone (same Wi-Fi as the Mac), then **Share → Add to Home
+Open that in Safari on the phone (same Wi-Fi as the Mac), then long-press the address bar
+→ **Share → Add to Home
 Screen**. The random suffix in the path is the only thing standing in for auth on this
 route — the page is served without a bearer token because a browser page load cannot set
 an `Authorization` header, so don't publish anything containing a real secret.

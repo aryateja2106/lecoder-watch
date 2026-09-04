@@ -12,6 +12,14 @@ the user explicitly asks for one.
 
 ---
 
+## Before this skill: the brief
+
+Do not start here from a bare "build me an app". Run the `app-brief` skill first: it asks
+the few questions that decide the design, records the user's preferences, and picks native
+or web on purpose. Come here only when the brief chose **native**. Build one app, once —
+never a web app "as well", never background jobs or parallel workers the user cannot see
+from a phone, never a test loop left running.
+
 ## 0. Before anything: get the Team ID and bundle prefix
 
 Never hardcode a Development Team or a bundle prefix. Run this first:
@@ -179,6 +187,23 @@ and check whether this repo already has a release script (`scripts/release-testf
 in MeshWatch itself, for example) before writing a new one.
 
 ---
+
+## 6b. Definition of done — no iconless, nameless, blank apps
+
+Every app this skill produces must have, before `mesh apps install`:
+
+1. **An icon.** Run the bundled generator; pick a symbol and a color that fit the app:
+   ```sh
+   sh ~/.agents/skills/native-app-builder/scripts/make-appicon.sh Sources/Assets.xcassets checkmark.circle.fill 1FA463 0B6B3A
+   ```
+   Then make sure `project.yml` points the target at it (`ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon`).
+2. **A display name** a person would say (`CFBundleDisplayName`), and a bundle id derived from
+   it under the configured prefix.
+3. **Empty states** that tell the user what to do first. No blank screens.
+4. **Every must-have from the brief** built, or listed as skipped with the reason, in the
+   completion message. Widgets and Live Activities come from the `apple-native-apis` skill.
+5. **Tests run once**, green. If something fails, fix it and run once more; never leave a
+   loop running.
 
 ## 7. Completion signal
 

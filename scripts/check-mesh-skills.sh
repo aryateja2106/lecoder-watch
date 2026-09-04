@@ -1,5 +1,5 @@
 #!/bin/sh
-# The three app-building skills (apple-native-apis, native-app-builder,
+# The four app-building skills (app-brief, apple-native-apis, native-app-builder,
 # pwa-local-app-builder) started life as a draft with a hardcoded Team ID, a hardcoded
 # bundle prefix, and a daemon on a port meshd has never listened on. This check makes
 # sure none of that regressed back in, and that `mesh skills install` actually does what
@@ -14,7 +14,7 @@ fail=0
 bad() { echo "FAIL: $1"; fail=1; }
 
 # ---- 1. no personal identifiers, no fake ports, in the shipped skills ----
-for name in apple-native-apis native-app-builder pwa-local-app-builder; do
+for name in app-brief apple-native-apis native-app-builder pwa-local-app-builder; do
   f="$SKILLS_SRC/$name/SKILL.md"
   [ -f "$f" ] || { bad "missing $f"; continue; }
   for needle in B5B87F7AXF com.aryateja 7777 imake maxawad; do
@@ -34,7 +34,7 @@ fi
 # .claude/skills and .cursor/skills pointers are committed. .agents/skills/* is per-machine
 # by .gitignore policy (only factory-* rides into PRs), so on a fresh checkout — CI — those
 # links are absent, which is fine; a real directory there would be a stale copy, which is not.
-for name in apple-native-apis native-app-builder pwa-local-app-builder; do
+for name in app-brief apple-native-apis native-app-builder pwa-local-app-builder; do
   for dir in .cursor/skills .claude/skills; do
     link="$ROOT/$dir/$name"
     [ -L "$link" ] || { bad "$dir/$name is not a symlink"; continue; }
@@ -54,7 +54,7 @@ trap 'rm -rf "$TMP"' EXIT
 run() { HOME="$TMP" MESH_HOME="$TMP/.mesh" bun "$MESH" "$@"; }
 
 run skills install >"$TMP/out1" 2>&1 || { bad "mesh skills install failed:"; cat "$TMP/out1"; }
-for name in apple-native-apis native-app-builder pwa-local-app-builder; do
+for name in app-brief apple-native-apis native-app-builder pwa-local-app-builder; do
   [ -f "$TMP/.agents/skills/$name/SKILL.md" ] || bad "no ~/.agents/skills/$name/SKILL.md after install"
   for dir in .claude .codex .cursor; do
     link="$TMP/$dir/skills/$name"
@@ -69,7 +69,7 @@ run skills install >/dev/null 2>&1 || bad "mesh skills install is not idempotent
 # `mesh skills status` must report all three installed, in JSON a caller can parse.
 STATUS_JSON="$(run skills status --json)"
 installed_count=$(printf '%s' "$STATUS_JSON" | grep -c '"installed": true') || installed_count=0
-[ "$installed_count" -eq 3 ] || bad "mesh skills status --json reports $installed_count/3 installed"
+[ "$installed_count" -eq 4 ] || bad "mesh skills status --json reports $installed_count/4 installed"
 
 # A directory the user owns (not created by mesh) must survive untouched.
 mkdir -p "$TMP/.agents/skills/user-owned-example"
@@ -79,7 +79,7 @@ run skills install >/dev/null 2>&1
 
 # --uninstall removes the symlinks and the managed copy.
 run skills install --uninstall >/dev/null 2>&1 || bad "mesh skills install --uninstall failed"
-for name in apple-native-apis native-app-builder pwa-local-app-builder; do
+for name in app-brief apple-native-apis native-app-builder pwa-local-app-builder; do
   [ -e "$TMP/.agents/skills/$name" ] && bad "$name still present under ~/.agents/skills after --uninstall"
   for dir in .claude .codex .cursor; do
     [ -L "$TMP/$dir/skills/$name" ] && bad "$dir/skills/$name symlink survived --uninstall"
