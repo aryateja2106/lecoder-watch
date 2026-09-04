@@ -124,7 +124,6 @@ struct AgentChatView: View {
     /// `client.send(key:)` and `AgentNotification.command(for:typed:)` use. A raw
     /// control byte in a text field is not how this app tells a session to stop.
     let onSendKey: (String) -> Void
-    let onOpenTerminal: () -> Void
 
     @State private var inputText = ""
     @State private var selectedArtifact: AgentArtifact?
@@ -244,6 +243,8 @@ struct AgentChatView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture { inputFocused = false }
                 .scrollDismissesKeyboard(.interactively)
                 // Same "at the bottom" rule as the watch terminal's FollowsTail
                 // (Watch/WatchViews.swift): 24pt slack so the newest line being on
@@ -289,14 +290,6 @@ struct AgentChatView: View {
             inputBar
         }
         .background(Color(.systemGroupedBackground))
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button { inputFocused = false } label: {
-                    Image(systemName: "keyboard.chevron.compact.down")
-                }
-            }
-        }
         .sheet(item: $selectedArtifact) { artifact in
             ArtifactDetailSheet(
                 artifact: artifact,
@@ -481,14 +474,6 @@ struct AgentChatView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button { onOpenTerminal() } label: {
-                Label("Terminal", systemImage: "terminal")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color(.tertiarySystemFill))
-                    .clipShape(Capsule())
-            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -498,25 +483,22 @@ struct AgentChatView: View {
     private var suggestionPills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                // The keys a TUI agent needs and a phone keyboard lacks, in the order the
-                // terminal mode offers them, so Chat never strands you one Escape short.
-                ForEach(chatKeys, id: \.key) { k in
-                    Button { onSendKey(k.key) } label: { Image(systemName: k.icon) }
-                        .buttonStyle(.bordered)
-                        .accessibilityLabel(k.label)
-                }
-                Divider().frame(height: 22)
-                // No Team ID / bundle prefix baked in here: the skill derives those
-                // from `mesh apps config` or asks, because this app ships to people
-                // who are not its author.
-                SuggestionChip(title: "Plan an app with me", icon: "hammer.fill") {
-                    onSendText("Use the app-brief skill: ask me what I want to build, then build it.\n")
-                }
-                SuggestionChip(title: "Run tests", icon: "checkmark.circle.fill") {
-                    onSendText("Run the project test suite\n")
-                }
-                SuggestionChip(title: "Status", icon: "questionmark.circle") {
-                    onSendText("What is the current status of this task?\n")
+                // The owner's own saved quick commands (Settings → Quick send), not a
+                // hardcoded list — each sends its text + Enter. Empty only before he's
+                // added any, so two sensible defaults stand in until he does.
+                if store.quickCommands.isEmpty {
+                    SuggestionChip(title: "Plan an app with me", icon: "hammer.fill") {
+                        onSendText("Use the app-brief skill: ask me what I want to build, then build it.\n")
+                    }
+                    SuggestionChip(title: "Status", icon: "questionmark.circle") {
+                        onSendText("What is the current status of this task?\n")
+                    }
+                } else {
+                    ForEach(store.quickCommands, id: \.self) { command in
+                        SuggestionChip(title: command, icon: "terminal") {
+                            onSendText(command + "\n")
+                        }
+                    }
                 }
                 SuggestionChip(title: "Restart Claude", icon: "arrow.clockwise") {
                     restartClaude()
@@ -587,17 +569,6 @@ struct AgentChatView: View {
         .padding(.vertical, 10)
         .background(Color(.secondarySystemGroupedBackground))
     }
-
-    private let chatKeys: [(key: String, icon: String, label: String)] = [
-        ("escape", "escape", "Esc"),
-        ("tab", "arrow.right.to.line", "Tab"),
-        ("up", "arrow.up", "Up"),
-        ("down", "arrow.down", "Down"),
-        ("left", "arrow.left", "Left"),
-        ("right", "arrow.right", "Right"),
-        ("enter", "return", "Enter"),
-        ("ctrl-c", "xmark.octagon", "Ctrl-C"),
-    ]
 
     private func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)

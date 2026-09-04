@@ -614,8 +614,7 @@ private struct SessionPeekScreen: View {
                             }
                         }
                     },
-                    onSendKey: { key in Task { await send(key: key) } },
-                    onOpenTerminal: { viewMode = .terminal }
+                    onSendKey: { key in Task { await send(key: key) } }
                 )
             } else {
                 ScrollView {
