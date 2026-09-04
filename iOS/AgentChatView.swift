@@ -153,6 +153,16 @@ struct AgentChatView: View {
     /// Composer Stop: armed by a first tap, sent by a second within 3 seconds.
     @State private var confirmingStop = false
 
+    // MARK: - Voice input
+
+    /// When the mic press began — a release under 300ms leaves the recording running
+    /// instead of cutting it off mid-breath; the sheet's own Stop & Review ends it.
+    @State private var micPressStart: Date?
+    @State private var showingVoiceRecording = false
+    @State private var showingTranscriptionCorrection = false
+    @State private var correctionText = ""
+    @State private var micErrorMessage: String?
+
     private var agentKind: AgentCLIKind {
         AgentCLIKind.detect(from: session.name, agentType: session.agentType)
     }
@@ -267,6 +277,15 @@ struct AgentChatView: View {
                 .onChange(of: awaitingDecision) { _, _ in if followBottom { scrollToEnd(proxy, animated: true) } }
             }
             suggestionPills
+            if let micErrorMessage {
+                Text(micErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemGroupedBackground))
+            }
             inputBar
         }
         .background(Color(.systemGroupedBackground))
@@ -291,6 +310,42 @@ struct AgentChatView: View {
                     try await store.client(for: machine).installMeshApp(slug: artifact.slug, target: "device")
                 }
             )
+        }
+        .sheet(isPresented: $showingVoiceRecording) {
+            VoiceRecordingSheet(agentKind: agentKind) {
+                showingVoiceRecording = false
+            }
+            .interactiveDismissDisabled()
+        }
+        .sheet(isPresented: $showingTranscriptionCorrection) {
+            TranscriptionCorrectionSheet(
+                initialText: correctionText,
+                agentKind: agentKind,
+                onSend: { text in
+                    showingTranscriptionCorrection = false
+                    onSendText(text + "\n")
+                },
+                onCancel: { showingTranscriptionCorrection = false }
+            )
+        }
+        .onChange(of: VoiceTranscriber.shared.state) { _, newState in
+            switch newState {
+            case .readyForReview(let text):
+                showingVoiceRecording = false
+                correctionText = text
+                showingTranscriptionCorrection = true
+            case .idle:
+                showingVoiceRecording = false
+            case .error(let message):
+                showingVoiceRecording = false
+                micErrorMessage = message
+                Task {
+                    try? await Task.sleep(for: .seconds(4))
+                    if micErrorMessage == message { micErrorMessage = nil }
+                }
+            default:
+                break
+            }
         }
     }
 
@@ -331,6 +386,38 @@ struct AgentChatView: View {
     private func confirmStop() {
         confirmingStop = false
         onSendKey("ctrl-c")
+    }
+
+    /// Hold to talk: press starts recording and shows the sheet; holding past 300ms and
+    /// releasing stops it. A release under 300ms is a tap, not a hold — recording keeps
+    /// running and the sheet's own Stop & Review button is what ends it, so a quick tap
+    /// doesn't cut the user off before they've said anything.
+    private var micGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                guard micPressStart == nil else { return }
+                micPressStart = Date()
+                showingVoiceRecording = true
+                Task { await VoiceTranscriber.shared.startRecording() }
+            }
+            .onEnded { _ in
+                let elapsed = micPressStart.map { Date().timeIntervalSince($0) } ?? 0
+                micPressStart = nil
+                guard elapsed >= 0.3 else { return }
+                Task { await VoiceTranscriber.shared.stopRecording() }
+            }
+    }
+
+    /// Ctrl-C twice (300ms apart) breaks out of whatever Claude Code is mid-doing, a beat
+    /// for the shell to settle, then a fresh `claude` relaunches it in the same pane.
+    private func restartClaude() {
+        Task {
+            onSendKey("ctrl-c")
+            try? await Task.sleep(for: .milliseconds(300))
+            onSendKey("ctrl-c")
+            try? await Task.sleep(for: .milliseconds(700))
+            onSendText("claude\n")
+        }
     }
 
     private func scrollToEnd(_ proxy: ScrollViewProxy, animated: Bool) {
@@ -422,17 +509,17 @@ struct AgentChatView: View {
                 // No Team ID / bundle prefix baked in here: the skill derives those
                 // from `mesh apps config` or asks, because this app ships to people
                 // who are not its author.
-                SuggestionChip(title: "Build a native iOS app", icon: "hammer.fill") {
-                    onSendText("Build a native iOS app with SwiftUI and XcodeGen\n")
-                }
-                SuggestionChip(title: "Build a web app", icon: "globe") {
-                    onSendText("Build a progressive web app with offline storage\n")
+                SuggestionChip(title: "Plan an app with me", icon: "hammer.fill") {
+                    onSendText("Use the app-brief skill: ask me what I want to build, then build it.\n")
                 }
                 SuggestionChip(title: "Run tests", icon: "checkmark.circle.fill") {
                     onSendText("Run the project test suite\n")
                 }
                 SuggestionChip(title: "Status", icon: "questionmark.circle") {
                     onSendText("What is the current status of this task?\n")
+                }
+                SuggestionChip(title: "Restart Claude", icon: "arrow.clockwise") {
+                    restartClaude()
                 }
             }
             .padding(.horizontal, 16)
@@ -459,6 +546,15 @@ struct AgentChatView: View {
                 // approval card is the one Allow/Deny surface. Stop stays, two-step:
                 // every tap here sends Ctrl-C into a session that might already be
                 // working again, so a reader has to mean it.
+                Image(systemName: "mic.fill")
+                    .font(.subheadline)
+                    .frame(width: 34, height: 34)
+                    .background(agentKind.brandColor.opacity(0.15))
+                    .foregroundStyle(agentKind.brandColor)
+                    .clipShape(Circle())
+                    .contentShape(Circle())
+                    .gesture(micGesture)
+
                 if confirmingStop {
                     Button(action: confirmStop) {
                         Text("Send Ctrl-C?")
@@ -1046,5 +1142,194 @@ struct SuggestionChip: View {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Voice recording + transcription correction sheets
+//
+// Recording itself is already under way by the time either sheet appears — the
+// composer's mic gesture calls `VoiceTranscriber.shared.startRecording()` directly, and
+// `AgentChatView`'s `onChange(of: VoiceTranscriber.shared.state)` is what reacts to
+// `.readyForReview`/`.error` and drives which sheet is on screen. Nothing here starts or
+// routes a recording on its own.
+
+private struct VoiceRecordingSheet: View {
+    let agentKind: AgentCLIKind
+    let onCancel: () -> Void
+
+    @State private var transcriber = VoiceTranscriber.shared
+    @State private var animationScale: CGFloat = 1.0
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 28) {
+                Spacer()
+
+                ZStack {
+                    Circle()
+                        .fill(agentKind.brandColor.opacity(0.12))
+                        .frame(width: 140 * animationScale, height: 140 * animationScale)
+                        .animation(.easeInOut(duration: 0.2), value: animationScale)
+                    Circle()
+                        .fill(agentKind.brandColor.opacity(0.25))
+                        .frame(width: 100, height: 100)
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 42))
+                        .foregroundStyle(agentKind.brandColor)
+                }
+
+                VStack(spacing: 8) {
+                    Text("Listening to your voice…")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+
+                    ScrollView {
+                        Text(transcriber.recognizedText.isEmpty
+                             ? "Speak your prompt or instructions to \(agentKind.rawValue)…"
+                             : transcriber.recognizedText)
+                            .font(.body)
+                            .foregroundStyle(transcriber.recognizedText.isEmpty ? .secondary : .primary)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 120)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .padding(.horizontal, 24)
+
+                Spacer()
+
+                HStack(spacing: 24) {
+                    Button {
+                        transcriber.cancelRecording()
+                        onCancel()
+                    } label: {
+                        Label("Cancel", systemImage: "xmark")
+                            .font(.subheadline)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .background(Color(.tertiarySystemFill))
+                            .clipShape(Capsule())
+                    }
+
+                    Button {
+                        Task { await transcriber.stopRecording() }
+                    } label: {
+                        Label("Stop & Review", systemImage: "stop.fill")
+                            .font(.headline)
+                            .padding(.horizontal, 28)
+                            .padding(.vertical, 14)
+                            .background(Color.red)
+                            .foregroundStyle(.white)
+                            .clipShape(Capsule())
+                    }
+                }
+                .padding(.bottom, 30)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Voice Input")
+            .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: transcriber.state) { _, newState in
+                if case .recording(let level, _) = newState {
+                    animationScale = 1.0 + CGFloat(level) * 0.4
+                }
+            }
+        }
+    }
+}
+
+private struct TranscriptionCorrectionSheet: View {
+    let initialText: String
+    let agentKind: AgentCLIKind
+    let onSend: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var editableText: String = ""
+
+    private let commonKeywords = [
+        "SwiftUI", "XcodeGen", "PWA", "IndexedDB", "TestFlight", "xcodebuild", "git status", "run tests"
+    ]
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Review and correct transcription before sending to \(agentKind.rawValue):")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextEditor(text: $editableText)
+                        .font(.body)
+                        .padding(10)
+                        .frame(maxHeight: .infinity)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Insert keywords:")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(commonKeywords, id: \.self) { kw in
+                                Button {
+                                    editableText = editableText.isEmpty ? kw : "\(editableText) \(kw)"
+                                } label: {
+                                    Text(kw)
+                                        .font(.caption.monospaced())
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color(.tertiarySystemFill))
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                }
+
+                HStack(spacing: 16) {
+                    Button {
+                        onCancel()
+                    } label: {
+                        Text("Discard")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color(.tertiarySystemFill))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+
+                    Button {
+                        let trimmed = editableText.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        onSend(trimmed)
+                    } label: {
+                        Label("Send", systemImage: "arrow.up.circle.fill")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(agentKind.brandColor)
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 20)
+            }
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Transcription Review")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                editableText = initialText
+            }
+        }
     }
 }
