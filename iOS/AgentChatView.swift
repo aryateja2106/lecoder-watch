@@ -318,7 +318,7 @@ struct AgentChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
-            TextField("Ask or command \(agentKind.rawValue)…", text: $inputText)
+            TextField("Ask or command \(agentKind.rawValue)…", text: $inputText.shellSafe)
                 .textFieldStyle(.plain)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
