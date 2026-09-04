@@ -22,7 +22,7 @@ those three.
 | [mac-remote-control.md](mac-remote-control.md) | Touching pointer, keyboard, media, windows or power | The control surface, end to end. Referenced from CONTEXT.md. |
 | [mesh-cli-and-remote-install.md](mesh-cli-and-remote-install.md) | Adding a machine, the `mesh` CLI, upgrade/uninstall | Start here for anything installer-shaped. |
 | [local-first-ade.md](local-first-ade.md) | Building or changing the app-building skills, or `mesh apps`/`mesh skills` | The two build routes (native via Xcode+devicectl, PWA via `mesh apps publish`) and the daemon underneath both. |
-| [launch-0.6.md](launch-0.6.md) | Building or changing the app-building skills, or `mesh apps`/`mesh skills` | Launch kit for 0.6: TestFlight notes, X thread, LinkedIn, Show HN, demo script, and the claims not to make. |
+| [launch-0.6.md](launch-0.6.md) | Writing the TestFlight notes, the launch posts or the demo recording for 0.6 | Launch kit for 0.6: TestFlight notes, X thread, LinkedIn, Show HN, demo script, and the claims not to make. |
 | [release-workflow.md](release-workflow.md) | Cutting a release | See the warning below — the fleet lags the repo. |
 | [backlog.md](backlog.md) | Asking "do we already have X?" before building it | 75 items graded against the code as done/partial/buried/missing. Generated — edit `.github/backlog.json`, not this. |
 | [updating.md](updating.md) | Anyone asks "how do I get the new version?" | Three components, three routes, no cable. Includes the internal-vs-external TestFlight trap. |
