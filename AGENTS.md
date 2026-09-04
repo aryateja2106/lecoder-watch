@@ -119,8 +119,10 @@ next steps that were correct in June and July and are wrong now; the index says 
 | `Shared/` | Models + `MeshClient` + risk classifier, used by both apps. |
 | `MeshDesktop/` | Mac menu-bar app: daemon status, permissions, pairing QR. |
 | `WatchWidgets/`, `MeshWatchWidgets/` | Complication; iOS Live Activity. |
-| `install/payload/meshd/` | **The daemon.** Bun + TypeScript. The only copy. |
-| `install/payload/bin/mesh` | The CLI: setup, pair, doctor, upgrade, uninstall. |
+| `install/payload/meshd/` | **The daemon.** Bun + TypeScript. The only copy. `redact.ts` (every outbound string), `chat.ts` (agent transcripts → `/agents/:n/chat`), `apps.ts` (built apps). |
+| `install/payload/rmux-bridge/` | The live terminal stream (port 7820, WebSocket). Requires the mesh token as a header or the `mesh_token` cookie since 0.6. |
+| `install/payload/share/skills/` | **The skills the product ships to its users' agents** (`app-brief`, `apple-native-apis`, `native-app-builder`, `pwa-local-app-builder`). Canonical copy; `.claude/skills/*` and `.cursor/skills/*` are committed symlinks to it, `.agents/skills/*` is per-machine and gitignored. `mesh skills install` puts them in a user's `~/.agents/skills` and links every client. A skill must work on a stranger's Mac: no Team ID, no bundle prefix, no port that is not meshd's. |
+| `install/payload/bin/mesh` | The CLI: setup, pair, doctor, upgrade, uninstall, `skills`, `apps`, `exposures`. |
 | `install/install.sh` | The `curl \| sh` installer. |
 | `scripts/check-*.{swift,sh}` | Self-checks. `check-all.sh` runs every one. |
 | `project.yml` | Canonical Xcode project. Run `xcodegen generate` after editing. |
@@ -158,14 +160,31 @@ GET    /doctor                       setup truth: token, input, screen, mux, pus
 GET    /stats /agents /usage /tailnet /displays /events
 POST   /agents/new                   {name,cwd,cmd,initialText}
 GET    /agents/:n/panes              panes, each with currentPath
-GET    /agents/:n/output?lines&pane  the pane's screen as TEXT
-POST   /agents/:n/send               {text,key,pane}
+GET    /agents/:n/output?lines&pane  the pane's screen as TEXT (redacted)
+GET    /agents/:n/chat?since&limit   the conversation from the agent's own transcript (Claude Code,
+                                     Codex, cursor-agent); source "output" = capture-pane fallback
+POST   /agents/:n/send               {text,key,pane}  — a trailing "\n" in text is NOT Enter; send key:enter
 POST   /agents/:n/panes              split
 DELETE /agents/:n | /agents/:n/panes/:id
 GET    /screen.jpg?display&width     width = longest edge, clamped 240-2000
 POST   /input                        pointer, keys, scroll
        /clipboard /files /push /wake /pair
+GET    /exposures                    secrets the daemon redacted: kind, hint, fingerprint, count — never values
+POST   /exposures/:fp                {status: rotated|ignored|open}
+GET    /built-apps                   apps registered by `mesh apps` (/apps is the Mac app switcher)
+POST   /built-apps/:slug/install     {target: device|sim} → runs `mesh apps install`
+GET    /a/<slug>-<key>/…             a built web app, token-free (Safari cannot send one; the key is the gate)
 ```
+
+Two rules that came from 0.6:
+
+- **Chat never regexes the terminal.** Structure comes from the transcript files the agents
+  write (`~/.claude/projects/<cwd with / and . → ->/*.jsonl`, `~/.codex/sessions/…/rollout-*.jsonl`,
+  `~/.cursor/projects/<cwd minus leading /, / → ->/agent-transcripts/…`). No agent prints
+  `<thinking>` or `$ ` markers; a parser that guesses them ships dead.
+- **Never redeploy the live daemon mid-work.** Test daemon changes on a side port
+  (`MESHD_PORT=8898 MESHD_TOKEN=… MESHD_EVENTS_PATH=<scratch> MESHD_EXPOSURES_PATH=<scratch>
+  bun run server.ts`). The owner's phone is paired to :8899.
 
 `send` keys: `enter ctrl-c ctrl-d up down left right tab escape backspace delete home end
 page-up page-down`. **If you add a key here, wire it into both clients** — the watch once
