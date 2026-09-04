@@ -9,7 +9,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>MeshWatch</string>
+	<string>LeSearch Mesh</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -50,6 +50,8 @@
 	<string>MeshWatch connects to your machines over your private network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Dictate commands to your agents.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Turn what you say into text for your agents, on this device.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
