@@ -119,6 +119,7 @@ function die(msg: string): never {
 // Split argv into positionals + a flag map. Known value-flags consume the next token.
 const VALUE_FLAGS = new Set([
   "-H", "--host", "-n", "--lines", "--pane", "--cmd", "--cwd", "--task", "--port", "--token", "--since", "--address", "--src",
+  "--rotated", "--ignored", "--reopen",
   "--team", "--prefix", "--slug", "--name", "--app", "--bundle-id", "--device",
 ]);
 function parse(argv: string[]): { pos: string[]; flags: Record<string, string>; bools: Set<string> } {
@@ -342,6 +343,35 @@ async function cmdEvents(flags: Record<string, string>, cfg: Config) {
     const list = Array.isArray(ev) ? ev : (ev?.events || []);
     for (const e of list) console.log(`${e.createdISO || ""}  ${e.level || "info"}  ${e.title || ""}`);
   }, ev);
+}
+
+/**
+ * Secrets the daemon had to redact out of agent/terminal text — kind, prefix, fingerprint,
+ * count, where — never the value. `--rotated <fp>` / `--ignored <fp>` / `--reopen <fp>` mark a
+ * row once you have dealt with it at the provider.
+ */
+async function cmdExposures(flags: Record<string, string>, cfg: Config) {
+  const h = resolveHost(hostOf(flags), cfg);
+  const change = flags.rotated ? ["rotated", flags.rotated] : flags.ignored ? ["ignored", flags.ignored] : flags.reopen ? ["open", flags.reopen] : null;
+  if (change) {
+    const [status, fp] = change;
+    if (!/^[0-9a-f]{6}$/.test(fp)) die(`a fingerprint is 6 hex characters, got: ${fp}`);
+    const row = await api(h, "POST", `/exposures/${fp}`, { status });
+    out(() => console.log(`ok ${row.kind} ${row.hint} [${row.fp}] → ${row.status}`), row);
+    return;
+  }
+  const r = await api(h, "GET", "/exposures");
+  out(() => {
+    const items = Array.isArray(r?.items) ? r.items : [];
+    if (!items.length) { console.log(`no secrets seen in agent/terminal output on ${h.name}`); return; }
+    console.log(`${r.open} open of ${r.count} secret(s) redacted on ${h.name} — rotate each open one at its provider, then: mesh exposures --rotated <fp>`);
+    console.log("");
+    console.log("STATUS   KIND              HINT               FP      SEEN  LAST                  WHERE");
+    for (const e of items) {
+      const last = String(e.last || "").replace("T", " ").slice(0, 19);
+      console.log(`${String(e.status).padEnd(8)} ${String(e.kind).padEnd(17)} ${String(e.hint).padEnd(18)} ${e.fp}  ${String(e.count).padStart(4)}  ${last.padEnd(20)}  ${(e.channels || []).join(",")}`);
+    }
+  }, r);
 }
 
 // ---------- pairing ----------
@@ -1711,6 +1741,7 @@ STATUS
   health                      is meshd up?
   doctor                      what actually works on a machine  [--fix shows the permission dialogs]
   events                      recent agent events           [--since ISO]
+  exposures                   secrets the daemon redacted, to rotate  [--rotated FP | --ignored FP | --reopen FP]
 
 MAINTENANCE
   upgrade                     install the latest meshd + tools and restart the daemon
@@ -1943,6 +1974,7 @@ async function main() {
     case "upgrade": case "update": return cmdUpgrade(flags, bools, cfg);
     case "doctor": return cmdDoctor(flags, cfg, bools);
     case "events": return cmdEvents(flags, cfg);
+    case "exposures": return cmdExposures(flags, cfg);
     case "uninstall": return cmdUninstall(bools, cfg);
     default: die(`unknown command: ${cmd}  (try: mesh help)`);
   }
