@@ -68,8 +68,25 @@ each entry as you ship the slice, not at release time.
   `mesh apps publish` is served from your Mac at an unguessable address you can add to
   your Home Screen; a native app it registers with `mesh apps add` installs onto your
   paired iPhone (or a simulator) from a button on the phone. `GET /built-apps` lists them.
+- **Native apps install without a cable.** `mesh apps add --app` on a device build now
+  also packages it as an `.ipa`, and `mesh apps ota --enable` publishes the machine's
+  install links on its Tailscale name (HTTPS with a real certificate, tailnet only). The
+  Install button on the phone then hands iOS its own `itms-services://` link — no cable,
+  no Mac in front of you, from the office or the road. Each app also has an install page
+  at `/a/<slug>-<key>/` for Safari. A Linux machine can serve an `.ipa` a Mac built
+  (`mesh apps add --ipa`), so the phone installs from whichever machine holds it.
+  `mesh apps ota --url https://…` for your own HTTPS front instead of Tailscale.
 
 ### Fixed
+- **A reverse proxy on the Mac no longer inherits the loopback token exemption.** Tailscale
+  Serve (and Caddy, cloudflared) connect to meshd from 127.0.0.1 on behalf of whoever is on
+  the other end, and meshd trusted 127.0.0.1 without a token. Any request carrying
+  `X-Forwarded-For` — which every such proxy stamps — now needs the bearer token like a
+  remote one; the header can only withdraw the exemption, never grant it. The token-free
+  `/a/` app routes are unaffected, which is what the proxy is for.
+- **The phone's Apps screen failed to load at all once a native app existed.** Native rows
+  carry no URL, and the client treated the URL as required, so the whole list failed to
+  decode and showed "Couldn't reach".
 - **The terminal's on-screen Esc and arrow keys typed `\u001b[A` into your agent's prompt.**
   An HTML attribute does not decode JavaScript escapes, so the buttons sent those literal
   six characters. They now send the key. This was there in 0.5; a phone test found it.

@@ -285,7 +285,17 @@ struct AgentChatView: View {
                     UIApplication.shared.open(url)
                 },
                 onInstall: {
-                    try await store.client(for: machine).installMeshApp(slug: artifact.slug, target: "device")
+                    // Wireless first: when the machine serves this app's .ipa over HTTPS,
+                    // iOS installs it itself from the itms-services link — from anywhere on
+                    // the tailnet, no cable. Otherwise the machine pushes it over devicectl.
+                    let client = store.client(for: machine)
+                    if let row = try? await client.meshApps().first(where: { $0.slug == artifact.slug }),
+                       let raw = row.install, let url = URL(string: raw) {
+                        let opened = await UIApplication.shared.open(url)
+                        return MeshAppInstallResult(ok: opened, error: opened ? nil : "Couldn't open the installer link.",
+                                                    detail: "iOS is asking to install \(artifact.title).")
+                    }
+                    return try await client.installMeshApp(slug: artifact.slug, target: "device")
                 }
             )
         }
@@ -943,7 +953,8 @@ struct ArtifactDetailSheet: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if artifact.kind == .nativeApp {
                         infoRow(icon: "arrow.down.app", title: "Install", detail: "Straight to this iPhone")
-                        infoRow(icon: "personalhotspot", title: "Requires", detail: "Paired over your network")
+                        infoRow(icon: "personalhotspot", title: "Requires",
+                                detail: "Wireless from anywhere on your tailnet when the machine has `mesh apps ota` on; otherwise the phone paired and reachable from it")
                     } else {
                         infoRow(icon: "internaldrive", title: "Storage", detail: "Local to this device")
                         infoRow(icon: "plus.app", title: "Add to Home Screen",
@@ -969,7 +980,7 @@ struct ArtifactDetailSheet: View {
                             installing = true
                             do {
                                 let result = try await onInstall()
-                                installMessage = result.ok ? "Installed." : (result.error ?? "Install failed.")
+                                installMessage = result.ok ? (result.detail ?? "Installed.") : (result.error ?? "Install failed.")
                             } catch {
                                 installMessage = "Couldn't reach the machine to install."
                             }

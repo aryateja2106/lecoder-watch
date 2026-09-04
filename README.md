@@ -174,12 +174,17 @@ and say so.
 answered anyone who could reach it. It now wants the same token as the daemon; the app
 sends it as a cookie. A phone app older than 0.6 loses Terminal mode until it updates.
 
-**Built apps, honestly.** A native app needs an Apple developer account, a paired iPhone in
-Developer Mode, and — today — the phone reachable from the Mac (a cable when Wi-Fi pairing
-is not up). A web app is served by your Mac over plain HTTP on your network at an
-unguessable address; it keeps its data in the browser and works while the Mac is on, and it
-only works offline when you host it on HTTPS you own. Chat reads transcripts from Claude
-Code, Codex and cursor-agent; other agents show as terminals.
+**Built apps, honestly.** A native app needs an Apple developer account and an iPhone in
+Developer Mode that was paired with a Mac once. After that it installs without a cable:
+`mesh apps ota --enable` puts the machine's install links on its Tailscale name, and the
+Install button on the phone hands the link to iOS itself, from anywhere on your tailnet.
+Without Tailscale (or your own HTTPS in front of the machine) the install goes through the
+Mac, so the phone must be reachable from it. Building still needs a Mac: a Linux machine
+serves an `.ipa` a Mac in your mesh built (`mesh apps add --ipa`), it does not compile one.
+A web app is served by your Mac over plain HTTP on your network at an unguessable address;
+it keeps its data in the browser and works while the Mac is on, and it only works offline
+when you host it on HTTPS you own. Chat reads transcripts from Claude Code, Codex and
+cursor-agent; other agents show as terminals.
 
 **A green build proves very little here.** Three features have shipped correct and
 completely dead — one because no hook was ever registered, one because event hostnames never

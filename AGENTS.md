@@ -174,6 +174,8 @@ POST   /exposures/:fp                {status: rotated|ignored|open}
 GET    /built-apps                   apps registered by `mesh apps` (/apps is the Mac app switcher)
 POST   /built-apps/:slug/install     {target: device|sim} → runs `mesh apps install`
 GET    /a/<slug>-<key>/…             a built web app, token-free (Safari cannot send one; the key is the gate)
+GET    /a/<slug>-<key>/manifest.plist  native app: Apple's wireless-install manifest (+ /<slug>.ipa, /icon.png,
+                                     / = install page); absolute URLs from otaBase in ~/.mesh/apps.json (`mesh apps ota`)
 ```
 
 Two rules that came from 0.6:

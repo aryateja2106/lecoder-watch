@@ -51,12 +51,19 @@ apps` enforces).
   Simulators (a "Trust This Computer" prompt on the phone the first time).
   Alternative: skip the phone and build straight to a Simulator with `--sim` — no developer
   account requirement at all in that case, and no signing step.
-- Same Wi-Fi network as the Mac, or a USB cable. No port forwarding, no VPN, no HTTPS
-  tunnel — installing to a device is entirely local.
+- For the cable/Wi-Fi route: the phone on the same Wi-Fi as the Mac, or a USB cable.
+- For the wireless route (install from anywhere, no cable, no Mac in front of the user):
+  the Mac on the user's Tailscale tailnet with `mesh apps ota --enable` run once (it
+  prints the HTTPS name it serves from). Check with `mesh apps ota` — "on" or "off" is the
+  whole answer. If it is off and `tailscale` is installed, run `mesh apps ota --enable`;
+  if it is off and there is no Tailscale, say so and use the cable/Wi-Fi route.
 
-There is no wireless "tap a link to install" path here (that needs `itms-services://`,
-which requires an HTTPS-hosted manifest — out of scope for a local-first tool). Installing
-onto a real iPhone always goes through this Mac via `devicectl`, with the phone connected.
+Both routes start from the same device build. The wireless one is Apple's own
+`itms-services://` installer: `mesh apps add` packages the device build as an `.ipa`, meshd
+serves the manifest at `/a/<slug>-<key>/manifest.plist` over the Tailscale HTTPS name, and
+the phone's Install button hands that link to iOS. The device must already be in the
+signing profile — which is what the one-time Xcode pairing does — and have Developer
+Mode on.
 
 ---
 
@@ -148,12 +155,26 @@ mesh apps add {{SLUG}} --name "{{APP_NAME}}" \
   --bundle-id {{PREFIX}}.{{APP_NAME}}
 ```
 
-This just remembers the path and metadata under `~/.mesh/apps/{{SLUG}}/` — it does not
-copy or modify the `.app`.
+This remembers the path and metadata under `~/.mesh/apps/{{SLUG}}/` and, because it is a
+device build, also packages it as `{{SLUG}}.ipa` there for the wireless route. Re-running
+it after a rebuild keeps the same install link. When wireless install is on, the command
+prints the link (`install wirelessly: https://…/a/{{SLUG}}-<key>/`); include that link in
+your final message.
 
 ---
 
 ## 5. Install it
+
+Wireless install on (`mesh apps ota` says "on"): you are done after step 4 — the phone's
+Apps screen (and the card your APP_READY line produces) shows Install, and iOS installs
+it from the link. Say so; do not also push it over a cable. Verify by fetching the
+manifest yourself:
+
+```sh
+curl -sf "$(mesh apps ota --json | sed -n 's/.*"otaBase":"\([^"]*\)".*/\1/p')/a/{{SLUG}}-$(sed -n 's/.*"key": "\([0-9a-f]*\)".*/\1/p' ~/.mesh/apps/{{SLUG}}/meta.json)/manifest.plist" | plutil -lint -s -
+```
+
+Wireless install off: push it from this Mac —
 
 ```sh
 mesh apps install {{SLUG}}
@@ -207,8 +228,9 @@ Every app this skill produces must have, before `mesh apps install`:
 
 ## 7. Completion signal
 
-Once `mesh apps install` has actually succeeded (not just "the build compiled" — see
-AGENTS.md's rule about verifying by running), emit this exact line on its own line:
+Once the app is really installable — `mesh apps install` succeeded, or the wireless
+manifest fetched and linted clean — (not just "the build compiled"; see AGENTS.md's rule
+about verifying by running), emit this exact line on its own line:
 
 ```html
 <!-- APP_READY slug="{{SLUG}}" name="{{APP_NAME}}" -->

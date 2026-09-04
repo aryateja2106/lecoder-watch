@@ -33,10 +33,12 @@ purely local-first app).
           │                                            │
   XcodeGen (project.yml)                     Static site: index.html, app.js,
   xcodebuild (debug, no archive)             styles.css, manifest.webmanifest
-  mesh apps add <slug>                       IndexedDB / OPFS for local data
+  mesh apps add <slug>  (also packages .ipa)  IndexedDB / OPFS for local data
   mesh apps install <slug>                   mesh apps publish <dir> --slug S --name N
   (devicectl to a paired iPhone,                       │
-   or simctl to a simulator)                            ▼
+   or simctl to a simulator), or                        │
+  Install on the phone → itms-services://               │
+  (mesh apps ota --enable: Tailscale HTTPS)             ▼
           │                                   http://<mac-lan-ip>:8899/a/<slug>-<key>/
           ▼                                   Safari → Share → Add to Home Screen
    App on the device's home screen
@@ -50,12 +52,32 @@ purely local-first app).
 TestFlight, not "put this on my phone"), registers the built `.app` with `mesh apps add`,
 and installs it with `mesh apps install`.
 
-Installing is always local: `xcrun devicectl device install app` against a paired,
-currently-connected iPhone, or `xcrun simctl install booted` against a simulator with
-`--sim`. There is no wireless "tap a link to install" (`itms-services://`) path — that
-needs an HTTPS-hosted manifest, which is a cloud dependency this tool does not have.
-Installing onto a real device always goes through this Mac, with the phone on the same
-network or a USB cable, exactly like running an app from Xcode does.
+Installing has two routes from the same build. Local: `xcrun devicectl device install
+app` against a paired, currently-connected iPhone, or `xcrun simctl install booted`
+against a simulator with `--sim` — the phone on the same network or a USB cable, exactly
+like running an app from Xcode does. Wireless: Apple's own `itms-services://` installer,
+which needs only a manifest and the `.ipa` on HTTPS with a public certificate. `mesh apps
+add` packages every device build as an `.ipa`; `mesh apps ota --enable` maps `/a/` of the
+machine's Tailscale name (`https://<machine>.<tailnet>.ts.net`, a real Let's Encrypt
+certificate, reachable only from the tailnet) onto meshd's `/a/`; the phone's Install
+button then hands iOS the link and iOS does the rest — from the office, from the road, no
+cable, nobody at the Mac. The device must be in the signing profile (the one-time Xcode
+pairing) and have Developer Mode on. `mesh apps ota --url https://…` if you already
+terminate HTTPS in front of the machine with something else (Caddy, cloudflared).
+
+### What a Linux machine can and cannot do
+
+Serving is the same everywhere: meshd on a Linux VPS serves `/a/…` exactly as on a Mac, and
+`tailscale serve` works there too (`tailscale cert` uses a DNS challenge, so the box needs
+no open ports). Compiling is not: a native iOS build needs Xcode, so a Linux machine takes
+an `.ipa` a Mac in the mesh built — `mesh apps add <slug> --ipa app.ipa --bundle-id … --name
+… --app-version …` — and serves it. Since the phone installs from whichever machine holds
+the `.ipa`, in practice the Mac that built it just serves it; the Linux route exists for a
+mesh whose always-on machine is a VPS. Web apps (Route 2) need no Mac at all and are the
+route for a Linux-only mesh. Building iOS apps *on* Linux is what
+[xtool](https://github.com/xtool-org/xtool) sets out to do (SwiftPM, user-supplied
+Xcode.xip for the SDK, signs with an Apple Developer account); it is not wired in here and
+has not been proven on this project — a candidate, not a route.
 
 One-time requirements, told to the user honestly rather than assumed: an Apple Developer
 account (free tier works — no paid membership needed to run a debug build on your own

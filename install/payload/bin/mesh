@@ -121,6 +121,7 @@ const VALUE_FLAGS = new Set([
   "-H", "--host", "-n", "--lines", "--pane", "--cmd", "--cwd", "--task", "--port", "--token", "--since", "--address", "--src",
   "--rotated", "--ignored", "--reopen",
   "--team", "--prefix", "--slug", "--name", "--app", "--bundle-id", "--device",
+  "--ipa", "--icon", "--app-version", "--url",
 ]);
 function parse(argv: string[]): { pos: string[]; flags: Record<string, string>; bools: Set<string> } {
   const pos: string[] = [], bools = new Set<string>(), flags: Record<string, string> = {};
@@ -1407,10 +1408,11 @@ const APPS_CONFIG_FILE = join(MESH_HOME, "apps.json");
 const APPS_DIR = join(MESH_HOME, "apps");
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
 
-type AppsConfig = { team?: string; prefix?: string };
+type AppsConfig = { team?: string; prefix?: string; otaBase?: string };
 type AppMeta = {
   slug: string; name: string; kind: "pwa" | "native"; updated: string;
   key?: string; url?: string; app?: string; bundleId?: string;
+  ipa?: string; icon?: string; version?: string;
 };
 
 function loadAppsConfig(): AppsConfig {
@@ -1459,8 +1461,118 @@ function cmdApps(pos: string[], flags: Record<string, string>, bools: Set<string
     case "list": return cmdAppsList();
     case "install": return cmdAppsInstall(pos, flags, bools);
     case "remove": case "rm": return cmdAppsRemove(pos);
-    default: die(`unknown: mesh apps ${action ?? ""}  (config | publish | add | list | install | remove)`);
+    case "ota": return cmdAppsOta(flags, bools);
+    default: die(`unknown: mesh apps ${action ?? ""}  (config | publish | add | list | install | ota | remove)`);
   }
+}
+
+// ---------- wireless install (OTA) ----------
+//
+// iOS installs a signed .ipa from a manifest.plist it fetches itself, over HTTPS with a
+// public certificate, from a link of the form itms-services://?action=download-manifest.
+// That is the whole mechanism — no cable, no Xcode, no App Store — and the only hard part
+// for a local-first tool is the certificate. Tailscale Serve gives every machine on a
+// tailnet a real Let's Encrypt one at https://<machine>.<tailnet>.ts.net, and proxies a
+// path of it to a local port, so `--enable` maps /a of that name onto meshd's /a and
+// remembers the origin as `otaBase`. Anything else that terminates TLS (Caddy, a
+// cloudflared tunnel) works the same through `--url`.
+
+function tailscaleBin(): string | null {
+  const candidates = [Bun.which("tailscale"), "/usr/local/bin/tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"];
+  return candidates.find((p): p is string => !!p && existsSync(p)) ?? null;
+}
+
+function cmdAppsOta(flags: Record<string, string>, bools: Set<string>) {
+  const c = loadAppsConfig();
+  const port = Number(process.env.MESHD_PORT) || 8899;
+  if (bools.has("disable")) {
+    const ts = tailscaleBin();
+    if (ts && c.otaBase?.endsWith(".ts.net")) Bun.spawnSync([ts, "serve", "--bg", "--set-path", "/a", "off"], { stdout: "pipe", stderr: "pipe" });
+    delete c.otaBase;
+    saveAppsConfig(c);
+    appsOk("ota disabled", { otaBase: null });
+  }
+  if (flags.url) {
+    const base = flags.url.replace(/\/+$/, "");
+    if (!/^https:\/\/[^/\s]+$/.test(base)) appsErr(`--url must be an https origin with no path, e.g. https://mac.example.com — got ${flags.url}`);
+    c.otaBase = base;
+    saveAppsConfig(c);
+    appsOk("ota enabled", { otaBase: base, note: `make ${base}/a/ reach http://127.0.0.1:${port}/a/ yourself` });
+  }
+  if (bools.has("enable")) {
+    const ts = tailscaleBin();
+    if (!ts) appsErr("tailscale is not installed — install it (tailscale.com/download), or terminate HTTPS yourself and pass --url https://<name>");
+    const serve = Bun.spawnSync([ts, "serve", "--bg", "--set-path", "/a", `http://127.0.0.1:${port}/a`], { stdout: "pipe", stderr: "pipe" });
+    if (!serve.success) appsErr(`tailscale serve failed: ${serve.stderr.toString().trim().split("\n").pop()} (MagicDNS and HTTPS must be enabled for the tailnet in the admin console)`);
+    const status = Bun.spawnSync([ts, "status", "--json"], { stdout: "pipe", stderr: "pipe" });
+    let dns = "";
+    try { dns = String(JSON.parse(status.stdout.toString())?.Self?.DNSName ?? "").replace(/\.$/, ""); } catch { /* handled below */ }
+    if (!dns) appsErr("tailscale gave this machine no MagicDNS name — enable MagicDNS in the Tailscale admin console");
+    c.otaBase = `https://${dns}`;
+    saveAppsConfig(c);
+    say(`  ${c.otaBase}/a/ -> http://127.0.0.1:${port}/a/ (tailnet only)`);
+    appsOk("ota enabled", { otaBase: c.otaBase });
+  }
+  out(() => {
+    if (!c.otaBase) {
+      console.log("Wireless install: off");
+      console.log("Enable with: mesh apps ota --enable   (Tailscale)   or   mesh apps ota --url https://<your-https-name>");
+      return;
+    }
+    console.log(`Wireless install: on  (${c.otaBase}/a/ -> meshd /a/)`);
+    for (const a of readAllAppMeta()) {
+      if (a.kind === "native" && a.ipa && a.key) console.log(`  ${a.slug.padEnd(20)} ${c.otaBase}/a/${a.slug}-${a.key}/`);
+    }
+    console.log("Turn off with: mesh apps ota --disable");
+  }, { otaBase: c.otaBase ?? null });
+}
+
+/// The two Info.plist reads packaging needs; PlistBuddy handles XML and binary plists,
+/// and only exists on macOS — which is the only place a .app can have been built anyway.
+function plistValue(plist: string, key: string): string | null {
+  if (!existsSync("/usr/libexec/PlistBuddy")) return null;
+  const r = Bun.spawnSync(["/usr/libexec/PlistBuddy", "-c", `Print :${key}`, plist], { stdout: "pipe", stderr: "pipe" });
+  return r.success ? r.stdout.toString().trim() : null;
+}
+
+/// A device build (DTPlatformName iphoneos) zipped as Payload/<App>.app is a valid .ipa:
+/// the signature and the embedded provisioning profile travel inside the bundle, so iOS
+/// installs it wirelessly on every device that profile names. Simulator and Mac builds
+/// are skipped — there is nothing to install over the air.
+function packageIpa(slug: string, app: string): Pick<AppMeta, "ipa" | "icon" | "version"> | null {
+  const info = join(app, "Info.plist");
+  if (plistValue(info, "DTPlatformName") !== "iphoneos") return null;
+  const dir = join(APPS_DIR, slug);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const stage = join(dir, ".ipa-stage");
+  rmSync(stage, { recursive: true, force: true });
+  mkdirSync(join(stage, "Payload"), { recursive: true });
+  try {
+    const cp = Bun.spawnSync(["cp", "-R", app, join(stage, "Payload", app.replace(/\/+$/, "").split("/").pop()!)], { stdout: "pipe", stderr: "pipe" });
+    if (!cp.success) appsErr(`could not copy the app bundle: ${cp.stderr.toString().trim()}`);
+    const ipa = join(dir, `${slug}.ipa`);
+    rmSync(ipa, { force: true });
+    const zip = Bun.spawnSync(["zip", "-qryX", ipa, "Payload"], { cwd: stage, stdout: "pipe", stderr: "pipe" });
+    if (!zip.success) appsErr(`zip failed: ${zip.stderr.toString().trim().split("\n").pop()}`);
+    const packaged: Pick<AppMeta, "ipa" | "icon" | "version"> = { ipa: `${slug}.ipa` };
+    const icon = join(app, "AppIcon60x60@2x.png");
+    if (existsSync(icon)) { copyFileSync(icon, join(dir, "icon.png")); packaged.icon = "icon.png"; }
+    packaged.version = plistValue(info, "CFBundleShortVersionString") ?? plistValue(info, "CFBundleVersion") ?? undefined;
+    return packaged;
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
+}
+
+function readAllAppMeta(): AppMeta[] {
+  const apps: AppMeta[] = [];
+  if (!existsSync(APPS_DIR)) return apps;
+  for (const e of readdirSync(APPS_DIR, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    const p = join(APPS_DIR, e.name, "meta.json");
+    if (existsSync(p)) { try { apps.push(JSON.parse(readFileSync(p, "utf8"))); } catch { /* skip corrupt row */ } }
+  }
+  return apps;
 }
 
 function cmdAppsConfig(flags: Record<string, string>) {
@@ -1500,31 +1612,46 @@ function cmdAppsPublish(pos: string[], flags: Record<string, string>) {
   appsOk(`publish ${slug}`, { slug, name, url });
 }
 
+/// `--app <path.app>`: a build from this Mac — remembered for devicectl/simctl, and when
+/// it is a device build, also packaged as an .ipa for wireless install. `--ipa <file>`:
+/// an .ipa built elsewhere (a Mac in the mesh, CI, xtool on Linux), copied in — this is
+/// how a Linux machine serves a native app it could never have compiled.
 function cmdAppsAdd(pos: string[], flags: Record<string, string>) {
   const slug = pos[0];
-  const name = flags.name, app = flags.app, bundleId = flags["bundle-id"];
+  const name = flags.name, app = flags.app, ipa = flags.ipa, bundleId = flags["bundle-id"];
   if (!slug || !SLUG_RE.test(slug)) appsErr(`invalid slug (want ${SLUG_RE.source}): ${slug ?? ""}`);
   if (!name) appsErr("missing --name");
-  if (!app) appsErr("missing --app <path.app>");
+  if (!app && !ipa) appsErr("missing --app <path.app> or --ipa <file.ipa>");
   if (!bundleId) appsErr("missing --bundle-id");
-  if (!existsSync(app)) appsErr(`no such app bundle: ${app}`);
+  if (app && !existsSync(app)) appsErr(`no such app bundle: ${app}`);
+  if (ipa && !existsSync(ipa)) appsErr(`no such file: ${ipa}`);
 
-  writeAppMeta({ slug, name, kind: "native", app, bundleId, updated: new Date().toISOString() });
-  appsOk(`add ${slug}`, { slug, name, app, bundleId });
+  // Keep the key across re-adds so a link already on the phone keeps working.
+  const prior = existsSync(join(APPS_DIR, slug, "meta.json")) ? readAppMeta(slug) : null;
+  const key = prior?.key ?? randomHex(4);
+  const meta: AppMeta = { slug, name, kind: "native", app, bundleId, key, updated: new Date().toISOString() };
+  if (ipa) {
+    mkdirSync(join(APPS_DIR, slug), { recursive: true, mode: 0o700 });
+    copyFileSync(ipa, join(APPS_DIR, slug, `${slug}.ipa`));
+    meta.ipa = `${slug}.ipa`;
+    meta.version = flags["app-version"];
+    if (flags.icon && existsSync(flags.icon)) { copyFileSync(flags.icon, join(APPS_DIR, slug, "icon.png")); meta.icon = "icon.png"; }
+  } else if (app) {
+    Object.assign(meta, packageIpa(slug, app) ?? {});
+  }
+  writeAppMeta(meta);
+  const base = loadAppsConfig().otaBase;
+  const install = meta.ipa && base ? `${base}/a/${slug}-${key}/` : undefined;
+  if (meta.ipa && !base) say(`  packaged ${meta.ipa}; run \`mesh apps ota --enable\` once to install it wirelessly`);
+  if (install) say(`  install wirelessly: ${install}`);
+  appsOk(`add ${slug}`, { slug, name, app, bundleId, ipa: meta.ipa ?? null, install: install ?? null });
 }
 
 function cmdAppsList() {
-  const apps: AppMeta[] = [];
-  if (existsSync(APPS_DIR)) {
-    for (const e of readdirSync(APPS_DIR, { withFileTypes: true })) {
-      if (!e.isDirectory()) continue;
-      const p = join(APPS_DIR, e.name, "meta.json");
-      if (existsSync(p)) { try { apps.push(JSON.parse(readFileSync(p, "utf8"))); } catch { /* skip corrupt row */ } }
-    }
-  }
+  const apps = readAllAppMeta();
   out(() => {
     if (!apps.length) { console.log(`No apps published or added yet. (${APPS_DIR})`); return; }
-    for (const a of apps) console.log(`  ${a.slug.padEnd(20)} ${a.kind.padEnd(7)} ${a.name}  ${a.kind === "pwa" ? a.url : a.app}`);
+    for (const a of apps) console.log(`  ${a.slug.padEnd(20)} ${a.kind.padEnd(7)} ${a.name}  ${a.kind === "pwa" ? a.url : a.app ?? a.ipa}${a.ipa ? "  (ipa)" : ""}`);
   }, { apps });
 }
 
@@ -1758,8 +1885,10 @@ APPS & SKILLS
                               [--team ID] [--prefix com.example]
   apps publish <dir>          host a static local web app  --slug S --name N
   apps add <slug>             register a built native app  --name N --app P.app --bundle-id B
+                              (--ipa F.ipa [--app-version V] [--icon I.png] for a build made elsewhere)
   apps list                   apps published or added on this machine
   apps install <slug>         put a native app on a device  [--sim] [--device UDID]
+  apps ota                    wireless install links  [--enable (Tailscale) | --url https://… | --disable]
   apps remove <slug>          forget a published/added app
 
 GLOBAL

@@ -1130,8 +1130,15 @@ struct MeshApp: Codable, Hashable, Identifiable {
     var slug: String
     var name: String
     var kind: String   // pwa | native
-    var url: String
+    /// PWA: the page to open. Native: its install page, only once the machine serves an
+    /// .ipa over HTTPS. A native row without one has no url at all — do not invent one.
+    var url: String?
     var bundleId: String?
+    var version: String?
+    /// Native only: the `itms-services://` URL iOS installs from, present exactly when
+    /// wireless install works from this machine (`mesh apps ota --enable`). Absent means
+    /// the only route is the machine's own devicectl push (cable or same Wi-Fi).
+    var install: String?
     var updated: String
 }
 
@@ -1142,6 +1149,9 @@ struct MeshAppList: Codable, Hashable {
 struct MeshAppInstallResult: Codable, Hashable {
     var ok: Bool
     var error: String?
+    /// What actually happened, when it was not a plain install — e.g. iOS's own
+    /// installer was opened and is now asking.
+    var detail: String?
 }
 
 // MARK: - Hand-off (meshd 0.6+, capability "handoff")

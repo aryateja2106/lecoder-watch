@@ -248,7 +248,7 @@ private struct MeshAppsScreen: View {
                         .foregroundStyle(app.kind == "native" ? Color.blue : Color.green)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(app.name).font(.headline)
-                        Text("\(app.kind == "native" ? "Native" : "Web") · \(updatedLabel(app.updated))")
+                        Text("\(kindLabel(app)) · \(updatedLabel(app.updated))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -284,6 +284,12 @@ private struct MeshAppsScreen: View {
         return date.formatted(date: .abbreviated, time: .shortened)
     }
 
+    /// Tells the user which install route the button will take before they tap it.
+    private func kindLabel(_ app: MeshApp) -> String {
+        guard app.kind == "native" else { return "Web" }
+        return app.install != nil ? "Native · wireless" : "Native · via \(machine.host)"
+    }
+
     private func load() async {
         loading = true
         defer { loading = false }
@@ -296,13 +302,22 @@ private struct MeshAppsScreen: View {
     }
 
     private func open(_ app: MeshApp) {
-        guard let url = URL(string: app.url) else { return }
+        guard let raw = app.url, let url = URL(string: raw) else { return }
         // Real Safari, not SFSafariViewController: Add to Home Screen only exists there.
         UIApplication.shared.open(url)
     }
 
+    /// Wireless when the machine serves an .ipa over HTTPS (`install` is the
+    /// itms-services URL iOS handles itself — no cable, no Mac in front of you);
+    /// otherwise the machine's own devicectl push, which needs the phone paired and
+    /// reachable from it.
     private func install(_ app: MeshApp) async {
         installMessage = nil
+        if let raw = app.install, let url = URL(string: raw) {
+            let opened = await UIApplication.shared.open(url)
+            installMessage = opened ? "iOS is asking to install \(app.name)." : "Couldn't open the installer link."
+            return
+        }
         do {
             let result = try await store.client(for: machine).installMeshApp(slug: app.slug, target: "device")
             installMessage = result.ok ? "\(app.name) installed." : (result.error ?? "Install failed.")

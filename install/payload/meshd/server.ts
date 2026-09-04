@@ -1019,7 +1019,13 @@ function json(data: any, status = 200) {
 // anything, so demanding a bearer token from 127.0.0.1 protects nothing while
 // blocking this Mac's own browser from /desktop. Decided from the socket peer
 // address via server.requestIP — never from a header, which a remote client controls.
+// A reverse proxy on this box (Tailscale Serve for wireless app installs, Caddy, …)
+// also connects from 127.0.0.1 — on behalf of someone who is NOT on this box. Every such
+// proxy stamps X-Forwarded-For, so its presence withdraws the exemption. A header can
+// only ever take the exemption away here, never grant it, so a client forging one gains
+// nothing.
 function isLoopback(server: any, req: Request): boolean {
+  if (req.headers.has("x-forwarded-for")) return false;
   const address = server?.requestIP?.(req)?.address ?? "";
   return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
 }
@@ -1167,10 +1173,11 @@ Bun.serve({
       const net = primaryIPv4();
       return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES, mac: primaryMac(), ipv4: net?.address ?? null, netmask: net?.netmask ?? null });
     }
-    // A web app an agent built: token-free by necessity (Safari, Add to Home Screen), gated
-    // by the unguessable key in its path instead. See apps.ts.
+    // A web app an agent built, or a native app's wireless-install folder: token-free by
+    // necessity (Safari, Add to Home Screen, iOS's installer), gated by the unguessable
+    // key in the path instead. See apps.ts.
     if (path.startsWith("/a/") && req.method === "GET") {
-      const served = await serveApp(path);
+      const served = await serveApp(path, req);
       if (served) return served;
     }
     // Pairing is the one route that must answer without a token — it is how the
