@@ -94,7 +94,7 @@ struct WatchRootView: View {
         NavigationStack {
             MachinesListView()
                 .environmentObject(store)
-                .navigationTitle("MeshWatch")
+                .navigationTitle("LeSearch Mesh")
         }
         .onAppear {
             store.start()

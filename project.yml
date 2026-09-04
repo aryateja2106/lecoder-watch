@@ -61,7 +61,7 @@ targets:
     info:
       path: Generated/iOS-Info.plist
       properties:
-        CFBundleDisplayName: MeshWatch
+        CFBundleDisplayName: LeSearch Mesh
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
@@ -119,7 +119,7 @@ targets:
       properties:
         # No Dock icon, no main window: the menu bar item is the whole app.
         LSUIElement: true
-        CFBundleDisplayName: MeshWatch
+        CFBundleDisplayName: LeSearch Mesh
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     settings:
@@ -140,7 +140,7 @@ targets:
     info:
       path: MeshWatchWidgets/Info.plist
       properties:
-        CFBundleDisplayName: MeshWatch Sessions
+        CFBundleDisplayName: LeSearch Mesh Sessions
         # Extensions must match the parent app's version or App Store Connect
         # rejects the upload — xcodegen defaults them to 1.0 unless told.
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -168,7 +168,7 @@ targets:
     info:
       path: Generated/Watch-Info.plist
       properties:
-        CFBundleDisplayName: MeshWatch
+        CFBundleDisplayName: LeSearch Mesh
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
@@ -198,7 +198,7 @@ targets:
     info:
       path: WatchWidgets/Info.plist
       properties:
-        CFBundleDisplayName: MeshWatch
+        CFBundleDisplayName: LeSearch Mesh
         # Extensions must match the parent app's version or App Store Connect
         # rejects the upload — xcodegen defaults them to 1.0 unless told.
         CFBundleShortVersionString: $(MARKETING_VERSION)
