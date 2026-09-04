@@ -32,6 +32,15 @@ each entry as you ship the slice, not at release time.
   the open count.
 
 ### Added
+- **Ask for an app and get interviewed first.** A new `app-brief` skill runs before any
+  scaffolding: it reads your saved preferences and the apps you already have, asks at most
+  six short questions in one message (answer by voice if you like), writes a brief, picks
+  native or web on purpose — native when your Team ID is set and your iPhone is paired —
+  and builds exactly one app, once, with no background workers and no test loops. Both
+  builders gained a definition of done: a real icon (a bundled script renders one from an
+  SF Symbol and a color), a spoken name, empty states, and every must-have either built or
+  listed as skipped. *(Found by building a habit tracker from the phone: the agent built a
+  web app that was not asked for, a second native build in parallel, and no icon.)*
 - **Chat with your coding agent, not its terminal.** A session's peek screen has a
   Chat view beside Terminal. It shows the real conversation — your prompt, the agent's
   text, its thinking, each tool call with its result and status — read from the transcript
@@ -44,6 +53,16 @@ each entry as you ship the slice, not at release time.
   paired iPhone (or a simulator) from a button on the phone. `GET /built-apps` lists them.
 
 ### Fixed
+- **The terminal's on-screen Esc and arrow keys typed `\u001b[A` into your agent's prompt.**
+  An HTML attribute does not decode JavaScript escapes, so the buttons sent those literal
+  six characters. They now send the key. This was there in 0.5; a phone test found it.
+- **The terminal came back "closed" after the phone slept.** The page never reconnected;
+  it now reloads its attach (same cookie) when the socket dies or the page becomes visible.
+- **Chat could not submit.** The composer typed a line feed after your prompt, which
+  Claude Code reads as a new line inside the prompt, not as Enter. A trailing newline now
+  sends the Enter key, and Chat carries the Esc/Tab/arrows/Enter/Ctrl-C row.
+- **A machine whose terminal bridge now asks for a token showed "no bridge".** The
+  reachability probe treated the 401 as absence; a 401 is the bridge answering.
 - **Pair again and Remove machine now live on the machine's own screen.** The screen
   that diagnosed "token rejected" told you to pair again while the only pairing form
   hid behind the + button two screens away — a dead end at exactly the moment you
