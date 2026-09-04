@@ -1144,6 +1144,38 @@ struct MeshAppInstallResult: Codable, Hashable {
     var error: String?
 }
 
+// MARK: - Hand-off (meshd 0.6+, capability "handoff")
+
+/// One conversation a CLI kept for a working directory, and the exact command that
+/// reopens it — `cmd` is meshd's own choice (`claude --resume <id>`, `codex resume
+/// <id>`, `cursor-agent --resume <id>`), never reconstructed client-side.
+struct ResumableItem: Codable, Hashable, Identifiable {
+    var kind: String   // claude | codex | cursor
+    var id: String
+    var title: String
+    var updated: String   // ISO 8601
+    var cmd: String
+}
+
+struct ResumableList: Codable, Hashable {
+    var cwd: String
+    var items: [ResumableItem]
+    /// Which CLIs `handoff(agent:to:)` can hand this session to — only the ones the
+    /// daemon found installed on that machine.
+    var targets: [String]
+}
+
+/// The answer to `POST /agents/:n/handoff`. A refusal normally never decodes into
+/// this: the daemon answers it with HTTP 400 and `MeshClient.request` throws the
+/// body's `error` as `MeshError.refused` first. `error` stays Optional anyway so a
+/// future 200-with-ok:false shape would still decode.
+struct HandoffResult: Codable, Hashable {
+    var ok: Bool
+    var file: String?
+    var cmd: String?
+    var error: String?
+}
+
 struct VolumeState: Codable, Hashable {
     var ok: Bool
     var level: Int?

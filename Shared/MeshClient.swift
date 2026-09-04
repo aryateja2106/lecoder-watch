@@ -557,6 +557,37 @@ struct MeshClient {
     func killPane(agent: String, paneId: String) async throws {
         _ = try await request("/agents/\(Self.pathSegment(agent))/panes/\(Self.pathSegment(paneId))", method: "DELETE")
     }
+
+    // MARK: - Hand-off (meshd 0.6+, capability "handoff")
+
+    /// Conversations each installed CLI kept for this session's own working directory.
+    func resumable(agent: String) async throws -> ResumableList {
+        guard supports("handoff") else { throw MeshError.unsupported("handoff") }
+        let data = try await request("/agents/\(Self.pathSegment(agent))/resumable")
+        return try JSONDecoder().decode(ResumableList.self, from: data)
+    }
+
+    /// Same listing for a directory that may not have a live session yet — the
+    /// new-session sheet's "Resume" section. `cwd` must be absolute; the daemon 400s
+    /// otherwise, so this refuses the same way before ever sending it.
+    func resumable(cwd: String) async throws -> ResumableList {
+        guard supports("handoff") else { throw MeshError.unsupported("handoff") }
+        guard cwd.hasPrefix("/") else { throw MeshError.badURL }
+        let enc = cwd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cwd
+        let data = try await request("/resumable?cwd=\(enc)")
+        return try JSONDecoder().decode(ResumableList.self, from: data)
+    }
+
+    /// Interrupt `agent` and hand its conversation to another CLI (`to`, one of
+    /// `ResumableList.targets`): the daemon writes HANDOFF.md into the session's
+    /// working directory and relaunches the pane under it.
+    @discardableResult
+    func handoff(agent: String, to: String) async throws -> HandoffResult {
+        guard supports("handoff") else { throw MeshError.unsupported("handoff") }
+        let body = try JSONSerialization.data(withJSONObject: ["to": to])
+        let data = try await request("/agents/\(Self.pathSegment(agent))/handoff", method: "POST", body: body)
+        return try JSONDecoder().decode(HandoffResult.self, from: data)
+    }
 }
 
 // MARK: - Reading a served frame

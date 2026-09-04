@@ -334,6 +334,14 @@ struct NewSessionSheet: View {
     /// form on screen with the reason and a way to try again.
     @State private var errorMessage: String?
 
+    // MARK: - Resume (meshd 0.6+, capability "handoff")
+
+    /// Conversations kept for the typed working directory. Refetched 500ms after
+    /// `cwd` settles on an absolute path — see the `onChange` below — so a directory
+    /// typed character by character doesn't fire a request per keystroke.
+    @State private var resumableItems: [ResumableItem] = []
+    @State private var resumableTask: Task<Void, Never>?
+
     // Common launchers; "shell" means just a plain rmux session.
     private let presets = ["shell", "claude", "codex", "pi", "agy", "bun", "python3"]
     private let taskAgents = ["claude", "codex", "pi"]
@@ -421,6 +429,20 @@ struct NewSessionSheet: View {
                     // best-effort request rather than a promise.
                     Toggle("Compact (80×24)", isOn: $compact)
                 }
+                if !resumableItems.isEmpty {
+                    Section("Resume") {
+                        ForEach(resumableItems) { item in
+                            Button {
+                                Task { await resume(item) }
+                            } label: {
+                                Text("\(kindLabel(item.kind)) · \(item.title.isEmpty ? "(untitled)" : item.title) · \(relativeTime(item.updated))")
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
                 Section("Task") {
                     Picker("Agent", selection: $taskAgent) {
                         ForEach(taskAgents, id: \.self) { Text($0).tag($0) }
@@ -460,6 +482,21 @@ struct NewSessionSheet: View {
             .onAppear {
                 if cwd.isEmpty, let initialCwd, !initialCwd.isEmpty { cwd = initialCwd }
             }
+            .onChange(of: cwd) { _, newValue in
+                resumableTask?.cancel()
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard trimmed.hasPrefix("/") else {
+                    resumableItems = []
+                    return
+                }
+                resumableTask = Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    guard !Task.isCancelled else { return }
+                    let items = (try? await store.client(for: machine).resumable(cwd: trimmed).items) ?? []
+                    guard !Task.isCancelled else { return }
+                    resumableItems = items
+                }
+            }
             .sheet(isPresented: $browsing) {
                 NavigationStack {
                     FileBrowserView(machine: machine, capabilities: capabilities) { picked in
@@ -488,6 +525,34 @@ struct NewSessionSheet: View {
             // sheet says exactly what MeshStore knows, not a generic "something failed".
             errorMessage = store.lastError?.message ?? "Couldn't start the session."
         }
+    }
+
+    private func kindLabel(_ kind: String) -> String {
+        switch kind {
+        case "claude": return "Claude"
+        case "codex": return "Codex"
+        case "cursor": return "Cursor"
+        default: return kind.capitalized
+        }
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f
+    }()
+
+    private func relativeTime(_ iso: String) -> String {
+        guard let date = parseISO(iso) else { return "" }
+        return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    /// A tapped Resume row launches through the same path as a manual Create: set
+    /// what it would have set by hand, then call it.
+    private func resume(_ item: ResumableItem) async {
+        command = item.cmd
+        name = "resume-\(item.kind)-\(item.id.prefix(6))"
+        await create()
     }
 }
 
@@ -537,6 +602,21 @@ private struct SessionPeekScreen: View {
     /// it to decide between the 500ms interactive cadence and the 2s ambient one.
     @State private var lastInteraction = Date.distantPast
 
+    // MARK: - Hand-off (meshd 0.6+, capability "handoff")
+
+    /// Installed CLIs this session can be handed to. Empty hides the toolbar menu —
+    /// either the daemon lacks the capability or nothing is installed there.
+    @State private var handoffTargets: [String] = []
+    @State private var handoffInFlight = false
+    @State private var handoffResultMessage: String?
+    /// Set the moment a menu row is tapped; the confirmation alert reads it and
+    /// clears it on either Cancel or Hand off.
+    @State private var confirmingHandoffTo: String?
+
+    private var handoffConfirmPresented: Binding<Bool> {
+        Binding(get: { confirmingHandoffTo != nil }, set: { if !$0 { confirmingHandoffTo = nil } })
+    }
+
     enum ViewMode: String, CaseIterable {
         case chat = "Chat"
         case terminal = "Terminal"
@@ -571,6 +651,10 @@ private struct SessionPeekScreen: View {
 
     private var sessionKind: String {
         session.kindLabel
+    }
+
+    private var agentDisplayName: String {
+        AgentCLIKind.detect(from: session.name, agentType: session.agentType).rawValue
     }
 
     private var continueBlocked: Bool {
@@ -616,6 +700,7 @@ private struct SessionPeekScreen: View {
                     },
                     onSendKey: { key in Task { await send(key: key) } }
                 )
+                .disabled(handoffInFlight)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
@@ -629,6 +714,16 @@ private struct SessionPeekScreen: View {
                     .padding(.vertical, 14)
                 }
                 .background(Color(.systemGroupedBackground))
+            }
+        }
+        .safeAreaInset(edge: .top) {
+            if let handoffResultMessage {
+                Text(handoffResultMessage)
+                    .font(.caption)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .background(.thinMaterial)
             }
         }
         .navigationTitle(session.displayName)
@@ -648,7 +743,20 @@ private struct SessionPeekScreen: View {
                     Image(systemName: loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                 }
             }
+            if !handoffTargets.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        ForEach(handoffTargets, id: \.self) { target in
+                            Button(target) { confirmingHandoffTo = target }
+                        }
+                    } label: {
+                        Label("Hand off to…", systemImage: "arrow.triangle.swap")
+                    }
+                    .disabled(handoffInFlight)
+                }
+            }
         }
+        .task(id: session.name) { await loadHandoffTargets() }
         .task(id: session.name) {
             // Adaptive cadence: 500ms while the user is actively driving this session
             // (a key, a paste, a reply within the last 10s), 2s otherwise, and no
@@ -668,6 +776,13 @@ private struct SessionPeekScreen: View {
         .sheet(isPresented: $showingCompose) { composeSheet }
         .sheet(isPresented: $showingPhrase) { phraseSheet }
         .sheet(item: $openingLink) { target in SafariView(url: target.url) }
+        .alert("Hand off to \(confirmingHandoffTo ?? "")?", isPresented: handoffConfirmPresented,
+               presenting: confirmingHandoffTo) { target in
+            Button("Cancel", role: .cancel) {}
+            Button("Hand off") { Task { await performHandoff(to: target) } }
+        } message: { target in
+            Text("Interrupt \(agentDisplayName) and continue this task with \(target). The conversation so far is written to HANDOFF.md in the working directory.")
+        }
     }
 
     private var headerCard: some View {
@@ -1108,6 +1223,34 @@ private struct SessionPeekScreen: View {
         }
         try? await Task.sleep(for: .milliseconds(350))
         await refresh()
+    }
+
+    /// meshd 0.6+ ("handoff"): which installed CLIs this session can be handed to.
+    /// `[]` on an unsupported daemon (`resumable(agent:)` throws `.unsupported`) or
+    /// one with nothing installed — either way the toolbar menu just doesn't appear.
+    private func loadHandoffTargets() async {
+        handoffTargets = (try? await client.resumable(agent: session.name).targets) ?? []
+    }
+
+    /// Interrupt this session and relaunch it under `target`. The daemon holds the
+    /// response open for the whole sequence (two Ctrl-C, a beat, the new command), so
+    /// disabling the composer for the `await` below already covers the time it takes.
+    private func performHandoff(to target: String) async {
+        handoffInFlight = true
+        do {
+            _ = try await client.handoff(agent: session.name, to: target)
+            handoffResultMessage = "Handed off — \(target) is reading HANDOFF.md"
+        } catch let error as MeshClient.MeshError {
+            handoffResultMessage = error.reason ?? "the hand-off was refused"
+        } catch {
+            handoffResultMessage = "the machine could not be reached"
+        }
+        handoffInFlight = false
+        let shown = handoffResultMessage
+        Task {
+            try? await Task.sleep(for: .seconds(6))
+            if handoffResultMessage == shown { handoffResultMessage = nil }
+        }
     }
 
     /// Paste the phone's clipboard into the selected pane. `paste: true` only reaches
