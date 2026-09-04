@@ -1263,7 +1263,10 @@ final class MeshStore: ObservableObject {
                 do {
                     let (_, resp) = try await URLSession.shared.data(for: req)
                     guard let http = resp as? HTTPURLResponse else { return (true, nil) }
-                    let ok = (200...399).contains(http.statusCode)
+                    // 401 is the service answering "who are you?" — the 0.6 bridge requires
+                    // the token on every page and the terminal sends it as a cookie later;
+                    // a login-walled noVNC does the same. Reachable is the question here.
+                    let ok = (200...399).contains(http.statusCode) || http.statusCode == 401
                     return (ok, ok ? nil : "HTTP \(http.statusCode)")
                 } catch {
                     return (false, describe(error))
