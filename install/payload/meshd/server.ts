@@ -21,7 +21,7 @@ import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrP
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.5.4";
+const VERSION = "0.6.0";
 // 0.5.0 additions, all additive so a 0.4.x daemon and a 0.5 app (or the reverse)
 // keep working: screenRegion (rect+quality on /screen.jpg), openUrl (POST /open),
 // power (shutdown/restart on /system, results now truthful), laPush (POST /la/token
