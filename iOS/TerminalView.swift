@@ -1173,6 +1173,7 @@ private struct FlowButtons: View {
 
 private struct BridgeTerminalScreen: View {
     @EnvironmentObject var store: MeshStore
+    @Environment(\.scenePhase) private var scenePhase
     let machine: Machine
     let session: String
     let initialPane: String?
@@ -1187,6 +1188,12 @@ private struct BridgeTerminalScreen: View {
     /// a cookie added after an unauthenticated page has already started loading would
     /// not retroactively fix that navigation.
     @State private var cookieReady = false
+    /// When the page was last (re)loaded. The bridge posts nothing about its own
+    /// WebSocket, so there is no "the socket closed" signal to read here — coming
+    /// back to the foreground after a while is the proxy: a phone that sat
+    /// backgrounded long enough for the terminal's socket to die is exactly the
+    /// stuck terminal the owner saw.
+    @State private var lastLoadAt = Date()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1241,6 +1248,15 @@ private struct BridgeTerminalScreen: View {
         // never sleeps again is a worse bug than the dim.
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        // A backgrounded WKWebView's socket does not reliably survive an arbitrary
+        // nap. Coming back to a page that has sat idle over a minute reloads it
+        // rather than leaving a frozen terminal on screen with no way to tell it
+        // apart from a quiet one.
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active, Date().timeIntervalSince(lastLoadAt) > 60 else { return }
+            lastLoadAt = Date()
+            reloadToken += 1
+        }
     }
 
     /// A WKWebView that cannot reach its host renders a blank black rectangle — which,
@@ -1280,6 +1296,7 @@ private struct BridgeTerminalScreen: View {
                     .textSelection(.enabled)
                 Button {
                     phase = .loading
+                    lastLoadAt = Date()
                     reloadToken += 1
                 } label: {
                     Label("Retry", systemImage: "arrow.clockwise")
