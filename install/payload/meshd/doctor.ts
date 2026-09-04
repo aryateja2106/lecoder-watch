@@ -20,7 +20,7 @@ type Check = { ok: boolean; detail: string; fix?: string };
 /// `tokenWeak` is the REASON a token is weak, or undefined when it is fine. The token
 /// itself deliberately never reaches this module: the caller judges it and passes a
 /// verdict, so a doctor report can never leak the thing it is reporting on.
-export type DoctorInfo = { tokenSet: boolean; tokenWeak?: string; bind: string; port: number; version: string; mux: string };
+export type DoctorInfo = { tokenSet: boolean; tokenWeak?: string; bind: string; port: number; version: string; mux: string; exposuresOpen?: number };
 
 /// Placeholder tokens that have actually been found in a live fleet, plus the obvious
 /// neighbours. `testtoken` was a hardcoded fallback that got copied into a doc and from
@@ -89,6 +89,11 @@ export async function doctorReport(prompt: boolean, info: DoctorInfo) {
       ok: true,
       detail: push.configured ? `APNs key ${(push as any).keyId ?? ""} · ${push.devices} device(s) registered` : "APNs not configured (optional — alerts arrive only while the app polls)",
     },
+    // Informational, like push: the daemon redacted these before they left the Mac, but
+    // a secret that was printed at all should be rotated at its provider.
+    exposures: (info.exposuresOpen ?? 0) > 0
+      ? { ok: true, detail: `${info.exposuresOpen} secret(s) seen in agent/terminal output and redacted — rotate them`, fix: "mesh exposures   (then mark each one rotated)" }
+      : { ok: true, detail: "no secrets seen in agent/terminal output" },
   };
 
   const ok = Object.values(checks).every((c) => c.ok);

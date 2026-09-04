@@ -3,13 +3,15 @@
 import os from "node:os";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 import { handleInput } from "./input";
 import { handleFiles } from "./files";
 import { handlePush, pushAlert, passesPushGate, notePushDecision, pushLiveActivity } from "./push";
 import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
+import { redact, redactAndRecord, record, addKnownSecrets, envSecrets, handleExposures, listExposures, type Finding } from "./redact";
+import { chatFor, outputPage } from "./chat";
 import { handleDoctor, tokenWeakness } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
@@ -28,7 +30,11 @@ const VERSION = "0.5.4";
 // 0.5.4 adds "herdr": panes of the herdr multiplexer are enumerated, peekable and
 // keyable under `herdr:<pane_id>` names. Clients gate the herdr row label and its
 // reduced key set on this string, not on version.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin"];
+// 0.6.0 adds "redact": secrets in event and output text are replaced before they leave
+// this machine, and GET /exposures lists what was seen (fingerprints, never values).
+// "chat": GET /agents/<s>/chat serves the session's conversation read from the agent's own
+// transcript (Claude Code, Codex), falling back to capture-pane lines as one system block.
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -207,6 +213,7 @@ function mapAgent(cmd: string): string {
   const c = cmd.toLowerCase();
   if (c.includes("claude")) return "Claude";
   if (c.includes("codex")) return "Codex";
+  if (c.includes("cursor")) return "Cursor";
   if (c.includes("node") || c.includes("bun")) return "Node";
   if (c.includes("python")) return "Python";
   return "shell";
@@ -528,7 +535,20 @@ function plainLine(line: string): string {
   return line.replace(/[\u2500-\u257F\u2800-\u28FF]/g, "").replace(/ {2,}/g, " ").trimEnd();
 }
 
+/// Every line the phone or watch will show passes through redact(); the same secret
+/// sitting on screen across many polls is counted once per ten minutes, not per poll.
+const OUTPUT_DEDUPE_MS = 10 * 60_000;
+async function redactOutput<T extends { lines: string[] } | null>(res: T): Promise<T> {
+  if (!res) return res;
+  const findings: Finding[] = [];
+  const lines = res.lines.map((line) => { const r = redact(line); findings.push(...r.findings); return r.text; });
+  if (findings.length) record(findings, "output", OUTPUT_DEDUPE_MS).catch(() => {});
+  return { ...res, lines };
+}
 async function agentOutput(name: string, lines: number, pane?: string, join = false, plain = false) {
+  return redactOutput(await agentOutputRaw(name, lines, pane, join, plain));
+}
+async function agentOutputRaw(name: string, lines: number, pane?: string, join = false, plain = false) {
   if (isHerdrAgent(name)) {
     const res = await herdrOutput(name, lines, join);
     return plain && res ? { ...res, lines: res.lines.map(plainLine) } : res;
@@ -742,6 +762,12 @@ type AgentEvent = {
   // Exact mux pane (#S:#I.#P) the event came from; a reply sent with this as the
   // pane target lands in the agent's pane even when another pane is active.
   pane?: string;
+  // 0.6: what the hook actually knew, kept structured instead of flattened into the
+  // title — the chat route reads the transcript at transcriptPath; toolName and
+  // hookEvent let a client draw a card without parsing prose.
+  transcriptPath?: string;
+  toolName?: string;
+  hookEvent?: string;
   // The identity the AGENT owns — Claude Code's session_id, Codex's thread id — which
   // exists whether or not the session is inside a multiplexer. `session` above is only
   // ever what the hook could resolve locally, and outside a pane that is a directory,
@@ -758,7 +784,9 @@ async function readEvents(since?: string | null): Promise<AgentEvent[]> {
     .map((line) => {
       try { return JSON.parse(line) as AgentEvent; } catch { return null; }
     })
-    .filter((event): event is AgentEvent => Boolean(event));
+    .filter((event): event is AgentEvent => Boolean(event))
+    // Events appended before 0.6 were stored unredacted; clean them on the way out.
+    .map((event) => ({ ...event, title: redact(event.title).text, body: event.body ? redact(event.body).text : event.body }));
   const filtered = since ? events.filter((event) => event.createdISO > since) : events;
   return filtered.slice(-100);
 }
@@ -797,6 +825,34 @@ function noteSessionEvent(event: AgentEvent) {
   }
 }
 
+/// The transcript file the last hook event named for each session — the chat route's first
+/// choice, because it is the agent saying which conversation this pane is.
+const transcriptBySession = new Map<string, string>();
+
+/// What the chat route needs from the mux: the pane's cwd and what runs in it.
+async function paneCwd(name: string): Promise<string | null> {
+  if (isHerdrAgent(name) || isCmuxAgent(name)) return null;
+  const out = (await sh(`${MUX} display -p -t ${shq(name)} '#{pane_current_path}' 2>/dev/null`)).trim();
+  return out.startsWith("/") ? out : null;
+}
+async function paneAgentType(name: string): Promise<string | undefined> {
+  if (isHerdrAgent(name) || isCmuxAgent(name)) return undefined;
+  const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{pane_current_command}' 2>/dev/null`);
+  const cmds = out.split("\n").filter(Boolean);
+  const hit = cmds.map(mapAgent).find((a) => a === "Claude" || a === "Codex" || a === "Cursor");
+  return hit?.toLowerCase();
+}
+async function agentChat(name: string, since: string | null, limit: number | null) {
+  const structured = await chatFor(name, since, limit, {
+    transcriptHint: (s) => transcriptBySession.get(s),
+    cwdOf: paneCwd,
+    agentTypeOf: paneAgentType,
+  }).catch(() => null);
+  if (structured) return structured;
+  const raw = await agentOutputRaw(name, 200, undefined, true, true);
+  return raw ? outputPage(name, raw.lines) : null;
+}
+
 const ERROR_LEVELS = new Set(["error", "failed", "failure"]);
 const WAITING_LEVELS = new Set(["warning", "needs-input", "needs_input", "needsinput"]);
 
@@ -832,26 +888,35 @@ function laContentState(event: AgentEvent, stateRaw?: string): Record<string, un
 
 async function addEvent(input: any): Promise<AgentEvent> {
   const now = new Date().toISOString();
+  // Redaction happens here, before the disk append, the APNs alert and the Live
+  // Activity below — the one place every producer (mesh-hook, mesh-event, a direct
+  // POST) funnels through. A secret an agent printed never leaves this function intact.
+  const title = await redactAndRecord(String(input.title ?? "Agent event"), "event");
+  const body = input.body ? await redactAndRecord(String(input.body), "event") : undefined;
   const event: AgentEvent = {
     id: sanitize(input.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
     host: os.hostname(),
     source: input.source ? String(input.source) : undefined,
     session: input.session ? String(input.session) : undefined,
     level: input.level ? String(input.level) : undefined,
-    title: String(input.title ?? "Agent event").slice(0, 120),
-    body: input.body ? String(input.body).slice(0, 500) : undefined,
+    title: title.slice(0, 120),
+    body: body ? body.slice(0, 500) : undefined,
     createdISO: input.createdISO ? String(input.createdISO) : now,
     replyable: typeof input.replyable === "boolean" ? input.replyable : undefined,
     pane: input.pane ? String(input.pane) : undefined,
     sessionId: input.sessionId ? String(input.sessionId).slice(0, 200) : undefined,
     cwd: input.cwd ? String(input.cwd).slice(0, 500) : undefined,
+    transcriptPath: input.transcriptPath ? String(input.transcriptPath).slice(0, 500) : undefined,
+    toolName: input.toolName ? String(input.toolName).slice(0, 80) : undefined,
+    hookEvent: input.hookEvent ? String(input.hookEvent).slice(0, 80) : undefined,
   };
   // The directory the events actually live in — not ~/.mesh unconditionally, which
   // both touched the real home under a redirected MESHD_EVENTS_PATH and failed to
   // create the directory the append below needs.
   await mkdir(dirname(EVENTS_PATH), { recursive: true, mode: 0o700 });
-  await appendFile(EVENTS_PATH, `${JSON.stringify(event)}\n`);
+  await appendFile(EVENTS_PATH, `${JSON.stringify(event)}\n`, { mode: 0o600 });
   noteSessionEvent(event);
+  if (event.session && event.transcriptPath) transcriptBySession.set(event.session, event.transcriptPath);
   // The flood fix: every event is stored for the pollers above, but only the ones a
   // person can act on — warnings, errors, needs-input — become an APNs buzz. It used
   // to push unconditionally, which made every turn end of every session a full
@@ -1083,6 +1148,9 @@ Bun.serve({
     if (paired) return paired;
     if (!authed(req, server)) return json({ error: "unauthorized" }, 401);
     try {
+      // Secrets seen in agent/terminal text — fingerprints and counts, never values.
+      const exposures = await handleExposures(req, url);
+      if (exposures) return exposures;
       // Setup truth: what this daemon can actually do right now — see doctor.ts.
       // The token is judged here and only a verdict travels on, so a doctor report can
       // never leak the thing it is reporting on.
@@ -1090,6 +1158,7 @@ Bun.serve({
         tokenSet: Boolean(TOKEN),
         tokenWeak: TOKEN ? (tokenWeakness(TOKEN) ?? undefined) : undefined,
         bind: HOST, port: PORT, version: VERSION, mux: MUX,
+        exposuresOpen: (await listExposures().catch(() => ({ open: 0 }))).open,
       });
       if (doc) return doc;
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
@@ -1145,6 +1214,16 @@ Bun.serve({
         const body = (await req.json().catch(() => ({}))) as any;
         const res = await agentNewPane(decodeURIComponent(panesM[1]), body.dir, body.cwd);
         return json(res, res.ok ? 201 : 404);
+      }
+      // The conversation, structured, from the agent's transcript (see chat.ts). 404 only
+      // when the session itself is gone; a session with no transcript answers with its
+      // capture-pane lines as one `system` message, so a client renders one shape.
+      const chatM = path.match(/^\/agents\/([^/]+)\/chat$/);
+      if (chatM && req.method === "GET") {
+        const name = decodeURIComponent(chatM[1]);
+        const limit = url.searchParams.get("limit");
+        const pageOut = await agentChat(name, url.searchParams.get("since"), limit ? Number(limit) : null);
+        return pageOut ? json(pageOut) : json({ error: "no such session" }, 404);
       }
       const outM = path.match(/^\/agents\/([^/]+)\/output$/);
       if (outM && req.method === "GET") {
@@ -1224,6 +1303,12 @@ Bun.serve({
     return json({ error: "not found" }, 404);
   },
 });
+// Exact-match redaction targets: this daemon's token, every peer token in hosts.json,
+// and the process's secret-shaped env. Values stay inside redact.ts; only hints leave.
+addKnownSecrets([["MESHD_TOKEN", TOKEN], ...envSecrets()]);
+peerHosts().then((peers) => addKnownSecrets([...peers.values()].flatMap((h) => (h.token ? [["hosts.json", h.token] as [string, string]] : [])))).catch(() => {});
+// The events file predates the mode on appendFile above; pin it once at boot.
+chmod(EVENTS_PATH, 0o600).catch(() => {});
 console.log(`meshd ${VERSION} on http://${HOST}:${PORT}  (host=${os.hostname()} platform=${process.platform})`);
 initTelemetry(VERSION);
 // Warm the per-session status index from the stored tail, and settle the capture-pane
