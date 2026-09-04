@@ -1,6 +1,12 @@
 import { unlink } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
+// Redaction lives in meshd's tree; ../../meshd resolves in the repo (install/payload/)
+// and in the installed layout (~/.mesh/) alike, so the bridge stays a sibling that
+// needs nothing but bun.
+import { createLineRedactor, type Finding } from "../../meshd/redact";
 
 type WsData = { session: string; pane?: string };
 
@@ -18,6 +24,13 @@ type ClientMessage = InputMessage | ResizeMessage | SplitMessage | NewPaneMessag
 
 type SessionRuntime = {
   clients: Set<ServerWebSocket<WsData>>;
+  // Streamed output is redacted a line at a time: bytes after the last newline wait
+  // here until the newline arrives or 40 ms pass, so a token split across two PTY
+  // reads is still seen whole.
+  pending: string;
+  decoder: TextDecoder;
+  redactLine: (line: string) => { text: string; findings: Finding[] };
+  flushTimer: ReturnType<typeof setTimeout> | null;
   listener: ReturnType<typeof Bun.listen> | null;
   socketPath: string | null;
   ensuring: Promise<void> | null;
@@ -44,6 +57,10 @@ function getRuntime(session: string): SessionRuntime {
   }
   const created: SessionRuntime = {
     clients: new Set(),
+    pending: "",
+    decoder: new TextDecoder("utf-8"),
+    redactLine: createLineRedactor(),
+    flushTimer: null,
     listener: null,
     socketPath: null,
     ensuring: null,
@@ -157,9 +174,120 @@ function toHexBytes(input: string): string[] {
 
 let server: ReturnType<typeof Bun.serve<WsData>>;
 
-// Pane output and WS traffic stay unbounded on purpose to preserve terminal semantics.
+// ---------- auth ----------
+// This process can type into any tmux/rmux session on the machine, so it is gated like
+// meshd: the same bearer token, exact and constant-time, and a peer on loopback (the
+// Mac's own browser, the CLI) is trusted. Browsers cannot put a header on a WebSocket
+// upgrade, so the token may also arrive as the `mesh_token` cookie the phone app sets
+// for this origin. Never from the URL. Fail closed: no token configured → nothing but
+// loopback gets in.
+function readToken(): string {
+  const fromEnv = process.env.MESHD_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+  try {
+    return readFileSync(join(process.env.MESH_HOME ?? join(homedir(), ".mesh"), "token"), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+const TOKEN = readToken();
+// Set BRIDGE_TRUST_LOOPBACK=0 when a reverse proxy on this host fronts the bridge (the
+// proxy's peers would otherwise all look local). The self-check uses it too.
+const TRUST_LOOPBACK = process.env.BRIDGE_TRUST_LOOPBACK !== "0";
+const MESHD_URL = `http://127.0.0.1:${process.env.MESHD_PORT ?? "8899"}`;
+
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
+function cookieValue(header: string | null, name: string): string {
+  if (!header) return "";
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
+  }
+  return "";
+}
+
+function authorized(req: Request): boolean {
+  if (TRUST_LOOPBACK) {
+    const ip = server.requestIP(req)?.address ?? "";
+    if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1") return true;
+  }
+  if (!TOKEN) return false;
+  const auth = req.headers.get("authorization") ?? "";
+  if (auth.startsWith("Bearer ") && safeEqual(auth.slice("Bearer ".length), TOKEN)) return true;
+  const cookie = cookieValue(req.headers.get("cookie"), "mesh_token");
+  return Boolean(cookie) && safeEqual(cookie, TOKEN);
+}
+
+// ---------- redacted fan-out ----------
+// Findings go to meshd, which owns the exposure ledger; the same fingerprint is
+// reported at most once per ten minutes from here so a key left on screen is one
+// exposure, not one per redraw.
+const reported = new Map<string, number>();
+function report(findings: Finding[]): void {
+  const now = Date.now();
+  const fresh = findings.filter((f) => {
+    const seen = reported.get(f.fp);
+    if (seen !== undefined && now - seen < 10 * 60_000) return false;
+    reported.set(f.fp, now);
+    return true;
+  });
+  if (!fresh.length) return;
+  fetch(`${MESHD_URL}/exposures/record`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ channel: "bridge", findings: fresh }),
+  }).catch(() => {});
+}
+
+const textEncoder = new TextEncoder();
+function publishRedacted(session: string, runtime: SessionRuntime, text: string): void {
+  if (!text) return;
+  const findings: Finding[] = [];
+  // Terminal lines end in \r\n; keep every terminator exactly as the PTY sent it.
+  const out = text.split(/(?<=\n)/).map((line) => {
+    const r = runtime.redactLine(line.replace(/\r?\n$/, ""));
+    findings.push(...r.findings);
+    const end = line.endsWith("\r\n") ? "\r\n" : line.endsWith("\n") ? "\n" : "";
+    return r.text + end;
+  }).join("");
+  if (findings.length) report(findings);
+  server.publish(session, textEncoder.encode(out));
+}
+
+/// Redact the whole snapshot a fresh client receives; it is complete lines already.
+function redactSnapshot(runtime: SessionRuntime, text: string): string {
+  const findings: Finding[] = [];
+  const out = text.split("\n").map((line) => { const r = runtime.redactLine(line); findings.push(...r.findings); return r.text; }).join("\n");
+  if (findings.length) report(findings);
+  return out;
+}
+
+// Pane output and WS traffic stay unbounded on purpose to preserve terminal semantics;
+// the only buffering is the partial last line held for redaction (≤ 40 ms).
 function fanout(session: string, data: Uint8Array): void {
-  server.publish(session, data);
+  const runtime = getRuntime(session);
+  runtime.pending += runtime.decoder.decode(data, { stream: true });
+  const cut = runtime.pending.lastIndexOf("\n");
+  if (cut >= 0) {
+    publishRedacted(session, runtime, runtime.pending.slice(0, cut + 1));
+    runtime.pending = runtime.pending.slice(cut + 1);
+  }
+  if (runtime.flushTimer) clearTimeout(runtime.flushTimer);
+  if (runtime.pending) {
+    runtime.flushTimer = setTimeout(() => {
+      runtime.flushTimer = null;
+      const tail = runtime.pending;
+      runtime.pending = "";
+      publishRedacted(session, runtime, tail);
+    }, 40);
+  }
 }
 
 async function ensureSession(session: string): Promise<void> {
@@ -245,7 +373,7 @@ async function handleOpen(ws: ServerWebSocket<WsData>): Promise<void> {
     ws.close(1011, "snapshot failed");
     return;
   }
-  ws.send(snapshot.stdout);
+  ws.send(redactSnapshot(getRuntime(target), snapshot.stdout));
   try {
     await ensureSession(target);
   } catch (error) {
@@ -304,6 +432,13 @@ server = Bun.serve<WsData>({
     const url = new URL(req.url);
     if (req.method !== "GET") {
       return new Response("Method Not Allowed", { status: 405 });
+    }
+    if (url.pathname === "/health") {
+      return new Response(JSON.stringify({ ok: true, auth: TOKEN ? "token" : "loopback-only" }), { headers: { "content-type": "application/json" } });
+    }
+    // Everything else — the page, its assets, and above all /attach — needs the token.
+    if (!authorized(req)) {
+      return new Response("Unauthorized: pair the phone app, or open this page on the Mac itself", { status: 401 });
     }
     if (url.pathname === "/") {
       return serveStatic(indexFile, "text/html; charset=utf-8");
