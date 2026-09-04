@@ -1059,6 +1059,12 @@ private struct BridgeTerminalScreen: View {
     @State private var selectedPane: String?   // nil = whole session (default)
     @State private var phase: WebLoadPhase = .loading
     @State private var reloadToken = 0
+    /// Set once the bridge auth cookie has landed in the shared cookie store — see the
+    /// `.task(id: machine.token)` below. `BridgeWebView` (and its `web.load`) is not
+    /// created until this is true, so the bridge's very first request always carries it;
+    /// a cookie added after an unauthenticated page has already started loading would
+    /// not retroactively fix that navigation.
+    @State private var cookieReady = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1067,8 +1073,12 @@ private struct BridgeTerminalScreen: View {
             }
             if let url = machine.terminalURL(session: session, pane: selectedPane) {
                 ZStack {
-                    BridgeWebView(url: url, reloadToken: reloadToken, phase: $phase)
-                        .ignoresSafeArea(edges: .bottom)
+                    if cookieReady {
+                        BridgeWebView(url: url, reloadToken: reloadToken, phase: $phase)
+                            .ignoresSafeArea(edges: .bottom)
+                    }
+                    // `phase` defaults to .loading, so this reads as "connecting" for
+                    // free during the cookie wait too — the same screen either way.
                     webStatus(url: url)
                 }
             } else {
@@ -1078,6 +1088,32 @@ private struct BridgeTerminalScreen: View {
         .navigationTitle(session)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadPanes() }
+        // install/payload/rmux-bridge auth.ts: a browser cannot put a header on a
+        // WebSocket upgrade, so the bridge accepts this machine's bearer token as the
+        // `mesh_token` cookie instead — never in the URL. Keyed on the token so a
+        // re-pair while this screen happens to still be open resets it.
+        .task(id: machine.token) {
+            guard let bridge = machine.resolvedBridge, let host = URL(string: bridge)?.host,
+                  !machine.token.isEmpty else {
+                cookieReady = true
+                return
+            }
+            let cookie = HTTPCookie(properties: [
+                .domain: host,
+                .path: "/",
+                .name: "mesh_token",
+                .value: machine.token,
+                .expires: Date().addingTimeInterval(86400),
+            ])
+            if let cookie {
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    WKWebsiteDataStore.default().httpCookieStore.setCookie(cookie) {
+                        continuation.resume()
+                    }
+                }
+            }
+            cookieReady = true
+        }
         // Watching an agent work is a screen you look at without touching, so the auto
         // lock dims it mid-run. Released on disappear, never at app scope: a phone that
         // never sleeps again is a worse bug than the dim.
