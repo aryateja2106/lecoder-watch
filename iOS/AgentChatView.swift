@@ -294,6 +294,14 @@ struct AgentChatView: View {
     private var suggestionPills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                // The keys a TUI agent needs and a phone keyboard lacks, in the order the
+                // terminal mode offers them, so Chat never strands you one Escape short.
+                ForEach(chatKeys, id: \.key) { k in
+                    Button { onSendKey(k.key) } label: { Image(systemName: k.icon) }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel(k.label)
+                }
+                Divider().frame(height: 22)
                 // No Team ID / bundle prefix baked in here: the skill derives those
                 // from `mesh apps config` or asks, because this app ships to people
                 // who are not its author.
@@ -356,6 +364,17 @@ struct AgentChatView: View {
         .padding(.vertical, 10)
         .background(Color(.secondarySystemGroupedBackground))
     }
+
+    private let chatKeys: [(key: String, icon: String, label: String)] = [
+        ("escape", "escape", "Esc"),
+        ("tab", "arrow.right.to.line", "Tab"),
+        ("up", "arrow.up", "Up"),
+        ("down", "arrow.down", "Down"),
+        ("left", "arrow.left", "Left"),
+        ("right", "arrow.right", "Right"),
+        ("enter", "return", "Enter"),
+        ("ctrl-c", "xmark.octagon", "Ctrl-C"),
+    ]
 
     private func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)

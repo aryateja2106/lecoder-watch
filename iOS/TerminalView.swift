@@ -600,7 +600,20 @@ private struct SessionPeekScreen: View {
                     messages: chatMessages,
                     chatSource: chatSource,
                     rawLines: output,
-                    onSendText: { text in Task { await send(text: text) } },
+                    // A trailing newline means "submit". Typed as a byte it is a line feed, and
+                    // Claude Code's prompt takes a bare line feed as a new line INSIDE the prompt —
+                    // the text sat there unsent. Enter is a key, so it is sent as one.
+                    onSendText: { text in
+                        Task {
+                            if text.hasSuffix("\n") {
+                                let body = String(text.dropLast())
+                                if !body.isEmpty { await send(text: body) }
+                                await send(key: "enter")
+                            } else {
+                                await send(text: text)
+                            }
+                        }
+                    },
                     onSendKey: { key in Task { await send(key: key) } },
                     onOpenTerminal: { viewMode = .terminal }
                 )
