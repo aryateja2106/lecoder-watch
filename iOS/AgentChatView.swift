@@ -128,6 +128,30 @@ struct AgentChatView: View {
 
     @State private var inputText = ""
     @State private var selectedArtifact: AgentArtifact?
+    @FocusState private var inputFocused: Bool
+
+    // MARK: - Scroll follow (mirrors Watch/WatchViews.swift's FollowsTail)
+
+    /// True while the list is genuinely at its tail — new messages keep auto-
+    /// scrolling. False the moment the reader scrolls up, so a poll landing mid-read
+    /// cannot yank the screen out from under them.
+    @State private var followBottom = true
+    /// True once the reader has scrolled up more than one screen — shows the
+    /// "jump to latest" button. A coarser threshold than `followBottom`'s so a small
+    /// scroll to reread the last line doesn't pop a button with nothing to do.
+    @State private var showJumpButton = false
+
+    // MARK: - Approval response
+
+    /// Set the moment Allow/Deny is tapped, so the card can hide behind a "sent"
+    /// line instead of staying up to invite a second, redundant tap — see
+    /// `awaitingDecision` and `respond(allow:)`.
+    @State private var hasResponded = false
+    @State private var respondedEventId: String?
+    @State private var showSentLine = false
+
+    /// Composer Stop: armed by a first tap, sent by a second within 3 seconds.
+    @State private var confirmingStop = false
 
     private var agentKind: AgentCLIKind {
         AgentCLIKind.detect(from: session.name, agentType: session.agentType)
@@ -153,11 +177,25 @@ struct AgentChatView: View {
     /// TUI might never even print that way. `replyable == false` means the hook could
     /// not resolve a reply route — showing Allow/Deny then would answer nothing.
     private var awaitingDecision: Bool {
-        session.status == "waiting" && latestEvent?.replyable != false
+        guard session.status == "waiting", latestEvent?.replyable != false else { return false }
+        // Once answered, stay hidden until a NEWER event lands for this session —
+        // the "status left waiting" half of that rule is the guard above, since a
+        // resolved session stops reading "waiting" at all.
+        guard hasResponded else { return true }
+        return latestEvent?.id != respondedEventId
     }
 
+    /// The daemon's own event, when it has one, beats the last thing the transcript
+    /// happened to show — a `result` message can land after the prompt and bump it
+    /// out of view before anyone reads it.
     private var decisionText: String {
-        messages.last(where: { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?.text
+        if let event = latestEvent {
+            let title = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = event.body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let combined = [title, body].filter { !$0.isEmpty }.joined(separator: "\n")
+            if !combined.isEmpty { return combined }
+        }
+        return messages.last(where: { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?.text
             ?? rawLines.last(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
             ?? "Waiting for your input."
     }
@@ -170,10 +208,12 @@ struct AgentChatView: View {
             Divider()
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         if showStructured {
-                            ForEach(messages) { message in
-                                messageRow(message).id(message.id)
+                            ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
+                                messageRow(message)
+                                    .padding(.top, topGap(before: index))
+                                    .id(message.id)
                             }
                         } else {
                             TerminalFallbackBlock(lines: rawLines).id("fallback")
@@ -182,24 +222,62 @@ struct AgentChatView: View {
                             DecisionCard(
                                 text: decisionText,
                                 risk: decisionRisk,
-                                onAllow: { onSendKey("enter") },
-                                onDeny: { onSendKey("escape") }
+                                onAllow: { respond(allow: true) },
+                                onDeny: { respond(allow: false) }
                             )
+                            .padding(.top, 14)
                             .id("decision")
+                        } else if showSentLine {
+                            SentDecisionLine().padding(.top, 14).id("decision-sent")
                         }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
                 }
+                .scrollDismissesKeyboard(.interactively)
+                // Same "at the bottom" rule as the watch terminal's FollowsTail
+                // (Watch/WatchViews.swift): 24pt slack so the newest line being on
+                // screen counts as following, not only a pixel-exact scroll position.
+                .onScrollGeometryChange(for: Bool.self) { geo in
+                    geo.visibleRect.maxY >= geo.contentSize.height - 24
+                } action: { _, atBottom in
+                    if followBottom != atBottom { followBottom = atBottom }
+                }
+                .onScrollGeometryChange(for: Bool.self) { geo in
+                    geo.contentSize.height - geo.visibleRect.maxY > geo.containerSize.height
+                } action: { _, scrolledAway in
+                    if showJumpButton != scrolledAway { showJumpButton = scrolledAway }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if showJumpButton {
+                        Button { scrollToEnd(proxy, animated: true) } label: {
+                            Image(systemName: "chevron.down")
+                                .font(.subheadline.weight(.bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(Color.black.opacity(0.55), in: Circle())
+                        }
+                        .padding(.trailing, 14)
+                        .padding(.bottom, 8)
+                    }
+                }
                 .onAppear { scrollToEnd(proxy, animated: false) }
-                .onChange(of: messages.count) { _, _ in scrollToEnd(proxy, animated: true) }
-                .onChange(of: rawLines.count) { _, _ in scrollToEnd(proxy, animated: true) }
-                .onChange(of: awaitingDecision) { _, _ in scrollToEnd(proxy, animated: true) }
+                .onChange(of: messages.count) { _, _ in if followBottom { scrollToEnd(proxy, animated: true) } }
+                .onChange(of: rawLines.count) { _, _ in if followBottom { scrollToEnd(proxy, animated: true) } }
+                .onChange(of: awaitingDecision) { _, _ in if followBottom { scrollToEnd(proxy, animated: true) } }
             }
             suggestionPills
             inputBar
         }
         .background(Color(.systemGroupedBackground))
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button { inputFocused = false } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                }
+            }
+        }
         .sheet(item: $selectedArtifact) { artifact in
             ArtifactDetailSheet(
                 artifact: artifact,
@@ -214,6 +292,45 @@ struct AgentChatView: View {
                 }
             )
         }
+    }
+
+    /// The gap above a structured row. Tight (6pt) when this message is a tool's
+    /// own result landing right after it, so the pair reads as one event instead of
+    /// two cards adrift in the transcript; the normal 14pt everywhere else.
+    private func topGap(before index: Int) -> CGFloat {
+        guard index > 0 else { return 0 }
+        if messages[index].role == "result", messages[index - 1].role == "tool" { return 6 }
+        return 14
+    }
+
+    /// Allow → Enter, Deny → Escape, unchanged — plus remembering what was answered
+    /// so the card can hide behind a "sent" line instead of staying up to invite a
+    /// second, redundant tap into a session that may already be moving again.
+    private func respond(allow: Bool) {
+        hasResponded = true
+        respondedEventId = latestEvent?.id
+        showSentLine = true
+        onSendKey(allow ? "enter" : "escape")
+        Task {
+            try? await Task.sleep(for: .seconds(5))
+            showSentLine = false
+        }
+    }
+
+    /// First tap arms a 3-second inline confirm; second tap within that window
+    /// sends it. A single tap here used to fire Ctrl-C straight into a session that
+    /// might already be working again.
+    private func armStopConfirm() {
+        confirmingStop = true
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            confirmingStop = false
+        }
+    }
+
+    private func confirmStop() {
+        confirmingStop = false
+        onSendKey("ctrl-c")
     }
 
     private func scrollToEnd(_ proxy: ScrollViewProxy, animated: Bool) {
@@ -333,24 +450,34 @@ struct AgentChatView: View {
                 .background(Color(.tertiarySystemFill))
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 .submitLabel(.send)
+                .focused($inputFocused)
                 .onSubmit { submit() }
 
             if inputText.isEmpty {
-                Button { onSendText("y\n") } label: {
-                    Text("Y")
-                        .font(.subheadline.bold())
-                        .frame(width: 34, height: 34)
-                        .background(Color.green.opacity(0.2))
-                        .foregroundStyle(.green)
-                        .clipShape(Circle())
-                }
-                Button { onSendKey("ctrl-c") } label: {
-                    Image(systemName: "stop.fill")
-                        .font(.subheadline)
-                        .frame(width: 34, height: 34)
-                        .background(Color.red.opacity(0.15))
-                        .foregroundStyle(.red)
-                        .clipShape(Circle())
+                // No bare "Y" button any more: it typed a literal y into whatever the
+                // session's own prompt actually wanted (Enter, or 1/2/3) — the
+                // approval card is the one Allow/Deny surface. Stop stays, two-step:
+                // every tap here sends Ctrl-C into a session that might already be
+                // working again, so a reader has to mean it.
+                if confirmingStop {
+                    Button(action: confirmStop) {
+                        Text("Send Ctrl-C?")
+                            .font(.caption.bold())
+                            .padding(.horizontal, 10)
+                            .frame(height: 34)
+                            .background(Color.red.opacity(0.15))
+                            .foregroundStyle(.red)
+                            .clipShape(Capsule())
+                    }
+                } else {
+                    Button(action: armStopConfirm) {
+                        Image(systemName: "stop.fill")
+                            .font(.subheadline)
+                            .frame(width: 34, height: 34)
+                            .background(Color.red.opacity(0.15))
+                            .foregroundStyle(.red)
+                            .clipShape(Circle())
+                    }
                 }
             } else {
                 Button { submit() } label: {
@@ -442,6 +569,24 @@ private struct DecisionCard: View {
     }
 }
 
+/// What replaces the decision card right after Allow/Deny, for 5 seconds — proof
+/// the tap landed, without a card sitting there begging for a second, redundant one.
+private struct SentDecisionLine: View {
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            Text("Sent")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(Capsule())
+    }
+}
+
 // MARK: - Message rows
 
 private struct ChatBubble: View {
@@ -452,7 +597,7 @@ private struct ChatBubble: View {
     var body: some View {
         HStack {
             if isUser { Spacer() }
-            Text(text)
+            MarkdownBlocks(text: text)
                 .font(.subheadline)
                 .foregroundStyle(isUser ? .white : .primary)
                 .padding(.horizontal, 14)
@@ -464,10 +609,97 @@ private struct ChatBubble: View {
     }
 }
 
+// MARK: - Minimal markdown (no third-party dependency)
+
+/// Splits `text` into blocks on blank lines: a fenced ``` block renders monospace,
+/// a run of lines each starting with "- "/"* "/"N. " renders as bullets, a lone
+/// "#"-prefixed line renders as a bold headline, and everything else goes through
+/// `AttributedString(markdown:)` so **bold**, `code`, *italic* and links render.
+struct MarkdownBlocks: View {
+    let text: String
+
+    private enum Block { case code(String), bullets([String]), headline(String), paragraph(String) }
+
+    private var blocks: [Block] {
+        text.components(separatedBy: "\n\n").compactMap { raw -> Block? in
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            if trimmed.hasPrefix("```") {
+                var lines = trimmed.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+                lines.removeFirst()
+                if lines.last?.trimmingCharacters(in: .whitespaces).hasPrefix("```") == true { lines.removeLast() }
+                return .code(lines.joined(separator: "\n"))
+            }
+            let lines = trimmed.split(separator: "\n").map(String.init)
+            if !lines.isEmpty, lines.allSatisfy(isBullet) {
+                return .bullets(lines.map(bulletBody))
+            }
+            if lines.count == 1, lines[0].hasPrefix("#") {
+                return .headline(String(lines[0].drop { $0 == "#" || $0 == " " }))
+            }
+            return .paragraph(trimmed)
+        }
+    }
+
+    private func isBullet(_ line: String) -> Bool {
+        line.hasPrefix("- ") || line.hasPrefix("* ")
+            || line.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil
+    }
+
+    private func bulletBody(_ line: String) -> String {
+        guard let r = line.range(of: #"^(-|\*|\d+\.)\s"#, options: .regularExpression) else { return line }
+        return String(line[r.upperBound...])
+    }
+
+    private func inline(_ s: String) -> Text {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        guard let attributed = try? AttributedString(markdown: s, options: options) else { return Text(s) }
+        return Text(attributed)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                switch block {
+                case .code(let code):
+                    Text(code)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.primary)
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(.tertiarySystemFill))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                case .bullets(let items):
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•")
+                                inline(item)
+                            }
+                        }
+                    }
+                case .headline(let head):
+                    inline(head).bold()
+                case .paragraph(let para):
+                    inline(para)
+                }
+            }
+        }
+    }
+}
+
 private struct ThinkingDisclosure: View {
     let text: String
     let tint: Color
     @State private var expanded = false
+
+    /// The label reads as a preview of the thought itself, not a fixed "Thinking"
+    /// that gives no reason to ever tap it.
+    private var firstLine: String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: true)
+            .first.map(String.init) ?? "Thinking"
+    }
 
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
@@ -483,9 +715,10 @@ private struct ThinkingDisclosure: View {
                 Image(systemName: "brain.head.profile")
                     .font(.caption)
                     .foregroundStyle(tint)
-                Text("Thinking")
+                Text(firstLine)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
         }
     }
@@ -493,8 +726,11 @@ private struct ThinkingDisclosure: View {
 
 /// One card for both a tool call in flight and its result — meshd sends them as
 /// separate messages (role `tool`, then `result`), but they read as one event.
+/// Collapsed by default: a transcript with a dozen tool calls used to be a dozen
+/// full JSON blobs eating the screen before anyone had read a word of the reply.
 private struct ToolResultCard: View {
     let message: ChatMessage
+    @State private var expanded = false
 
     private var dotColor: Color {
         switch message.status {
@@ -504,32 +740,90 @@ private struct ToolResultCard: View {
         }
     }
 
+    private var titleText: String {
+        message.tool?.name ?? (message.role == "result" ? "Result" : "Tool")
+    }
+
+    private var fullDetail: String {
+        message.tool?.input ?? message.text
+    }
+
+    /// One line: the input's first 60 characters for a tool call, or the first
+    /// non-empty line (max 80) for a result — enough to recognize the call without
+    /// reading it.
+    private var summaryLine: String {
+        if message.role == "result" {
+            let firstLine = fullDetail
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .map(String.init) ?? ""
+            return String(firstLine.prefix(80))
+        }
+        return String(fullDetail.prefix(60))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 6) {
                 Image(systemName: "wrench.and.screwdriver.fill")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                Text(message.tool?.name ?? (message.role == "result" ? "Result" : "Tool"))
+                Text(titleText)
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if !summaryLine.isEmpty {
+                    Text(summaryLine)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
                 Spacer()
                 Circle().fill(dotColor).frame(width: 6, height: 6)
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-            let detail = message.tool?.input ?? message.text
-            if !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(detail)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.primary)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.tertiarySystemFill))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+            .onTapGesture { expanded.toggle() }
+
+            if expanded, !fullDetail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ExpandedDetailBlock(text: fullDetail)
             }
         }
         .padding(10)
         .background(Color(.secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// The full text behind a tapped tool/result card, capped so one giant dump (a
+/// large file read, a long diff) still renders in bounded time.
+private struct ExpandedDetailBlock: View {
+    let text: String
+    @State private var showAll = false
+    private static let cap = 2000
+
+    private var capped: String {
+        showAll || text.count <= Self.cap ? text : String(text.prefix(Self.cap))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(capped)
+                .font(.caption.monospaced())
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.tertiarySystemFill))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            if !showAll, text.count > Self.cap {
+                Button("Show all (\(text.count) characters)") { showAll = true }
+                    .font(.caption2.weight(.medium))
+            }
+        }
     }
 }
 
@@ -645,7 +939,8 @@ struct ArtifactDetailSheet: View {
                         infoRow(icon: "personalhotspot", title: "Requires", detail: "Paired over your network")
                     } else {
                         infoRow(icon: "internaldrive", title: "Storage", detail: "Local to this device")
-                        infoRow(icon: "plus.app", title: "Add to Home Screen", detail: "From Safari's Share sheet")
+                        infoRow(icon: "plus.app", title: "Add to Home Screen",
+                                detail: "Safari: long-press the address bar → Share → Add to Home Screen\nor tap ⋯ in the address bar on older iOS")
                         infoRow(icon: "wifi.slash", title: "Offline", detail: "Only if the agent enabled a service worker")
                     }
                 }
@@ -715,7 +1010,7 @@ struct ArtifactDetailSheet: View {
     }
 
     private func infoRow(icon: String, title: String, detail: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .font(.subheadline)
                 .frame(width: 24)
@@ -727,6 +1022,7 @@ struct ArtifactDetailSheet: View {
             Text(detail)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.primary)
+                .multilineTextAlignment(.trailing)
         }
     }
 }
