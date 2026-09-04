@@ -1,0 +1,751 @@
+<title>LeSearch AI Brand Board</title>
+<link rel="icon" href="/appicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   LeSearch AI / LeSearch Mesh — Brand Board
+   Tokens mirror /brand/TOKENS.css exactly. Light is the default (bare :root);
+   dark applies under prefers-color-scheme OR an explicit data-theme stamp;
+   an explicit data-theme always wins over the media query either direction.
+   ========================================================================== */
+:root{
+  --lw-bg:#f2f2f2; --lw-bg-2:#eeeeee; --lw-panel:#ececec; --lw-elev:#e4e4e4; --lw-hover:#dcdcdc;
+  --lw-line:#dcdcdc; --lw-line-2:#c7c7c7; --lw-line-h:#a3a3a3;
+  --lw-ink:#191919; --lw-ink-2:#545454; --lw-ink-3:#767676;
+  --lw-ok:#167a3a; --lw-danger:#c51111;
+  --lw-mono:'JetBrains Mono','Fira Code','SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  --lw-radius:8px; --lw-wrap:920px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --lw-bg:#191919; --lw-bg-2:#202020; --lw-panel:#1f1f1f; --lw-elev:#252525; --lw-hover:#2a2a2a;
+    --lw-line:#2a2a2a; --lw-line-2:#373737; --lw-line-h:#525252;
+    --lw-ink:#e9e9e7; --lw-ink-2:#9b9b9b; --lw-ink-3:#6b6b6b;
+    --lw-ok:#4ade80; --lw-danger:#ef4444;
+  }
+}
+:root[data-theme="dark"]{
+  --lw-bg:#191919; --lw-bg-2:#202020; --lw-panel:#1f1f1f; --lw-elev:#252525; --lw-hover:#2a2a2a;
+  --lw-line:#2a2a2a; --lw-line-2:#373737; --lw-line-h:#525252;
+  --lw-ink:#e9e9e7; --lw-ink-2:#9b9b9b; --lw-ink-3:#6b6b6b;
+  --lw-ok:#4ade80; --lw-danger:#ef4444;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--lw-bg);color:var(--lw-ink);font-family:var(--lw-mono);
+  font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:var(--lw-ink);color:var(--lw-bg)}
+:focus-visible{outline:2px solid var(--lw-ink);outline-offset:3px;border-radius:4px}
+a{color:inherit}
+.wrap{max-width:var(--lw-wrap);margin:0 auto;padding:0 20px}
+img,svg{max-width:100%}
+button{font-family:inherit}
+
+/* ---- topbar ---- */
+.lw-topbar{position:sticky;top:0;z-index:50;backdrop-filter:blur(10px);
+  background:color-mix(in srgb, var(--lw-bg) 86%, transparent);border-bottom:1px solid var(--lw-line)}
+.lw-topbar-in{display:flex;align-items:center;gap:12px;height:54px}
+.lw-topbar-brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:13.5px;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lw-mark-mini{width:22px;height:22px;flex:none;color:var(--lw-ink)}
+.lw-topbar-sub{color:var(--lw-ink-3);font-weight:500}
+.lw-topbar .spacer{flex:1}
+.lw-toggle{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--lw-line-2);
+  background:var(--lw-panel);color:var(--lw-ink-2);border-radius:999px;padding:6px 12px 6px 9px;
+  font-size:12px;font-weight:600;cursor:pointer;font-family:var(--lw-mono);flex:none;
+  transition:color .15s ease,border-color .15s ease,background-color .15s ease}
+.lw-toggle:hover{color:var(--lw-ink);border-color:var(--lw-line-h)}
+.lw-toggle-dot{width:7px;height:7px;border-radius:50%;background:var(--lw-ok);flex:none}
+
+/* ---- generic section rhythm ---- */
+section{padding:56px 0;border-top:1px solid var(--lw-line)}
+.lw-kicker{font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--lw-ink-3)}
+h2{font-size:clamp(21px,3.6vw,28px);line-height:1.2;letter-spacing:-.02em;margin:10px 0 0;font-weight:700;text-wrap:balance}
+.lw-sub{color:var(--lw-ink-2);margin:12px 0 0;max-width:62ch;font-size:14px}
+h3{font-size:14.5px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px}
+p{margin:0}
+code,.lw-code{font-family:var(--lw-mono)}
+.lw-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* ---- reusable mark glyph ---- */
+.lw-ring{fill:none;stroke:currentColor;stroke-width:6;stroke-linecap:round;stroke-linejoin:round}
+.lw-arc{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.lw-dot{fill:currentColor}
+
+/* ---- hero ---- */
+.lw-hero{padding:52px 0 44px;text-align:center;position:relative}
+.lw-hero::before{content:"";position:absolute;inset:-20px -20px auto;height:340px;z-index:-1;pointer-events:none;
+  background:radial-gradient(420px 260px at 50% 0%, color-mix(in srgb, var(--lw-ink) 7%, transparent), transparent 70%)}
+.lw-eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;font-weight:600;
+  color:var(--lw-ink-2);border:1px solid var(--lw-line-2);background:var(--lw-panel);
+  padding:5px 12px;border-radius:999px;letter-spacing:.04em;text-transform:uppercase}
+.lw-eyebrow-dot{width:6px;height:6px;border-radius:50%;background:var(--lw-ok)}
+@media (prefers-reduced-motion:no-preference){
+  @keyframes lw-eyebrow-pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--lw-ok) 45%, transparent)}55%{box-shadow:0 0 0 5px color-mix(in srgb, var(--lw-ok) 0%, transparent)}}
+  .lw-eyebrow-dot{animation:lw-eyebrow-pulse 2.6s ease-in-out infinite}
+}
+.lw-hero-mark{width:104px;height:104px;margin:26px auto 0;color:var(--lw-ink)}
+.lw-hero-mark svg{width:100%;height:100%;overflow:visible}
+.lw-hero .lw-ring,.lw-hero .lw-arc{stroke-dasharray:100;stroke-dashoffset:0}
+.lw-hero .lw-dot{opacity:1;transform:none}
+@media (prefers-reduced-motion:no-preference){
+  @keyframes lw-draw{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
+  @keyframes lw-pop{from{opacity:0;transform:scale(.15)}to{opacity:1;transform:scale(1)}}
+  .lw-hero .lw-ring{stroke-dashoffset:100;animation:lw-draw .7s cubic-bezier(.2,.7,.2,1) forwards}
+  .lw-hero .lw-arc{stroke-dashoffset:100;animation:lw-draw .5s cubic-bezier(.2,.7,.2,1) forwards}
+  .lw-hero .lw-dot{opacity:0;transform-box:fill-box;transform-origin:center;animation:lw-pop .3s cubic-bezier(.34,1.56,.64,1) forwards}
+}
+.lw-hero h1{font-size:clamp(30px,7vw,44px);font-weight:800;letter-spacing:-.03em;margin:18px 0 0}
+.lw-hero-sub{color:var(--lw-ink-2);max-width:46ch;margin:14px auto 0;font-size:14px}
+.lw-replay{margin-top:22px;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--lw-line-2);
+  background:var(--lw-panel);color:var(--lw-ink-2);border-radius:var(--lw-radius);padding:8px 14px;
+  font-size:12px;font-weight:600;cursor:pointer;font-family:var(--lw-mono);
+  transition:color .15s ease,border-color .15s ease}
+.lw-replay:hover{color:var(--lw-ink);border-color:var(--lw-line-h)}
+.lw-replay:active{transform:translateY(1px)}
+
+/* ---- before/after (why normalize) ---- */
+.lw-ba{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:28px}
+@media(max-width:560px){.lw-ba{grid-template-columns:1fr}}
+.lw-ba-card{border:1px solid var(--lw-line-2);border-radius:var(--lw-radius);padding:18px;background:var(--lw-panel)}
+.lw-ba-stage{height:110px;border-radius:6px;display:grid;place-items:center;background:#191919}
+.lw-ba-stage svg{width:56px;height:56px}
+.lw-ba-card h3{margin-top:14px}
+.lw-ba-ratio{font-size:22px;font-weight:800;margin-top:2px}
+.lw-ba-ratio.bad{color:#ef8080}
+.lw-ba-ratio.good{color:#4ade80}
+.lw-ba-note{color:var(--lw-ink-3);font-size:12.5px;margin-top:6px;line-height:1.55}
+
+/* ---- swatch row (mark on light / mark on dark, fixed regardless of page theme) ---- */
+.lw-swatch-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:24px}
+@media(max-width:560px){.lw-swatch-row{grid-template-columns:1fr}}
+.lw-swatch{margin:0;border-radius:var(--lw-radius);border:1px solid var(--lw-line-2);overflow:hidden}
+.lw-swatch-stage{height:180px;display:grid;place-items:center}
+.lw-swatch--light .lw-swatch-stage{background:#f2f2f2;color:#191919}
+.lw-swatch--dark .lw-swatch-stage{background:#191919;color:#e9e9e7}
+.lw-swatch-stage svg{width:78px;height:78px}
+.lw-swatch figcaption{padding:10px 14px;font-size:11.5px;color:var(--lw-ink-3);border-top:1px solid var(--lw-line);background:var(--lw-panel)}
+.lw-swatch figcaption b{color:var(--lw-ink-2);font-weight:600}
+
+/* ---- lockups ---- */
+.lw-lockups{display:grid;gap:14px;margin-top:26px}
+.lw-lockup-card{border:1px solid var(--lw-line-2);border-radius:var(--lw-radius);padding:24px;background:var(--lw-panel)}
+.lw-lockup{display:flex;align-items:center;gap:10px}
+.lw-lockup .lw-mark-mini{width:28px;height:28px}
+.lw-lockup-text{font-weight:700;font-size:19px;letter-spacing:-.01em}
+.lw-lockup-text .dim{color:var(--lw-ink-2);font-weight:500;font-size:.58em;letter-spacing:0;margin-left:.35em}
+.lw-lockup-spec{margin-top:16px;padding-top:14px;border-top:1px dashed var(--lw-line-2);
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px 18px;font-size:12px}
+.lw-lockup-spec div b{display:block;color:var(--lw-ink-3);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.lw-lockup-spec div span{color:var(--lw-ink)}
+
+/* ---- color tokens ---- */
+.lw-ttable{width:100%;border-collapse:collapse;margin-top:22px;font-size:12.5px;min-width:600px}
+.lw-ttable th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--lw-ink-3);
+  font-weight:600;padding:0 10px 8px;border-bottom:1px solid var(--lw-line-2)}
+.lw-ttable td{padding:12px 10px;border-bottom:1px solid var(--lw-line);vertical-align:middle}
+.lw-ttable tr:last-child td{border-bottom:none}
+.lw-tok-name{font-weight:700}
+.lw-tok-role{color:var(--lw-ink-2)}
+.lw-chip{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.lw-swab{width:15px;height:15px;border-radius:4px;border:1px solid rgba(128,128,128,.35);flex:none}
+.lw-ratio{font-weight:700;font-variant-numeric:tabular-nums}
+.lw-tier{display:inline-block;margin-left:6px;font-size:9.5px;font-weight:700;letter-spacing:.04em;
+  padding:1px 6px;border-radius:4px;border:1px solid var(--lw-line-2);color:var(--lw-ink-3)}
+.lw-tier.aaa{color:var(--lw-ok);border-color:currentColor}
+.lw-surfaces{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:22px}
+.lw-surf{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--lw-ink-2)}
+.lw-surf b{color:var(--lw-ink);font-weight:700}
+
+/* ---- type ramp ---- */
+.lw-ramp{margin-top:26px;display:grid;gap:0;border-top:1px solid var(--lw-line-2)}
+.lw-ramp-row{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:18px;padding:20px 0;border-bottom:1px solid var(--lw-line)}
+@media(max-width:640px){.lw-ramp-row{grid-template-columns:1fr}}
+.lw-ramp-sample{overflow-x:auto}
+.lw-ramp-meta{font-size:11.5px;color:var(--lw-ink-3);line-height:1.9}
+.lw-ramp-meta b{color:var(--lw-ink-2);font-weight:600}
+.lw-r-display{font-size:clamp(26px,5vw,38px);font-weight:800;letter-spacing:-.03em;line-height:1.06;text-wrap:balance}
+.lw-r-h2{font-size:clamp(19px,3vw,24px);font-weight:700;letter-spacing:-.025em}
+.lw-r-body{font-size:15px;font-weight:400;color:var(--lw-ink);max-width:52ch}
+.lw-r-kicker{font-size:11.5px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--lw-ink-3)}
+.lw-r-code{font-size:13px;background:var(--lw-panel);border:1px solid var(--lw-line-2);border-radius:6px;padding:8px 10px;color:var(--lw-ink);white-space:nowrap;display:inline-block}
+.lw-r-caption{font-size:12.5px;color:var(--lw-ink-3)}
+
+/* ---- motion ---- */
+.lw-motion-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:26px}
+.lw-motion-card{border:1px solid var(--lw-line-2);border-radius:var(--lw-radius);background:var(--lw-panel);
+  padding:20px;display:flex;flex-direction:column;gap:14px}
+.lw-motion-stage{height:96px;border-radius:6px;background:var(--lw-elev);display:flex;align-items:center;justify-content:center;gap:22px}
+.lw-motion-card h3{margin:0}
+.lw-motion-card p{color:var(--lw-ink-2);font-size:12.5px;margin-top:4px;line-height:1.55}
+.lw-motion-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto}
+.lw-tinybtn{border:1px solid var(--lw-line-2);background:var(--lw-elev);color:var(--lw-ink-2);border-radius:6px;
+  padding:6px 11px;font-size:11.5px;cursor:pointer;font-weight:600;font-family:var(--lw-mono)}
+.lw-tinybtn:hover{color:var(--lw-ink);border-color:var(--lw-line-h)}
+
+/* pulse dot */
+.lw-pdot-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+.lw-pdot{width:12px;height:12px;border-radius:50%;background:var(--lw-ok)}
+.lw-pdot.danger{background:var(--lw-danger)}
+.lw-pdot-label{font-size:10.5px;color:var(--lw-ink-3)}
+@media (prefers-reduced-motion:no-preference){
+  @keyframes lw-pulse-ok{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--lw-ok) 45%, transparent)}55%{box-shadow:0 0 0 9px color-mix(in srgb, var(--lw-ok) 0%, transparent)}}
+  @keyframes lw-pulse-danger{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--lw-danger) 45%, transparent)}55%{box-shadow:0 0 0 9px color-mix(in srgb, var(--lw-danger) 0%, transparent)}}
+  .lw-pdot{animation:lw-pulse-ok 2.2s ease-in-out infinite}
+  .lw-pdot.danger{animation:lw-pulse-danger 1.15s ease-in-out infinite}
+}
+
+/* spinner */
+.lw-spin{width:34px;height:34px;color:var(--lw-ink)}
+.lw-spin svg{width:100%;height:100%}
+.lw-spin circle{fill:none;stroke:currentColor;stroke-width:7;stroke-linecap:round}
+@media (prefers-reduced-motion:no-preference){
+  @keyframes lw-rotate{to{transform:rotate(360deg)}}
+  .lw-spin svg{animation:lw-rotate 1s linear infinite;transform-origin:50% 50%}
+}
+
+/* button demo */
+.lw-btnrow{display:flex;flex-wrap:wrap;gap:10px}
+.lw-btn{display:inline-flex;align-items:center;gap:8px;border-radius:var(--lw-radius);padding:10px 16px;
+  font-size:12.5px;font-weight:600;border:1px solid transparent;font-family:var(--lw-mono);cursor:pointer;
+  transition:color .16s ease,background-color .16s ease,border-color .16s ease,box-shadow .2s ease,transform .12s cubic-bezier(.2,.7,.3,1)}
+.lw-btn-primary{background:var(--lw-ink);color:var(--lw-bg)}
+.lw-btn-primary:hover,.lw-btn-primary.lw-demo-hover{filter:brightness(1.12)}
+.lw-btn-primary:active,.lw-btn-primary.lw-demo-active{transform:translateY(1px);filter:brightness(1.2)}
+.lw-btn-ghost{border-color:var(--lw-line-2);color:var(--lw-ink-2);background:var(--lw-panel)}
+.lw-btn-ghost:hover,.lw-btn-ghost.lw-demo-hover{color:var(--lw-ink);border-color:var(--lw-line-h)}
+.lw-btn-ghost:active,.lw-btn-ghost.lw-demo-active{transform:translateY(1px)}
+
+/* ---- in context ---- */
+.lw-ctx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:26px}
+.lw-ctx-card{border:1px solid var(--lw-line-2);border-radius:var(--lw-radius);background:var(--lw-panel);padding:18px;text-align:center}
+.lw-ctx-stage{height:88px;display:flex;align-items:center;justify-content:center;gap:18px}
+.lw-ctx-card h3{font-size:12.5px;margin-top:12px}
+.lw-ctx-card .lw-r-caption{margin-top:4px}
+.lw-icon-tile{width:96px;height:96px;border-radius:21px;background:#fff;display:grid;place-items:center;
+  box-shadow:0 1px 0 rgba(0,0,0,.05),0 6px 16px -8px rgba(0,0,0,.25)}
+.lw-icon-tile svg{width:78%;height:78%;color:#191919}
+.lw-complication{width:44px;height:44px;border-radius:50%;background:#101010;display:grid;place-items:center;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.lw-complication svg{width:74%;height:74%;color:#e9e9e7}
+.lw-menubar-strip{display:flex;flex-direction:column;gap:8px;align-items:center}
+.lw-menubar{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:5px}
+.lw-menubar.light{background:#e7e7e5;color:#1a1a1a}
+.lw-menubar.dark{background:#141414;color:#e9e9e7}
+.lw-menubar svg{width:18px;height:18px}
+.lw-menubar span{font-size:9px;color:var(--lw-ink-3)}
+.lw-zoom{color:var(--lw-ink);opacity:.85}
+.lw-favicon-tab{display:inline-flex;align-items:center;gap:6px;background:var(--lw-elev);border:1px solid var(--lw-line-2);
+  border-radius:6px 6px 0 0;padding:6px 10px;font-size:10px;color:var(--lw-ink-2)}
+.lw-favicon-tab svg{width:16px;height:16px;color:var(--lw-ink)}
+
+/* ---- usage rules ---- */
+.lw-rule-block{margin-top:26px}
+.lw-min-demo{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap;margin-top:16px}
+.lw-min-item{display:flex;flex-direction:column;align-items:center;gap:8px}
+.lw-min-item svg{color:var(--lw-ink)}
+.lw-min-item span{font-size:10.5px;color:var(--lw-ink-3)}
+.lw-clear-demo{margin-top:18px;display:inline-block;position:relative;padding:24px}
+.lw-clear-demo::before{content:"";position:absolute;inset:0;border:1px dashed var(--lw-line-h);border-radius:6px}
+.lw-clear-demo svg{width:64px;height:64px;color:var(--lw-ink);display:block}
+.lw-clear-note{font-size:11.5px;color:var(--lw-ink-3);margin-top:10px}
+.lw-donts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:22px}
+.lw-dont{border:1px solid var(--lw-line-2);border-radius:var(--lw-radius);background:var(--lw-panel);padding:16px;text-align:center}
+.lw-dont-stage{height:70px;display:grid;place-items:center;color:var(--lw-ink)}
+.lw-dont-stage svg{width:52px;height:52px}
+.lw-dont p{font-size:11.5px;color:var(--lw-ink-2);margin-top:10px;line-height:1.5}
+.lw-dont .x{color:var(--lw-danger);font-weight:800;margin-right:4px}
+
+/* don't-example transforms */
+.lw-dont-skew svg{transform:scaleX(1.6) skewY(-8deg)}
+.lw-dont-rotate svg{transform:rotate(35deg)}
+.lw-dont-recolor .lw-ring{color:#c51111}
+.lw-dont-recolor .lw-arc,.lw-dont-recolor .lw-dot{color:#167a3a}
+.lw-dont-shadow svg{filter:drop-shadow(3px 5px 0 rgba(0,0,0,.35)) drop-shadow(0 0 8px rgba(255,0,128,.4))}
+.lw-dont-low{background:#232323 !important}
+.lw-dont-low svg{color:#2c2c2c}
+.lw-dont-crop svg{transform:scale(2.1) translateY(18%)}
+.lw-dont-crop{overflow:hidden}
+
+footer.lw-foot{border-top:1px solid var(--lw-line);padding:34px 0 50px;color:var(--lw-ink-3);font-size:12px}
+.lw-foot-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.lw-foot-row .spacer{flex:1}
+.lw-foot code{background:var(--lw-panel);border:1px solid var(--lw-line-2);border-radius:5px;padding:1px 6px;font-size:11px}
+</style>
+
+<header class="lw-topbar">
+  <div class="wrap lw-topbar-in">
+    <div class="lw-topbar-brand">
+      <svg class="lw-mark-mini" viewBox="872 397 246 246" aria-hidden="true"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg>
+      <span>LeSearch AI<span class="lw-topbar-sub"> / Brand Board</span></span>
+    </div>
+    <div class="spacer"></div>
+    <button id="themeToggle" class="lw-toggle" type="button" aria-label="Cycle theme: auto, light, dark">
+      <span class="lw-toggle-dot" aria-hidden="true"></span><span id="themeToggleLabel">Auto</span>
+    </button>
+  </div>
+</header>
+
+<main>
+
+<section class="lw-hero">
+  <div class="wrap">
+    <span class="lw-eyebrow"><span class="lw-eyebrow-dot"></span>Identity system · v1</span>
+    <div id="heroMark" class="lw-hero-mark">
+      <svg viewBox="872 397 246 246" aria-hidden="true">
+        <path class="lw-ring" pathLength="100" style="animation-delay:0ms" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/>
+        <path class="lw-arc" pathLength="100" style="animation-delay:520ms" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/>
+        <path class="lw-arc" pathLength="100" style="animation-delay:580ms" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/>
+        <path class="lw-arc" pathLength="100" style="animation-delay:640ms" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/>
+        <path class="lw-arc" pathLength="100" style="animation-delay:700ms" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/>
+        <path class="lw-arc" pathLength="100" style="animation-delay:760ms" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/>
+        <path class="lw-arc" pathLength="100" style="animation-delay:820ms" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/>
+        <path class="lw-arc" pathLength="100" style="animation-delay:880ms" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/>
+        <circle class="lw-dot" style="animation-delay:1180ms" cx="927" cy="494" r="8"/>
+        <circle class="lw-dot" style="animation-delay:1220ms" cx="933" cy="537" r="8"/>
+        <circle class="lw-dot" style="animation-delay:1260ms" cx="951" cy="604" r="8"/>
+        <circle class="lw-dot" style="animation-delay:1300ms" cx="1008" cy="598" r="8"/>
+        <circle class="lw-dot" style="animation-delay:1340ms" cx="1069" cy="544" r="8"/>
+        <circle class="lw-dot" style="animation-delay:1380ms" cx="979" cy="511" r="8"/>
+        <circle class="lw-dot" style="animation-delay:1420ms" cx="969" cy="445" r="8"/>
+        <circle class="lw-dot" style="animation-delay:1460ms" cx="1065" cy="464" r="8"/>
+        <circle class="lw-dot" style="animation-delay:1500ms" cx="1028" cy="437" r="8"/>
+      </svg>
+    </div>
+    <h1>LeSearch AI</h1>
+    <p class="lw-hero-sub">The mark, the wordmarks, the tokens, the type, and the motion — normalized once so the same files hold up in daylight and in the terminal-dark the product actually ships in.</p>
+    <button class="lw-replay" type="button" data-replay="hero">↺ Replay reveal</button>
+  </div>
+</section>
+
+<!-- ============================== THE MARK ============================== -->
+<section id="mark">
+  <div class="wrap">
+    <span class="lw-kicker">The mark</span>
+    <h2>One glyph, two grounds.</h2>
+    <p class="lw-sub">The source file (<code class="lw-code">Lesearch Logo.svg</code>) hardcodes its color: a
+      pure-black ring at <code class="lw-code">#000000</code>, and every arc and node at
+      <code class="lw-code">#231F20</code> — a near-black gray, clearly tuned against a white page. The path
+      data underneath is fine; the colors are baked in. Below, every stroke and fill is swapped for
+      <code class="lw-code">currentColor</code> instead, so one <code class="lw-code">color</code> declaration
+      drives the whole mark on either ground.</p>
+
+    <div class="lw-ba">
+      <div class="lw-ba-card">
+        <div class="lw-ba-stage"><svg viewBox="872 397 246 246" style="color:#231F20">
+          <path fill="none" stroke="#000" stroke-width="6" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/>
+          <path fill="none" stroke="#231F20" stroke-width="2" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/>
+          <circle fill="#231F20" cx="927" cy="494" r="8"/><circle fill="#231F20" cx="1008" cy="598" r="8"/><circle fill="#231F20" cx="1069" cy="544" r="8"/>
+        </svg></div>
+        <h3>Before — baked-in color</h3>
+        <div class="lw-ba-ratio bad">1.08 : 1</div>
+        <div class="lw-ba-note">#231F20 arcs on a #191919 ground. WCAG needs 3:1 for graphics — this is
+          effectively invisible the moment it lands on a dark surface.</div>
+      </div>
+      <div class="lw-ba-card">
+        <div class="lw-ba-stage"><svg viewBox="872 397 246 246" style="color:#e9e9e7"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+        <h3>After — currentColor</h3>
+        <div class="lw-ba-ratio good">14.46 : 1</div>
+        <div class="lw-ba-note">Same path data. <code class="lw-code">color:#e9e9e7</code> is the only change —
+          every stroke and fill inherits it.</div>
+      </div>
+    </div>
+
+    <div class="lw-swatch-row">
+      <figure class="lw-swatch lw-swatch--light">
+        <div class="lw-swatch-stage"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+        <figcaption>On light · <b>color: #191919</b> on #f2f2f2</figcaption>
+      </figure>
+      <figure class="lw-swatch lw-swatch--dark">
+        <div class="lw-swatch-stage"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+        <figcaption>On dark · <b>color: #e9e9e7</b> on #191919</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== LOCKUPS ============================== -->
+<section id="lockups">
+  <div class="wrap">
+    <span class="lw-kicker">Lockups</span>
+    <h2>The wordmark, spaced correctly.</h2>
+    <p class="lw-sub">Both lockups share the mark-to-text ratio already shipping in the site header
+      (<code class="lw-code">.brand</code>: a 28px mark, a 10px gap — ≈0.36× the mark's height). Weight and
+      tracking come from the same rule the product's own H1 uses.</p>
+
+    <div class="lw-lockups">
+      <div class="lw-lockup-card">
+        <div class="lw-lockup">
+          <svg class="lw-mark-mini" viewBox="872 397 246 246" style="width:28px;height:28px"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg>
+          <span class="lw-lockup-text">LeSearch AI</span>
+        </div>
+        <div class="lw-lockup-spec">
+          <div><b>Gap</b><span>10px (0.36 × mark height)</span></div>
+          <div><b>Weight</b><span>700</span></div>
+          <div><b>Tracking</b><span>-0.01em</span></div>
+          <div><b>Case</b><span>As written — mid-word capital, never all-caps</span></div>
+        </div>
+      </div>
+
+      <div class="lw-lockup-card">
+        <div class="lw-lockup">
+          <svg class="lw-mark-mini" viewBox="872 397 246 246" style="width:28px;height:28px"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg>
+          <span class="lw-lockup-text">LeSearch Mesh<span class="dim">by LeSearch AI</span></span>
+        </div>
+        <div class="lw-lockup-spec">
+          <div><b>Gap</b><span>10px before mark, 0.4em before "by"</span></div>
+          <div><b>Weight</b><span>700 / 500 (endorsement line)</span></div>
+          <div><b>Endorsement size</b><span>58% of the product name</span></div>
+          <div><b>Endorsement color</b><span>ink-2, never ink</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== COLOR ============================== -->
+<section id="color">
+  <div class="wrap">
+    <span class="lw-kicker">Color</span>
+    <h2>Nine tokens, five of them do the talking.</h2>
+    <p class="lw-sub">Structural tokens (surfaces, lines) are picked for rhythm, not contrast — they never sit
+      text on top of themselves alone. The five below carry text or meaning, so each is checked against the
+      page background in both themes. Ratios are computed WCAG 2.1 relative luminance, not eyeballed.</p>
+
+    <div class="lw-scroll">
+    <table class="lw-ttable">
+      <thead><tr><th>Token</th><th>Role</th><th>Light</th><th>vs bg</th><th>Dark</th><th>vs bg</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="lw-tok-name">ink</td><td class="lw-tok-role">Primary text, headings</td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#191919"></span>#191919</span></td>
+          <td><span class="lw-ratio">15.71:1</span><span class="lw-tier aaa">AAA</span></td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#e9e9e7"></span>#e9e9e7</span></td>
+          <td><span class="lw-ratio">14.46:1</span><span class="lw-tier aaa">AAA</span></td>
+        </tr>
+        <tr>
+          <td class="lw-tok-name">ink-2</td><td class="lw-tok-role">Secondary text, captions</td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#545454"></span>#545454</span></td>
+          <td><span class="lw-ratio">6.76:1</span><span class="lw-tier">AA</span></td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#9b9b9b"></span>#9b9b9b</span></td>
+          <td><span class="lw-ratio">6.33:1</span><span class="lw-tier">AA</span></td>
+        </tr>
+        <tr>
+          <td class="lw-tok-name">ink-3</td><td class="lw-tok-role">Meta, tags — large text / UI only</td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#767676"></span>#767676</span></td>
+          <td><span class="lw-ratio">4.06:1</span><span class="lw-tier">AA·large</span></td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#6b6b6b"></span>#6b6b6b</span></td>
+          <td><span class="lw-ratio">3.30:1</span><span class="lw-tier">AA·large</span></td>
+        </tr>
+        <tr>
+          <td class="lw-tok-name">ok</td><td class="lw-tok-role">Affirmative — online, continue</td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#167a3a"></span>#167a3a</span></td>
+          <td><span class="lw-ratio">4.90:1</span><span class="lw-tier">AA</span></td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#4ade80"></span>#4ade80</span></td>
+          <td><span class="lw-ratio">10.09:1</span><span class="lw-tier aaa">AAA</span></td>
+        </tr>
+        <tr>
+          <td class="lw-tok-name">danger</td><td class="lw-tok-role">Destructive — force-push, stop</td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#c51111"></span>#c51111</span></td>
+          <td><span class="lw-ratio">5.42:1</span><span class="lw-tier">AA</span></td>
+          <td><span class="lw-chip"><span class="lw-swab" style="background:#ef4444"></span>#ef4444</span></td>
+          <td><span class="lw-ratio">4.67:1</span><span class="lw-tier">AA</span></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="lw-surfaces">
+      <div class="lw-surf"><span class="lw-swab" style="background:var(--lw-bg)"></span><b>bg</b> page ground</div>
+      <div class="lw-surf"><span class="lw-swab" style="background:var(--lw-panel)"></span><b>panel</b> cards, inputs</div>
+      <div class="lw-surf"><span class="lw-swab" style="background:var(--lw-elev)"></span><b>elev</b> raised chips</div>
+      <div class="lw-surf"><span class="lw-swab" style="background:var(--lw-line)"></span><b>line</b> hairlines</div>
+      <div class="lw-surf"><span class="lw-swab" style="background:var(--lw-line-2)"></span><b>line-2</b> borders</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== TYPE ============================== -->
+<section id="type">
+  <div class="wrap">
+    <span class="lw-kicker">Type</span>
+    <h2>One face carries the whole system.</h2>
+    <p class="lw-sub">JetBrains Mono, weights 400–800. Not a fallback for a "real" display face — the product
+      is a terminal-first tool, so the terminal's own type <em>is</em> the brand type. Every sample below is
+      copy pulled straight from the live site.</p>
+
+    <div class="lw-ramp">
+      <div class="lw-ramp-row">
+        <div class="lw-ramp-sample"><div class="lw-r-display">Your agents stop and ask.</div></div>
+        <div class="lw-ramp-meta"><b>Display / H1</b><br>clamp(30–60px) · 800 · -0.03em · 1.06</div>
+      </div>
+      <div class="lw-ramp-row">
+        <div class="lw-ramp-sample"><div class="lw-r-h2">Three seconds instead of twenty minutes.</div></div>
+        <div class="lw-ramp-meta"><b>H2</b><br>clamp(21–28px) · 700 · -0.025em · 1.2</div>
+      </div>
+      <div class="lw-ramp-row">
+        <div class="lw-ramp-sample"><p class="lw-r-body">Coding agents run for hours and then freeze on one
+          question — <em>can I force-push?</em> — and sit there until you walk back to the machine.</p></div>
+        <div class="lw-ramp-meta"><b>Body</b><br>15–15.5px · 400 · 1.65</div>
+      </div>
+      <div class="lw-ramp-row">
+        <div class="lw-ramp-sample"><div class="lw-r-kicker">The whole point</div></div>
+        <div class="lw-ramp-meta"><b>Kicker</b><br>12px · 700 · uppercase · 0.1em</div>
+      </div>
+      <div class="lw-ramp-row">
+        <div class="lw-ramp-sample lw-scroll"><span class="lw-r-code">curl -fsSL https://mesh.lesearch.ai/install.sh | sh</span></div>
+        <div class="lw-ramp-meta"><b>Code</b><br>13px · 400–500 · tabular</div>
+      </div>
+      <div class="lw-ramp-row">
+        <div class="lw-ramp-sample"><span class="lw-r-caption">Free · no account · no server of ours between you and your Mac</span></div>
+        <div class="lw-ramp-meta"><b>Caption</b><br>12–12.5px · 400–500 · ink-3</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== MOTION ============================== -->
+<section id="motion">
+  <div class="wrap">
+    <span class="lw-kicker">Motion</span>
+    <h2>Small movements, on brand.</h2>
+    <p class="lw-sub">Four micro-animations, all pure CSS/SVG, all respecting
+      <code class="lw-code">prefers-reduced-motion</code>. Each has its own replay control — useful here on a
+      touch screen, where hover never fires on its own.</p>
+
+    <div class="lw-motion-grid">
+
+      <div class="lw-motion-card">
+        <div class="lw-motion-stage"><svg viewBox="872 397 246 246" style="width:56px;height:56px;color:var(--lw-ink)" id="mStage1">
+          <path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/>
+        </svg></div>
+        <div>
+          <h3>Reveal</h3>
+          <p>Ring draws first, the seven mesh arcs sweep in staggered, the nine nodes pop last. The exact
+            animation running in the hero above, isolated here for reference.</p>
+        </div>
+        <div class="lw-motion-foot"><span class="lw-r-caption">stroke-dashoffset + scale-pop</span>
+          <button class="lw-tinybtn" type="button" data-replay="hero">↺ Replay</button></div>
+      </div>
+
+      <div class="lw-motion-card">
+        <div class="lw-motion-stage">
+          <div class="lw-pdot-wrap"><span class="lw-pdot" id="pdotOk"></span><span class="lw-pdot-label">online</span></div>
+          <div class="lw-pdot-wrap"><span class="lw-pdot danger" id="pdotDanger"></span><span class="lw-pdot-label">blocked</span></div>
+        </div>
+        <div>
+          <h3>Mesh pulse</h3>
+          <p>The site's own eyebrow dot, made a documented element. Green breathes slow — a fleet that's fine.
+            Red pulses fast — an agent waiting on you, the moment the whole product exists for.</p>
+        </div>
+        <div class="lw-motion-foot"><span class="lw-r-caption">box-shadow ripple</span>
+          <button class="lw-tinybtn" type="button" data-replay="pulse">↺ Replay</button></div>
+      </div>
+
+      <div class="lw-motion-card">
+        <div class="lw-motion-stage"><div class="lw-spin" id="spinStage"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" pathLength="100" stroke-dasharray="62 38"/></svg></div></div>
+        <div>
+          <h3>Spinner</h3>
+          <p>The mark's own ring, given a gap and set spinning — the loading state is the brand mark, not a
+            generic system spinner.</p>
+        </div>
+        <div class="lw-motion-foot"><span class="lw-r-caption">rotate 360°, 1s linear</span>
+          <button class="lw-tinybtn" type="button" data-replay="spin">↺ Replay</button></div>
+      </div>
+
+      <div class="lw-motion-card">
+        <div class="lw-motion-stage">
+          <div class="lw-btnrow">
+            <button class="lw-btn lw-btn-primary" id="btnPrimary" type="button">Continue</button>
+            <button class="lw-btn lw-btn-ghost" id="btnGhost" type="button">Reply</button>
+          </div>
+        </div>
+        <div>
+          <h3>Buttons</h3>
+          <p>Primary brightens and dips on press; ghost brightens its border and text. Real
+            <code class="lw-code">:hover</code>/<code class="lw-code">:active</code> — the demo below fakes
+            the same states with a timer, for screens with no mouse.</p>
+        </div>
+        <div class="lw-motion-foot"><span class="lw-r-caption">hover → press → release</span>
+          <button class="lw-tinybtn" type="button" data-replay="buttons">↺ Demo</button></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================== IN CONTEXT ============================== -->
+<section id="context">
+  <div class="wrap">
+    <span class="lw-kicker">In context</span>
+    <h2>Real sizes, real places.</h2>
+    <p class="lw-sub">Rendered at the literal pixel size each context uses — small enough on a phone screen
+      that a 4× callout sits alongside each one.</p>
+
+    <div class="lw-ctx-grid">
+      <div class="lw-ctx-card">
+        <div class="lw-ctx-stage"><div class="lw-icon-tile"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div></div>
+        <h3>App icon tile</h3>
+        <div class="lw-r-caption">96px shown · squircle mask, white ground (as shipped — no transparency, App Store requirement)</div>
+      </div>
+      <div class="lw-ctx-card">
+        <div class="lw-ctx-stage"><div class="lw-complication"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div></div>
+        <h3>Watch complication</h3>
+        <div class="lw-r-caption">44px shown · circular, dark ground, ink-on-dark mark</div>
+      </div>
+      <div class="lw-ctx-card">
+        <div class="lw-ctx-stage">
+          <div class="lw-menubar-strip">
+            <div class="lw-menubar light"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg><span>18px</span></div>
+            <div class="lw-menubar dark"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg><span>18px</span></div>
+          </div>
+          <svg class="lw-zoom" viewBox="872 397 246 246" style="width:40px;height:40px;margin-left:14px"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg>
+        </div>
+        <h3>Menu bar glyph</h3>
+        <div class="lw-r-caption">True 18px, light + dark bar · 4× callout at right</div>
+      </div>
+      <div class="lw-ctx-card">
+        <div class="lw-ctx-stage">
+          <div class="lw-favicon-tab"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg>mesh.lesearch.ai</div>
+          <svg class="lw-zoom" viewBox="872 397 246 246" style="width:40px;height:40px;margin-left:14px"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg>
+        </div>
+        <h3>Favicon</h3>
+        <div class="lw-r-caption">True 16px in a browser tab · 4× callout at right</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== USAGE RULES ============================== -->
+<section id="rules">
+  <div class="wrap">
+    <span class="lw-kicker">Usage rules</span>
+    <h2>Minimums, clearspace, and what never to do.</h2>
+
+    <div class="lw-rule-block">
+      <h3>Minimum size</h3>
+      <p class="lw-sub" style="margin-top:8px">The nine-node mesh is the whole idea, but it's also the first
+        thing to break. Below ~24px it compresses into visual noise — look back at the 16–18px renders above.
+        The ring alone stays legible to about 12px. Never scale the full mark below 24px; at 16–18px, the
+        favicon and menu-bar crops shown above are already as small as this mark should go.</p>
+      <div class="lw-min-demo">
+        <div class="lw-min-item"><svg viewBox="872 397 246 246" style="width:48px;height:48px"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg><span>48px</span></div>
+        <div class="lw-min-item"><svg viewBox="872 397 246 246" style="width:32px;height:32px"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg><span>32px</span></div>
+        <div class="lw-min-item"><svg viewBox="872 397 246 246" style="width:24px;height:24px"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg><span>24px — floor</span></div>
+        <div class="lw-min-item"><svg viewBox="872 397 246 246" style="width:16px;height:16px"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg><span>16px — favicon only</span></div>
+      </div>
+    </div>
+
+    <div class="lw-rule-block">
+      <h3>Clearspace</h3>
+      <p class="lw-sub" style="margin-top:8px">Minimum clearspace on every side is 20% of the mark's own
+        height — nothing else (text, edges, other marks) crosses the dashed line below.</p>
+      <div class="lw-clear-demo"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+      <div class="lw-clear-note">Dashed line = minimum clearspace, drawn to scale.</div>
+    </div>
+
+    <div class="lw-rule-block">
+      <h3>Never</h3>
+      <div class="lw-donts">
+        <div class="lw-dont"><div class="lw-dont-stage lw-dont-skew"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+          <p><span class="x">✕</span>Stretch or skew non-uniformly</p></div>
+        <div class="lw-dont"><div class="lw-dont-stage lw-dont-rotate"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+          <p><span class="x">✕</span>Rotate the mark</p></div>
+        <div class="lw-dont"><div class="lw-dont-stage lw-dont-recolor"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+          <p><span class="x">✕</span>Recolor the ring and mesh separately</p></div>
+        <div class="lw-dont"><div class="lw-dont-stage lw-dont-shadow"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+          <p><span class="x">✕</span>Add drop shadows or glow effects</p></div>
+        <div class="lw-dont"><div class="lw-dont-stage lw-dont-low"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+          <p><span class="x">✕</span>Place on low-contrast grounds</p></div>
+        <div class="lw-dont"><div class="lw-dont-stage lw-dont-crop"><svg viewBox="872 397 246 246"><path class="lw-ring" d="M1106.5,522.2c0,62.3-50.5,112.8-112.8,112.8S881,584.5,881,522.2c0-44,27.9-74.5,32.2-79c4.1-4.2,35.2-34.9,80.5-33.8C1046.7,410.8,1106.5,455.2,1106.5,522.2z"/><path class="lw-arc" d="M913,440c-4-0.3-12.9-0.5-21,5c-9,6.1-11.8,15.7-13,20c-7.5,26.2,13.1,76.9,55,107c11.5,8.3,34,21.7,68,26"/><path class="lw-arc" d="M920,496c-26.9,6.4-45.7,30.8-45,58c0.7,26.1,19.2,48.9,45,55"/><path class="lw-arc" d="M932,544c-0.5,7.5-0.3,20,5,34c3.2,8.6,7.4,15.3,11,20"/><path class="lw-arc" d="M1061,469c-7.1,7.6-18.6,18.2-35,27c-15.6,8.4-30,12.2-40,14"/><path class="lw-arc" d="M976,445c6.8,0.5,46.7,4,73,38c16.2,21,19.3,43.2,20,53"/><path class="lw-arc" d="M1065,434c0.1-0.7,1.7-13.4-5-18c-6.7-4.6-21.3-0.8-30,14"/><path class="lw-arc" d="M1012,604c2.7,6.8,9.3,20.6,24,29c5.6,3.2,15.3,8.7,25,5c7.4-2.8,10.6-9.2,11-10c4.7-9.6-0.5-19.1-1-20"/><circle class="lw-dot" cx="927" cy="494" r="8"/><circle class="lw-dot" cx="933" cy="537" r="8"/><circle class="lw-dot" cx="951" cy="604" r="8"/><circle class="lw-dot" cx="1008" cy="598" r="8"/><circle class="lw-dot" cx="1069" cy="544" r="8"/><circle class="lw-dot" cx="979" cy="511" r="8"/><circle class="lw-dot" cx="969" cy="445" r="8"/><circle class="lw-dot" cx="1065" cy="464" r="8"/><circle class="lw-dot" cx="1028" cy="437" r="8"/></svg></div>
+          <p><span class="x">✕</span>Crop the ring</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="lw-foot">
+  <div class="wrap lw-foot-row">
+    <span>LeSearch AI — Brand Board</span>
+    <div class="spacer"></div>
+    <span>Tokens: <code>/brand/TOKENS.css</code></span>
+    <span>Source: <code>LeSearch-AI/mesh</code></span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var root = document.documentElement;
+  var toggleBtn = document.getElementById('themeToggle');
+  var toggleLabel = document.getElementById('themeToggleLabel');
+  var states = ['auto','light','dark'];
+
+  function apply(state){
+    if (state === 'light') root.setAttribute('data-theme','light');
+    else if (state === 'dark') root.setAttribute('data-theme','dark');
+    else root.removeAttribute('data-theme');
+    toggleLabel.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+  }
+
+  var saved = 'auto';
+  try { saved = localStorage.getItem('lw-brand-theme') || 'auto'; } catch(e){}
+  if (states.indexOf(saved) === -1) saved = 'auto';
+  apply(saved);
+
+  toggleBtn.addEventListener('click', function(){
+    var next = states[(states.indexOf(saved) + 1) % states.length];
+    saved = next;
+    apply(next);
+    try { localStorage.setItem('lw-brand-theme', next); } catch(e){}
+  });
+
+  function restart(el){
+    if (!el) return;
+    var name = el.style.animationName;
+    el.style.animationName = 'none';
+    void el.offsetWidth;
+    el.style.animationName = name || '';
+  }
+
+  function replayHero(){
+    var stage = document.getElementById('heroMark');
+    if (stage) stage.querySelectorAll('.lw-ring,.lw-arc,.lw-dot').forEach(restart);
+  }
+  function replayPulse(){
+    restart(document.getElementById('pdotOk'));
+    restart(document.getElementById('pdotDanger'));
+  }
+  function replaySpin(){
+    var s = document.getElementById('spinStage');
+    if (s) restart(s.querySelector('svg'));
+  }
+  function replayButtons(){
+    [['btnPrimary'],['btnGhost']].forEach(function(pair){
+      var el = document.getElementById(pair[0]);
+      if (!el) return;
+      el.classList.remove('lw-demo-hover','lw-demo-active');
+    });
+    var primary = document.getElementById('btnPrimary');
+    var ghost = document.getElementById('btnGhost');
+    setTimeout(function(){ primary.classList.add('lw-demo-hover'); ghost.classList.add('lw-demo-hover'); }, 60);
+    setTimeout(function(){ primary.classList.add('lw-demo-active'); ghost.classList.add('lw-demo-active'); }, 520);
+    setTimeout(function(){ primary.classList.remove('lw-demo-active'); ghost.classList.remove('lw-demo-active'); }, 780);
+    setTimeout(function(){ primary.classList.remove('lw-demo-hover'); ghost.classList.remove('lw-demo-hover'); }, 1100);
+  }
+
+  document.querySelectorAll('[data-replay]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var kind = btn.getAttribute('data-replay');
+      if (kind === 'hero') replayHero();
+      else if (kind === 'pulse') replayPulse();
+      else if (kind === 'spin') replaySpin();
+      else if (kind === 'buttons') replayButtons();
+    });
+  });
+})();
+</script>

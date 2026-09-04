@@ -153,6 +153,11 @@ footer a:hover{color:var(--ink)}
     <li>Paired machine names, addresses and access tokens.</li>
     <li>Your preferences, and the last snapshot of your mesh so the watch face has
         something to show before it reaches the network.</li>
+    <li>On each machine, a ledger of secrets the daemon had to redact
+        (<code class="inline">~/.mesh/exposures.json</code>, readable only by you). It holds
+        the kind of secret, its prefix, a six-character fingerprint and a count — never the
+        secret itself. Agent and terminal text is redacted on the machine before it reaches
+        your phone, your watch or Apple's push servers.</li>
   </ul>
   <p>
     Deleting the app deletes all of it. To revoke a phone's access from the other side, run

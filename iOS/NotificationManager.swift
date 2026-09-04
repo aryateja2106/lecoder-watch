@@ -79,6 +79,12 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     /// happens to have active.
     var onAgentAction: ((_ host: String, _ session: String, _ text: String?, _ key: String?, _ pane: String?) -> Void)?
 
+    /// A plain tap on an agent banner — not a button, the banner itself. Routes to the
+    /// session the alert is about. Before this existed the default tap opened the app
+    /// and went nowhere, which read as "notifications are broken" even though every
+    /// button worked: the most natural gesture was the only one that did nothing.
+    var onOpenSession: ((_ host: String, _ session: String) -> Void)?
+
     private override init() {
         // Defaults before `super.init()` because they are stored properties with
         // observers: `object(forKey:)` returning nil is "never chosen", which is the
@@ -715,6 +721,13 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
            ) {
             onAgentAction?(target.host, target.session, cmd.text, cmd.key,
                            AgentNotification.pane(from: info))
+        } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+                  let target = AgentNotification.target(from: info) {
+            // The banner itself was tapped. `command(for:)` deliberately returns nil
+            // here — a bare tap must never SEND anything — but it must still LAND
+            // somewhere: on the session the alert is about, same as the Live
+            // Activity's widgetURL.
+            onOpenSession?(target.host, target.session)
         }
         completionHandler()
     }

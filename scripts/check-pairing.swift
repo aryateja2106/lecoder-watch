@@ -10,6 +10,9 @@ struct CheckPairing {
         checkAllHosts()
         checkMerge()
         checkHostMatching()
+        checkTombstones()
+        checkBridgeAddress()
+        checkPairingLinkParsing()
         print("check-pairing: OK")
     }
 
@@ -50,6 +53,68 @@ struct CheckPairing {
             fleet: [host("studio", "100.1.1.1", "self-token"), host("halfdone", "100.3.3.3", "")],
         )
         assert(partial.allHosts.count == 1, "a tokenless host is dropped, not added broken")
+    }
+
+    // Pairing adopts the paired machine's whole hosts.json, so without tombstones a
+    // machine the user deleted resurrects on the very next pair — observed live as an
+    // un-removable "my-mac" zombie row. The filter has to hold the line both ways:
+    // removed stays removed across unrelated pairs, and explicitly pairing the removed
+    // machine itself brings it back.
+    static func checkTombstones() {
+        let fleet = [host("studio", "100.1.1.1", "t1"),
+                     host("pi", "100.2.2.2", "t2"),
+                     host("my-mac", "100.3.3.3", "t3")]
+
+        // A host removed by name must not come back from an unrelated pairing…
+        let byName = filteringRemovedHosts(fleet, removed: ["my-mac"],
+                                           pairedHost: "studio", pairedAddress: "100.1.1.1")
+        assert(byName.map(\.host) == ["studio", "pi"], "a removed host must not resurrect")
+
+        // …nor when only its address was tombstoned (manual adds may lack a stable name).
+        let byIP = filteringRemovedHosts(fleet, removed: ["100.3.3.3"],
+                                         pairedHost: "studio", pairedAddress: "100.1.1.1")
+        assert(byIP.map(\.host) == ["studio", "pi"], "a removed address must not resurrect")
+
+        // Tombstones are stored lowercased; hosts arrive as the daemon spells them.
+        let cased = filteringRemovedHosts([host("My-Mac", "100.3.3.3", "t3")], removed: ["my-mac"],
+                                          pairedHost: "studio", pairedAddress: "100.1.1.1")
+        assert(cased.isEmpty, "tombstone matching is case-insensitive")
+
+        // Explicitly pairing the removed machine is the un-remove gesture — by name…
+        let unremoved = filteringRemovedHosts(fleet, removed: ["my-mac"],
+                                              pairedHost: "my-mac", pairedAddress: "100.3.3.3")
+        assert(unremoved.count == 3, "pairing a machine overrides its own tombstone")
+
+        // …and by the address the phone actually dialed, even under a fresh name.
+        let redialed = filteringRemovedHosts(fleet, removed: ["my-mac", "100.3.3.3"],
+                                             pairedHost: "renamed-mac", pairedAddress: "100.3.3.3")
+        assert(redialed.contains { $0.ip == "100.3.3.3" }, "dialed address overrides its tombstone")
+
+        // No tombstones: everything flows through untouched.
+        assert(filteringRemovedHosts(fleet, removed: [],
+                                     pairedHost: "studio", pairedAddress: "100.1.1.1").count == 3)
+    }
+
+    // The terminal died on "http://Aryas-MacBook-Pro:7820 — hostname could not be
+    // found" while every meshd probe reached the same machine by IP: the bridge and
+    // VNC fallbacks dialed addresses.LAST (the bare name) instead of the numeric
+    // address. A phone without MagicDNS can never resolve the name.
+    static func checkBridgeAddress() {
+        let paired = Machine(host: "Aryas-MacBook-Pro", ip: "100.94.221.115", port: 8899, token: "t")
+        assert(paired.resolvedBridge == "http://100.94.221.115:7820",
+               "bridge dials the numeric address, not the bare hostname")
+        assert(paired.resolvedVNC.hasPrefix("http://100.94.221.115:6080"),
+               "VNC dials the numeric address, not the bare hostname")
+
+        // A hand-added machine may have no ip yet — the name is then the only address.
+        let manual = Machine(host: "studio", ip: "", port: 8899, token: "t")
+        assert(manual.resolvedBridge == "http://studio:7820",
+               "with no ip the name is still better than nothing")
+
+        // An explicitly stored bridge URL always wins over any fallback.
+        var custom = paired
+        custom.bridgeURL = "https://mac.tail.ts.net"
+        assert(custom.resolvedBridge == "https://mac.tail.ts.net")
     }
 
     // The name in an APNs payload is whatever `os.hostname()` says on that machine.
@@ -115,5 +180,38 @@ struct CheckPairing {
         // Idempotent — pairing twice must not grow the list.
         let once = mergingPairedHosts(existing, [host("studio", "100.1.1.1", "x")])
         assert(mergingPairedHosts(once, [host("studio", "100.1.1.1", "x")]) == once)
+    }
+
+    // The in-app QR scanner and the system-Camera deep link both funnel through
+    // parsePairingLink; if this drifts from what mesh pair actually prints, one path
+    // silently accepts a link the other rejects.
+    static func checkPairingLinkParsing() {
+        // A full link, port and all.
+        let valid = parsePairingLink(URL(string: "meshwatch://pair?h=100.1.1.1&p=8899&c=K7M4-QP2X")!)
+        assert(valid?.address == "100.1.1.1")
+        assert(valid?.port == 8899)
+        assert(valid?.code == "K7M4-QP2X", "the raw code is kept as scanned; normalization happens at pairing time")
+
+        // No port in the query: falls back to meshd's default.
+        let noPort = parsePairingLink(URL(string: "meshwatch://pair?h=100.1.1.1&c=K7M4QP2X")!)
+        assert(noPort?.port == 8899, "a missing port must not make the link unusable")
+
+        // Missing code entirely.
+        assert(parsePairingLink(URL(string: "meshwatch://pair?h=100.1.1.1")!) == nil, "no code means no link")
+
+        // Code present but too short once normalized — punctuation doesn't count
+        // toward the length, so "AB-1" is really 3 characters, not 4.
+        assert(parsePairingLink(URL(string: "meshwatch://pair?h=100.1.1.1&c=AB-1")!) == nil, "a short code is not a link")
+
+        // Missing address entirely.
+        assert(parsePairingLink(URL(string: "meshwatch://pair?c=K7M4QP2X")!) == nil, "no address means no link")
+
+        // Garbage: a QR that happens to encode some other URL entirely.
+        assert(parsePairingLink(URL(string: "https://example.com/not-a-pairing-link")!) == nil,
+               "the wrong scheme is not a pairing link")
+
+        // A meshwatch:// link, but the session kind, not pair.
+        assert(parsePairingLink(URL(string: "meshwatch://session/studio/abc123")!) == nil,
+               "a session link is not a pairing link")
     }
 }

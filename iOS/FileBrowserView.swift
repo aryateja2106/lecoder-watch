@@ -38,6 +38,13 @@ struct FileBrowserView: View {
     @State private var creatingFolder = false
     @State private var folderName = ""
     @State private var startingSession = false
+    /// Type-to-filter text. Client-side only — the daemon has no query param, and a
+    /// big listing is at most a few thousand rows, cheap to filter on every keystroke.
+    @State private var query = ""
+    /// Dotfiles/dotfolders are noise on every machine (`.git`, `.cache`, `node_modules`
+    /// siblings like `.DS_Store`) and hidden by default; persisted so the choice
+    /// survives leaving and reopening the browser. Keyed like `AppLock.enabledKey`.
+    @AppStorage("mesh.fileBrowser.showHidden.v1") private var showHidden = false
 
     private var client: MeshClient { MeshClient(machine: machine, capabilities: capabilities) }
     private var isPicker: Bool { onPick != nil }
@@ -45,6 +52,19 @@ struct FileBrowserView: View {
     /// back: it has been resolved, so "~" and a trailing slash cannot come back to bite.
     private var currentPath: String? { listing?.path ?? path }
     private var rows: [FsEntry] { listing?.rows ?? [] }
+    /// `rows` after the hidden-file and search filters (`filterFsEntries` in
+    /// Shared/Models.swift). A computed property, not cached state — a directory
+    /// listing tops out in the low thousands, so filtering on every render is
+    /// cheaper than keeping it in sync by hand.
+    private var visibleRows: [FsEntry] {
+        filterFsEntries(rows, showHidden: showHidden, query: query)
+    }
+    /// How many rows the hidden-files filter is holding back right now (query included,
+    /// so "matches exist but they are hidden" is answerable). Zero when showing hidden.
+    private var hiddenCount: Int {
+        guard !showHidden else { return 0 }
+        return filterFsEntries(rows, showHidden: true, query: query).count - visibleRows.count
+    }
 
     var body: some View {
         List {
@@ -65,13 +85,29 @@ struct FileBrowserView: View {
                         Label("Up", systemImage: "arrow.turn.left.up")
                     }
                 }
-                ForEach(rows) { entry in row(entry) }
-                if rows.isEmpty, !loading, failure == nil {
-                    Text("Empty folder")
+                ForEach(visibleRows) { entry in row(entry) }
+                if visibleRows.isEmpty, !loading, failure == nil {
+                    emptyStateLabel
+                }
+                // A folder showing 12 of 40 entries must say so, or the filter reads
+                // as data loss. One tappable line, inside the listing where the missing
+                // rows would have been — not a toggle buried below the whole list.
+                if hiddenCount > 0, !loading {
+                    Button { showHidden = true } label: {
+                        Label(
+                            hiddenCount == 1 ? "1 hidden item" : "\(hiddenCount) hidden items",
+                            systemImage: "eye.slash"
+                        )
+                        .font(.callout)
                         .foregroundStyle(.secondary)
+                    }
                 }
             } header: {
                 breadcrumb
+            }
+
+            Section {
+                Toggle("Show hidden files", isOn: $showHidden)
             }
 
             Section {
@@ -114,9 +150,13 @@ struct FileBrowserView: View {
                 .disabled(loading)
             }
         }
+        // Default placement, not .navigationBarDrawer(displayMode: .always): on this
+        // app's iOS 26 floor the automatic iPhone placement bottom-aligns the field
+        // where a thumb can reach it one-handed, and does not reserve permanent space.
+        .searchable(text: $query, prompt: "Filter by name")
         .task(id: path) { await load() }
         .alert("New folder", isPresented: $creatingFolder) {
-            TextField("name", text: $folderName)
+            TextField("name", text: $folderName.shellSafe)
             Button("Cancel", role: .cancel) { }
             Button("Create") { Task { await makeFolder() } }
         } message: {
@@ -128,6 +168,23 @@ struct FileBrowserView: View {
     }
 
     // MARK: Rows
+
+    /// Distinguishes "nothing here" from "something here, but filtered out" — a bare
+    /// "Empty folder" would be a lie if the folder holds only dotfiles or a search
+    /// that missed, and would leave the hidden toggle looking like it did nothing.
+    @ViewBuilder
+    private var emptyStateLabel: some View {
+        if rows.isEmpty {
+            Text("Empty folder")
+                .foregroundStyle(.secondary)
+        } else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Text("No files match \u{201c}\(query)\u{201d}")
+                .foregroundStyle(.secondary)
+        } else {
+            Text("Only hidden files here")
+                .foregroundStyle(.secondary)
+        }
+    }
 
     @ViewBuilder
     private func row(_ entry: FsEntry) -> some View {
@@ -210,6 +267,10 @@ struct FileBrowserView: View {
 
     private func go(to newPath: String) {
         failure = nil
+        // A filter typed for one folder must not silently filter the next: navigation
+        // is in-place (same view instance, .task(id: path) refetches), so the query
+        // survives unless cleared here. Files.app clears on navigation; so do we.
+        query = ""
         path = newPath
     }
 

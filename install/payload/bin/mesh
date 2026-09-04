@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// mesh — command-line control for a MeshWatch mesh (the meshd HTTP API).
+// mesh — command-line control for a LeSearch Mesh fleet (the meshd HTTP API).
 // Dependency-free (bun's built-in fetch). Config: ~/.mesh/hosts.json.
 // Human output by default; --json for agents/scripts. `mesh help <cmd>` for details.
 
@@ -8,6 +8,7 @@ import { join } from "path";
 import {
   existsSync, readFileSync, writeFileSync, mkdirSync,
   statSync, readdirSync, renameSync, rmSync, copyFileSync, chmodSync,
+  cpSync, lstatSync, readlinkSync, symlinkSync,
 } from "fs";
 
 const MESH_HOME = process.env.MESH_HOME || join(homedir(), ".mesh");
@@ -116,7 +117,12 @@ function die(msg: string): never {
 // ---------- arg parsing ----------
 
 // Split argv into positionals + a flag map. Known value-flags consume the next token.
-const VALUE_FLAGS = new Set(["-H", "--host", "-n", "--lines", "--pane", "--cmd", "--cwd", "--task", "--port", "--token", "--since", "--address", "--src"]);
+const VALUE_FLAGS = new Set([
+  "-H", "--host", "-n", "--lines", "--pane", "--cmd", "--cwd", "--task", "--port", "--token", "--since", "--address", "--src",
+  "--rotated", "--ignored", "--reopen",
+  "--team", "--prefix", "--slug", "--name", "--app", "--bundle-id", "--device",
+  "--ipa", "--icon", "--app-version", "--url",
+]);
 function parse(argv: string[]): { pos: string[]; flags: Record<string, string>; bools: Set<string> } {
   const pos: string[] = [], bools = new Set<string>(), flags: Record<string, string> = {};
   for (let i = 0; i < argv.length; i++) {
@@ -338,6 +344,35 @@ async function cmdEvents(flags: Record<string, string>, cfg: Config) {
     const list = Array.isArray(ev) ? ev : (ev?.events || []);
     for (const e of list) console.log(`${e.createdISO || ""}  ${e.level || "info"}  ${e.title || ""}`);
   }, ev);
+}
+
+/**
+ * Secrets the daemon had to redact out of agent/terminal text — kind, prefix, fingerprint,
+ * count, where — never the value. `--rotated <fp>` / `--ignored <fp>` / `--reopen <fp>` mark a
+ * row once you have dealt with it at the provider.
+ */
+async function cmdExposures(flags: Record<string, string>, cfg: Config) {
+  const h = resolveHost(hostOf(flags), cfg);
+  const change = flags.rotated ? ["rotated", flags.rotated] : flags.ignored ? ["ignored", flags.ignored] : flags.reopen ? ["open", flags.reopen] : null;
+  if (change) {
+    const [status, fp] = change;
+    if (!/^[0-9a-f]{6}$/.test(fp)) die(`a fingerprint is 6 hex characters, got: ${fp}`);
+    const row = await api(h, "POST", `/exposures/${fp}`, { status });
+    out(() => console.log(`ok ${row.kind} ${row.hint} [${row.fp}] → ${row.status}`), row);
+    return;
+  }
+  const r = await api(h, "GET", "/exposures");
+  out(() => {
+    const items = Array.isArray(r?.items) ? r.items : [];
+    if (!items.length) { console.log(`no secrets seen in agent/terminal output on ${h.name}`); return; }
+    console.log(`${r.open} open of ${r.count} secret(s) redacted on ${h.name} — rotate each open one at its provider, then: mesh exposures --rotated <fp>`);
+    console.log("");
+    console.log("STATUS   KIND              HINT               FP      SEEN  LAST                  WHERE");
+    for (const e of items) {
+      const last = String(e.last || "").replace("T", " ").slice(0, 19);
+      console.log(`${String(e.status).padEnd(8)} ${String(e.kind).padEnd(17)} ${String(e.hint).padEnd(18)} ${e.fp}  ${String(e.count).padStart(4)}  ${last.padEnd(20)}  ${(e.channels || []).join(",")}`);
+    }
+  }, r);
 }
 
 // ---------- pairing ----------
@@ -1088,7 +1123,7 @@ function cmdDesktop() {
   if (runOk(["open", "-b", "com.lecoder.meshdesktop"])) return;
   die("MeshDesktop is not installed on this Mac.\n"
     + "  From the repo: xcodegen generate && xcodebuild -project MeshWatch.xcodeproj -scheme MeshDesktop -destination 'platform=macOS' build\n"
-    + "  then copy the built LeSearch Mesh.app into /Applications and re-run 'mesh desktop'.");
+    + "  then copy the built MeshWatch.app into /Applications and re-run 'mesh desktop'.");
 }
 
 function cmdShellenv() {
@@ -1235,6 +1270,453 @@ function cmdHooks(pos: string[], flags: Record<string, string>, cfg: Config) {
   }, { ok: true, action, events: HOOK_EVENTS, settings: CLAUDE_SETTINGS });
 }
 
+// ---------- skills ----------
+//
+// Skills teach an agent working through mesh the two app-build routes (native via Xcode +
+// devicectl, or a local PWA via `mesh apps publish`). The canonical copy ships in the
+// payload at share/skills/; ~/.agents/skills is the one real copy on an installed
+// machine, and every CLI's own skills directory (~/.claude, ~/.codex, ~/.cursor) is a
+// symlink to it — so an upgrade only ever has to touch one directory.
+//
+// A marker file inside each copied skill directory is how a re-run tells "this is ours,
+// safe to refresh" apart from "the user already has something here" — there is no other
+// cheap way to tell those two apart from outside, and overwriting the second one silently
+// would destroy content that was never ours to touch.
+
+const AGENTS_SKILLS = join(homedir(), ".agents", "skills");
+const SKILL_LINK_DIRS = [
+  join(homedir(), ".claude", "skills"),
+  join(homedir(), ".codex", "skills"),
+  join(homedir(), ".cursor", "skills"),
+];
+const SKILL_MARKER = ".mesh-skill";
+
+function skillsPayloadDir(): string {
+  const installed = join(MESH_HOME, "share", "skills");
+  if (existsSync(installed)) return installed;
+  return join(import.meta.dir, "..", "share", "skills");
+}
+
+function listSkillNames(payload: string): string[] {
+  if (!existsSync(payload)) return [];
+  return readdirSync(payload, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && existsSync(join(payload, e.name, "SKILL.md")))
+    .map((e) => e.name)
+    .sort();
+}
+
+function lstatOrNull(p: string) { try { return lstatSync(p); } catch { return null; } }
+function isMeshManagedDir(p: string): boolean {
+  const st = lstatOrNull(p);
+  return Boolean(st && st.isDirectory() && existsSync(join(p, SKILL_MARKER)));
+}
+
+function linkedClientCount(name: string): number {
+  return SKILL_LINK_DIRS.filter((d) => {
+    const st = lstatOrNull(join(d, name));
+    return Boolean(st && st.isSymbolicLink() && existsSync(join(d, name)));
+  }).length;
+}
+
+function cmdSkills(pos: string[], bools: Set<string>) {
+  const action = pos[0] ?? "status";
+  const payload = skillsPayloadDir();
+  const names = listSkillNames(payload);
+
+  if (action === "status") {
+    out(() => {
+      if (!names.length) { console.log(`No skills payload found (expected ${payload}).`); return; }
+      console.log(`skills: ${names.filter((n) => existsSync(join(AGENTS_SKILLS, n))).length}/${names.length} installed (${AGENTS_SKILLS})`);
+      for (const name of names) {
+        const installed = existsSync(join(AGENTS_SKILLS, name));
+        console.log(`  ${name.padEnd(22)} ${installed ? "installed" : "not installed"}  (${linkedClientCount(name)}/${SKILL_LINK_DIRS.length} clients linked)`);
+      }
+      if (names.some((n) => !existsSync(join(AGENTS_SKILLS, n)))) console.log(`\nRun: mesh skills install`);
+    }, { payload, skills: names.map((name) => ({ name, installed: existsSync(join(AGENTS_SKILLS, name)), linked: linkedClientCount(name) })) });
+    return;
+  }
+
+  if (action !== "install") die(`unknown: mesh skills ${action}  (status | install [--uninstall])`);
+  if (bools.has("uninstall")) return uninstallSkills(names);
+  if (!names.length) die(`no skills found in ${payload}`);
+
+  mkdirSync(AGENTS_SKILLS, { recursive: true });
+  const results: { name: string; status: string }[] = [];
+  for (const name of names) {
+    const src = join(payload, name);
+    const dest = join(AGENTS_SKILLS, name);
+    const destSt = lstatOrNull(dest);
+    if (destSt) {
+      if (destSt.isSymbolicLink() || !isMeshManagedDir(dest)) {
+        say(`  skip ${name}: ${dest} already exists and was not installed by mesh`);
+        results.push({ name, status: "skipped (user-owned)" });
+        continue;
+      }
+      rmSync(dest, { recursive: true, force: true });
+    }
+    cpSync(src, dest, { recursive: true });
+    writeFileSync(join(dest, SKILL_MARKER), "");
+
+    for (const linkDir of SKILL_LINK_DIRS) {
+      mkdirSync(linkDir, { recursive: true });
+      const link = join(linkDir, name);
+      const st = lstatOrNull(link);
+      if (st) {
+        if (!st.isSymbolicLink()) { say(`  skip ${link}: exists and is not a mesh-managed symlink`); continue; }
+        if (readlinkSync(link) === dest) continue; // already correct
+        rmSync(link, { force: true });
+      }
+      symlinkSync(dest, link);
+    }
+    say(`  installed ${name}`);
+    results.push({ name, status: "installed" });
+  }
+  out(() => console.log(`\nSkills installed into ${AGENTS_SKILLS}, linked into ${SKILL_LINK_DIRS.map((d) => d.replace(homedir(), "~")).join(", ")}.`), { ok: true, results });
+}
+
+function uninstallSkills(names: string[]) {
+  const results: { name: string; status: string }[] = [];
+  for (const name of names) {
+    for (const linkDir of SKILL_LINK_DIRS) {
+      const link = join(linkDir, name);
+      const st = lstatOrNull(link);
+      if (st?.isSymbolicLink()) rmSync(link, { force: true });
+    }
+    const dest = join(AGENTS_SKILLS, name);
+    if (isMeshManagedDir(dest)) { rmSync(dest, { recursive: true, force: true }); results.push({ name, status: "removed" }); }
+    else results.push({ name, status: "not installed" });
+  }
+  out(() => console.log(`Removed mesh skills and their symlinks.`), { ok: true, action: "uninstall", results });
+}
+
+// ---------- apps ----------
+//
+// Two build routes an agent hands a user, both rooted at mesh apps config (team +
+// bundle prefix — never hardcoded). Route 1 (native) stores only a path and a bundle id
+// here: Xcode already built the .app, this just remembers where and hands it to
+// devicectl/simctl. Route 2 (PWA) copies the whole site and mints an unguessable slug so
+// the daemon can serve it without a bearer token — a browser cannot set an Authorization
+// header on a plain page load, so the random suffix in the URL path is what stands in
+// for auth on that one route.
+//
+// The daemon shells out to `mesh apps install <slug>` from an HTTP route (a different
+// lane owns that route), so every mutating command here ends on a single machine-
+// readable line — `ok <what>` or `error <why>` — on STDOUT, exit 0 or 1, and never
+// throws past this file the way the rest of the CLI does through the shared die().
+
+const APPS_CONFIG_FILE = join(MESH_HOME, "apps.json");
+const APPS_DIR = join(MESH_HOME, "apps");
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
+
+type AppsConfig = { team?: string; prefix?: string; otaBase?: string; otaVia?: "tailscale" };
+type AppMeta = {
+  slug: string; name: string; kind: "pwa" | "native"; updated: string;
+  key?: string; url?: string; app?: string; bundleId?: string;
+  ipa?: string; icon?: string; version?: string;
+};
+
+function loadAppsConfig(): AppsConfig {
+  if (!existsSync(APPS_CONFIG_FILE)) return {};
+  try { return JSON.parse(readFileSync(APPS_CONFIG_FILE, "utf8")); } catch { return {}; }
+}
+function saveAppsConfig(c: AppsConfig) {
+  mkdirSync(MESH_HOME, { recursive: true, mode: 0o700 });
+  writeFileSync(APPS_CONFIG_FILE, JSON.stringify(c, null, 2) + "\n", { mode: 0o600 });
+}
+
+function randomHex(bytes: number): string {
+  const b = new Uint8Array(bytes);
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+function appsOk(what: string, data?: Record<string, unknown>): never {
+  out(() => console.log(`ok ${what}`), { ok: true, what, ...data });
+  process.exit(0);
+}
+function appsErr(why: string): never {
+  const line = why.replace(/\s+/g, " ").trim();
+  out(() => console.log(`error ${line}`), { ok: false, error: line });
+  process.exit(1);
+}
+
+function readAppMeta(slug: string): AppMeta {
+  const p = join(APPS_DIR, slug, "meta.json");
+  if (!existsSync(p)) appsErr(`no app named ${slug} (mesh apps list)`);
+  try { return JSON.parse(readFileSync(p, "utf8")); }
+  catch { appsErr(`${p} is not valid JSON`); }
+}
+function writeAppMeta(meta: AppMeta) {
+  const dir = join(APPS_DIR, meta.slug);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2) + "\n", { mode: 0o600 });
+}
+
+function cmdApps(pos: string[], flags: Record<string, string>, bools: Set<string>) {
+  const action = pos.shift();
+  switch (action) {
+    case "config": return cmdAppsConfig(flags);
+    case "publish": return cmdAppsPublish(pos, flags);
+    case "add": return cmdAppsAdd(pos, flags);
+    case "list": return cmdAppsList();
+    case "install": return cmdAppsInstall(pos, flags, bools);
+    case "remove": case "rm": return cmdAppsRemove(pos);
+    case "ota": return cmdAppsOta(flags, bools);
+    default: die(`unknown: mesh apps ${action ?? ""}  (config | publish | add | list | install | ota | remove)`);
+  }
+}
+
+// ---------- wireless install (OTA) ----------
+//
+// iOS installs a signed .ipa from a manifest.plist it fetches itself, over HTTPS with a
+// public certificate, from a link of the form itms-services://?action=download-manifest.
+// That is the whole mechanism — no cable, no Xcode, no App Store — and the only hard part
+// for a local-first tool is the certificate. Tailscale Serve gives every machine on a
+// tailnet a real Let's Encrypt one at https://<machine>.<tailnet>.ts.net, and proxies a
+// path of it to a local port, so `--enable` maps /a of that name onto meshd's /a and
+// remembers the origin as `otaBase`. Anything else that terminates TLS (Caddy, a
+// cloudflared tunnel) works the same through `--url`.
+
+function tailscaleBin(): string | null {
+  const candidates = [Bun.which("tailscale"), "/usr/local/bin/tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"];
+  return candidates.find((p): p is string => !!p && existsSync(p)) ?? null;
+}
+
+function cmdAppsOta(flags: Record<string, string>, bools: Set<string>) {
+  const c = loadAppsConfig();
+  const port = Number(process.env.MESHD_PORT) || 8899;
+  if (bools.has("disable")) {
+    // Only undo a mapping THIS command made. A base set with --url (or by a self-check
+    // against a temp MESH_HOME) never touches the machine's real Tailscale config — the
+    // first version keyed on the ".ts.net" suffix and a self-check tore down the live
+    // mapping while a phone was mid-download.
+    const ts = tailscaleBin();
+    if (ts && c.otaVia === "tailscale") Bun.spawnSync([ts, "serve", "--bg", "--set-path", "/a", "off"], { stdout: "pipe", stderr: "pipe" });
+    delete c.otaBase;
+    delete c.otaVia;
+    saveAppsConfig(c);
+    appsOk("ota disabled", { otaBase: null });
+  }
+  if (flags.url) {
+    const base = flags.url.replace(/\/+$/, "");
+    if (!/^https:\/\/[^/\s]+$/.test(base)) appsErr(`--url must be an https origin with no path, e.g. https://mac.example.com — got ${flags.url}`);
+    c.otaBase = base;
+    delete c.otaVia;
+    saveAppsConfig(c);
+    appsOk("ota enabled", { otaBase: base, note: `make ${base}/a/ reach http://127.0.0.1:${port}/a/ yourself` });
+  }
+  if (bools.has("enable")) {
+    const ts = tailscaleBin();
+    if (!ts) appsErr("tailscale is not installed — install it (tailscale.com/download), or terminate HTTPS yourself and pass --url https://<name>");
+    const serve = Bun.spawnSync([ts, "serve", "--bg", "--set-path", "/a", `http://127.0.0.1:${port}/a`], { stdout: "pipe", stderr: "pipe" });
+    if (!serve.success) appsErr(`tailscale serve failed: ${serve.stderr.toString().trim().split("\n").pop()} (MagicDNS and HTTPS must be enabled for the tailnet in the admin console)`);
+    const status = Bun.spawnSync([ts, "status", "--json"], { stdout: "pipe", stderr: "pipe" });
+    let dns = "";
+    try { dns = String(JSON.parse(status.stdout.toString())?.Self?.DNSName ?? "").replace(/\.$/, ""); } catch { /* handled below */ }
+    if (!dns) appsErr("tailscale gave this machine no MagicDNS name — enable MagicDNS in the Tailscale admin console");
+    c.otaBase = `https://${dns}`;
+    c.otaVia = "tailscale";
+    saveAppsConfig(c);
+    say(`  ${c.otaBase}/a/ -> http://127.0.0.1:${port}/a/ (tailnet only)`);
+    appsOk("ota enabled", { otaBase: c.otaBase });
+  }
+  out(() => {
+    if (!c.otaBase) {
+      console.log("Wireless install: off");
+      console.log("Enable with: mesh apps ota --enable   (Tailscale)   or   mesh apps ota --url https://<your-https-name>");
+      return;
+    }
+    console.log(`Wireless install: on  (${c.otaBase}/a/ -> meshd /a/)`);
+    for (const a of readAllAppMeta()) {
+      if (a.kind === "native" && a.ipa && a.key) console.log(`  ${a.slug.padEnd(20)} ${c.otaBase}/a/${a.slug}-${a.key}/`);
+    }
+    console.log("Turn off with: mesh apps ota --disable");
+  }, { otaBase: c.otaBase ?? null });
+}
+
+/// The two Info.plist reads packaging needs; PlistBuddy handles XML and binary plists,
+/// and only exists on macOS — which is the only place a .app can have been built anyway.
+function plistValue(plist: string, key: string): string | null {
+  if (!existsSync("/usr/libexec/PlistBuddy")) return null;
+  const r = Bun.spawnSync(["/usr/libexec/PlistBuddy", "-c", `Print :${key}`, plist], { stdout: "pipe", stderr: "pipe" });
+  return r.success ? r.stdout.toString().trim() : null;
+}
+
+/// A device build (DTPlatformName iphoneos) zipped as Payload/<App>.app is a valid .ipa:
+/// the signature and the embedded provisioning profile travel inside the bundle, so iOS
+/// installs it wirelessly on every device that profile names. Simulator and Mac builds
+/// are skipped — there is nothing to install over the air.
+function packageIpa(slug: string, app: string): Pick<AppMeta, "ipa" | "icon" | "version"> | null {
+  const info = join(app, "Info.plist");
+  if (plistValue(info, "DTPlatformName") !== "iphoneos") return null;
+  const dir = join(APPS_DIR, slug);
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const stage = join(dir, ".ipa-stage");
+  rmSync(stage, { recursive: true, force: true });
+  mkdirSync(join(stage, "Payload"), { recursive: true });
+  try {
+    const cp = Bun.spawnSync(["cp", "-R", app, join(stage, "Payload", app.replace(/\/+$/, "").split("/").pop()!)], { stdout: "pipe", stderr: "pipe" });
+    if (!cp.success) appsErr(`could not copy the app bundle: ${cp.stderr.toString().trim()}`);
+    const ipa = join(dir, `${slug}.ipa`);
+    rmSync(ipa, { force: true });
+    const zip = Bun.spawnSync(["zip", "-qryX", ipa, "Payload"], { cwd: stage, stdout: "pipe", stderr: "pipe" });
+    if (!zip.success) appsErr(`zip failed: ${zip.stderr.toString().trim().split("\n").pop()}`);
+    const packaged: Pick<AppMeta, "ipa" | "icon" | "version"> = { ipa: `${slug}.ipa` };
+    const icon = join(app, "AppIcon60x60@2x.png");
+    if (existsSync(icon)) { copyFileSync(icon, join(dir, "icon.png")); packaged.icon = "icon.png"; }
+    packaged.version = plistValue(info, "CFBundleShortVersionString") ?? plistValue(info, "CFBundleVersion") ?? undefined;
+    return packaged;
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
+}
+
+function readAllAppMeta(): AppMeta[] {
+  const apps: AppMeta[] = [];
+  if (!existsSync(APPS_DIR)) return apps;
+  for (const e of readdirSync(APPS_DIR, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    const p = join(APPS_DIR, e.name, "meta.json");
+    if (existsSync(p)) { try { apps.push(JSON.parse(readFileSync(p, "utf8"))); } catch { /* skip corrupt row */ } }
+  }
+  return apps;
+}
+
+function cmdAppsConfig(flags: Record<string, string>) {
+  const c = loadAppsConfig();
+  if (flags.team || flags.prefix) {
+    if (flags.team) c.team = flags.team;
+    if (flags.prefix) c.prefix = flags.prefix;
+    saveAppsConfig(c);
+  }
+  out(() => {
+    console.log(`Team ID:       ${c.team || "(not set)"}`);
+    console.log(`Bundle prefix: ${c.prefix || "(not set)"}`);
+    if (!c.team || !c.prefix) console.log(`\nSet with: mesh apps config --team <ID> --prefix <com.example>`);
+  }, { team: c.team ?? null, prefix: c.prefix ?? null, config: APPS_CONFIG_FILE });
+}
+
+function cmdAppsPublish(pos: string[], flags: Record<string, string>) {
+  const dir = pos[0];
+  const slug = flags.slug, name = flags.name;
+  if (!dir) appsErr("usage: mesh apps publish <dir> --slug <slug> --name <name>");
+  if (!slug || !SLUG_RE.test(slug)) appsErr(`invalid --slug (want ${SLUG_RE.source}): ${slug ?? ""}`);
+  if (!name) appsErr("missing --name");
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) appsErr(`not a directory: ${dir}`);
+
+  const appDir = join(APPS_DIR, slug);
+  const site = join(appDir, "site");
+  rmSync(site, { recursive: true, force: true });
+  mkdirSync(appDir, { recursive: true, mode: 0o700 });
+  cpSync(dir, site, { recursive: true });
+
+  const key = randomHex(4);
+  const port = Number(process.env.MESHD_PORT) || 8899;
+  const ip = reachableAddress() || "127.0.0.1";
+  const url = `http://${ip}:${port}/a/${slug}-${key}/`;
+  writeAppMeta({ slug, name, kind: "pwa", key, url, updated: new Date().toISOString() });
+  say(`  published ${dir} -> ${site}`);
+  appsOk(`publish ${slug}`, { slug, name, url });
+}
+
+/// `--app <path.app>`: a build from this Mac — remembered for devicectl/simctl, and when
+/// it is a device build, also packaged as an .ipa for wireless install. `--ipa <file>`:
+/// an .ipa built elsewhere (a Mac in the mesh, CI, xtool on Linux), copied in — this is
+/// how a Linux machine serves a native app it could never have compiled.
+function cmdAppsAdd(pos: string[], flags: Record<string, string>) {
+  const slug = pos[0];
+  const name = flags.name, app = flags.app, ipa = flags.ipa, bundleId = flags["bundle-id"];
+  if (!slug || !SLUG_RE.test(slug)) appsErr(`invalid slug (want ${SLUG_RE.source}): ${slug ?? ""}`);
+  if (!name) appsErr("missing --name");
+  if (!app && !ipa) appsErr("missing --app <path.app> or --ipa <file.ipa>");
+  if (!bundleId) appsErr("missing --bundle-id");
+  if (app && !existsSync(app)) appsErr(`no such app bundle: ${app}`);
+  if (ipa && !existsSync(ipa)) appsErr(`no such file: ${ipa}`);
+
+  // Keep the key across re-adds so a link already on the phone keeps working.
+  const prior = existsSync(join(APPS_DIR, slug, "meta.json")) ? readAppMeta(slug) : null;
+  const key = prior?.key ?? randomHex(4);
+  const meta: AppMeta = { slug, name, kind: "native", app, bundleId, key, updated: new Date().toISOString() };
+  if (ipa) {
+    mkdirSync(join(APPS_DIR, slug), { recursive: true, mode: 0o700 });
+    copyFileSync(ipa, join(APPS_DIR, slug, `${slug}.ipa`));
+    meta.ipa = `${slug}.ipa`;
+    meta.version = flags["app-version"];
+    if (flags.icon && existsSync(flags.icon)) { copyFileSync(flags.icon, join(APPS_DIR, slug, "icon.png")); meta.icon = "icon.png"; }
+  } else if (app) {
+    Object.assign(meta, packageIpa(slug, app) ?? {});
+  }
+  writeAppMeta(meta);
+  const base = loadAppsConfig().otaBase;
+  const install = meta.ipa && base ? `${base}/a/${slug}-${key}/` : undefined;
+  if (meta.ipa && !base) say(`  packaged ${meta.ipa}; run \`mesh apps ota --enable\` once to install it wirelessly`);
+  if (install) say(`  install wirelessly: ${install}`);
+  appsOk(`add ${slug}`, { slug, name, app, bundleId, ipa: meta.ipa ?? null, install: install ?? null });
+}
+
+function cmdAppsList() {
+  const apps = readAllAppMeta();
+  out(() => {
+    if (!apps.length) { console.log(`No apps published or added yet. (${APPS_DIR})`); return; }
+    for (const a of apps) console.log(`  ${a.slug.padEnd(20)} ${a.kind.padEnd(7)} ${a.name}  ${a.kind === "pwa" ? a.url : a.app ?? a.ipa}${a.ipa ? "  (ipa)" : ""}`);
+  }, { apps });
+}
+
+function cmdAppsRemove(pos: string[]) {
+  const slug = pos[0];
+  if (!slug || !SLUG_RE.test(slug)) appsErr(`invalid slug: ${slug ?? ""}`);
+  const dir = join(APPS_DIR, slug);
+  if (!existsSync(dir)) appsErr(`no app named ${slug}`);
+  rmSync(dir, { recursive: true, force: true });
+  appsOk(`remove ${slug}`, { slug });
+}
+
+// The udid devicectl should target when the caller passed no --device: the first
+// physical iPhone/iPad actually reachable right now. Simulators show up in the very same
+// list — CoreSimulator registers them as devices too — so `reality` is what tells them
+// apart. `pairingState: "paired"` on its own is NOT enough: a device Xcode paired with
+// months ago and has not seen since still reports paired, with tunnelState "unavailable"
+// or "disconnected" — installing against that udid is a guaranteed, confusing devicectl
+// failure instead of a clear "nothing is connected". Measured live on this Mac: a real
+// iPhone last synced over Wi-Fi shows paired + tunnel "unavailable", right alongside a
+// booted simulator showing paired + tunnel "connected" (excluded here on reality alone).
+function firstPairedIphoneUdid(): string | null {
+  const tmp = join(MESH_HOME, `.devicectl-${process.pid}.json`);
+  try {
+    const r = Bun.spawnSync(["xcrun", "devicectl", "list", "devices", "--json-output", tmp], { stdout: "pipe", stderr: "pipe" });
+    if (!r.success || !existsSync(tmp)) return null;
+    const j = JSON.parse(readFileSync(tmp, "utf8"));
+    const devices: any[] = j?.result?.devices ?? [];
+    const connected = devices.find((d) =>
+      d?.hardwareProperties?.platform === "iOS" &&
+      d?.hardwareProperties?.reality === "physical" &&
+      d?.connectionProperties?.pairingState === "paired" &&
+      d?.connectionProperties?.tunnelState === "connected");
+    return connected?.hardwareProperties?.udid ?? null;
+  } catch { return null; }
+  finally { rmSync(tmp, { force: true }); }
+}
+
+function cmdAppsInstall(pos: string[], flags: Record<string, string>, bools: Set<string>) {
+  const slug = pos[0];
+  if (!slug || !SLUG_RE.test(slug)) appsErr(`invalid slug: ${slug ?? ""}`);
+  const meta = readAppMeta(slug);
+  if (meta.kind !== "native" || !meta.app) appsErr(`${slug} is a ${meta.kind} app — open its url in Safari instead of installing`);
+  if (!existsSync(meta.app)) appsErr(`app bundle no longer at ${meta.app}`);
+
+  if (bools.has("sim")) {
+    const r = Bun.spawnSync(["xcrun", "simctl", "install", "booted", meta.app], { stdout: "pipe", stderr: "pipe" });
+    if (!r.success) appsErr(`simctl install failed: ${r.stderr.toString().trim().split("\n").pop()}`);
+    appsOk(`install ${slug}`, { slug, target: "sim" });
+  }
+
+  const udid = flags.device || firstPairedIphoneUdid();
+  if (!udid) appsErr("no paired iPhone found — pair one in Xcode > Devices, pass --device <udid>, or use --sim");
+  const r = Bun.spawnSync(["xcrun", "devicectl", "device", "install", "app", "--device", udid, meta.app], { stdout: "pipe", stderr: "pipe" });
+  if (!r.success) appsErr(`devicectl install failed: ${r.stderr.toString().trim().split("\n").pop()}`);
+  appsOk(`install ${slug}`, { slug, target: "device", udid });
+}
+
 // ---------- help ----------
 
 // ---------- uninstall ----------
@@ -1361,7 +1843,7 @@ function cmdUninstall(bools: Set<string>, cfg: Config) {
   }, { ok: true, removed });
 }
 
-const HELP = `mesh ${VERSION} — control a MeshWatch mesh from the command line
+const HELP = `mesh ${VERSION} — control a LeSearch Mesh fleet from the command line
 
 USAGE
   mesh <command> [args] [-H host] [--json]
@@ -1393,6 +1875,7 @@ STATUS
   health                      is meshd up?
   doctor                      what actually works on a machine  [--fix shows the permission dialogs]
   events                      recent agent events           [--since ISO]
+  exposures                   secrets the daemon redacted, to rotate  [--rotated FP | --ignored FP | --reopen FP]
 
 MAINTENANCE
   upgrade                     install the latest meshd + tools and restart the daemon
@@ -1402,6 +1885,18 @@ MAINTENANCE
   uninstall                   remove mesh completely from THIS machine: daemon,
                               service, tokens, hosts, hooks and PATH lines. Prints
                               exactly what it will delete; --yes to do it.
+
+APPS & SKILLS
+  skills [status|install]     agent skills that build apps for a user  [--uninstall]
+  apps config                 set the Team ID / bundle prefix used for native apps
+                              [--team ID] [--prefix com.example]
+  apps publish <dir>          host a static local web app  --slug S --name N
+  apps add <slug>             register a built native app  --name N --app P.app --bundle-id B
+                              (--ipa F.ipa [--app-version V] [--icon I.png] for a build made elsewhere)
+  apps list                   apps published or added on this machine
+  apps install <slug>         put a native app on a device  [--sim] [--device UDID]
+  apps ota                    wireless install links  [--enable (Tailscale) | --url https://… | --disable]
+  apps remove <slug>          forget a published/added app
 
 GLOBAL
   -H, --host <name>           target host (default: config default, else localhost)
@@ -1516,6 +2011,47 @@ permission dialogs on that machine (approve them at the machine, then re-run).
 
   mesh doctor                 # this machine
   mesh doctor -H studio --fix # pop the permission dialogs on studio`,
+  skills: `mesh skills [status|install] [--uninstall]
+
+Agent skills that teach a CLI coding agent how to build an app for the user's phone —
+native (Xcode + devicectl) or a local PWA (mesh apps publish). The canonical copy ships
+in the payload; this installs it to ~/.agents/skills and symlinks ~/.claude/skills,
+~/.codex/skills and ~/.cursor/skills to it, so every CLI sees the same files. Idempotent,
+and it never overwrites a directory it did not create itself — it prints and skips those.
+
+  mesh skills status           # what is installed, and how many clients are linked
+  mesh skills install          # install/refresh
+  mesh skills install --uninstall   # remove the symlinks and the managed copy`,
+  apps: `mesh apps <config|publish|add|list|install|remove> ...
+
+Two build routes, both under ~/.mesh/apps/<slug>/. Slugs are ^[a-z0-9][a-z0-9-]{1,40}$.
+
+  mesh apps config [--team ID] [--prefix com.example]
+      Set (or just print) the Development Team ID and bundle-id prefix skills use — never
+      hardcode these. Stored in ~/.mesh/apps.json (mode 600).
+
+  mesh apps publish <dir> --slug S --name N
+      Copy a static site (a PWA) to ~/.mesh/apps/S/site/ and print the LAN URL the daemon
+      will serve it at: http://<mac-lan-ip>:8899/a/S-<key>/. The random key stands in for
+      auth on that one route, since a browser page load cannot send a bearer token.
+
+  mesh apps add <slug> --name N --app <path.app> --bundle-id B
+      Register an already-built native .app (kind=native). Stores the path; copies nothing.
+
+  mesh apps list
+      One line per app: slug, kind, name, and its url (pwa) or .app path (native).
+
+  mesh apps install <slug> [--sim] [--device <udid>]
+      Native apps only. Installs to the first paired, connected iPhone via
+      'xcrun devicectl device install app', or to a booted simulator with --sim
+      ('xcrun simctl install booted'), or to --device <udid> if given.
+
+  mesh apps remove <slug>
+      Delete everything mesh stored for that slug.
+
+Exit code and the LAST line of stdout are machine-readable on every command except list:
+'ok <what>' on success, 'error <why>' on failure — the daemon shells out to
+'mesh apps install <slug>' and reads exactly that.`,
 };
 
 function help(topic?: string) {
@@ -1552,6 +2088,8 @@ async function main() {
       return die("usage: mesh token rotate [-H host] [--yes]   (mesh help token)");
     }
     case "hooks": return cmdHooks(pos, flags, cfg);
+    case "skills": return cmdSkills(pos, bools);
+    case "apps": return cmdApps(pos, flags, bools);
     case "hosts": return cmdHosts(cfg);
     case "host": {
       const sub = pos.shift();
@@ -1572,6 +2110,7 @@ async function main() {
     case "upgrade": case "update": return cmdUpgrade(flags, bools, cfg);
     case "doctor": return cmdDoctor(flags, cfg, bools);
     case "events": return cmdEvents(flags, cfg);
+    case "exposures": return cmdExposures(flags, cfg);
     case "uninstall": return cmdUninstall(bools, cfg);
     default: die(`unknown command: ${cmd}  (try: mesh help)`);
   }

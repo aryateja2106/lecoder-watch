@@ -260,6 +260,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     <div class="spacer"></div>
     <a class="link hide-sm" href="#how">How it works</a>
     <a class="link hide-sm" href="#wrist">On your wrist</a>
+    <a class="link hide-sm" href="#agents">New in 0.6</a>
     <a class="link hide-sm" href="#faq">FAQ</a>
     <a class="link" href="https://github.com/LeSearch-AI/mesh">GitHub</a>
     <a class="btn btn-primary" href="https://testflight.apple.com/join/pVYPTxc7">Join the beta</a>
@@ -527,6 +528,44 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
   </div>
 </section>
 
+<section id="agents">
+  <div class="wrap">
+    <span class="kicker">New in 0.6</span>
+    <h2>Talk to the agent. Ship what it builds. Keep your keys.</h2>
+    <p class="sub">Three things that were missing from a control plane for coding agents.</p>
+
+    <div class="beats">
+      <div class="beat">
+        <span class="n">01</span>
+        <h3>Chat, not a terminal dump</h3>
+        <p>Every session now has a Chat view beside its Terminal. You see the conversation
+           the way the agent wrote it — your prompt, its answer, its thinking, each tool call
+           with its result — read from the transcript Claude Code, Codex or cursor-agent
+           keeps on your Mac. Nothing about how the agent runs changes. Type back from the
+           phone; approve or refuse from the watch.</p>
+      </div>
+      <div class="beat">
+        <span class="n">02</span>
+        <h3>Apps your agent builds, on your phone</h3>
+        <p>Ask for an app. With an Apple developer account the agent builds a real iOS app
+           on your Mac and installs it onto your paired iPhone from a button on the phone.
+           Without one, it builds a home-screen web app your Mac serves on your own network,
+           with its data in the browser on your device. The skills that teach every agent
+           how are installed for you by <code>mesh skills install</code>.</p>
+      </div>
+      <div class="beat">
+        <span class="n">03</span>
+        <h3>Secrets never leave the Mac</h3>
+        <p>Agents print keys — <code>cat .env</code>, a failing <code>curl</code> with its
+           header. Every line is redacted before it reaches your phone, your watch or Apple's
+           push servers: <code>ghp_ABCD…</code> becomes <code>ghp_••••••[902dd5]</code>. Each
+           distinct secret is counted, with a fingerprint and never the value, so you know
+           exactly what to rotate. The live terminal now requires your token too.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="faq">
   <div class="wrap">
     <span class="kicker">Questions</span>
@@ -557,9 +596,22 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 
     <details>
       <summary>Which agents does it watch?</summary>
-      <p>Claude Code is wired up by <code>mesh hooks install</code>. Anything else can post
-         to the daemon's <code>/events</code> endpoint with one curl call, which is how the
-         hook itself works — so Codex, a CI job, or a shell script can all raise your wrist.</p>
+      <p>Claude Code is wired up by <code>mesh hooks install</code>; the Chat view reads
+         Claude Code, Codex and cursor-agent transcripts, and any agent CLI on your Mac —
+         Antigravity, Hermes, and the rest — can be launched into a session and watched as a
+         terminal. Anything else can post to the daemon's <code>/events</code> endpoint with
+         one curl call, which is how the hook itself works — so a CI job or a shell script
+         can raise your wrist too.</p>
+    </details>
+
+    <details>
+      <summary>Can the web apps work offline?</summary>
+      <p>Only over HTTPS. Your Mac serves them over your private network in plain HTTP, so
+         they work whenever your phone can reach the Mac and keep their data in your
+         browser; a service worker — the thing that makes a web app work with the Mac
+         asleep — needs HTTPS, which means hosting the folder somewhere you own (GitHub
+         Pages, Cloudflare Pages, Vercel). The skill prints that one command when you ask
+         for it. Native apps have no such limit.</p>
     </details>
 
     <details>

@@ -37,3 +37,14 @@ install/dist/
 # gajae-code: per-machine tmux session state, never shared
 .gjc/
 supabase/.temp/
+
+# Harness droppings, never product
+.cursor/hooks/state/
+.habit-hooks/
+.jscpd.json
+
+# Machine-local skills library synced by the harness. The repo's own skills are
+# the factory adapters, tracked explicitly before this rule existed; everything
+# else under .agents/skills is per-machine and must not ride into PRs.
+.agents/skills/*
+!.agents/skills/factory-*

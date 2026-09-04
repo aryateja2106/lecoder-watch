@@ -1,6 +1,6 @@
 ---
 name: overnight-slice
-description: Use for unattended or overnight work on MeshWatch — implement exactly one focused slice at a time, gate on a full build, commit only when green, and never leave uncommitted work behind.
+description: Use for unattended or overnight work on LeSearch Mesh — implement exactly one focused slice at a time, gate on a full build, commit only when green, and never leave uncommitted work behind.
 ---
 
 # overnight-slice — one green slice at a time

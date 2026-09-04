@@ -25,17 +25,12 @@ struct MeshRelayApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        // .autocorrectionDisabled() is on all 14 fields that reach a shell, but it does
-        // not touch smart punctuation: iOS still rewrote `--flag` into `–flag` and "x"
-        // into curly quotes on the way to bash, so the command failed for a reason
-        // nothing on screen explained and the daemon looked broken. Set app-wide because
-        // every one of those fields would otherwise have to remember to opt out.
-        UITextField.appearance().smartQuotesType = .no
-        UITextField.appearance().smartDashesType = .no
-        UITextField.appearance().smartInsertDeleteType = .no
-        UITextView.appearance().smartQuotesType = .no
-        UITextView.appearance().smartDashesType = .no
-        UITextView.appearance().smartInsertDeleteType = .no
+        // Smart punctuation is handled per field by `Binding.shellSafe` (see
+        // ShellSafeText.swift). It used to be six UITextField/UITextView.appearance()
+        // calls right here, and they crashed the app: UIKit replays a stored appearance
+        // invocation onto every field that enters a window, and replaying any
+        // UITextInputTraits setter onto a UITextField throws, so every sheet with a
+        // TextField in it died on presentation. Do not reintroduce the proxy.
         let store = MeshStore()
         _store = StateObject(wrappedValue: store)
         PushDelegate.onToken = { token in
@@ -48,6 +43,14 @@ struct MeshRelayApp: App {
         }
         NotificationManager.shared.onAgentAction = { host, session, text, key, pane in
             Task { await store.respondToAgent(host: host, session: session, text: text, key: key, pane: pane) }
+        }
+        // A plain tap on the banner lands on the session it is about, exactly like the
+        // Live Activity's widgetURL. Set on the main actor: the tap can arrive on a
+        // cold start, and deepLinkSession drives navigation.
+        NotificationManager.shared.onOpenSession = { host, session in
+            Task { @MainActor in
+                store.deepLinkSession = MeshStore.SessionTarget(host: host, session: session)
+            }
         }
         // Live Activity push tokens go to the machines themselves — meshd pushes the
         // card directly, same as it pushes alerts, so there is no cloud in the path.
@@ -104,6 +107,12 @@ struct MeshRelayApp: App {
                     // suspend often fails once while the radio wakes, which used to
                     // read as "offline". Poll immediately instead.
                     Task { await store.refresh() }
+                    // A card meshd push-STARTED while we were parked is not ours yet:
+                    // adoption only ran at launch, so its update token was never
+                    // uploaded and the daemon could start cards it could never change
+                    // (/push showed laStartTokens:2, laUpdateTokens:0 — that shape).
+                    // Re-adopt on every return to the foreground; attach is idempotent.
+                    LiveActivityController.shared.readoptIfNeeded()
                 default:
                     break
                 }

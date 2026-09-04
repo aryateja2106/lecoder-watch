@@ -1,4 +1,4 @@
-# Impeccable setup plan for MeshWatch / LeScout
+# Impeccable setup plan for LeSearch Mesh / LeScout
 
 Arya asked to start using Impeccable as a working design-quality baseline for this project. Do not install during handoff-only mode; this file records the exact next steps.
 

@@ -323,10 +323,15 @@ final class RemoteControl: ObservableObject {
             screen = frame.data
             screenRect = frame.rect
             screenError = nil
-        } catch MeshClient.MeshError.http(let code) where code == 401 || code == 403 {
-            screenError = "token rejected — re-pair this machine on your iPhone"
-        } catch MeshClient.MeshError.http(let code) {
-            screenError = "the Mac answered \(code) — check Screen Recording in System Settings"
+        // Switched off `statusCode` because meshd puts a reason in the body of its
+        // refusals, so 401 now arrives as .refused and a `case .http` alone stopped
+        // matching it — which would have replaced "re-pair this machine" with the
+        // generic no-answer line at the one moment it is wrong.
+        } catch let error as MeshClient.MeshError where error.statusCode != nil {
+            let code = error.statusCode!
+            screenError = code == 401 || code == 403
+                ? "token rejected — re-pair this machine on your iPhone"
+                : "the Mac answered \(code) — check Screen Recording in System Settings"
         } catch {
             screenError = "no answer from \(machine.host)"
         }
@@ -591,6 +596,14 @@ struct RemoteView: View {
             .overlay(alignment: .top) {
                 inspectZoomChips(containerAspect: containerAspect, imageAspect: displayAspect)
             }
+            .overlay(alignment: .leading) {
+                inspectPanButton(-1, "chevron.left",
+                                 containerAspect: containerAspect, imageAspect: displayAspect)
+            }
+            .overlay(alignment: .trailing) {
+                inspectPanButton(1, "chevron.right",
+                                 containerAspect: containerAspect, imageAspect: displayAspect)
+            }
             .onTapGesture { point in
                 let third = geo.size.width / 3
                 if point.x < third {
@@ -636,6 +649,25 @@ struct RemoteView: View {
             remote.screenRect = nil
             Task { await remote.refreshScreen() }
         }
+    }
+
+    /// Visible ◀ ▶ at the edges. The tap-thirds still pan — muscle memory keeps — but
+    /// an invisible control the hint names for three seconds is not a control most
+    /// people ever find, and the crown only covers up and down.
+    private func inspectPanButton(_ direction: Double, _ symbol: String,
+                                  containerAspect: Double, imageAspect: Double) -> some View {
+        Button {
+            pan(direction, containerAspect: containerAspect, imageAspect: imageAspect)
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(.black.opacity(0.45), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 2)
+        .accessibilityLabel(direction < 0 ? "Pan left" : "Pan right")
     }
 
     /// − and + without the crown (it pans) and without a pinch (a 44mm screen has no

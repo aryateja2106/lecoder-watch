@@ -46,6 +46,34 @@ struct ContentView: View {
 private struct MonitorTab: View {
     @EnvironmentObject var store: MeshStore
     @ObservedObject private var notifications = NotificationManager.shared
+    /// IDs the owner swiped away, client-side only — the daemon keeps its own event
+    /// file untouched. Ordered by dismissal so the cap below drops the oldest first,
+    /// same idiom as `chatMessages`' 500-message cap in TerminalView.swift.
+    @State private var dismissedEventIDs: [String] =
+        UserDefaults.standard.stringArray(forKey: "mesh.dismissedEventIDs.v1") ?? []
+    @State private var confirmingClearAll = false
+
+    private var visibleEvents: [AgentEvent] {
+        store.events.reversed().filter { !dismissedEventIDs.contains($0.id) }
+    }
+
+    private func dismiss(_ event: AgentEvent) {
+        guard !dismissedEventIDs.contains(event.id) else { return }
+        dismissedEventIDs.append(event.id)
+        saveDismissedEventIDs()
+    }
+
+    private func clearAllVisible() {
+        for event in visibleEvents where !dismissedEventIDs.contains(event.id) {
+            dismissedEventIDs.append(event.id)
+        }
+        saveDismissedEventIDs()
+    }
+
+    private func saveDismissedEventIDs() {
+        if dismissedEventIDs.count > 500 { dismissedEventIDs.removeFirst(dismissedEventIDs.count - 500) }
+        UserDefaults.standard.set(dismissedEventIDs, forKey: "mesh.dismissedEventIDs.v1")
+    }
 
     var body: some View {
         NavigationStack {
@@ -74,12 +102,21 @@ private struct MonitorTab: View {
                     }
                 }
                 SessionLimitsBanner()
+                // Usage first — session limits for Claude and Codex at a glance, no
+                // scrolling past a long Events list to find them.
+                Section("Usage") {
+                    if (store.snapshot?.usage?.providers ?? []).isEmpty {
+                        Text("No usage data")
+                            .foregroundStyle(.secondary)
+                    }
+                    UsageRows()
+                }
                 Section("Events") {
-                    if store.events.isEmpty {
+                    if visibleEvents.isEmpty {
                         Text("No agent events")
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(store.events.reversed()) { event in
+                    ForEach(visibleEvents) { event in
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
                                 Text(event.title).font(.headline)
@@ -89,21 +126,26 @@ private struct MonitorTab: View {
                                     .foregroundStyle(.secondary)
                             }
                             if let body = event.body, !body.isEmpty {
-                                Text(body).font(.subheadline)
+                                // Hooks post transcript PATHS as event bodies, and a
+                                // five-line /Users/… wall tells a phone reader nothing
+                                // the subtitle line doesn't. A body that is one bare
+                                // absolute path collapses to its filename; prose
+                                // bodies still render in full.
+                                Text(compactEventBody(body))
+                                    .font(.subheadline)
+                                    .lineLimit(4)
                             }
                             Text([event.host, event.source, event.session].compactMap { $0 }.joined(separator: " · "))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 3)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) { dismiss(event) } label: {
+                                Label("Dismiss", systemImage: "trash")
+                            }
+                        }
                     }
-                }
-                Section("Usage") {
-                    if (store.snapshot?.usage?.providers ?? []).isEmpty {
-                        Text("No usage data")
-                            .foregroundStyle(.secondary)
-                    }
-                    UsageRows()
                 }
             }
             .navigationTitle("Monitor")
@@ -111,6 +153,15 @@ private struct MonitorTab: View {
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
+                Button(role: .destructive) { confirmingClearAll = true } label: {
+                    Image(systemName: "trash")
+                }
+                .disabled(visibleEvents.isEmpty)
+            }
+            .confirmationDialog("Clear all events?", isPresented: $confirmingClearAll, titleVisibility: .visible) {
+                Button("Clear all", role: .destructive) { clearAllVisible() }
+            } message: {
+                Text("This only hides them on this phone. The daemon keeps its own copy.")
             }
         }
     }
@@ -128,7 +179,7 @@ private struct LocalNetworkBlockedBanner: View {
                 .foregroundStyle(.orange)
             Text("Your machines are on addresses iOS treats as a local network — a "
                  + "192.168.x home LAN, or the 100.x range a VPN like Tailscale uses. "
-                 + "LeSearch Mesh needs Local Network permission, and every request is "
+                 + "MeshWatch needs Local Network permission, and every request is "
                  + "being dropped before it leaves the phone until it has one.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -247,6 +298,13 @@ private struct MachinesTab: View {
                                     .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
                             }
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                store.removeMachine(host: m.host)
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
@@ -259,10 +317,17 @@ private struct MachinesTab: View {
 /// section below it, both saying "green", and neither being where you wanted to go.
 private struct MachineDetailView: View {
     @EnvironmentObject var store: MeshStore
+    @Environment(\.dismiss) private var dismiss
     let host: String
+    @State private var repairing = false
+    @State private var confirmingRemoval = false
 
     private var snapshot: MachineSnapshot? {
         store.snapshot?.machines.first { $0.host == host }
+    }
+
+    private var config: Machine? {
+        store.machines.first { $0.host == host }
     }
 
     /// The newest event this phone holds for a session on this machine, so a row can
@@ -286,7 +351,7 @@ private struct MachineDetailView: View {
                     ServiceStatusRow(label: "auth", ok: m.authError == nil, detail: m.authError ?? "active")
                     if m.authError != nil {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("This machine rotated its token. Run mesh pair on it and pair again — that replaces the saved token in place.")
+                            Text("This machine rotated its token. Run mesh pair on it, then tap Pair again below and enter the code it prints — that replaces the saved token in place.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             CopyableCommand(text: "mesh pair")
@@ -358,7 +423,7 @@ private struct MachineDetailView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(a.displayName)
                             SessionStateBadge(state: a.displayState(latestEvent: latestEvent(for: a.name)))
-                            Text(a.isCmux ? "cmux" : "\(a.windows) pane\(a.windows == 1 ? "" : "s")")
+                            Text(a.kindLabel)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -408,10 +473,43 @@ private struct MachineDetailView: View {
             } else {
                 Text("No reading for this machine yet.").foregroundStyle(.secondary)
             }
+            // Always present, whatever state the machine is in. The screen above
+            // diagnoses "token rejected" and used to tell the user to "pair again"
+            // while the only pairing UI lived behind a + button two screens away —
+            // the diagnosis and the cure have to be in the same place.
+            Section {
+                Button {
+                    repairing = true
+                } label: {
+                    Label("Pair again", systemImage: "qrcode.viewfinder")
+                }
+                Button(role: .destructive) {
+                    confirmingRemoval = true
+                } label: {
+                    Label("Remove machine", systemImage: "trash")
+                }
+            } footer: {
+                Text("Pairing the same machine replaces its saved token in place. Removing only forgets it on this phone — and it stays forgotten until you pair it again.")
+            }
         }
         .navigationTitle(machineShortName(host))
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await store.refresh() }
+        .sheet(isPresented: $repairing) {
+            PairMachineView(prefill: config.map {
+                MeshStore.PairTarget(address: $0.ip, port: $0.port, code: "")
+            })
+            .environmentObject(store)
+        }
+        .confirmationDialog("Remove \(machineShortName(host))?",
+                            isPresented: $confirmingRemoval, titleVisibility: .visible) {
+            Button("Remove machine", role: .destructive) {
+                store.removeMachine(host: host)
+                dismiss()
+            }
+        } message: {
+            Text("The machine itself is untouched. Pair it again any time to bring it back.")
+        }
     }
 }
 
@@ -513,6 +611,9 @@ private struct MachinePowerSection: View {
                     }
                     .disabled(running != nil)
                 }
+                Text("The daemon starts at login. After a restart nothing answers from the phone until someone logs in at the Mac (or auto-login is on).")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             } else {
                 Text("Restart and Shut Down need a newer agent on this machine. Re-run the install command on it.")
                     .font(.caption2)
@@ -712,7 +813,9 @@ private struct MachineSetupSection: View {
             error = nil
         } catch {
             // An older daemon has no /doctor route; say so instead of showing a raw 404.
-            if case MeshClient.MeshError.http(404) = error {
+            // Matched on the status, not the case: meshd answers an unknown route with
+            // `{"error":"not found"}`, which now arrives as .refused.
+            if (error as? MeshClient.MeshError)?.statusCode == 404 {
                 self.error = "This machine's daemon predates setup checks. Reinstall to update it."
             } else {
                 self.error = "Couldn't reach \(machineShortName(machine.host))."
@@ -857,7 +960,7 @@ private func machineShortName(_ host: String) -> String {
 private func machineSummary(_ machine: MachineSnapshot) -> String {
     guard machine.reachable else { return machine.error ?? "unreachable" }
     let version = machine.meshdVersion.map { "meshd \($0)" } ?? "meshd active"
-    if machine.authError != nil { return "\(version) · token needed" }
+    if machine.authError != nil { return "\(version) · token rejected — pair again" }
     let bridge = machine.bridgeReachable == true ? "bridge" : "no bridge"
     // An out-of-date daemon earns the last slot ahead of "hooks". The row used to read
     // "meshd 0.4.1 · no bridge · hooks" on a daemon missing seven capabilities, which
@@ -1030,6 +1133,7 @@ private struct SettingsTab: View {
     @ObservedObject private var notifications = NotificationManager.shared
     @State private var newCommand = ""
     @State private var pairing = false
+    @FocusState private var newCommandFocused: Bool
     /// Read from ActivityKit rather than from our own controller so the row states the
     /// system's answer, not our cache of it, and follows the same stream the controller
     /// does — a permission flipped in Settings updates this without a relaunch.
@@ -1109,16 +1213,16 @@ private struct SettingsTab: View {
                 Section("Machines") {
                     ForEach($store.machines) { $m in
                         VStack(alignment: .leading, spacing: 10) {
-                            TextField("host", text: $m.host)
+                            TextField("host", text: $m.host.shellSafe)
                                 .font(.headline)
                                 .autocorrectionDisabled()
                                 .textInputAutocapitalization(.never)
-                            LabeledContent("IP") { TextField("ip", text: $m.ip).multilineTextAlignment(.trailing) }
+                            LabeledContent("IP") { TextField("ip", text: $m.ip.shellSafe).multilineTextAlignment(.trailing) }
                             LabeledContent("Port") { TextField("port", value: $m.port, format: .number).multilineTextAlignment(.trailing) }
                             LabeledContent("Bridge") {
                                 TextField("http://ip:7820", text: Binding(
                                     get: { m.bridgeURL ?? "" },
-                                    set: { m.bridgeURL = $0.isEmpty ? nil : $0 }
+                                    set: { let v = $0.shellSafePunctuation; m.bridgeURL = v.isEmpty ? nil : v }
                                 ))
                                 .multilineTextAlignment(.trailing)
                                 .autocorrectionDisabled()
@@ -1127,7 +1231,7 @@ private struct SettingsTab: View {
                             LabeledContent("VNC") {
                                 TextField("http://ip:6080/vnc.html", text: Binding(
                                     get: { m.vncURL ?? "" },
-                                    set: { m.vncURL = $0.isEmpty ? nil : $0 }
+                                    set: { let v = $0.shellSafePunctuation; m.vncURL = v.isEmpty ? nil : v }
                                 ))
                                 .multilineTextAlignment(.trailing)
                                 .autocorrectionDisabled()
@@ -1171,15 +1275,16 @@ private struct SettingsTab: View {
 
                 Section("Quick send") {
                     ForEach($store.quickCommands, id: \.self) { $cmd in
-                        TextField("command", text: $cmd)
+                        TextField("command", text: $cmd.shellSafe)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                     }
                     .onDelete { store.quickCommands.remove(atOffsets: $0); store.save() }
                     HStack {
-                        TextField("new command", text: $newCommand)
+                        TextField("new command", text: $newCommand.shellSafe)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .focused($newCommandFocused)
                         Button {
                             let trimmed = newCommand.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty else { return }
@@ -1217,6 +1322,16 @@ private struct SettingsTab: View {
                     }
                 }
 
+                if !store.machines.isEmpty {
+                    Section {
+                        NavigationLink {
+                            ExposedSecretsScreen()
+                        } label: {
+                            Label("Exposed secrets", systemImage: "eye.trianglebadge.exclamationmark")
+                        }
+                    }
+                }
+
                 Section {
                     Toggle(isOn: $lock.enabled) {
                         Label("Require \(AppLock.methodName)", systemImage: "lock.fill")
@@ -1234,6 +1349,18 @@ private struct SettingsTab: View {
             .navigationTitle("Settings")
             .toolbar { Button("Save") { store.save(); Task { await store.refresh() } } }
             .sheet(isPresented: $pairing) { PairMachineView().environmentObject(store) }
+            // TabView keeps every tab mounted, so switching away from Settings never
+            // tore this view down — with no @FocusState, nothing told a focused
+            // TextField to resign, and the keyboard stayed parked over whatever tab
+            // came next until something incidental (a screenshot, a force-quit)
+            // knocked it loose. This clears the one field wired to @FocusState and
+            // asks the responder chain to resign directly, which covers every other
+            // TextField/SecureField on this screen (machine fields, quick commands,
+            // pinned limits) without wiring each one individually.
+            .onDisappear {
+                newCommandFocused = false
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
     }
 }
@@ -1296,7 +1423,7 @@ private struct PinnedLimitEditor: View {
                     Text(m.host).tag(m.host)
                 }
             }
-            TextField("rmux session or cmux:surface:N", text: $sessionName)
+            TextField("rmux session or cmux:surface:N", text: $sessionName.shellSafe)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
             HStack {
@@ -1575,4 +1702,15 @@ private func resetText(_ iso: String?) -> String? {
 private func eventTime(_ iso: String) -> String {
     guard let date = parseISO(iso) else { return "" }
     return date.formatted(date: .omitted, time: .shortened)
+}
+
+/// An event body that is exactly one absolute path (hooks post transcript paths there)
+/// collapses to its filename — the subtitle already names host, source and session, and
+/// five wrapped lines of /Users/… bury the events around it. Anything with spaces or
+/// newlines is prose and passes through untouched.
+private func compactEventBody(_ body: String) -> String {
+    let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("/"), !trimmed.contains(" "), !trimmed.contains("\n"),
+          let last = trimmed.split(separator: "/").last else { return body }
+    return String(last)
 }

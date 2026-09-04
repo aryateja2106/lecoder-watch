@@ -20,7 +20,7 @@ type Check = { ok: boolean; detail: string; fix?: string };
 /// `tokenWeak` is the REASON a token is weak, or undefined when it is fine. The token
 /// itself deliberately never reaches this module: the caller judges it and passes a
 /// verdict, so a doctor report can never leak the thing it is reporting on.
-export type DoctorInfo = { tokenSet: boolean; tokenWeak?: string; bind: string; port: number; version: string; mux: string };
+export type DoctorInfo = { tokenSet: boolean; tokenWeak?: string; bind: string; port: number; version: string; mux: string; exposuresOpen?: number };
 
 /// Placeholder tokens that have actually been found in a live fleet, plus the obvious
 /// neighbours. `testtoken` was a hardcoded fallback that got copied into a doc and from
@@ -43,7 +43,19 @@ function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 }
 
+/// The coding-agent CLIs a session can be started with, in the order the phone lists them.
+export const AGENT_CLIS = ["claude", "codex", "cursor-agent", "agy", "hermes", "openclaw"] as const;
+export function installedAgents(): Array<{ name: string; path: string }> {
+  const out: Array<{ name: string; path: string }> = [];
+  for (const name of AGENT_CLIS) {
+    const path = Bun.which(name);
+    if (path) out.push({ name, path });
+  }
+  return out;
+}
+
 export async function doctorReport(prompt: boolean, info: DoctorInfo) {
+  const agents = installedAgents();
   const input: any = await inputStatus(prompt).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
   const push = await pushStatus().catch(() => ({ configured: false, devices: 0 }));
   const muxPath = Bun.which(info.mux);
@@ -89,10 +101,20 @@ export async function doctorReport(prompt: boolean, info: DoctorInfo) {
       ok: true,
       detail: push.configured ? `APNs key ${(push as any).keyId ?? ""} · ${push.devices} device(s) registered` : "APNs not configured (optional — alerts arrive only while the app polls)",
     },
+    // Informational, like push: the daemon redacted these before they left the Mac, but
+    // a secret that was printed at all should be rotated at its provider.
+    exposures: (info.exposuresOpen ?? 0) > 0
+      ? { ok: true, detail: `${info.exposuresOpen} secret(s) seen in agent/terminal output and redacted — rotate them`, fix: "mesh exposures   (then mark each one rotated)" }
+      : { ok: true, detail: "no secrets seen in agent/terminal output" },
+    // Informational: which coding-agent CLIs this machine can launch into a session. The
+    // phone shows a launcher only for what is actually here.
+    agents: agents.length
+      ? { ok: true, detail: `agent CLIs on PATH: ${agents.map((a) => a.name).join(", ")}` }
+      : { ok: true, detail: "no coding-agent CLI (claude, codex, cursor-agent, agy, hermes, openclaw) found on PATH" },
   };
 
   const ok = Object.values(checks).every((c) => c.ok);
-  return { ok, host: os.hostname(), platform: process.platform, version: info.version, bind: `${info.bind}:${info.port}`, prompted: prompt, checks };
+  return { ok, host: os.hostname(), platform: process.platform, version: info.version, bind: `${info.bind}:${info.port}`, prompted: prompt, checks, agents };
 }
 
 export async function handleDoctor(req: Request, url: URL, info: DoctorInfo): Promise<Response | null> {

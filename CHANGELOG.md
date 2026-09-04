@@ -9,6 +9,173 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Security
+- **The terminal bridge now asks who you are.** The live terminal on port 7820 could type
+  into any session on the machine and answered anyone who could reach the port — no
+  token, no origin check, on every network interface. It now requires the same token as
+  the rest of the daemon (the phone app sends it as a cookie, since a browser cannot put a
+  header on a WebSocket), trusts only the Mac itself without one, and refuses everything
+  when no token is configured. A phone app older than 0.6 has to update before its
+  Terminal mode opens again.
+- **Secrets an agent prints never leave your Mac.** `cat .env`, a failing `curl` with its
+  bearer header, a connection string in a stack trace — until now those bytes went to the
+  Lock Screen through Apple's push servers, into the events file and to the watch. Every
+  line is now redacted on the way out: `ghp_ABCD…` becomes `ghp_••••••[902dd5]`, and the
+  six characters are a fingerprint, not part of the key. The daemon's own token and every
+  paired machine's token are caught exactly. Rules cover GitHub, AWS, Anthropic, OpenAI,
+  Slack, Google, Stripe, Hugging Face, npm, JWTs, `Authorization: Bearer`, URLs with
+  passwords, `KEY=value` assignments and private-key blocks.
+- **Exposed secrets are counted so you can rotate them.** Each distinct secret the daemon
+  had to redact is one row in `mesh exposures` / the phone's Exposed secrets screen: what
+  kind, its prefix, its fingerprint, how many times and where (event, terminal output,
+  live terminal), and whether you have rotated it. Never the value. `mesh doctor` mentions
+  the open count.
+
+### Added
+- **Hand a task to a different agent mid-session.** From a session's menu, pick codex,
+  claude, cursor-agent, OMP, Antigravity or Hermes: the conversation so far is written to
+  `HANDOFF.md` in the working directory, the current agent is interrupted, and the chosen
+  one starts in the same pane with the instruction to continue from that file. OMP imports
+  the Claude Code transcript directly.
+- **Resume a conversation from the phone.** Type a working directory in the new-session
+  sheet and the conversations Claude Code, Codex and cursor-agent kept for it appear with a
+  title and a time; tapping one reopens it with that CLI's own resume command.
+- **Voice that survives a pause.** Speaking, stopping to think, and speaking again now
+  produces one transcript: finished segments are kept and the recognizer restarts under
+  the same microphone. Every recording is also saved as audio on the phone (last five),
+  with "Transcribe again" when recognition returned nothing. One sheet: a live, editable
+  transcript, Stop/Resume, Send.
+- **Monitor leads with usage.** Session limits for Claude and Codex sit at the top; events
+  can be dismissed one by one or cleared at once (on this phone only).
+- **Your quick commands in Chat.** The pills above the composer are the quick commands
+  you keep in Settings, plus Restart Claude.
+- **Ask for an app and get interviewed first.** A new `app-brief` skill runs before any
+  scaffolding: it reads your saved preferences and the apps you already have, asks at most
+  six short questions in one message (answer by voice if you like), writes a brief, picks
+  native or web on purpose — native when your Team ID is set and your iPhone is paired —
+  and builds exactly one app, once, with no background workers and no test loops. Both
+  builders gained a definition of done: a real icon (a bundled script renders one from an
+  SF Symbol and a color), a spoken name, empty states, and every must-have either built or
+  listed as skipped. *(Found by building a habit tracker from the phone: the agent built a
+  web app that was not asked for, a second native build in parallel, and no icon.)*
+- **Chat with your coding agent, not its terminal.** A session's peek screen has a
+  Chat view beside Terminal. It shows the real conversation — your prompt, the agent's
+  text, its thinking, each tool call with its result and status — read from the transcript
+  the agent itself writes (Claude Code, Codex, cursor-agent), so nothing about how the
+  agent runs changes and no output is guessed at with patterns. Sessions without a
+  transcript show their screen as one block.
+- **The apps your agent builds have a home.** A web app it publishes with
+  `mesh apps publish` is served from your Mac at an unguessable address you can add to
+  your Home Screen; a native app it registers with `mesh apps add` installs onto your
+  paired iPhone (or a simulator) from a button on the phone. `GET /built-apps` lists them.
+- **Native apps install without a cable.** `mesh apps add --app` on a device build now
+  also packages it as an `.ipa`, and `mesh apps ota --enable` publishes the machine's
+  install links on its Tailscale name (HTTPS with a real certificate, tailnet only). The
+  Install button on the phone then hands iOS its own `itms-services://` link — no cable,
+  no Mac in front of you, from the office or the road. Each app also has an install page
+  at `/a/<slug>-<key>/` for Safari. A Linux machine can serve an `.ipa` a Mac built
+  (`mesh apps add --ipa`), so the phone installs from whichever machine holds it.
+  `mesh apps ota --url https://…` for your own HTTPS front instead of Tailscale.
+
+### Fixed
+- **Hand-off typed the new agent's launch line into the old agent.** The first version
+  sent Ctrl-C twice and then the command, and on the phone that command landed inside
+  cursor-agent as a prompt: an approval dialog eats the first interrupt, and no CLI here
+  promises to exit on the second. The daemon now asks the multiplexer to replace the
+  pane's process (`respawn-pane -k`) — the one interrupt no agent can swallow — on the
+  pane that actually runs the agent, found from the process tree, not the pane beside it
+  the user split off. Leftover processes are ended. Where the pane cannot be respawned
+  (herdr, cmux) the keystroke path remains, marked best effort.
+- **Hand-off resumes the other agent's own conversation.** Handing a task to Claude Code,
+  Codex or cursor-agent reopens the newest conversation that CLI kept for the directory
+  (within a day) and lands the hand-off on top of it, so "hand it back to Claude" keeps
+  everything Claude already knew. OMP, Antigravity and Hermes start fresh.
+- **Live agents showed as "shell".** Claude Code's pane command is its version number and
+  cursor-agent's is `node`, so the session list and the hand-off could not see either.
+  Agents are now recognised from the process tree.
+- **Chat showed cursor-agent's `<timestamp>` and `<user_query>` wrappers.** Only the
+  words you typed show now.
+- **A self-check switched off the live wireless-install mapping.** `mesh apps ota
+  --disable` undid the Tailscale path for any `.ts.net` base, including the fake one a
+  check sets in a temp home; it now only undoes a mapping `--enable` itself made. This is
+  what broke the first Habits install on the phone: iOS showed the prompt, and by the time
+  Install was tapped the package address answered 404.
+- **A reverse proxy on the Mac no longer inherits the loopback token exemption.** Tailscale
+  Serve (and Caddy, cloudflared) connect to meshd from 127.0.0.1 on behalf of whoever is on
+  the other end, and meshd trusted 127.0.0.1 without a token. Any request carrying
+  `X-Forwarded-For` — which every such proxy stamps — now needs the bearer token like a
+  remote one; the header can only withdraw the exemption, never grant it. The token-free
+  `/a/` app routes are unaffected, which is what the proxy is for.
+- **The phone's Apps screen failed to load at all once a native app existed.** Native rows
+  carry no URL, and the client treated the URL as required, so the whole list failed to
+  decode and showed "Couldn't reach".
+- **The terminal's on-screen Esc and arrow keys typed `\u001b[A` into your agent's prompt.**
+  An HTML attribute does not decode JavaScript escapes, so the buttons sent those literal
+  six characters. They now send the key. This was there in 0.5; a phone test found it.
+- **The terminal came back "closed" after the phone slept.** The page never reconnected;
+  it now reloads its attach (same cookie) when the socket dies or the page becomes visible.
+- **Chat could not submit.** The composer typed a line feed after your prompt, which
+  Claude Code reads as a new line inside the prompt, not as Enter. A trailing newline now
+  sends the Enter key, and Chat carries the Esc/Tab/arrows/Enter/Ctrl-C row.
+- **The keyboard stayed up after leaving Settings.** The quick-command field on a tab that
+  is never torn down kept the keyboard as first responder across tab switches; it now
+  resigns when the tab goes away. Chat's own keyboard-dismiss button, which overlapped, is
+  gone; tapping the conversation dismisses the keyboard instead.
+- **Chat carried the terminal's keys.** Esc, Tab and the arrows belong to the terminal;
+  Chat keeps the text field, the mic and Stop. The duplicate "Terminal" button inside Chat
+  is gone — the Chat/Terminal switch is the one way across.
+- **A machine whose terminal bridge now asks for a token showed "no bridge".** The
+  reachability probe treated the 401 as absence; a 401 is the bridge answering.
+- **Pair again and Remove machine now live on the machine's own screen.** The screen
+  that diagnosed "token rejected" told you to pair again while the only pairing form
+  hid behind the + button two screens away — a dead end at exactly the moment you
+  needed the cure. Every machine screen now has **Pair again** (opens the pairing form
+  with that machine's address filled in) and **Remove machine**, whatever state the
+  machine is in. The machine list gets swipe-to-remove too.
+- **Removing a machine now sticks.** Pairing adopts every machine the paired Mac knows
+  about, which silently resurrected anything you had deleted — the un-removable ghost
+  machine. A removed machine now stays removed until you deliberately pair it again.
+- **Opening a terminal is no longer slow.** Every new interactive shell was taking about
+  14.5 seconds, essentially all of it inside the cmux-bridge startup hook that the
+  installer adds to your shell profile. The hook decided the bridge was broken by asking
+  whether the cmux *app* currently had a window open — which it is not the bridge's job to
+  know. With cmux closed, a perfectly healthy bridge was declared dead, killed, and waited
+  on through a retry loop that could never succeed, on every single shell. It now asks the
+  bridge whether *the bridge* is answering, never blocks the shell waiting for a daemon,
+  and no longer prints stray job-control lines like `[4] + killed` at your prompt.
+  Measured: **14.5s → 0.12s**.
+- **The app closed itself on any screen with a text box.** 0.5.0 turned off iOS smart
+  punctuation app-wide, so that typing `--flag` into a command did not arrive at the
+  shell as `–flag`. It did that through the UIKit appearance proxy — and iOS replays a
+  stored appearance instruction onto *every* text box the moment it appears on screen,
+  which throws. Tapping **Pair a machine**, opening **Settings**, or reaching any other
+  screen with a field on it killed the app instantly. Smart punctuation is still off,
+  now handled per field where it cannot take the screen down with it.
+- **Renaming a machine no longer corrupts the list.** A machine's identity in the list
+  was its name, and the name is the thing you edit — so the row changed identity on
+  every keystroke, and two machines added with **Add manually** were indistinguishable
+  to the list itself. Machines now carry a private stable id; existing machines are
+  given one on first launch and nothing is lost.
+- **Machine tokens are no longer left behind in plain text.** Tokens moved into the
+  Keychain in an earlier build, but the unencrypted copy from before that move was only
+  deleted on the single launch that performed the move — so a phone that had already
+  migrated kept a readable copy of every token, included in device backups. It is now
+  cleared whenever it is found. *(Found on a real device, not in review.)*
+
+### Added
+- **The app is now launched before it ships.** A smoke test runs the real app on a
+  simulator, visits every tab and opens the pairing sheet. The crash above passed every
+  existing check because all of them read source code, and no amount of reading can see
+  an instruction that only fails when iOS replays it onto a live screen. Releasing to
+  TestFlight now refuses to proceed if the app cannot survive being opened.
+
+## [0.5.3] — unreleased (installer only)
+
+### Fixed
+- **Opening a terminal is no longer slow** — the 14.5s → 0.12s cmux-bridge hook fix
+  above ships to every machine in this release; the published 0.5.2 tarball was cut
+  hours before the fix landed and still carries the old hook.
+
 ## [0.5.2] — 2026-08-27 (installer only)
 
 ### Fixed

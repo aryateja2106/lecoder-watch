@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 /// Onboarding. Two fields, because everything else is derivable: the machine's address
 /// and a code it prints. The code buys the real token over `/pair/claim`, and the
@@ -17,6 +18,8 @@ struct PairMachineView: View {
     @State private var busy = false
     @State private var failure: String?
     @State private var added: [PairedHost] = []
+    @State private var scanning = false
+    @State private var cameraHint: String?
 
     /// A scanned `meshwatch://pair` QR arrives with all three fields known. They land
     /// as editable prefills, not an automatic claim — reading the code before tapping
@@ -93,6 +96,14 @@ struct PairMachineView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                 }
             }
+            .sheet(isPresented: $scanning) {
+                PairingScannerSheet { link in
+                    address = link.address
+                    port = String(link.port)
+                    code = link.code
+                    scanning = false
+                }
+            }
         }
     }
 
@@ -115,20 +126,30 @@ struct PairMachineView: View {
 
     private var fields: some View {
         Section {
+            Button {
+                beginScan()
+            } label: {
+                Label("Scan code", systemImage: "qrcode.viewfinder")
+            }
+            if let cameraHint {
+                Text(cameraHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             LabeledContent("Address") {
-                TextField("100.x.y.z", text: $address)
+                TextField("100.x.y.z", text: $address.shellSafe)
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .keyboardType(.URL)
             }
             LabeledContent("Port") {
-                TextField("8899", text: $port)
+                TextField("8899", text: $port.shellSafe)
                     .multilineTextAlignment(.trailing)
                     .keyboardType(.numberPad)
             }
             LabeledContent("Code") {
-                TextField("XXXX-XXXX", text: $code)
+                TextField("XXXX-XXXX", text: $code.shellSafe)
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.characters)
@@ -165,6 +186,31 @@ struct PairMachineView: View {
 
     // MARK: Action
 
+    /// Checks camera permission before presenting the scanner, rather than after: a
+    /// denied grant shows a black rectangle behind a live-camera-shaped sheet, which
+    /// reads as broken. Denied or restricted falls back to the fields already on
+    /// screen with a one-line hint instead of opening anything.
+    private func beginScan() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            cameraHint = nil
+            scanning = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                Task { @MainActor in
+                    if granted {
+                        cameraHint = nil
+                        scanning = true
+                    } else {
+                        cameraHint = "Camera access is off. Enable it in Settings, or fill in the fields below."
+                    }
+                }
+            }
+        default:
+            cameraHint = "Camera access is off. Enable it in Settings, or fill in the fields below."
+        }
+    }
+
     private func pair() async {
         busy = true
         failure = nil
@@ -198,7 +244,8 @@ struct PairMachineView: View {
         default:
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorTimedOut {
-                return "No answer from \(ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String ?? "that address"). Check the address, and that iOS hasn't blocked Local Network access."
+                let failing = (ns.userInfo[NSURLErrorFailingURLErrorKey] as? URL)?.absoluteString ?? "that address"
+                return "No answer from \(failing). Check the address, and that iOS hasn't blocked Local Network access."
             }
             return ns.localizedDescription
         }

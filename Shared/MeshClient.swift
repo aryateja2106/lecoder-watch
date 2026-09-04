@@ -37,6 +37,42 @@ struct MeshClient {
         /// The daemon did not advertise the named capability, so the call was
         /// refused client-side rather than sent to a route that does not exist.
         case unsupported(String)
+        /// The daemon answered non-2xx with a reason in its `error` field. Kept as
+        /// text because "pane w9:p2 not found" tells the user what to do and a bare
+        /// 400 does not — the refusal used to be thrown away with the body.
+        ///
+        /// The status travels WITH the reason rather than replacing it: meshd answers
+        /// 401 as `{"error":"unauthorized"}`, so a refusal that dropped the code would
+        /// have made every expired token look like an ordinary failure and silently
+        /// taken the "run mesh pair" prompt off the screen.
+        case refused(Int, String)
+
+        var statusCode: Int? {
+            switch self {
+            case .http(let code), .refused(let code, _): return code
+            case .badURL, .decode, .unsupported: return nil
+            }
+        }
+
+        var reason: String? {
+            switch self {
+            case .refused(_, let why): return why
+            case .unsupported(let cap): return "this machine's daemon is too old for \(cap)"
+            case .http(let code): return "the machine answered \(code)"
+            case .badURL, .decode: return nil
+            }
+        }
+    }
+
+    /// The `error` string out of a daemon refusal body, or nil when the body is not
+    /// one (an HTML proxy page, an empty 502). Trimmed to one line so a stray stack
+    /// trace cannot push the rest of the screen off.
+    static func daemonReason(in data: Data) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let why = obj["error"] as? String else { return nil }
+        let line = why.split(separator: "\n").first.map(String.init) ?? why
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : String(trimmed.prefix(200))
     }
 
     private func request(_ path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
@@ -66,7 +102,11 @@ struct MeshClient {
             do {
                 let (data, resp) = try await URLSession.shared.data(for: req)
                 if let http = resp as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                    throw MeshError.http(http.statusCode)
+                    // The daemon puts its reason in the body of every refusal it
+                    // authors. Throwing the status alone reduced "herdr pane not
+                    // found" and "unsupported key" to an indistinguishable 400.
+                    throw Self.daemonReason(in: data)
+                        .map { MeshError.refused(http.statusCode, $0) } ?? MeshError.http(http.statusCode)
                 }
                 return (data, resp as? HTTPURLResponse)
             } catch {
@@ -377,6 +417,55 @@ struct MeshClient {
         _ = try await request("/apps", method: "POST", body: body)
     }
 
+    // MARK: - Chat (meshd 0.6+, capability "chat")
+
+    /// Structured transcript for a session, replacing client-side regex over
+    /// `capture-pane` text. `since` is the opaque cursor from the previous call's
+    /// `ChatFeed.cursor`; omit it for the first fetch. Callers append new messages by
+    /// `id` rather than replacing the list outright.
+    func chat(agent: String, since: String? = nil, limit: Int = 200) async throws -> ChatFeed {
+        var path = "/agents/\(Self.pathSegment(agent))/chat?limit=\(limit)"
+        if let since, !since.isEmpty {
+            let enc = since.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? since
+            path += "&since=\(enc)"
+        }
+        let data = try await request(path)
+        return try JSONDecoder().decode(ChatFeed.self, from: data)
+    }
+
+    // MARK: - Exposed secrets (meshd 0.6+, capability "redact")
+
+    func exposures() async throws -> ExposureList {
+        let data = try await request("/exposures")
+        return try JSONDecoder().decode(ExposureList.self, from: data)
+    }
+
+    /// Mark a fingerprinted secret rotated/ignored/open again. Returns the updated row.
+    @discardableResult
+    func setExposureStatus(_ fp: String, status: String) async throws -> SecretExposure {
+        let body = try JSONSerialization.data(withJSONObject: ["status": status])
+        let data = try await request("/exposures/\(Self.pathSegment(fp))", method: "POST", body: body)
+        return try JSONDecoder().decode(SecretExposure.self, from: data)
+    }
+
+    // MARK: - Hosted apps (meshd 0.6+, capability "apps")
+    //
+    // An agent-built PWA or native app, published on this machine — distinct from
+    // `apps()`/`activateApp(_:)` above, which list and front *running Mac processes*.
+
+    func meshApps() async throws -> [MeshApp] {
+        let data = try await request("/built-apps")
+        return try JSONDecoder().decode(MeshAppList.self, from: data).apps
+    }
+
+    /// `target`: "device" (this phone's paired iPhone, via devicectl) or "sim".
+    @discardableResult
+    func installMeshApp(slug: String, target: String) async throws -> MeshAppInstallResult {
+        let body = try JSONSerialization.data(withJSONObject: ["target": target])
+        let data = try await request("/built-apps/\(Self.pathSegment(slug))/install", method: "POST", body: body)
+        return try JSONDecoder().decode(MeshAppInstallResult.self, from: data)
+    }
+
     /// Register this phone's APNs device token so meshd can push alerts directly.
     func registerPush(deviceToken: String) async throws {
         // Read from the embedded profile, never hardcoded: a TestFlight build's token
@@ -467,6 +556,37 @@ struct MeshClient {
     /// Kill a single pane within a session.
     func killPane(agent: String, paneId: String) async throws {
         _ = try await request("/agents/\(Self.pathSegment(agent))/panes/\(Self.pathSegment(paneId))", method: "DELETE")
+    }
+
+    // MARK: - Hand-off (meshd 0.6+, capability "handoff")
+
+    /// Conversations each installed CLI kept for this session's own working directory.
+    func resumable(agent: String) async throws -> ResumableList {
+        guard supports("handoff") else { throw MeshError.unsupported("handoff") }
+        let data = try await request("/agents/\(Self.pathSegment(agent))/resumable")
+        return try JSONDecoder().decode(ResumableList.self, from: data)
+    }
+
+    /// Same listing for a directory that may not have a live session yet — the
+    /// new-session sheet's "Resume" section. `cwd` must be absolute; the daemon 400s
+    /// otherwise, so this refuses the same way before ever sending it.
+    func resumable(cwd: String) async throws -> ResumableList {
+        guard supports("handoff") else { throw MeshError.unsupported("handoff") }
+        guard cwd.hasPrefix("/") else { throw MeshError.badURL }
+        let enc = cwd.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cwd
+        let data = try await request("/resumable?cwd=\(enc)")
+        return try JSONDecoder().decode(ResumableList.self, from: data)
+    }
+
+    /// Interrupt `agent` and hand its conversation to another CLI (`to`, one of
+    /// `ResumableList.targets`): the daemon writes HANDOFF.md into the session's
+    /// working directory and relaunches the pane under it.
+    @discardableResult
+    func handoff(agent: String, to: String) async throws -> HandoffResult {
+        guard supports("handoff") else { throw MeshError.unsupported("handoff") }
+        let body = try JSONSerialization.data(withJSONObject: ["to": to])
+        let data = try await request("/agents/\(Self.pathSegment(agent))/handoff", method: "POST", body: body)
+        return try JSONDecoder().decode(HandoffResult.self, from: data)
     }
 }
 

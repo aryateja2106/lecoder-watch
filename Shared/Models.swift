@@ -4,7 +4,22 @@ import Foundation
 
 /// A machine on the Tailscale mesh that runs `meshd`.
 struct Machine: Codable, Identifiable, Hashable {
-    var id: String { host }
+    /// Stable row identity, and deliberately NOT `host`.
+    ///
+    /// `id` used to be `host`, which the machine editor binds straight to a TextField:
+    /// the row's identity changed on every keystroke while you renamed a machine, and
+    /// two machines added with "Add manually" both claimed the id "new-machine".
+    /// Duplicate or moving ids inside a `ForEach` over bindings are a crash, not a
+    /// cosmetic glitch.
+    ///
+    /// Optional so a list written by an older build still decodes — a non-optional
+    /// stored id would fail to decode every pre-existing machine, and the `try?` at the
+    /// call site turns that into a silently empty fleet. `MeshStore.load()` stamps any
+    /// machine that arrives without one, so the fallback below is only ever used for the
+    /// instant between decode and stamp; it is derived from `host` rather than fresh so
+    /// that even then it does not change identity on every access.
+    var uid: UUID?
+    var id: String { uid?.uuidString ?? "host:\(host)" }
     var host: String          // display name, e.g. "arya-macbook-pro"
     var ip: String            // tailscale IP, e.g. "100.100.1.99"
     var port: Int             // meshd port, default 8899
@@ -40,7 +55,10 @@ struct Machine: Codable, Identifiable, Hashable {
     var resolvedBridge: String? {
         if let b = bridgeURL, !b.isEmpty { return b }
         // rmux-bridge runs on every mesh machine at tailnet IP:7820 (http+ws).
-        return addresses.last.map { "http://\($0):7820" }
+        // `addresses` is [ip, host]: dial the NUMERIC address first, not the bare
+        // hostname — a phone without MagicDNS answers "hostname could not be found"
+        // for the name while the IP works, and the terminal died on exactly that.
+        return addresses.first.map { "http://\($0):7820" }
     }
 
     /// meshd's own remote desktop: polls /screen.jpg, posts /input. Needs no VNC
@@ -53,7 +71,8 @@ struct Machine: Codable, Identifiable, Hashable {
 
     var resolvedVNC: String {
         if let v = vncURL, !v.isEmpty { return v }
-        let address = addresses.last ?? ip
+        // Numeric address first, same reason as `resolvedBridge`.
+        let address = addresses.first ?? ip
         return "http://\(address):6080/vnc.html?autoconnect=1&resize=scale"
     }
 
@@ -116,6 +135,32 @@ func normalizedPairingCode(_ input: String) -> String {
     input.uppercased().filter { $0.isASCII && ($0.isNumber || ($0.isLetter && $0.isUppercase)) }
 }
 
+/// A `meshwatch://pair?h=&p=&c=` link, parsed. The three fields `mesh pair`'s QR
+/// encodes, and nothing else — pairing itself still needs a human tap.
+struct PairingLink: Hashable {
+    var address: String
+    var port: Int
+    var code: String
+}
+
+/// One parser for one link format, shared by every way a pairing QR reaches the app:
+/// the system Camera handing off the URL, and the in-app scanner reading the same code
+/// directly off the frame. Both must agree on what counts as a valid link, or a QR that
+/// the in-app scanner accepts and the deep link handler rejects (or the reverse) is a
+/// pairing flow that works differently depending on which camera happened to read it.
+///
+/// `h` is required and non-empty; `c` must normalize to at least 6 characters (mirrors
+/// `canPair` in `PairMachineView`); `p` defaults to meshd's default port.
+func parsePairingLink(_ url: URL) -> PairingLink? {
+    guard url.scheme == "meshwatch", url.host == "pair" else { return nil }
+    let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+    guard let address = value("h")?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !address.isEmpty,
+          let code = value("c"), normalizedPairingCode(code).count >= 6 else { return nil }
+    return PairingLink(address: address, port: Int(value("p") ?? "") ?? 8899, code: code)
+}
+
 /// `machineMatching` over snapshots rather than configs — same rules, and they have to
 /// stay the same rules, so both defer to `hostNamesMatch`.
 func snapshotMachineMatching(_ name: String, in machines: [MachineSnapshot]) -> MachineSnapshot? {
@@ -168,10 +213,29 @@ func mergingPairedHosts(_ existing: [Machine], _ paired: [PairedHost]) -> [Machi
             out[i].token = entry.token
             out[i].port = entry.port
         } else {
-            out.append(Machine(host: entry.host, ip: entry.ip, port: entry.port, token: entry.token))
+            // Stamp the id here, not on the next launch: a machine paired in this
+            // session would otherwise fall back to a host-derived id, and renaming it
+            // before relaunching would change its identity mid-edit — the bug `uid`
+            // exists to stop.
+            out.append(Machine(uid: UUID(), host: entry.host, ip: entry.ip, port: entry.port, token: entry.token))
         }
     }
     return out
+}
+
+/// Which of a pairing's fleet entries are allowed in, given the hosts the user has
+/// deliberately removed. Pairing adopts the paired machine's whole `hosts.json`, so a
+/// machine deleted on the phone would otherwise resurrect on the very next pair —
+/// including the pair the user performs to fix an unrelated token, which makes deletion
+/// feel broken. The machine being explicitly paired always comes through (pairing it IS
+/// the un-remove gesture); every other fleet entry stays out if its name or address is
+/// in `removed`. `removed` holds lowercased names and addresses.
+func filteringRemovedHosts(_ hosts: [PairedHost], removed: Set<String>,
+                           pairedHost: String, pairedAddress: String) -> [PairedHost] {
+    hosts.filter { entry in
+        if hostNamesMatch(entry.host, pairedHost) || entry.ip == pairedAddress { return true }
+        return !removed.contains(entry.host.lowercased()) && !removed.contains(entry.ip.lowercased())
+    }
 }
 
 // MARK: - Stats (htop-style)
@@ -312,6 +376,21 @@ struct Agent: Codable, Hashable, Identifiable {
 
     var displayName: String { title?.isEmpty == false ? title! : name }
     var isCmux: Bool { name.hasPrefix("cmux:") }
+    /// meshd 0.5.4+ ("herdr"): a pane of the herdr multiplexer, named `herdr:<pane_id>`.
+    var isHerdr: Bool { name.hasPrefix("herdr:") }
+
+    /// What kind of thing this row is, in one word the multiplexer would recognise.
+    /// A herdr pane that says "1 pane" reads as an rmux session, and the whole point
+    /// of listing it is that you can tell where it lives.
+    var kindLabel: String {
+        if isCmux { return "cmux" }
+        if isHerdr { return "herdr" }
+        return "\(windows) pane\(windows == 1 ? "" : "s")"
+    }
+
+    /// Neither cmux nor herdr takes the full rmux key set, and neither can be split or
+    /// killed over the wire. One question, asked in every place that used `!isCmux`.
+    var isMuxGuest: Bool { isCmux || isHerdr }
 }
 
 struct AgentOutput: Codable, Hashable {
@@ -378,6 +457,66 @@ struct FsListing: Codable, Hashable {
     /// Directories first, then case-insensitive by name — the daemon already sorted;
     /// this just spares every view the nil dance.
     var rows: [FsEntry] { entries ?? [] }
+}
+
+/// What `FileBrowserView` shows: `entries` with dotfiles/dotfolders removed unless
+/// `showHidden`, then a case-insensitive substring match of `query` against the
+/// name. A free function rather than a view computed property so a
+/// `scripts/check-*.swift` can exercise it without linking SwiftUI. The daemon has
+/// no query param and does not filter dotfiles — both are client-side.
+func filterFsEntries(_ entries: [FsEntry], showHidden: Bool, query: String) -> [FsEntry] {
+    var result = showHidden ? entries : entries.filter { !$0.name.hasPrefix(".") }
+    let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !needle.isEmpty {
+        // localizedStandardContains, not localizedCaseInsensitiveContains: filename
+        // search must be diacritic-insensitive ("cafe" finds "café.txt"), and this is
+        // the API Apple documents for exactly this user-initiated-search case.
+        result = result.filter { $0.name.localizedStandardContains(needle) }
+    }
+    return result
+}
+
+/// Collapse machine rows that are provably one physical box: two entries whose
+/// /health-reported hardware MAC matches are the same machine paired twice — the live
+/// case was a fleet-adopted alias ("mac", from the CLI's hosts.json) sitting next to
+/// the real "arya-macbook-pro" row, each listing the same sessions. A free function so
+/// `scripts/check-machine-dedupe.swift` can exercise it without a store.
+///
+/// The keeper, decided in order (each rule breaks the previous rule's ties):
+///   1. a non-loopback ip beats a 127.0.0.1 artifact,
+///   2. the longer host name beats the shorter (the alias is usually the short one),
+///   3. list order.
+/// Configured bridge/VNC URLs do NOT vote: the fold below carries them to whichever
+/// row wins, so config survives either way and must not crown an alias.
+/// The keeper absorbs any bridgeURL/vncURL a losing row had that it lacks. Each loser
+/// is returned WITH its keeper so the caller can tombstone selectively — only the
+/// identifiers the keeper does not share. Tombstoning a loser's ip wholesale would
+/// block the keeper too: `filteringRemovedHosts` rejects fleet entries by ip, and two
+/// rows for one box usually hold the same ip. Without any tombstone, the next
+/// `mesh pair` fleet-adoption resurrects the alias immediately.
+func mergeDuplicateMachineRows(_ rows: [Machine]) -> (kept: [Machine], removed: [(loser: Machine, keeper: Machine)]) {
+    var byMac: [String: [Int]] = [:]
+    for (i, m) in rows.enumerated() {
+        guard let mac = m.macAddress?.lowercased(), !mac.isEmpty else { continue }
+        byMac[mac, default: []].append(i)
+    }
+    var losers: [Int: Int] = [:]   // loser index -> keeper index
+    var kept = rows
+    for idxs in byMac.values where idxs.count > 1 {
+        func score(_ m: Machine) -> (Int, Int) {
+            ((m.ip.hasPrefix("127.") || m.ip == "localhost") ? 0 : 1,
+             m.host.count)
+        }
+        let ranked = idxs.sorted { score(rows[$0]) == score(rows[$1]) ? $0 < $1 : score(rows[$0]) > score(rows[$1]) }
+        let keeper = ranked[0]
+        for loser in ranked.dropFirst() {
+            if kept[keeper].bridgeURL?.isEmpty != false { kept[keeper].bridgeURL = rows[loser].bridgeURL }
+            if kept[keeper].vncURL?.isEmpty != false { kept[keeper].vncURL = rows[loser].vncURL }
+            losers[loser] = keeper
+        }
+    }
+    return (kept: kept.indices.filter { losers[$0] == nil }.map { kept[$0] },
+            removed: losers.sorted { $0.key < $1.key }.map { (loser: rows[$0.key], keeper: kept[$0.value]) })
 }
 
 // MARK: - Usage (OpenUsage)
@@ -925,6 +1064,126 @@ struct AppList: Codable, Hashable {
     var front: String?
     var running: [MacApp]
     var installed: [String]
+}
+
+// MARK: - Agent chat (meshd 0.6+, capability "chat")
+
+/// `GET /agents/:n/chat` replaces client-side parsing of terminal text: the daemon
+/// already has the Claude Code / Codex transcript, so the app no longer guesses at
+/// roles and tool calls from regex over `capture-pane` output.
+struct ChatToolInfo: Codable, Hashable {
+    var name: String
+    var input: String?
+}
+
+struct ChatMessage: Codable, Hashable, Identifiable {
+    var id: String
+    var ts: String
+    /// "user" | "assistant" | "thinking" | "tool" | "result" | "system". Left as a
+    /// raw string, like `Agent.status` and `SecretExposure.status` below, so a role
+    /// the daemon adds later degrades to the `default` case instead of a decode
+    /// failure that blanks the whole transcript.
+    var role: String
+    var text: String
+    var tool: ChatToolInfo?
+    var status: String?
+}
+
+/// One poll's worth of transcript. `source == "output"` means the daemon found no
+/// Claude/Codex transcript and fell back to capture-pane lines — render those as
+/// plain terminal blocks rather than trusting `messages` to carry real structure.
+struct ChatFeed: Codable, Hashable {
+    var name: String
+    var source: String
+    var cursor: String?
+    var messages: [ChatMessage]
+}
+
+// MARK: - Exposed secrets (meshd 0.6+, capability "redact")
+
+struct SecretExposure: Codable, Hashable, Identifiable {
+    var id: String { fp }
+    var fp: String
+    var kind: String
+    var hint: String
+    var first: String
+    var last: String
+    var count: Int
+    var channels: [String]
+    var status: String   // open | rotated | ignored
+}
+
+struct ExposureList: Codable, Hashable {
+    var count: Int
+    var open: Int
+    var items: [SecretExposure]
+}
+
+// MARK: - Hosted apps (meshd 0.6+, capability "apps")
+//
+// Deliberately NOT named `App`/`AppList` — those already mean "a running process on
+// the Mac" (`MacApp`/`AppList` above, backing `/apps` GET+POST for the app switcher).
+// This is a different feature living at the daemon's own hosted-app routes: a PWA or
+// native build an agent produced, published for the phone to open or install.
+struct MeshApp: Codable, Hashable, Identifiable {
+    var id: String { slug }
+    var slug: String
+    var name: String
+    var kind: String   // pwa | native
+    /// PWA: the page to open. Native: its install page, only once the machine serves an
+    /// .ipa over HTTPS. A native row without one has no url at all — do not invent one.
+    var url: String?
+    var bundleId: String?
+    var version: String?
+    /// Native only: the `itms-services://` URL iOS installs from, present exactly when
+    /// wireless install works from this machine (`mesh apps ota --enable`). Absent means
+    /// the only route is the machine's own devicectl push (cable or same Wi-Fi).
+    var install: String?
+    var updated: String
+}
+
+struct MeshAppList: Codable, Hashable {
+    var apps: [MeshApp]
+}
+
+struct MeshAppInstallResult: Codable, Hashable {
+    var ok: Bool
+    var error: String?
+    /// What actually happened, when it was not a plain install — e.g. iOS's own
+    /// installer was opened and is now asking.
+    var detail: String?
+}
+
+// MARK: - Hand-off (meshd 0.6+, capability "handoff")
+
+/// One conversation a CLI kept for a working directory, and the exact command that
+/// reopens it — `cmd` is meshd's own choice (`claude --resume <id>`, `codex resume
+/// <id>`, `cursor-agent --resume <id>`), never reconstructed client-side.
+struct ResumableItem: Codable, Hashable, Identifiable {
+    var kind: String   // claude | codex | cursor
+    var id: String
+    var title: String
+    var updated: String   // ISO 8601
+    var cmd: String
+}
+
+struct ResumableList: Codable, Hashable {
+    var cwd: String
+    var items: [ResumableItem]
+    /// Which CLIs `handoff(agent:to:)` can hand this session to — only the ones the
+    /// daemon found installed on that machine.
+    var targets: [String]
+}
+
+/// The answer to `POST /agents/:n/handoff`. A refusal normally never decodes into
+/// this: the daemon answers it with HTTP 400 and `MeshClient.request` throws the
+/// body's `error` as `MeshError.refused` first. `error` stays Optional anyway so a
+/// future 200-with-ok:false shape would still decode.
+struct HandoffResult: Codable, Hashable {
+    var ok: Bool
+    var file: String?
+    var cmd: String?
+    var error: String?
 }
 
 struct VolumeState: Codable, Hashable {

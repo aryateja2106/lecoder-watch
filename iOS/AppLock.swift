@@ -62,7 +62,7 @@ final class AppLock: ObservableObject {
         do {
             let ok = try await context.evaluatePolicy(
                 .deviceOwnerAuthentication,
-                localizedReason: "Unlock LeSearch Mesh to reach your machines"
+                localizedReason: "Unlock MeshWatch to reach your machines"
             )
             if ok {
                 isLocked = false
@@ -96,7 +96,7 @@ struct LockScreen: View {
                 .font(.system(size: 44))
                 .foregroundStyle(Color.accentColor)
             VStack(spacing: 6) {
-                Text("LeSearch Mesh is locked").font(.title2.bold())
+                Text("MeshWatch is locked").font(.title2.bold())
                 Text("Your machine tokens are protected by \(AppLock.methodName).")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

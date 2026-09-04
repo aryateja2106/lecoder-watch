@@ -180,7 +180,7 @@ final class DaemonWatch: ObservableObject {
 }
 
 /// "Start at login", which is the one permission this app asks for in its own name:
-/// registering here is what puts LeSearch Mesh in System Settings › General › Login
+/// registering here is what puts MeshWatch in System Settings › General › Login
 /// Items, where the user can revoke it.
 @MainActor
 final class LoginItem: ObservableObject {

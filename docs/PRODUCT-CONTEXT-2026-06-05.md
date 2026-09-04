@@ -1,4 +1,4 @@
-# LeScout / MeshWatch product context — 2026-06-05
+# LeScout / LeSearch Mesh product context — 2026-06-05
 
 This document captures Arya's feedback after testing the current iPhone/watch terminal UI. It is a handoff for the next agent. Do not treat the current UI as successful just because data flows; the human experience is still below usable.
 

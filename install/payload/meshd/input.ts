@@ -4,6 +4,10 @@
 //
 //   GET  /input            -> { ok, trusted, helper, hint }   (?prompt=1 shows the TCC dialog)
 //   POST /input            <- { events: [ {t:"move",dx,dy}, {t:"click"}, ... ] }
+//                             A {t:"key",key,mods:[…]} is a chord — modifiers down, key
+//                             down and up, modifiers up — synthesized as one atomic
+//                             sequence by the backend. Refused whole (400) if a modifier
+//                             name is not one both backends can map.
 //   GET  /clipboard        -> { text }
 //   POST /clipboard        <- { text }
 //   POST /volume           <- { level } | { delta } | { muted }   (GET reads current)
@@ -123,17 +127,71 @@ async function stream(trusted: boolean): Promise<any> {
 /// status check (which the watch runs on open, and after "Ask the Mac now") moves it.
 let trustedCache = false;
 
+// ---------- chords ----------
+/// Modifier names both backends can map, ranked outermost-first — which is the order
+/// the chord gets pressed in. ⌘ wraps around everything else, the way a hand actually
+/// forms ⌘⇧4.
+///
+/// The rank doubles as an identity: cmd/command are the same physical key, so are
+/// opt/option/alt and ctrl/control, and a chord that pressed one of them twice would
+/// release it on the first lift while the rest of the chord still needed it. `meta`
+/// keeps a rank of its own because it is NOT an alias here — mesh-input reads it as ⌘,
+/// xdotool as Super, and collapsing the two would silently change which key Linux gets.
+const MODIFIER_RANK: Record<string, number> = {
+  cmd: 0, command: 0,
+  meta: 1,
+  ctrl: 2, control: 2,
+  opt: 3, option: 3, alt: 3,
+  shift: 4,
+  fn: 5,
+};
+
+/// Canonicalize every chord in a batch, or name the one modifier that cannot be mapped.
+///
+/// Refusing is the point. Both backends used to drop an unmappable modifier and press
+/// whatever was left, which is the worst of the three possible behaviors: a ⌘⇧4 whose
+/// "cmd" did not map was not a failed screenshot, it was a "$" typed into whatever had
+/// focus. A chord is all-or-nothing or it is a different keystroke wearing its name.
+///
+/// The ordering is not cosmetic either. The phone keeps its sticky modifiers in a Set,
+/// which has no order of its own, so the same two taps could arrive as ["cmd","shift"]
+/// or ["shift","cmd"] and synthesize two different key sequences on the Mac.
+export function normalizeChords(batch: any[]): { events: any[] } | { error: string } {
+  const events: any[] = [];
+  for (const e of batch) {
+    if (e.t !== "key" || !Array.isArray(e.mods) || e.mods.length === 0) { events.push(e); continue; }
+    const byRank = new Map<number, string>();
+    for (const raw of e.mods) {
+      const name = String(raw).toLowerCase();
+      // hasOwn, not a bare lookup — "constructor" is not a modifier. Same reason as
+      // systemAction() below.
+      if (!Object.hasOwn(MODIFIER_RANK, name)) {
+        return { error: `unknown modifier: ${String(raw).slice(0, 24)}` };
+      }
+      const rank = MODIFIER_RANK[name];
+      if (!byRank.has(rank)) byRank.set(rank, name);
+    }
+    const mods = [...byRank.keys()].sort((a, b) => a - b).map((rank) => byRank.get(rank)!);
+    events.push({ ...e, mods });
+  }
+  return { events };
+}
+
 // ---------- actions ----------
 export async function injectEvents(events: any[]): Promise<{ ok: boolean; count?: number; error?: string }> {
   if (!Array.isArray(events) || events.length === 0) return { ok: false, error: "events required" };
   const batch = events.slice(0, MAX_EVENTS).filter((e) => e && typeof e.t === "string");
   if (batch.length === 0) return { ok: false, error: "no valid events" };
-  if (!IS_MAC) return linuxInjectEvents(batch);
+  // Before the platform split, so a chord means the same thing on both backends and a
+  // bad modifier is a 400 the client can show rather than a wrong key on the screen.
+  const chords = normalizeChords(batch);
+  if ("error" in chords) return { ok: false, error: chords.error };
+  if (!IS_MAC) return linuxInjectEvents(chords.events);
   const proc = await stream(trustedCache);
   if (!proc) return { ok: false, error: buildError || "mesh-input unavailable" };
-  proc.stdin.write(batch.map((e) => JSON.stringify(e)).join("\n") + "\n");
+  proc.stdin.write(chords.events.map((e) => JSON.stringify(e)).join("\n") + "\n");
   proc.stdin.flush();
-  return { ok: true, count: batch.length };
+  return { ok: true, count: chords.events.length };
 }
 
 export async function inputStatus(prompt = false) {

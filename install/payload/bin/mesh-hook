@@ -121,7 +121,9 @@ def main():
 
     doc = load_stdin()
     title = event_title(args.source, doc, args.title)
-    body = args.body or pick(doc, "body", "message", "prompt", "command", "transcript_path")
+    # A transcript PATH is not a body: 212 of 312 real events once carried one as
+    # their text. The path now travels in its own field for the chat route to read.
+    body = args.body or pick(doc, "body", "message", "prompt", "command")
     # Multiplexer session first: it is the only name the reply path can address.
     # An explicit --session / MESHD_SESSION is the caller naming that target itself.
     session = args.session
@@ -144,6 +146,9 @@ def main():
     # not an identity, because two sessions can share one.
     session_id = pick(doc, "session_id", "sessionId")
     cwd = pick(doc, "cwd", "workspace")
+    transcript_path = pick(doc, "transcript_path", "transcriptPath")
+    tool_name = pick(doc, "tool_name", "toolName")
+    hook_event = pick(doc, "hook_event_name", "hookEvent")
 
     payload_doc = {
         "source": args.source,
@@ -159,6 +164,12 @@ def main():
         payload_doc["cwd"] = cwd
     if pane:
         payload_doc["pane"] = pane
+    if transcript_path:
+        payload_doc["transcriptPath"] = transcript_path
+    if tool_name:
+        payload_doc["toolName"] = tool_name
+    if hook_event:
+        payload_doc["hookEvent"] = hook_event
     if args.dry_run:
         print(json.dumps(payload_doc, indent=2, sort_keys=True))
         return 0

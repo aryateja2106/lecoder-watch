@@ -94,7 +94,7 @@ struct WatchRootView: View {
         NavigationStack {
             MachinesListView()
                 .environmentObject(store)
-                .navigationTitle("Mesh")
+                .navigationTitle("LeSearch Mesh")
         }
         .onAppear {
             store.start()
@@ -479,7 +479,7 @@ private func statusColor(_ snap: MachineSnapshot) -> Color {
 }
 
 private func watchSessionSubtitle(_ agent: Agent, route: String) -> String {
-    let kind = agent.isCmux ? "cmux" : "\(agent.windows) pane\(agent.windows == 1 ? "" : "s")"
+    let kind = agent.kindLabel
     return "\(kind)\(agent.attached ? " · live" : "") · \(route)"
 }
 
@@ -625,7 +625,7 @@ struct SessionsView: View {
             }
             if snap?.authError != nil {
                 Section("Fix") {
-                    Text("Open LeSearch Mesh on your iPhone and copy the install command for this machine.")
+                    Text("Open MeshWatch on your iPhone and copy the install command for this machine.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text("Then refresh the watch.")
@@ -658,6 +658,9 @@ struct SessionsView: View {
                 }
                 Button { openNewSession(cmd: "codex") } label: {
                     Label("Codex", systemImage: "curlybraces")
+                }
+                Button { openNewSession(cmd: "cursor-agent") } label: {
+                    Label("Cursor", systemImage: "cursorarrow.rays")
                 }
                 Button { taskAgent = "claude"; showTask = true } label: {
                     Label("Claude task", systemImage: "text.bubble")
@@ -772,7 +775,7 @@ struct SessionsView: View {
                     helpLine("Open terminal", "The full screen of a session, with the key bar. Turn the Digital Crown to scroll back.")
                     helpLine("Reader / Raw", "The first chip in the key bar. Reader wraps every line to the screen — best for questions, prose and errors. Raw keeps the Mac's own line breaks and lets you drag sideways — best for diffs and tables.")
                     helpLine("Reply", "Type or dictate text, then send it. Nothing is sent until you tap Send.")
-                    helpLine("Insert iPhone clipboard", "Types whatever is on your iPhone's clipboard into the session, so a URL or a key never has to be scribbled. Your iPhone must be open on LeSearch Mesh at the time.")
+                    helpLine("Insert iPhone clipboard", "Types whatever is on your iPhone's clipboard into the session, so a URL or a key never has to be scribbled. Your iPhone must be open on MeshWatch at the time.")
                     helpLine("Open on Mac", "Appears when an agent has printed a link. Opens it in the Mac's own browser.")
                     helpLine("Key bar", "Enter, arrows, Tab, Escape, Page up/down, Home, End, Backspace and Ctrl-D — enough to drive a full-screen program. Text size lives under the … chip at the end.")
                     helpLine("Interrupt", "Ctrl-C, to stop whatever is running.")
@@ -798,9 +801,9 @@ struct SessionsView: View {
     private var supportsInput: Bool { snap?.capabilities?.contains("input") ?? false }
 
     private var emptySessionHint: String {
-        if snap?.authError != nil { return "Open LeSearch Mesh on your iPhone, fix the token, then refresh." }
+        if snap?.authError != nil { return "Open MeshWatch on your iPhone, fix the token, then refresh." }
         if snap?.reachable == true { return "Start Shell, Claude, or Codex below." }
-        return "Open LeSearch Mesh on your iPhone, or refresh when the Mac is nearby."
+        return "Open MeshWatch on your iPhone, or refresh when the Mac is nearby."
     }
 
     private func openNewSession(cmd: String?, initialText: String? = nil) {
@@ -940,6 +943,20 @@ struct AgentLiveView: View {
             .limits.first { $0.label.lowercased().contains("session") }
     }
 
+    /// The truth for "is this session blocked on a human", per meshd 0.5.0+
+    /// ("sessionStatus"): the daemon's own verdict, not a `[y/n]` guess over whatever
+    /// text a TUI happened to print. `replyable == false` means the hook could not
+    /// resolve a reply route, so an Allow/Deny here would answer nothing.
+    private var awaitingDecision: Bool {
+        currentAgent?.status == "waiting" && store.latestEvent(host: host, session: agent)?.replyable != false
+    }
+
+    private var decisionText: String {
+        meaningfulLines.last ?? "Waiting for your input."
+    }
+
+    private var decisionRisk: RiskVerdict { classifyRisk(decisionText) }
+
     var body: some View {
         List {
             if continueBlocked, let providerId = LimitHelpers.providerId(for: currentAgent?.agentType),
@@ -959,6 +976,42 @@ struct AgentLiveView: View {
                 }
             }
 
+            if awaitingDecision {
+                Section("Decision Needed") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Image(systemName: decisionRisk.isDestructive ? "exclamationmark.triangle.fill" : "hand.raised.fill")
+                                .foregroundStyle(decisionRisk.isDestructive ? .red : .orange)
+                            Text("Agent asks")
+                                .font(.headline)
+                        }
+                        Text(decisionText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                        HStack(spacing: 8) {
+                            Button {
+                                WKInterfaceDevice.current().play(.click)
+                                store.send(key: "enter")
+                            } label: {
+                                Label(decisionRisk.verb, systemImage: "checkmark.circle.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(decisionRisk.isDestructive ? .red : .green)
+                            }
+                            Button {
+                                WKInterfaceDevice.current().play(.click)
+                                store.send(key: "escape")
+                            } label: {
+                                Label("Deny", systemImage: "xmark.circle.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+
             Section("Monitor") {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
@@ -974,7 +1027,10 @@ struct AgentLiveView: View {
                     Text(statusText)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    if let pane = currentPane {
+                    // Only when there is more than one pane to tell apart: for a
+                    // single-pane session "0.0 2.1.250" is a riddle spending one of
+                    // the wrist's ~6 readable lines (same rule as the iOS pane card).
+                    if let pane = currentPane, panes.count > 1 {
                         Text(pane.label)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
@@ -1252,11 +1308,17 @@ struct AgentLiveView: View {
                 keyChip("Down", "arrow.down") { store.send(key: "down") }
                 keyChip("Left", "arrow.left") { store.send(key: "left") }
                 keyChip("Right", "arrow.right") { store.send(key: "right") }
-                keyChip("Backspace", "delete.left") { store.send(key: "backspace") }
-                keyChip("Page up", "arrow.up.to.line") { store.send(key: "page-up") }
-                keyChip("Page down", "arrow.down.to.line") { store.send(key: "page-down") }
-                keyChip("Home", "arrow.up.to.line.compact") { store.send(key: "home") }
-                keyChip("End", "arrow.down.to.line.compact") { store.send(key: "end") }
+                // herdr's send-keys vocabulary has no backspace/paging/home/end; the
+                // daemon refuses them by name and the refusal never reaches the wrist,
+                // so on a herdr row these five chips would be dead buttons. Hide them —
+                // a control that cannot work is worse on a watch than no control.
+                if currentAgent?.isHerdr != true {
+                    keyChip("Backspace", "delete.left") { store.send(key: "backspace") }
+                    keyChip("Page up", "arrow.up.to.line") { store.send(key: "page-up") }
+                    keyChip("Page down", "arrow.down.to.line") { store.send(key: "page-down") }
+                    keyChip("Home", "arrow.up.to.line.compact") { store.send(key: "home") }
+                    keyChip("End", "arrow.down.to.line.compact") { store.send(key: "end") }
+                }
                 keyChip("End of input, control D", "control") { store.send(key: "ctrl-d") }
                 // A push rather than a sheet: this bar already lives inside a presented
                 // sheet, and watchOS does not present a second one over it reliably.

@@ -1,4 +1,4 @@
-# HANDOFF — MeshWatch (updated 2026-07-07)
+# HANDOFF — LeSearch Mesh (updated 2026-07-07)
 
 Single entry point to resume. Read this → `docs/PROJECT-STATE-AND-LEARNINGS-2026-07-07.md` → `git log`, then continue.
 Older but still-useful context: `docs/PRODUCT-CONTEXT-2026-06-05.md`, `docs/XCODE-WATCH-DEVICE-RUNBOOK.md`.

@@ -126,11 +126,12 @@ final class WatchMeshStore: ObservableObject {
         return snap.reachable && snap.authError == nil
     }
 
+    /// Asked of `statusCode`, not of one case: a 401 carrying meshd's
+    /// `{"error":"unauthorized"}` body arrives as .refused, and matching only .http
+    /// would drop the token prompt exactly when the token is the problem.
     private nonisolated static func isAuthError(_ error: Error) -> Bool {
-        if case MeshClient.MeshError.http(let code) = error {
-            return code == 401 || code == 403
-        }
-        return false
+        guard let code = (error as? MeshClient.MeshError)?.statusCode else { return false }
+        return code == 401 || code == 403
     }
 
     // MARK: Capabilities
@@ -326,7 +327,7 @@ final class WatchMeshStore: ObservableObject {
     var emptyStateReason: (title: String, detail: String) {
         if let count = phoneReplyMachineCount, count == 0 {
             return ("No machines paired",
-                    "Your iPhone answered but has nothing paired yet. Open LeSearch Mesh on your iPhone and pair a machine.")
+                    "Your iPhone answered but has nothing paired yet. Open MeshWatch on your iPhone and pair a machine.")
         }
         if lastPhoneReplyAt != nil {
             return ("Nothing to show yet", phoneLinkNote ?? "Your iPhone answered but sent no machines.")
@@ -336,7 +337,7 @@ final class WatchMeshStore: ObservableObject {
         switch connectionState {
         case .offline:
             return ("iPhone not reachable",
-                    "Keep your iPhone nearby and unlocked, then open LeSearch Mesh on it once. The watch reaches your machines through the phone.")
+                    "Keep your iPhone nearby and unlocked, then open MeshWatch on it once. The watch reaches your machines through the phone.")
         default:
             return ("Connecting…", "Reaching your iPhone. Keep it nearby and unlocked.")
         }
@@ -729,13 +730,13 @@ final class WatchMeshStore: ObservableObject {
         case .failed(let why):
             return .problem("clipboard — \(why)")
         case .queued:
-            return .problem("open LeSearch Mesh on your iPhone once, then try again")
+            return .problem("open MeshWatch on your iPhone once, then try again")
         case .delivered(let data):
             guard let data, let text = try? JSONDecoder().decode(String.self, from: data) else {
                 // No payload: either an older phone build that does not know this
                 // command, or one that could not read its own pasteboard from the
                 // background. Both have the same fix.
-                return .problem("open LeSearch Mesh on your iPhone once — it can only read its clipboard while open")
+                return .problem("open MeshWatch on your iPhone once — it can only read its clipboard while open")
             }
             if text.hasPrefix(clipboardErrorPrefix) {
                 let why = String(text.dropFirst(clipboardErrorPrefix.count))

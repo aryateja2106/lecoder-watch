@@ -17,8 +17,14 @@ those three.
 
 | Doc | Read it when | Notes |
 |---|---|---|
+| [PRODUCT-SPEC-V1.md](PRODUCT-SPEC-V1.md) | Deciding what to build or ship next | The consolidated launch spec, 2026-08-28. §1.4 and the open-decision answers record where the owner overrode its recommendations — the DECIDED/RESOLVED markers are the current truth. |
+| [playbooks/](playbooks/README.md) | Before touching Xcode, simulators, devices, releases, asc, or the daemon from any agent harness | Six imperative playbooks; every trap in them was paid for at least once here. |
 | [mac-remote-control.md](mac-remote-control.md) | Touching pointer, keyboard, media, windows or power | The control surface, end to end. Referenced from CONTEXT.md. |
 | [mesh-cli-and-remote-install.md](mesh-cli-and-remote-install.md) | Adding a machine, the `mesh` CLI, upgrade/uninstall | Start here for anything installer-shaped. |
+| [local-first-ade.md](local-first-ade.md) | Building or changing the app-building skills, or `mesh apps`/`mesh skills` | The two build routes (native via Xcode+devicectl, PWA via `mesh apps publish`) and the daemon underneath both. |
+| [launch-0.6.md](launch-0.6.md) | Writing the TestFlight notes, the launch posts or the demo recording for 0.6 | Launch kit for 0.6: TestFlight notes, X thread, LinkedIn, Show HN, demo script, and the claims not to make. |
+| [compare-moshi.md](compare-moshi.md) | Writing landing copy, a pricing page or a "vs" post | The sourced Moshi comparison: what they have that we lack (gestures, voice), what we have that they do not (redaction, built apps, fleet), and the claims we never make. |
+| [ux-audit.md](ux-audit.md) | Finding every rough screen without tapping through the app by hand | The crawl → grade → fix loop, the three copy-paste prompts for any agent, and the list of what the device day already found. |
 | [release-workflow.md](release-workflow.md) | Cutting a release | See the warning below — the fleet lags the repo. |
 | [backlog.md](backlog.md) | Asking "do we already have X?" before building it | 75 items graded against the code as done/partial/buried/missing. Generated — edit `.github/backlog.json`, not this. |
 | [updating.md](updating.md) | Anyone asks "how do I get the new version?" | Three components, three routes, no cable. Includes the internal-vs-external TestFlight trap. |

@@ -517,7 +517,7 @@ install_components() {
     cp "$PAYLOAD_DIR/hooks/cmux-bridge.zsh" "$MESH_HOME/hooks/cmux-bridge.zsh"
     _hook='[ -f "$HOME/.mesh/hooks/cmux-bridge.zsh" ] && source "$HOME/.mesh/hooks/cmux-bridge.zsh"'
     if [ -f "$HOME/.zshrc" ] && ! grep -Fq 'cmux-bridge.zsh' "$HOME/.zshrc" 2>/dev/null; then
-      printf '\n# MeshWatch cmux bridge (auto-start in interactive shells)\n%s\n' "$_hook" >> "$HOME/.zshrc"
+      printf '\n# LeSearch Mesh cmux bridge (auto-start in interactive shells)\n%s\n' "$_hook" >> "$HOME/.zshrc"
       log "Added cmux-bridge hook to ~/.zshrc"
     fi
   fi
@@ -537,6 +537,23 @@ install_agent_hooks() {
     log "Wired agent alerts into Claude Code (mesh hooks status to check)"
   else
     log "Could not wire Claude Code hooks — run: $MESH_HOME/bin/mesh hooks install"
+  fi
+}
+
+# Skills teach a coding agent working through mesh how to build an app for the user's
+# phone — native (Xcode + devicectl) or a local PWA (mesh apps publish). The payload
+# already staged share/skills/ into $MESH_HOME/share above; this is the step that makes
+# every CLI (Claude Code, Codex, Cursor) actually see it, by copying into
+# ~/.agents/skills and symlinking each CLI's own skills directory to it. Idempotent, and
+# never overwrites a directory it did not create itself.
+install_skills() {
+  want_component tools || return 0
+  command -v bun >/dev/null 2>&1 || return 0
+  [ -x "$MESH_HOME/bin/mesh" ] || return 0
+  if "$MESH_HOME/bin/mesh" skills install >/dev/null 2>&1; then
+    log "Installed agent skills into ~/.agents/skills (mesh skills status to check)"
+  else
+    log "Could not install agent skills — run: $MESH_HOME/bin/mesh skills install"
   fi
 }
 
@@ -569,7 +586,7 @@ setup_path() {
   if [ -f "$PATH_RC" ] && grep -Fq 'mesh shellenv' "$PATH_RC" 2>/dev/null; then
     PATH_STATE="present"; return 0
   fi
-  if printf '\n# MeshWatch CLI on PATH\n%s\n' "$PATH_LINE" >> "$PATH_RC" 2>/dev/null; then
+  if printf '\n# LeSearch Mesh CLI on PATH\n%s\n' "$PATH_LINE" >> "$PATH_RC" 2>/dev/null; then
     PATH_STATE="added"
   else
     PATH_STATE="manual"
@@ -784,6 +801,7 @@ chmod 600 "$MESH_HOME/token" 2>/dev/null || true
 want_component meshd && install_deps "$MESH_HOME/meshd"
 want_component bridge && install_deps "$MESH_HOME/rmux-bridge"
 install_agent_hooks
+install_skills
 
 MESHD_STATUS="skipped"; BRIDGE_STATUS="skipped"
 if [ "$NO_START" = "1" ]; then

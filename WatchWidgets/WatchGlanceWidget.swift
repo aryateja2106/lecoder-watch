@@ -21,7 +21,7 @@ struct WatchGlanceWidget: Widget {
             GlanceView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Agents waiting")
+        .configurationDisplayName("LeSearch Mesh")
         .description("How many agents are waiting on you, and how much of your mesh is up.")
         .supportedFamilies([.accessoryCircular, .accessoryCorner, .accessoryInline, .accessoryRectangular])
     }

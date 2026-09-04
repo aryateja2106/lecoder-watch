@@ -64,7 +64,7 @@ struct TerminalTab: View {
                                         Image(systemName: "terminal.fill")
                                         VStack(alignment: .leading) {
                                             Text(agent.displayName)
-                                            Text([agent.isCmux ? "cmux" : nil, agent.agentType ?? "shell", agent.memLabel].compactMap { $0 }.joined(separator: " · "))
+                                            Text([agent.isMuxGuest ? agent.kindLabel : nil, agent.agentType ?? "shell", agent.memLabel].compactMap { $0 }.joined(separator: " · "))
                                                 .font(.caption).foregroundStyle(.secondary)
                                         }
                                         Spacer()
@@ -75,7 +75,7 @@ struct TerminalTab: View {
                                     }
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    if !agent.isCmux {
+                                    if !agent.isMuxGuest {
                                         Button(role: .destructive) {
                                             Task { await store.kill(on: m, name: agent.name) }
                                         } label: {
@@ -106,6 +106,19 @@ struct TerminalTab: View {
                                 Circle().fill(snap.authError != nil ? .orange : (snap.reachable ? .green : .secondary)).frame(width: 7, height: 7)
                                 Text(snap.host)
                                 Spacer()
+                                // meshd 0.6+ ("apps"): an agent on this machine can
+                                // publish a PWA or build a native app — this is where
+                                // it shows up outside of whatever chat card built it.
+                                if snap.capabilities?.contains("apps") == true {
+                                    NavigationLink {
+                                        MeshAppsScreen(machine: m)
+                                    } label: {
+                                        Label("Apps", systemImage: "square.grid.2x2")
+                                    }
+                                    .labelStyle(.iconOnly)
+                                    .buttonStyle(.borderless)
+                                    .disabled(!terminalReady(snap))
+                                }
                                 // Browsing the machine's own filesystem is the fastest
                                 // way to answer "where do I start this?" — and the one
                                 // question a phone keyboard is worst at.
@@ -175,7 +188,7 @@ private struct ManualBridgeScreen: View {
     var body: some View {
         Form {
             Section("Session") {
-                TextField("pi-shell", text: $session)
+                TextField("pi-shell", text: $session.shellSafe)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                 FlowButtons(items: suggestions) { session = $0 }
@@ -203,6 +216,117 @@ private struct ManualBridgeScreen: View {
     }
 }
 
+// MARK: - Hosted apps (meshd 0.6+, capability "apps")
+
+/// What an agent built and published on this machine — a PWA or a native app — listed
+/// outside of whatever chat card first showed it. The same two actions as the chat
+/// artifact card: PWA opens in real Safari (Add to Home Screen only exists there),
+/// native posts to the machine's own install route.
+private struct MeshAppsScreen: View {
+    @EnvironmentObject var store: MeshStore
+    let machine: Machine
+
+    @State private var apps: [MeshApp] = []
+    @State private var loading = false
+    @State private var loadError: String?
+    @State private var installMessage: String?
+
+    var body: some View {
+        List {
+            if let loadError {
+                Text(loadError).font(.caption).foregroundStyle(.orange)
+            } else if apps.isEmpty && !loading {
+                ContentUnavailableView(
+                    "No apps yet",
+                    systemImage: "square.grid.2x2",
+                    description: Text("Ask an agent to build one — a native app or a web app — and it appears here.")
+                )
+            }
+            ForEach(apps) { app in
+                HStack(spacing: 12) {
+                    Image(systemName: app.kind == "native" ? "iphone.badge.play" : "globe")
+                        .foregroundStyle(app.kind == "native" ? Color.blue : Color.green)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(app.name).font(.headline)
+                        Text("\(kindLabel(app)) · \(updatedLabel(app.updated))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if app.kind == "native" {
+                        Button("Install") { Task { await install(app) } }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    } else {
+                        Button("Open") { open(app) }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                }
+            }
+            if let installMessage {
+                Text(installMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Apps")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if loading { ProgressView().controlSize(.small) }
+        }
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func updatedLabel(_ iso: String) -> String {
+        guard let date = parseISO(iso) else { return iso }
+        return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    /// Tells the user which install route the button will take before they tap it.
+    private func kindLabel(_ app: MeshApp) -> String {
+        guard app.kind == "native" else { return "Web" }
+        return app.install != nil ? "Native · wireless" : "Native · via \(machine.host)"
+    }
+
+    private func load() async {
+        loading = true
+        defer { loading = false }
+        do {
+            apps = try await store.client(for: machine).meshApps()
+            loadError = nil
+        } catch {
+            loadError = "Couldn't reach \(machine.host)."
+        }
+    }
+
+    private func open(_ app: MeshApp) {
+        guard let raw = app.url, let url = URL(string: raw) else { return }
+        // Real Safari, not SFSafariViewController: Add to Home Screen only exists there.
+        UIApplication.shared.open(url)
+    }
+
+    /// Wireless when the machine serves an .ipa over HTTPS (`install` is the
+    /// itms-services URL iOS handles itself — no cable, no Mac in front of you);
+    /// otherwise the machine's own devicectl push, which needs the phone paired and
+    /// reachable from it.
+    private func install(_ app: MeshApp) async {
+        installMessage = nil
+        if let raw = app.install, let url = URL(string: raw) {
+            let opened = await UIApplication.shared.open(url)
+            installMessage = opened ? "iOS is asking to install \(app.name)." : "Couldn't open the installer link."
+            return
+        }
+        do {
+            let result = try await store.client(for: machine).installMeshApp(slug: app.slug, target: "device")
+            installMessage = result.ok ? "\(app.name) installed." : (result.error ?? "Install failed.")
+        } catch {
+            installMessage = "Couldn't reach \(machine.host) to install."
+        }
+    }
+}
+
 // MARK: - New session sheet
 
 struct NewSessionSheet: View {
@@ -220,6 +344,18 @@ struct NewSessionSheet: View {
     @State private var busy = false
     @State private var browsing = false
     @State private var compact = false
+    /// Set when `create()` fails. The sheet used to dismiss unconditionally on tap,
+    /// which made a failed launch look identical to a successful one — this keeps the
+    /// form on screen with the reason and a way to try again.
+    @State private var errorMessage: String?
+
+    // MARK: - Resume (meshd 0.6+, capability "handoff")
+
+    /// Conversations kept for the typed working directory. Refetched 500ms after
+    /// `cwd` settles on an absolute path — see the `onChange` below — so a directory
+    /// typed character by character doesn't fire a request per keystroke.
+    @State private var resumableItems: [ResumableItem] = []
+    @State private var resumableTask: Task<Void, Never>?
 
     // Common launchers; "shell" means just a plain rmux session.
     private let presets = ["shell", "claude", "codex", "pi", "agy", "bun", "python3"]
@@ -265,8 +401,19 @@ struct NewSessionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let errorMessage {
+                    Section {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            Button("Retry") { Task { await create() } }
+                                .buttonStyle(.bordered)
+                                .disabled(busy)
+                        }
+                    }
+                }
                 Section("Session name") {
-                    TextField("e.g. build-watch", text: $name)
+                    TextField("e.g. build-watch", text: $name.shellSafe)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 }
@@ -276,11 +423,11 @@ struct NewSessionSheet: View {
                             Text(p).tag(p == "shell" ? "" : p)
                         }
                     }
-                    TextField("or custom command", text: $command)
+                    TextField("or custom command", text: $command.shellSafe)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                     HStack {
-                        TextField("Working directory (optional)", text: $cwd)
+                        TextField("Working directory (optional)", text: $cwd.shellSafe)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                         Button("Browse…") { browsing = true }
@@ -297,11 +444,25 @@ struct NewSessionSheet: View {
                     // best-effort request rather than a promise.
                     Toggle("Compact (80×24)", isOn: $compact)
                 }
+                if !resumableItems.isEmpty {
+                    Section("Resume") {
+                        ForEach(resumableItems) { item in
+                            Button {
+                                Task { await resume(item) }
+                            } label: {
+                                Text("\(kindLabel(item.kind)) · \(item.title.isEmpty ? "(untitled)" : item.title) · \(relativeTime(item.updated))")
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
                 Section("Task") {
                     Picker("Agent", selection: $taskAgent) {
                         ForEach(taskAgents, id: \.self) { Text($0).tag($0) }
                     }
-                    TextField("Describe the task", text: $taskText, axis: .vertical)
+                    TextField("Describe the task", text: $taskText.shellSafe, axis: .vertical)
                         .lineLimit(2...5)
                         .autocorrectionDisabled()
                     if !taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -318,12 +479,38 @@ struct NewSessionSheet: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") { Task { await create() } }
-                        .disabled(busy)
+                    Button {
+                        Task { await create() }
+                    } label: {
+                        if busy {
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                Text("Starting session…")
+                            }
+                        } else {
+                            Text("Create")
+                        }
+                    }
+                    .disabled(busy)
                 }
             }
             .onAppear {
                 if cwd.isEmpty, let initialCwd, !initialCwd.isEmpty { cwd = initialCwd }
+            }
+            .onChange(of: cwd) { _, newValue in
+                resumableTask?.cancel()
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard trimmed.hasPrefix("/") else {
+                    resumableItems = []
+                    return
+                }
+                resumableTask = Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    guard !Task.isCancelled else { return }
+                    let items = (try? await store.client(for: machine).resumable(cwd: trimmed).items) ?? []
+                    guard !Task.isCancelled else { return }
+                    resumableItems = items
+                }
             }
             .sheet(isPresented: $browsing) {
                 NavigationStack {
@@ -337,15 +524,50 @@ struct NewSessionSheet: View {
 
     private func create() async {
         busy = true
-        defer { busy = false }
-        await store.newSession(on: machine,
+        errorMessage = nil
+        let ok = await store.newSession(on: machine,
                                name: sessionName,
                                cmd: launchCommand,
                                cwd: cwd.trimmingCharacters(in: .whitespacesAndNewlines),
                                initialText: initialText,
                                cols: compact ? 80 : nil,
                                rows: compact ? 24 : nil)
-        dismiss()
+        busy = false
+        if ok {
+            dismiss()
+        } else {
+            // `store.fail(...)` on the failure path just set this; surfaced here so the
+            // sheet says exactly what MeshStore knows, not a generic "something failed".
+            errorMessage = store.lastError?.message ?? "Couldn't start the session."
+        }
+    }
+
+    private func kindLabel(_ kind: String) -> String {
+        switch kind {
+        case "claude": return "Claude"
+        case "codex": return "Codex"
+        case "cursor": return "Cursor"
+        default: return kind.capitalized
+        }
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f
+    }()
+
+    private func relativeTime(_ iso: String) -> String {
+        guard let date = parseISO(iso) else { return "" }
+        return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    /// A tapped Resume row launches through the same path as a manual Create: set
+    /// what it would have set by hand, then call it.
+    private func resume(_ item: ResumableItem) async {
+        command = item.cmd
+        name = "resume-\(item.kind)-\(item.id.prefix(6))"
+        await create()
     }
 }
 
@@ -369,15 +591,58 @@ private struct SessionPeekScreen: View {
     @State private var showingPhrase = false
     @State private var loading = false
     @State private var lastUpdated: Date?
-    /// The last poll came back with nothing at all. Distinct from "no output": one is
-    /// a quiet session, the other is a machine that stopped answering, and a screen
-    /// that shows the same thing for both is the reason "updated 14:02" used to be a
-    /// lie told every two seconds.
-    @State private var unreachable = false
+    /// Why the last poll came back with nothing, told apart. One `unreachable` boolean
+    /// used to cover all of these, which printed "HOST isn't answering" over a machine
+    /// that was answering fine — it had answered 404, because the session was gone.
+    /// A stale Live Activity tap lands here constantly; the sentence must be true.
+    enum PeekFailure: Equatable {
+        case none
+        /// Transport-level nothing: the machine did not answer at all.
+        case unreachable
+        /// The machine answered 404: the session/pane no longer exists.
+        case sessionGone
+        /// The machine answered 401/403: the token is bad — "pair again" territory.
+        case tokenRejected
+    }
+    @State private var peekFailure: PeekFailure = .none
+    private var unreachable: Bool { peekFailure == .unreachable }
+    /// Why the last keystroke did not land, in the daemon's own words. Cleared by the
+    /// next send that succeeds, so it describes the present and not a solved problem.
+    @State private var inputRefusal: String?
     @State private var openingLink: LinkTarget?
     /// Links the session printed — a dev server, a PR, an auth callback. Computed once
     /// per poll rather than per body pass: scanning is cheap, but not once a scroll.
     @State private var links: [URL] = []
+    /// When the user last drove this session (key, text, paste). The poll loop reads
+    /// it to decide between the 500ms interactive cadence and the 2s ambient one.
+    @State private var lastInteraction = Date.distantPast
+
+    // MARK: - Hand-off (meshd 0.6+, capability "handoff")
+
+    /// Installed CLIs this session can be handed to. Empty hides the toolbar menu —
+    /// either the daemon lacks the capability or nothing is installed there.
+    @State private var handoffTargets: [String] = []
+    @State private var handoffInFlight = false
+    @State private var handoffResultMessage: String?
+    /// Set the moment a menu row is tapped; the confirmation alert reads it and
+    /// clears it on either Cancel or Hand off.
+    @State private var confirmingHandoffTo: String?
+
+    private var handoffConfirmPresented: Binding<Bool> {
+        Binding(get: { confirmingHandoffTo != nil }, set: { if !$0 { confirmingHandoffTo = nil } })
+    }
+
+    enum ViewMode: String, CaseIterable {
+        case chat = "Chat"
+        case terminal = "Terminal"
+    }
+    @State private var viewMode: ViewMode = .chat
+    /// meshd 0.6+ ("chat"): the structured transcript AgentChatView renders. Owned
+    /// here rather than by AgentChatView itself so both view modes share the one
+    /// adaptive poll loop below instead of each running their own.
+    @State private var chatMessages: [ChatMessage] = []
+    @State private var chatCursor: String?
+    @State private var chatSource: String = ""
 
     /// The store's constructor, never a bare `MeshClient(machine:)`: one built without
     /// capabilities silently switches every 0.5.0 feature off.
@@ -400,7 +665,11 @@ private struct SessionPeekScreen: View {
     private var state: SessionState { sessionState(lines: output, attached: session.attached) }
 
     private var sessionKind: String {
-        session.isCmux ? "cmux" : "\(session.windows) pane\(session.windows == 1 ? "" : "s")"
+        session.kindLabel
+    }
+
+    private var agentDisplayName: String {
+        AgentCLIKind.detect(from: session.name, agentType: session.agentType).rawValue
     }
 
     private var continueBlocked: Bool {
@@ -422,34 +691,113 @@ private struct SessionPeekScreen: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                headerCard
-                paneCard
-                outputCard
-                controlsCard
-                presetsCard
+        Group {
+            if viewMode == .chat {
+                AgentChatView(
+                    machine: machine,
+                    session: session,
+                    messages: chatMessages,
+                    chatSource: chatSource,
+                    rawLines: output,
+                    // A trailing newline means "submit". Typed as a byte it is a line feed, and
+                    // Claude Code's prompt takes a bare line feed as a new line INSIDE the prompt —
+                    // the text sat there unsent. Enter is a key, so it is sent as one.
+                    onSendText: { text in
+                        Task {
+                            if text.hasSuffix("\n") {
+                                let body = String(text.dropLast())
+                                if !body.isEmpty { await send(text: body) }
+                                await send(key: "enter")
+                            } else {
+                                await send(text: text)
+                            }
+                        }
+                    },
+                    onSendKey: { key in Task { await send(key: key) } }
+                )
+                .disabled(handoffInFlight)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        headerCard
+                        paneCard
+                        outputCard
+                        controlsCard
+                        presetsCard
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                }
+                .background(Color(.systemGroupedBackground))
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
         }
-        .background(Color(.systemGroupedBackground))
+        .safeAreaInset(edge: .top) {
+            if let handoffResultMessage {
+                Text(handoffResultMessage)
+                    .font(.caption)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                    .background(.thinMaterial)
+            }
+        }
         .navigationTitle(session.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            Button { Task { await refresh() } } label: {
-                Image(systemName: loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+            ToolbarItem(placement: .principal) {
+                Picker("Mode", selection: $viewMode) {
+                    ForEach(ViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 150)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { Task { await refresh() } } label: {
+                    Image(systemName: loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                }
+            }
+            if !handoffTargets.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        ForEach(handoffTargets, id: \.self) { target in
+                            Button(target) { confirmingHandoffTo = target }
+                        }
+                    } label: {
+                        Label("Hand off to…", systemImage: "arrow.triangle.swap")
+                    }
+                    .disabled(handoffInFlight)
+                }
             }
         }
+        .task(id: session.name) { await loadHandoffTargets() }
         .task(id: session.name) {
+            // Adaptive cadence: 500ms while the user is actively driving this session
+            // (a key, a paste, a reply within the last 10s), 2s otherwise, and no
+            // fetches at all while the app is backgrounded. The fast lane is what makes
+            // a sent keystroke's echo feel attached to the finger; the 10s decay is the
+            // battery guard — reading output hands-off is a 2s activity, typing is not.
             while !Task.isCancelled {
-                await refresh()
-                try? await Task.sleep(for: .seconds(2))
+                let parked = UIApplication.shared.applicationState == .background
+                if !parked {
+                    await refresh()
+                    await refreshChat()
+                }
+                let fast = !parked && Date().timeIntervalSince(lastInteraction) < 10
+                try? await Task.sleep(for: .milliseconds(fast ? 500 : 2000))
             }
         }
         .sheet(isPresented: $showingCompose) { composeSheet }
         .sheet(isPresented: $showingPhrase) { phraseSheet }
         .sheet(item: $openingLink) { target in SafariView(url: target.url) }
+        .alert("Hand off to \(confirmingHandoffTo ?? "")?", isPresented: handoffConfirmPresented,
+               presenting: confirmingHandoffTo) { target in
+            Button("Cancel", role: .cancel) {}
+            Button("Hand off") { Task { await performHandoff(to: target) } }
+        } message: { target in
+            Text("Interrupt \(agentDisplayName) and continue this task with \(target). The conversation so far is written to HANDOFF.md in the working directory.")
+        }
     }
 
     private var headerCard: some View {
@@ -473,14 +821,30 @@ private struct SessionPeekScreen: View {
                 StatPill(label: "Mem", value: session.memLabel ?? "—")
                 StatPill(label: "State", value: state.label, tone: stateColor(state))
             }
-            if unreachable {
+            switch peekFailure {
+            case .unreachable:
                 Label(lastUpdated == nil
                       ? "\(machine.host) isn't answering — nothing has loaded yet"
                       : "\(machine.host) stopped answering · showing the last output",
                       systemImage: "wifi.exclamationmark")
                     .font(.caption)
                     .foregroundStyle(.orange)
-            } else if let lastUpdated {
+            case .sessionGone:
+                Label(lastUpdated == nil
+                      ? "This session has ended — \(machine.host) is answering, the pane is gone"
+                      : "This session has ended · showing its last output",
+                      systemImage: "moon.zzz")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            case .tokenRejected:
+                Label("\(machine.host) rejected the token — pair again from Machines",
+                      systemImage: "key.slash")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            case .none:
+                EmptyView()
+            }
+            if peekFailure == .none, let lastUpdated {
                 Text("updated \(lastUpdated.formatted(date: .omitted, time: .shortened))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -503,12 +867,17 @@ private struct SessionPeekScreen: View {
     private var paneCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label(session.isCmux ? "Surface" : "Pane", systemImage: "rectangle.split.2x1")
+                Label(session.isCmux ? "Surface" : session.isHerdr ? "herdr pane" : "Pane", systemImage: "rectangle.split.2x1")
                     .font(.headline)
                 Spacer()
-                Text(activePane?.label ?? "session")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                // Only when there is a choice to describe: with one pane, "0.0 2.1.250"
+                // in the corner is a riddle, not information — the path below already
+                // says everything a single pane has to say.
+                if panes.count > 1 {
+                    Text(activePane?.label ?? "session")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             if panes.isEmpty {
                 Text("No pane list yet.")
@@ -522,10 +891,12 @@ private struct SessionPeekScreen: View {
                         .lineLimit(2)
                         .textSelection(.enabled)
                 }
-                FlowButtons(items: panes.map(\.label)) { label in
-                    guard let pane = panes.first(where: { $0.label == label }) else { return }
-                    selectedPane = pane.paneId
-                    Task { await refresh() }
+                if panes.count > 1 {
+                    FlowButtons(items: panes.map(\.label)) { label in
+                        guard let pane = panes.first(where: { $0.label == label }) else { return }
+                        selectedPane = pane.paneId
+                        Task { await refresh() }
+                    }
                 }
             }
         }
@@ -541,9 +912,27 @@ private struct SessionPeekScreen: View {
                 Spacer()
                 if loading { ProgressView().controlSize(.small) }
             }
+            if let inputRefusal {
+                Label("Input refused · \(inputRefusal)", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Group {
                 if visibleLines.isEmpty {
-                    Text("No output yet. Tap refresh or open the terminal.")
+                    // "No output yet" is only true when the session answered. Each
+                    // failure gets its own sentence: a vanished pane, a silent machine
+                    // and a rejected token demand three different next moves, and
+                    // printing the reassuring line over any of them is what made the
+                    // terminal look merely quiet.
+                    Text({
+                        switch peekFailure {
+                        case .unreachable: "\(machine.host) isn't answering — this is not an empty session."
+                        case .sessionGone: "This session has ended. Nothing more will appear here."
+                        case .tokenRejected: "\(machine.host) rejected the token — pair again from Machines."
+                        case .none: "No output yet. Tap refresh or open the terminal."
+                        }
+                    }())
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
@@ -551,6 +940,13 @@ private struct SessionPeekScreen: View {
                         .font(.system(.caption, design: .monospaced))
                         .lineSpacing(2)
                         .textSelection(.enabled)
+                        // Accept the proposed width, wrap, grow down. Without this an
+                        // unbreakable run (a agent's ────── separator, a long path)
+                        // sets the Text's ideal width past the viewport, and inside a
+                        // ScrollView it GETS it — every maxWidth:.infinity sibling then
+                        // stretches to match, which is why the whole screen rendered
+                        // full-bleed with both gutters clipped.
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -587,7 +983,7 @@ private struct SessionPeekScreen: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(session.isCmux)
+            .disabled(session.isMuxGuest)
             // meshd's own remote desktop, opened knowing which session you came from —
             // which is what lets its paste go into this pane instead of into whatever
             // the Mac happens to have focused. Needs no VNC server installed anywhere.
@@ -617,29 +1013,37 @@ private struct SessionPeekScreen: View {
                     Label("Paste", systemImage: "doc.on.clipboard")
                 }
                 .disabled(!UIPasteboard.general.hasStrings)
-                if !session.isCmux {
+                if !session.isMuxGuest {
                     Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
                 }
-                if activePane != nil && !session.isCmux {
+                if activePane != nil && !session.isMuxGuest {
+                    // isMuxGuest, not isCmux: the daemon refuses kill for herdr panes
+                    // too, and a button that always answers 400 is not a control.
                     Button(role: .destructive) { Task { await killPane() } } label: { Label("Kill pane", systemImage: "rectangle.split.1x2") }
                 }
             }
             .buttonStyle(.bordered)
             .labelStyle(.iconOnly)
-            HStack {
-                Button { Task { await send(key: "enter") } } label: { Label("Enter", systemImage: "return") }
-                Button(role: .destructive) { Task { await send(key: "ctrl-c") } } label: { Label("Stop", systemImage: "xmark.octagon") }
-                Button { Task { await send(key: "up") } } label: { Label("Up", systemImage: "arrow.up") }
-                Button { Task { await send(key: "down") } } label: { Label("Down", systemImage: "arrow.down") }
-                Button { Task { await send(key: "left") } } label: { Label("Left", systemImage: "arrow.left") }
-                Button { Task { await send(key: "right") } } label: { Label("Right", systemImage: "arrow.right") }
-                Button { Task { await send(key: "tab") } } label: { Label("Tab", systemImage: "arrow.right.to.line") }
-                Button { Task { await send(key: "escape") } } label: { Label("Esc", systemImage: "escape") }
+            // Scrolls sideways instead of dictating the page's width: eight bordered
+            // icon buttons want ~450pt on a 402pt screen, and an HStack that gets its
+            // ideal width inside this ScrollView stretched EVERY card past both edges —
+            // the whole peek screen rendered full-bleed with its gutters clipped.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    Button { Task { await send(key: "enter") } } label: { Label("Enter", systemImage: "return") }
+                    Button(role: .destructive) { Task { await send(key: "ctrl-c") } } label: { Label("Stop", systemImage: "xmark.octagon") }
+                    Button { Task { await send(key: "up") } } label: { Label("Up", systemImage: "arrow.up") }
+                    Button { Task { await send(key: "down") } } label: { Label("Down", systemImage: "arrow.down") }
+                    Button { Task { await send(key: "left") } } label: { Label("Left", systemImage: "arrow.left") }
+                    Button { Task { await send(key: "right") } } label: { Label("Right", systemImage: "arrow.right") }
+                    Button { Task { await send(key: "tab") } } label: { Label("Tab", systemImage: "arrow.right.to.line") }
+                    Button { Task { await send(key: "escape") } } label: { Label("Esc", systemImage: "escape") }
+                }
             }
             .buttonStyle(.bordered)
             .labelStyle(.iconOnly)
             // rmux supports the full key set; cmux surfaces only take the row above.
-            if !session.isCmux {
+            if !session.isMuxGuest {
                 HStack {
                     Button { Task { await send(key: "page-up") } } label: { Label("Page up", systemImage: "arrow.up.to.line") }
                     Button { Task { await send(key: "page-down") } } label: { Label("Page down", systemImage: "arrow.down.to.line") }
@@ -650,7 +1054,7 @@ private struct SessionPeekScreen: View {
                 .buttonStyle(.bordered)
                 .labelStyle(.iconOnly)
             }
-            if !session.isCmux {
+            if !session.isMuxGuest {
                 Button(role: .destructive) {
                     Task {
                         await store.kill(on: machine, name: session.name)
@@ -683,7 +1087,7 @@ private struct SessionPeekScreen: View {
         NavigationStack {
             Form {
                 Section("Send to \(session.displayName)") {
-                    TextField("Type, paste, or dictate a command", text: $composeText, axis: .vertical)
+                    TextField("Type, paste, or dictate a command", text: $composeText.shellSafe, axis: .vertical)
                         .lineLimit(3...8)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -711,7 +1115,7 @@ private struct SessionPeekScreen: View {
         NavigationStack {
             Form {
                 Section("Say what you want") {
-                    TextField("list files, go to Projects, start codex", text: $phraseText, axis: .vertical)
+                    TextField("list files, go to Projects, start codex", text: $phraseText.shellSafe, axis: .vertical)
                         .lineLimit(2...5)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
@@ -754,17 +1158,20 @@ private struct SessionPeekScreen: View {
         let mesh = client
         let name = session.name
         let pane = selectedPane
-        async let out = try? mesh.output(agent: name, lines: 120, pane: pane)
-        async let paneList = try? mesh.panes(agent: name)
-        let fetchedOutput = await out
-        let fetchedPanes = await paneList
-        if let fetchedOutput {
+        // Task.result, not `try?`: the error IS the data here. A 404 means the machine
+        // answered and the session is gone; a transport error means it did not answer;
+        // 401/403 means the token died. `try?` melted all three into one wrong banner.
+        let outTask = Task { try await mesh.output(agent: name, lines: 120, pane: pane) }
+        let panesTask = Task { try await mesh.panes(agent: name) }
+        let outResult = await outTask.result
+        let panesResult = await panesTask.result
+        if case .success(let fetchedOutput) = outResult {
             output = fetchedOutput.lines
             // Scanned off the fetched lines rather than off `visibleLines`, so this
             // never depends on when a @State write becomes readable again.
             links = detectedLinks(in: Array(fetchedOutput.lines.suffix(32)))
         }
-        if let fetchedPanes {
+        if case .success(let fetchedPanes) = panesResult {
             panes = fetchedPanes
             if selectedPane == nil {
                 selectedPane = fetchedPanes.first(where: { $0.active })?.paneId ?? fetchedPanes.first?.paneId
@@ -773,18 +1180,92 @@ private struct SessionPeekScreen: View {
         // Only real data moves the clock. Stamping `Date()` unconditionally meant a
         // machine that had been unreachable for an hour still reported itself updated
         // two seconds ago — the timestamp described the poll, not the output.
-        if fetchedOutput != nil || fetchedPanes != nil {
+        switch (outResult, panesResult) {
+        case (.success, _), (_, .success):
             lastUpdated = Date()
-            unreachable = false
-        } else {
-            unreachable = true
+            peekFailure = .none
+        case (.failure(let outError), .failure):
+            peekFailure = Self.classify(outError)
         }
     }
 
+    /// meshd 0.6+ ("chat"): poll the structured transcript alongside `refresh()`'s
+    /// output/panes fetch, on the same adaptive cadence. Gated client-side on the
+    /// capability string, never on version — an old daemon simply never gets asked.
+    /// New messages are appended by `id` rather than replacing the list, matching the
+    /// contract's "append by id; pass cursor back"; a transient poll failure leaves
+    /// the transcript exactly as it was rather than blanking it.
+    private func refreshChat() async {
+        guard client.supports("chat") else { return }
+        guard let feed = try? await client.chat(agent: session.name, since: chatCursor, limit: 200) else { return }
+        chatCursor = feed.cursor
+        chatSource = feed.source
+        if feed.source == "output" {
+            // The daemon found no real transcript either; AgentChatView falls back to
+            // rendering `output` (already fetched above) as a terminal block.
+            chatMessages = []
+        } else {
+            let known = Set(chatMessages.map(\.id))
+            chatMessages.append(contentsOf: feed.messages.filter { !known.contains($0.id) })
+            // Cap stored history — the daemon already caps a single poll at `limit`,
+            // this caps the running total for a session left open for hours.
+            if chatMessages.count > 500 { chatMessages.removeFirst(chatMessages.count - 500) }
+        }
+    }
+
+    /// The output fetch's error decides the banner; the panes fetch fails the same way
+    /// for the same causes and adds nothing.
+    private static func classify(_ error: Error) -> PeekFailure {
+        switch (error as? MeshClient.MeshError)?.statusCode {
+        case 404: .sessionGone
+        case 401, 403: .tokenRejected
+        default: .unreachable
+        }
+    }
+
+    /// A refused keystroke has to say so. `try?` here meant the daemon could answer
+    /// "pane not found" and the screen would look exactly like a delivered key — the
+    /// half of the dead-terminal report that no daemon fix could have reached.
     private func send(text: String? = nil, key: String? = nil) async {
-        try? await client.send(agent: session.name, text: text, key: key, pane: selectedPane)
+        lastInteraction = Date()
+        do {
+            try await client.send(agent: session.name, text: text, key: key, pane: selectedPane)
+            inputRefusal = nil
+        } catch let error as MeshClient.MeshError {
+            inputRefusal = error.reason ?? "the machine refused the input"
+        } catch {
+            inputRefusal = "the machine could not be reached"
+        }
         try? await Task.sleep(for: .milliseconds(350))
         await refresh()
+    }
+
+    /// meshd 0.6+ ("handoff"): which installed CLIs this session can be handed to.
+    /// `[]` on an unsupported daemon (`resumable(agent:)` throws `.unsupported`) or
+    /// one with nothing installed — either way the toolbar menu just doesn't appear.
+    private func loadHandoffTargets() async {
+        handoffTargets = (try? await client.resumable(agent: session.name).targets) ?? []
+    }
+
+    /// Interrupt this session and relaunch it under `target`. The daemon holds the
+    /// response open for the whole sequence (two Ctrl-C, a beat, the new command), so
+    /// disabling the composer for the `await` below already covers the time it takes.
+    private func performHandoff(to target: String) async {
+        handoffInFlight = true
+        do {
+            _ = try await client.handoff(agent: session.name, to: target)
+            handoffResultMessage = "Handed off — \(target) is reading HANDOFF.md"
+        } catch let error as MeshClient.MeshError {
+            handoffResultMessage = error.reason ?? "the hand-off was refused"
+        } catch {
+            handoffResultMessage = "the machine could not be reached"
+        }
+        handoffInFlight = false
+        let shown = handoffResultMessage
+        Task {
+            try? await Task.sleep(for: .seconds(6))
+            if handoffResultMessage == shown { handoffResultMessage = nil }
+        }
     }
 
     /// Paste the phone's clipboard into the selected pane. `paste: true` only reaches
@@ -792,7 +1273,16 @@ private struct SessionPeekScreen: View {
     /// behavior from the same call, so there is nothing to branch on here.
     private func pasteIntoPane() async {
         guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
-        try? await client.send(agent: session.name, text: text, pane: selectedPane, paste: true)
+        lastInteraction = Date()
+        // Same contract as send(): a refused paste must say why, not look delivered.
+        do {
+            try await client.send(agent: session.name, text: text, pane: selectedPane, paste: true)
+            inputRefusal = nil
+        } catch let error as MeshClient.MeshError {
+            inputRefusal = error.reason ?? "the machine refused the paste"
+        } catch {
+            inputRefusal = "the machine could not be reached"
+        }
         try? await Task.sleep(for: .milliseconds(350))
         await refresh()
     }
@@ -840,6 +1330,7 @@ private struct FlowButtons: View {
 
 private struct BridgeTerminalScreen: View {
     @EnvironmentObject var store: MeshStore
+    @Environment(\.scenePhase) private var scenePhase
     let machine: Machine
     let session: String
     let initialPane: String?
@@ -848,6 +1339,18 @@ private struct BridgeTerminalScreen: View {
     @State private var selectedPane: String?   // nil = whole session (default)
     @State private var phase: WebLoadPhase = .loading
     @State private var reloadToken = 0
+    /// Set once the bridge auth cookie has landed in the shared cookie store — see the
+    /// `.task(id: machine.token)` below. `BridgeWebView` (and its `web.load`) is not
+    /// created until this is true, so the bridge's very first request always carries it;
+    /// a cookie added after an unauthenticated page has already started loading would
+    /// not retroactively fix that navigation.
+    @State private var cookieReady = false
+    /// When the page was last (re)loaded. The bridge posts nothing about its own
+    /// WebSocket, so there is no "the socket closed" signal to read here — coming
+    /// back to the foreground after a while is the proxy: a phone that sat
+    /// backgrounded long enough for the terminal's socket to die is exactly the
+    /// stuck terminal the owner saw.
+    @State private var lastLoadAt = Date()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -856,8 +1359,12 @@ private struct BridgeTerminalScreen: View {
             }
             if let url = machine.terminalURL(session: session, pane: selectedPane) {
                 ZStack {
-                    BridgeWebView(url: url, reloadToken: reloadToken, phase: $phase)
-                        .ignoresSafeArea(edges: .bottom)
+                    if cookieReady {
+                        BridgeWebView(url: url, reloadToken: reloadToken, phase: $phase)
+                            .ignoresSafeArea(edges: .bottom)
+                    }
+                    // `phase` defaults to .loading, so this reads as "connecting" for
+                    // free during the cookie wait too — the same screen either way.
                     webStatus(url: url)
                 }
             } else {
@@ -867,11 +1374,46 @@ private struct BridgeTerminalScreen: View {
         .navigationTitle(session)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadPanes() }
+        // install/payload/rmux-bridge auth.ts: a browser cannot put a header on a
+        // WebSocket upgrade, so the bridge accepts this machine's bearer token as the
+        // `mesh_token` cookie instead — never in the URL. Keyed on the token so a
+        // re-pair while this screen happens to still be open resets it.
+        .task(id: machine.token) {
+            guard let bridge = machine.resolvedBridge, let host = URL(string: bridge)?.host,
+                  !machine.token.isEmpty else {
+                cookieReady = true
+                return
+            }
+            let cookie = HTTPCookie(properties: [
+                .domain: host,
+                .path: "/",
+                .name: "mesh_token",
+                .value: machine.token,
+                .expires: Date().addingTimeInterval(86400),
+            ])
+            if let cookie {
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    WKWebsiteDataStore.default().httpCookieStore.setCookie(cookie) {
+                        continuation.resume()
+                    }
+                }
+            }
+            cookieReady = true
+        }
         // Watching an agent work is a screen you look at without touching, so the auto
         // lock dims it mid-run. Released on disappear, never at app scope: a phone that
         // never sleeps again is a worse bug than the dim.
         .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        // A backgrounded WKWebView's socket does not reliably survive an arbitrary
+        // nap. Coming back to a page that has sat idle over a minute reloads it
+        // rather than leaving a frozen terminal on screen with no way to tell it
+        // apart from a quiet one.
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active, Date().timeIntervalSince(lastLoadAt) > 60 else { return }
+            lastLoadAt = Date()
+            reloadToken += 1
+        }
     }
 
     /// A WKWebView that cannot reach its host renders a blank black rectangle — which,
@@ -911,6 +1453,7 @@ private struct BridgeTerminalScreen: View {
                     .textSelection(.enabled)
                 Button {
                     phase = .loading
+                    lastLoadAt = Date()
                     reloadToken += 1
                 } label: {
                     Label("Retry", systemImage: "arrow.clockwise")

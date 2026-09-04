@@ -95,7 +95,7 @@ struct WatchGlance: Codable, Hashable {
     func entry(now: Date = Date()) -> (eyebrow: String, title: String, body: String) {
         if isStale(now: now) {
             guard let age = ageMinutes(now: now) else {
-                return ("NOT CONNECTED", "Open LeSearch Mesh", "The watch has never reached your mesh.")
+                return ("NOT CONNECTED", "Open MeshWatch", "The watch has never reached your mesh.")
             }
             return ("LAST SEEN \(age)M AGO", "Tap to reconnect", "This count may be out of date.")
         }
@@ -113,7 +113,7 @@ struct WatchGlance: Codable, Hashable {
                     machinesTotal == 0 ? "Open to check on it" : "\(machinesUp) of \(machinesTotal) machines up")
         }
         if machinesTotal == 0 {
-            return ("NOT PAIRED", "Pair a machine", "Open LeSearch Mesh on your iPhone.")
+            return ("NOT PAIRED", "Pair a machine", "Open MeshWatch on your iPhone.")
         }
         return ("ALL CLEAR", "Nothing waiting on you", "\(machinesUp) of \(machinesTotal) machines up")
     }

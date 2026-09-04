@@ -7,7 +7,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "0.5.0"
+    MARKETING_VERSION: "0.5.1"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     GENERATE_INFOPLIST_FILE: NO
@@ -20,6 +20,10 @@ schemes:
         MeshWatch: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - MeshWatchUITests
   MeshWatch Watch App:
     build:
       targets:
@@ -33,6 +37,20 @@ schemes:
     run:
       config: Debug
 targets:
+  # Runs the app and puts a text field on screen. Static checks cannot see a UIKit
+  # appearance invocation that only throws when it is replayed onto a live view.
+  MeshWatchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: MeshWatch
+    settings:
+      base:
+        TEST_TARGET_NAME: MeshWatch
+        GENERATE_INFOPLIST_FILE: YES
+
   MeshWatch:
     type: application
     platform: iOS
@@ -57,9 +75,11 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSLocalNetworkUsageDescription: "LeSearch Mesh connects to your machines over your private network."
+        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
-        NSFaceIDUsageDescription: "Unlock LeSearch Mesh so only you can reach your machines."
+        NSSpeechRecognitionUsageDescription: "Turn what you say into text for your agents, on this device."
+        NSFaceIDUsageDescription: "Unlock MeshWatch so only you can reach your machines."
+        NSCameraUsageDescription: "Scan a machine's pairing QR code."
         UIBackgroundModes:
           - fetch
         BGTaskSchedulerPermittedIdentifiers:
@@ -107,7 +127,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.lecoder.meshdesktop
         # `mesh desktop` opens it by bundle id, but the name on disk is the one the CLI
         # tells you to drag into /Applications, so it has to match.
-        PRODUCT_NAME: LeSearch Mesh
+        PRODUCT_NAME: MeshWatch
         # No sandbox entitlement on purpose: this app talks to 127.0.0.1:8899 and hands
         # System Settings deep links to NSWorkspace. A sandbox would block both to
         # protect the user from an app that only ever calls their own machine.
@@ -156,7 +176,7 @@ targets:
         WKCompanionAppBundleIdentifier: com.lecoder.meshwatch
         # The watch dials meshd directly (f3e88d0), so it needs its own Local
         # Network grant — the phone's does not carry over.
-        NSLocalNetworkUsageDescription: "LeSearch Mesh connects to your machines over your private network."
+        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
@@ -178,7 +198,7 @@ targets:
     info:
       path: WatchWidgets/Info.plist
       properties:
-        CFBundleDisplayName: Agents waiting
+        CFBundleDisplayName: LeSearch Mesh
         # Extensions must match the parent app's version or App Store Connect
         # rejects the upload — xcodegen defaults them to 1.0 unless told.
         CFBundleShortVersionString: $(MARKETING_VERSION)

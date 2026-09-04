@@ -6,6 +6,10 @@
 //   mesh-input --check            print {"trusted":…}; exit 0 when Accessibility is granted
 //   mesh-input --check --prompt   same, but ask macOS to show the Accessibility dialog
 //   mesh-input --displays         print the display arrangement as JSON and exit
+//   mesh-input --dry-run          stream mode that PRINTS each event instead of posting
+//                                 it. Nothing reaches the Mac, which is the only way to
+//                                 read a chord's real sequence back on a machine
+//                                 somebody is using (scripts/check-mesh-chords.sh).
 //
 // Events (t = type):
 //   {"t":"move","dx":3,"dy":-2}            relative cursor move (drag when button held)
@@ -13,7 +17,10 @@
 //   {"t":"click","button":"left","count":2}
 //   {"t":"down"} / {"t":"up"}              hold/release left button (drag lock)
 //   {"t":"scroll","dx":0,"dy":-40}         pixel scroll
-//   {"t":"key","key":"c","mods":["cmd"]}
+//   {"t":"key","key":"c","mods":["cmd"]}   a CHORD: every modifier goes down, the key is
+//                                          pressed and released while they are held, and
+//                                          they lift again in reverse. One line on the
+//                                          wire, one atomic sequence, all-or-nothing.
 //   {"t":"text","s":"hello"}               arbitrary Unicode, no keycode needed
 //   {"t":"media","key":"playpause"}        media / brightness / backlight keys
 //   {"t":"window","place":"left","display":2}    snap the frontmost window
@@ -29,6 +36,13 @@ import ApplicationServices
 import AppKit
 
 let flags = Set(CommandLine.arguments.dropFirst())
+
+/// Print what would be posted; post nothing. Every property of a chord that can be
+/// wrong — the order of the events, the keycodes, the modifier flags each one carries —
+/// is observable this way without a single HID event reaching the Mac. That matters
+/// because the alternative test is "press ⌘⇧4 on the developer's own machine and look",
+/// which nobody can run twice in a row.
+let dryRun = flags.contains("--dry-run")
 
 // MARK: - Permission check mode
 
@@ -148,8 +162,44 @@ let MODIFIERS: [String: (key: CGKeyCode, flag: CGEventFlags)] = [
 let clickFence: UInt32 = 50_000   // µs inside a click, between its down and its up
 let keyFence: UInt32   = 1_200    // µs after a key, text or media event
 
+/// The named modifier bits, in the order Apple prints them on a menu (⌃⌥⇧⌘). Fixed on
+/// purpose: a dry-run line has to be the same string whatever order the client listed
+/// its modifiers in, or the test would be asserting the client's Set iteration order.
+func describeFlags(_ mask: CGEventFlags) -> String {
+    var parts: [String] = []
+    if mask.contains(.maskControl) { parts.append("ctrl") }
+    if mask.contains(.maskAlternate) { parts.append("opt") }
+    if mask.contains(.maskShift) { parts.append("shift") }
+    if mask.contains(.maskCommand) { parts.append("cmd") }
+    if mask.contains(.maskSecondaryFn) { parts.append("fn") }
+    return parts.isEmpty ? "-" : parts.joined(separator: "+")
+}
+
+/// One line per event, keyboard events named because they are the ones a chord is made
+/// of. Anything else prints its raw type — enough to prove it happened and in what
+/// order, without pretending this is a general-purpose CGEvent printer.
+///
+/// A modifier comes back as `flags`, not `keydown`: asked for a keyDown on keycode 55,
+/// Quartz hands back a .flagsChanged event, which is exactly what the hardware ⌘ key
+/// emits. Whether it went down or came up is in the flags on the line, the way the
+/// WindowServer reads it too.
+func describe(_ event: CGEvent) -> String {
+    let mods = describeFlags(event.flags)
+    let code = event.getIntegerValueField(.keyboardEventKeycode)
+    switch event.type {
+    case .keyDown:      return "keydown \(code) \(mods)"
+    case .keyUp:        return "keyup \(code) \(mods)"
+    case .flagsChanged: return "flags \(code) \(mods)"
+    default:            return "event \(event.type.rawValue) \(mods)"
+    }
+}
+
 func post(_ event: CGEvent?, settle: UInt32 = 0) {
-    event?.post(tap: .cghidEventTap)
+    guard let event else { return }
+    // Before the post, never after: a --dry-run that still injected would be worse than
+    // having no test at all.
+    if dryRun { print(describe(event)); return }
+    event.post(tap: .cghidEventTap)
     if settle > 0 { usleep(settle) }
 }
 
@@ -211,9 +261,27 @@ func scroll(dx: Int32, dy: Int32) {
                  wheelCount: 2, wheel1: dy, wheel2: dx, wheel3: 0))
 }
 
+/// A chord, and the reason it is one function rather than a caller's for-loop: the
+/// modifiers go down, the key goes down and up while they are held, and the modifiers
+/// lift in reverse. Quartz has no shape for "simultaneous" — it is separate events or
+/// nothing — so the guarantee this function makes is that nothing gets between them.
+///
+/// All-or-nothing on the modifiers, which is the half that used to be missing. It
+/// compactMapped them, so a name the table did not know simply fell out and the chord
+/// fired without it: a ⌘⇧4 whose "cmd" did not map was not a failed screenshot, it was
+/// a "$" typed into whatever had focus. The helper has no reply channel and can only
+/// refuse silently; meshd's input.ts checks the same names first and tells the client
+/// which one it could not map.
 func pressKey(_ name: String, mods: [String]) {
     guard let code = KEYCODES[name.lowercased()] else { return }
-    let held = mods.compactMap { MODIFIERS[$0.lowercased()] }
+    var held: [(key: CGKeyCode, flag: CGEventFlags)] = []
+    var pressed = Set<CGKeyCode>()
+    for raw in mods {
+        guard let mod = MODIFIERS[raw.lowercased()] else { return }
+        // "cmd" and "command" are one physical key. Pressing it twice would make the
+        // first release lift a modifier the rest of the chord still needs.
+        if pressed.insert(mod.key).inserted { held.append(mod) }
+    }
     let allFlags = held.reduce(CGEventFlags()) { $0.union($1.flag) }
 
     var accumulated = CGEventFlags()

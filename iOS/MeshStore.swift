@@ -47,6 +47,7 @@ final class MeshStore: ObservableObject {
     private let pinnedLimitsKey = "mesh.pinnedLimits.v1"
     private let netIdentityKey = "mesh.netIdentity.v1"
     private let capabilitiesKey = "mesh.capabilities.v1"
+    private let removedHostsKey = "mesh.removedHosts.v1"
     static let defaultQuickCommands = ["continue", "git status", "pwd", "ls", "cd ..", "clear", "~/.mesh/bin/mesh-self-check"]
     // The agent the watch asked us to relay live output for.
     private var watchedHost: String?
@@ -133,7 +134,11 @@ final class MeshStore: ObservableObject {
         // this kept them in UserDefaults in plaintext; migrate those once.
         if let data = SecureStore.migrateFromUserDefaults(key: defaultsKey),
            let decoded = try? JSONDecoder().decode([Machine].self, from: data) {
-            machines = decoded
+            // Stamp every machine written before `uid` existed, once, before anything
+            // renders — the rest of the app may then treat `id` as stable and unique.
+            let needsStamping = decoded.contains { $0.uid == nil }
+            machines = decoded.map { var m = $0; if m.uid == nil { m.uid = UUID() }; return m }
+            if needsStamping { save() }
         }
         if let decoded = UserDefaults.standard.stringArray(forKey: quickCommandsKey), !decoded.isEmpty {
             quickCommands = Self.mergedQuickCommands(decoded)
@@ -172,8 +177,49 @@ final class MeshStore: ObservableObject {
         UserDefaults.standard.set(data, forKey: capabilitiesKey)
     }
 
+    /// Hosts the user deliberately removed, kept so a later pairing's fleet import does
+    /// not resurrect them (pairing adopts the paired machine's whole hosts.json).
+    /// Lowercased names and addresses; not secret, so UserDefaults is the right place.
+    private var removedHosts: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: removedHostsKey) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue).sorted(), forKey: removedHostsKey) }
+    }
+
+    private func tombstone(_ machine: Machine) {
+        var set = removedHosts
+        if !machine.host.isEmpty { set.insert(machine.host.lowercased()) }
+        if !machine.ip.isEmpty { set.insert(machine.ip.lowercased()) }
+        removedHosts = set
+    }
+
     func deleteMachines(atOffsets offsets: IndexSet) {
+        let removed = Set(offsets.map { machines[$0].host })
+        for i in offsets { tombstone(machines[i]) }
         machines.remove(atOffsets: offsets)
+        // Same ghost problem as removeMachine: an in-flight poll can write the row
+        // back moments later, so the visible snapshot must forget it too.
+        snapshot?.machines.removeAll { removed.contains($0.host) }
+        save()
+    }
+
+    /// Removal from the machine list or detail screen, where there is no IndexSet.
+    /// Local only — the machine itself is untouched — and remembered, so the row does
+    /// not reappear from the next pairing's fleet.
+    func removeMachine(host: String) {
+        // The row being removed may be a ghost a stale poll wrote back after the
+        // config was already deleted. Removal must never be a silent no-op: strip the
+        // snapshot row and record the tombstone even when there is no config row left.
+        var set = removedHosts
+        set.insert(host.lowercased())
+        removedHosts = set
+        if let index = machines.firstIndex(where: { $0.host == host })
+            ?? machines.firstIndex(where: { hostNamesMatch($0.host, host) }) {
+            tombstone(machines[index])
+            machines.remove(at: index)
+        }
+        // Drop the stale snapshot row too; waiting for the next poll to erase a machine
+        // the user just deleted reads as the delete not working.
+        snapshot?.machines.removeAll { $0.host == host }
         save()
     }
 
@@ -182,8 +228,21 @@ final class MeshStore: ObservableObject {
     @discardableResult
     func pair(address: String, port: Int, code: String) async throws -> [PairedHost] {
         let result = try await MeshClient.claimPair(address: address, port: port, code: code)
-        let hosts = result.allHosts
-        guard !hosts.isEmpty else { throw MeshClient.MeshError.decode }
+        guard !result.allHosts.isEmpty else { throw MeshClient.MeshError.decode }
+        // Pairing this machine is the un-remove gesture: its identifiers leave the
+        // tombstone set so it can be removed and re-added forever. Every OTHER fleet
+        // entry still respects a deliberate removal — without this, deleting a stale
+        // machine is silently undone by the next pairing.
+        var tombstones = removedHosts
+        tombstones.remove(result.host.lowercased())
+        tombstones.remove(address.lowercased())
+        for entry in result.allHosts where hostNamesMatch(entry.host, result.host) || entry.ip == address {
+            tombstones.remove(entry.host.lowercased())
+            tombstones.remove(entry.ip.lowercased())
+        }
+        removedHosts = tombstones
+        let hosts = filteringRemovedHosts(result.allHosts, removed: tombstones,
+                                          pairedHost: result.host, pairedAddress: address)
         machines = mergingPairedHosts(machines, hosts)
         save()
         // The highest-intent moment in the app: they just connected a machine, so
@@ -223,11 +282,20 @@ final class MeshStore: ObservableObject {
         }
     }
 
+    /// Match on `host`, not on `id`. A machine is the same machine when it is the same
+    /// box; `id` is only the row's identity in a list, and a freshly paired `Machine`
+    /// carries a brand new one — matching on it would append a second copy of a machine
+    /// you already had every time you re-paired it. The existing row's `uid` is kept so
+    /// the list does not lose the row's identity underneath the user.
     func update(_ machine: Machine) {
-        if let idx = machines.firstIndex(where: { $0.id == machine.id }) {
-            machines[idx] = machine
+        if let idx = machines.firstIndex(where: { $0.host == machine.host }) {
+            var merged = machine
+            merged.uid = machines[idx].uid ?? machine.uid ?? UUID()
+            machines[idx] = merged
         } else {
-            machines.append(machine)
+            var added = machine
+            if added.uid == nil { added.uid = UUID() }
+            machines.append(added)
         }
         save()
     }
@@ -236,7 +304,14 @@ final class MeshStore: ObservableObject {
     /// machine already has a token of its own and a random one here would just 401,
     /// which reads as "the machine is broken" instead of "you have not paired it".
     func addMachine() {
-        machines.append(Machine(host: "new-machine", ip: "", port: 8899, token: ""))
+        // A unique name as well as a unique id: two rows called "new-machine" are
+        // indistinguishable to the user even once the list can render them safely.
+        var name = "new-machine"
+        var n = 2
+        while machines.contains(where: { $0.host == name }) {
+            name = "new-machine-\(n)"; n += 1
+        }
+        machines.append(Machine(uid: UUID(), host: name, ip: "", port: 8899, token: ""))
         save()
     }
 
@@ -283,6 +358,15 @@ final class MeshStore: ObservableObject {
         await withTaskGroup(of: MachineSnapshot.self) { group in
             for machine in targets {
                 group.addTask {
+                    // A machine added by hand has no token yet. Polling it answers
+                    // "token rejected", which reads as "this machine is broken" when the
+                    // truth is "you have not paired it" — and it is the very first thing
+                    // you see after tapping Add manually.
+                    guard machine.isConfigured else {
+                        return MachineSnapshot(
+                            host: machine.host, config: machine, reachable: false, agents: [],
+                            error: "not paired yet — open this machine and tap Pair")
+                    }
                     // Seeded from the last poll so the very first call of this pass is
                     // already capability-correct, then replaced by whatever /health
                     // says a moment later.
@@ -419,6 +503,30 @@ final class MeshStore: ObservableObject {
                 capabilitiesChanged = true
             }
         }
+        // Two rows, one hardware MAC = one machine paired twice (a fleet-adopted alias
+        // beside the real entry — both listing the same eight sessions). Merge here,
+        // right after the MACs above went fresh, and tombstone the losing identity so
+        // the next pair's fleet adoption cannot hand it straight back. The
+        // `liveHosts` filter below then drops the loser from this same snapshot.
+        let merged = mergeDuplicateMachineRows(machines)
+        if !merged.removed.isEmpty {
+            machines = merged.kept
+            // Selective tombstone: only the identifiers the keeper does NOT share.
+            // The loser usually holds the keeper's own ip, and filteringRemovedHosts
+            // rejects fleet entries by ip — a wholesale tombstone would ban the
+            // keeper from every future fleet adoption.
+            var set = removedHosts
+            for (loser, keeper) in merged.removed {
+                if !loser.host.isEmpty, !hostNamesMatch(loser.host, keeper.host) {
+                    set.insert(loser.host.lowercased())
+                }
+                if !loser.ip.isEmpty, loser.ip.lowercased() != keeper.ip.lowercased() {
+                    set.insert(loser.ip.lowercased())
+                }
+            }
+            removedHosts = set
+            machinesChanged = true
+        }
         if machinesChanged { save() }
         if identitiesChanged { saveNetIdentities() }
         if capabilitiesChanged { saveCapabilities() }
@@ -472,9 +580,16 @@ final class MeshStore: ObservableObject {
         }
         await refreshEvents(from: targets)
 
+        // This poll captured `targets = machines` up to ~16s ago (a dead host takes
+        // that long to fail /health while the timer fires every 8s), and the user may
+        // have removed a machine since. Writing the stale row back resurrects it on
+        // screen — the "I deleted it and it came again" bug — so the snapshot keeps
+        // only rows the machine list still owns.
+        let liveHosts = Set(machines.map { $0.host })
+        let liveOrdered = ordered.filter { liveHosts.contains($0.host) }
         let now = ISO8601DateFormatter().string(from: Date())
         let snap = MeshSnapshot(updatedISO: now,
-                                machines: ordered,
+                                machines: liveOrdered,
                                 usage: usage,
                                 quickCommands: quickCommands,
                                 events: events,
@@ -522,7 +637,9 @@ final class MeshStore: ObservableObject {
     /// Emit a snapshot containing the hosts that have answered so far, with the rest
     /// carrying whatever we last knew, so the list fills in progressively.
     private func publishPartial(_ answered: [MachineSnapshot], targets: [Machine]) {
-        let byHost = Dictionary(uniqueKeysWithValues: answered.map { ($0.host, $0) })
+        // `uniqueKeysWithValues` TRAPS on a duplicate key, and two machines can share a
+        // host name — nothing stops you naming them both "pi". Keep the newest answer.
+        let byHost = Dictionary(answered.map { ($0.host, $0) }, uniquingKeysWith: { _, newer in newer })
         let merged = targets.map { machine -> MachineSnapshot in
             if let fresh = byHost[machine.host] { return holdRecentlyGood(fresh) }
             if let remembered = lastGood[machine.host] {
@@ -635,14 +752,21 @@ final class MeshStore: ObservableObject {
     // MARK: Sessions
 
     /// Create a new rmux session on a machine, then refresh so it appears in the list.
+    /// Returns whether it actually landed — `@discardableResult` so the fire-and-forget
+    /// callers (the watch relay's `.newAgent` command) are unaffected, while a caller
+    /// with a sheet on screen (`NewSessionSheet`) can keep that sheet open and show the
+    /// failure inline instead of dismissing on the strength of having tried.
+    @discardableResult
     func newSession(on machine: Machine, name: String, cmd: String?, cwd: String? = nil, initialText: String? = nil,
-                    cols: Int? = nil, rows: Int? = nil) async {
+                    cols: Int? = nil, rows: Int? = nil) async -> Bool {
         do {
             try await client(for: machine).newSession(name: name, cmd: cmd, cwd: cwd, initialText: initialText,
                                                       cols: cols, rows: rows)
             await refresh()
+            return true
         } catch {
             fail("create session failed: \(Self.describe(error))")
+            return false
         }
     }
 
@@ -854,10 +978,11 @@ final class MeshStore: ObservableObject {
     }
 
     /// Set by a `meshwatch://pair?h=<addr>&p=<port>&c=<code>` link — the QR that
-    /// `mesh pair` prints. Scanning it with the system Camera lands here with every
-    /// field filled; no in-app scanner, no camera permission. The user still sees
-    /// the code and taps Pair themselves — that confirmation against what the
-    /// terminal printed is the verification step, so the claim is never automatic.
+    /// `mesh pair` prints, whether the system Camera handed it off or the in-app
+    /// scanner (`PairingScannerSheet`) read it directly. Either way it lands here with
+    /// every field filled, not paired: the user still sees the code and taps Pair
+    /// themselves — that confirmation against what the terminal printed is the
+    /// verification step, so the claim is never automatic.
     @Published var deepLinkPair: PairTarget?
 
     struct PairTarget: Identifiable, Hashable {
@@ -868,21 +993,15 @@ final class MeshStore: ObservableObject {
     }
 
     /// `meshwatch://session/<host>/<session>` or `meshwatch://pair?h=&p=&c=`.
-    /// Anything else is ignored rather than guessed at.
+    /// Anything else is ignored rather than guessed at. The pairing half defers to
+    /// `parsePairingLink`, the same parser the in-app QR scanner uses, so a link
+    /// handed off by the system Camera and one read straight off the frame agree.
     func open(url: URL) -> Bool {
-        guard url.scheme == "meshwatch" else { return false }
-        if url.host == "pair" {
-            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
-            guard let address = value("h")?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !address.isEmpty,
-                  let code = value("c"), normalizedPairingCode(code).count >= 6 else { return false }
-            deepLinkPair = PairTarget(address: address,
-                                      port: Int(value("p") ?? "") ?? 8899,
-                                      code: code)
+        if let link = parsePairingLink(url) {
+            deepLinkPair = PairTarget(address: link.address, port: link.port, code: link.code)
             return true
         }
-        guard url.host == "session" else { return false }
+        guard url.scheme == "meshwatch", url.host == "session" else { return false }
         let parts = url.path.split(separator: "/").map { String($0).removingPercentEncoding ?? String($0) }
         guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return false }
         deepLinkSession = SessionTarget(host: parts[0], session: parts[1])
@@ -994,7 +1113,7 @@ final class MeshStore: ObservableObject {
             // Say why instead.
             guard UIApplication.shared.applicationState == .active else {
                 return try? JSONEncoder().encode(RelayReply.failure(
-                    "open LeSearch Mesh on your iPhone — iOS only shares the clipboard with an app you're looking at"))
+                    "open MeshWatch on your iPhone — iOS only shares the clipboard with an app you're looking at"))
             }
             return try? JSONEncoder().encode(UIPasteboard.general.string ?? "")
         case .openURL:
@@ -1119,16 +1238,20 @@ final class MeshStore: ObservableObject {
             // daemon never claimed it could do this. Say which thing is missing —
             // "unsupported" alone sends people looking at the wrong end.
             case .unsupported(let capability): return "this agent has no \(capability) support"
+            // The daemon's own sentence, which names the thing that went wrong —
+            // "pane w9:p2 not found" instead of the "HTTP 400" it used to collapse to.
+            case .refused(_, let why): return why
             }
         }
         return error.localizedDescription
     }
 
+    /// Asked of `statusCode`, not of one case: a 401 carrying meshd's
+    /// `{"error":"unauthorized"}` body arrives as .refused, and matching only .http
+    /// would drop the token prompt exactly when the token is the problem.
     private nonisolated static func isAuthError(_ error: Error) -> Bool {
-        if case MeshClient.MeshError.http(let code) = error {
-            return code == 401 || code == 403
-        }
-        return false
+        guard let code = (error as? MeshClient.MeshError)?.statusCode else { return false }
+        return code == 401 || code == 403
     }
 
     private nonisolated static func probe(_ urlString: String?) async -> (ok: Bool, error: String?) {
@@ -1140,7 +1263,10 @@ final class MeshStore: ObservableObject {
                 do {
                     let (_, resp) = try await URLSession.shared.data(for: req)
                     guard let http = resp as? HTTPURLResponse else { return (true, nil) }
-                    let ok = (200...399).contains(http.statusCode)
+                    // 401 is the service answering "who are you?" — the 0.6 bridge requires
+                    // the token on every page and the terminal sends it as a cookie later;
+                    // a login-walled noVNC does the same. Reachable is the question here.
+                    let ok = (200...399).contains(http.statusCode) || http.statusCode == 401
                     return (ok, ok ? nil : "HTTP \(http.statusCode)")
                 } catch {
                     return (false, describe(error))
