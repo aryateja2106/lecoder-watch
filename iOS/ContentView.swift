@@ -46,6 +46,34 @@ struct ContentView: View {
 private struct MonitorTab: View {
     @EnvironmentObject var store: MeshStore
     @ObservedObject private var notifications = NotificationManager.shared
+    /// IDs the owner swiped away, client-side only — the daemon keeps its own event
+    /// file untouched. Ordered by dismissal so the cap below drops the oldest first,
+    /// same idiom as `chatMessages`' 500-message cap in TerminalView.swift.
+    @State private var dismissedEventIDs: [String] =
+        UserDefaults.standard.stringArray(forKey: "mesh.dismissedEventIDs.v1") ?? []
+    @State private var confirmingClearAll = false
+
+    private var visibleEvents: [AgentEvent] {
+        store.events.reversed().filter { !dismissedEventIDs.contains($0.id) }
+    }
+
+    private func dismiss(_ event: AgentEvent) {
+        guard !dismissedEventIDs.contains(event.id) else { return }
+        dismissedEventIDs.append(event.id)
+        saveDismissedEventIDs()
+    }
+
+    private func clearAllVisible() {
+        for event in visibleEvents where !dismissedEventIDs.contains(event.id) {
+            dismissedEventIDs.append(event.id)
+        }
+        saveDismissedEventIDs()
+    }
+
+    private func saveDismissedEventIDs() {
+        if dismissedEventIDs.count > 500 { dismissedEventIDs.removeFirst(dismissedEventIDs.count - 500) }
+        UserDefaults.standard.set(dismissedEventIDs, forKey: "mesh.dismissedEventIDs.v1")
+    }
 
     var body: some View {
         NavigationStack {
@@ -74,12 +102,21 @@ private struct MonitorTab: View {
                     }
                 }
                 SessionLimitsBanner()
+                // Usage first — session limits for Claude and Codex at a glance, no
+                // scrolling past a long Events list to find them.
+                Section("Usage") {
+                    if (store.snapshot?.usage?.providers ?? []).isEmpty {
+                        Text("No usage data")
+                            .foregroundStyle(.secondary)
+                    }
+                    UsageRows()
+                }
                 Section("Events") {
-                    if store.events.isEmpty {
+                    if visibleEvents.isEmpty {
                         Text("No agent events")
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(store.events.reversed()) { event in
+                    ForEach(visibleEvents) { event in
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
                                 Text(event.title).font(.headline)
@@ -103,14 +140,12 @@ private struct MonitorTab: View {
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.vertical, 3)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) { dismiss(event) } label: {
+                                Label("Dismiss", systemImage: "trash")
+                            }
+                        }
                     }
-                }
-                Section("Usage") {
-                    if (store.snapshot?.usage?.providers ?? []).isEmpty {
-                        Text("No usage data")
-                            .foregroundStyle(.secondary)
-                    }
-                    UsageRows()
                 }
             }
             .navigationTitle("Monitor")
@@ -118,6 +153,15 @@ private struct MonitorTab: View {
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
+                Button(role: .destructive) { confirmingClearAll = true } label: {
+                    Image(systemName: "trash")
+                }
+                .disabled(visibleEvents.isEmpty)
+            }
+            .confirmationDialog("Clear all events?", isPresented: $confirmingClearAll, titleVisibility: .visible) {
+                Button("Clear all", role: .destructive) { clearAllVisible() }
+            } message: {
+                Text("This only hides them on this phone. The daemon keeps its own copy.")
             }
         }
     }
@@ -1086,6 +1130,7 @@ private struct SettingsTab: View {
     @ObservedObject private var notifications = NotificationManager.shared
     @State private var newCommand = ""
     @State private var pairing = false
+    @FocusState private var newCommandFocused: Bool
     /// Read from ActivityKit rather than from our own controller so the row states the
     /// system's answer, not our cache of it, and follows the same stream the controller
     /// does — a permission flipped in Settings updates this without a relaunch.
@@ -1236,6 +1281,7 @@ private struct SettingsTab: View {
                         TextField("new command", text: $newCommand.shellSafe)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .focused($newCommandFocused)
                         Button {
                             let trimmed = newCommand.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty else { return }
@@ -1300,6 +1346,18 @@ private struct SettingsTab: View {
             .navigationTitle("Settings")
             .toolbar { Button("Save") { store.save(); Task { await store.refresh() } } }
             .sheet(isPresented: $pairing) { PairMachineView().environmentObject(store) }
+            // TabView keeps every tab mounted, so switching away from Settings never
+            // tore this view down — with no @FocusState, nothing told a focused
+            // TextField to resign, and the keyboard stayed parked over whatever tab
+            // came next until something incidental (a screenshot, a force-quit)
+            // knocked it loose. This clears the one field wired to @FocusState and
+            // asks the responder chain to resign directly, which covers every other
+            // TextField/SecureField on this screen (machine fields, quick commands,
+            // pinned limits) without wiring each one individually.
+            .onDisappear {
+                newCommandFocused = false
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
     }
 }
