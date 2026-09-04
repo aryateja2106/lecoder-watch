@@ -659,6 +659,9 @@ struct SessionsView: View {
                 Button { openNewSession(cmd: "codex") } label: {
                     Label("Codex", systemImage: "curlybraces")
                 }
+                Button { openNewSession(cmd: "cursor-agent") } label: {
+                    Label("Cursor", systemImage: "cursorarrow.rays")
+                }
                 Button { taskAgent = "claude"; showTask = true } label: {
                     Label("Claude task", systemImage: "text.bubble")
                 }
@@ -940,6 +943,20 @@ struct AgentLiveView: View {
             .limits.first { $0.label.lowercased().contains("session") }
     }
 
+    /// The truth for "is this session blocked on a human", per meshd 0.5.0+
+    /// ("sessionStatus"): the daemon's own verdict, not a `[y/n]` guess over whatever
+    /// text a TUI happened to print. `replyable == false` means the hook could not
+    /// resolve a reply route, so an Allow/Deny here would answer nothing.
+    private var awaitingDecision: Bool {
+        currentAgent?.status == "waiting" && store.latestEvent(host: host, session: agent)?.replyable != false
+    }
+
+    private var decisionText: String {
+        meaningfulLines.last ?? "Waiting for your input."
+    }
+
+    private var decisionRisk: RiskVerdict { classifyRisk(decisionText) }
+
     var body: some View {
         List {
             if continueBlocked, let providerId = LimitHelpers.providerId(for: currentAgent?.agentType),
@@ -956,6 +973,42 @@ struct AgentLiveView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                }
+            }
+
+            if awaitingDecision {
+                Section("Decision Needed") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Image(systemName: decisionRisk.isDestructive ? "exclamationmark.triangle.fill" : "hand.raised.fill")
+                                .foregroundStyle(decisionRisk.isDestructive ? .red : .orange)
+                            Text("Agent asks")
+                                .font(.headline)
+                        }
+                        Text(decisionText)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(3)
+                        HStack(spacing: 8) {
+                            Button {
+                                WKInterfaceDevice.current().play(.click)
+                                store.send(key: "enter")
+                            } label: {
+                                Label(decisionRisk.verb, systemImage: "checkmark.circle.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(decisionRisk.isDestructive ? .red : .green)
+                            }
+                            Button {
+                                WKInterfaceDevice.current().play(.click)
+                                store.send(key: "escape")
+                            } label: {
+                                Label("Deny", systemImage: "xmark.circle.fill")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
                 }
             }
 

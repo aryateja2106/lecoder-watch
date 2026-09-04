@@ -1066,6 +1066,84 @@ struct AppList: Codable, Hashable {
     var installed: [String]
 }
 
+// MARK: - Agent chat (meshd 0.6+, capability "chat")
+
+/// `GET /agents/:n/chat` replaces client-side parsing of terminal text: the daemon
+/// already has the Claude Code / Codex transcript, so the app no longer guesses at
+/// roles and tool calls from regex over `capture-pane` output.
+struct ChatToolInfo: Codable, Hashable {
+    var name: String
+    var input: String?
+}
+
+struct ChatMessage: Codable, Hashable, Identifiable {
+    var id: String
+    var ts: String
+    /// "user" | "assistant" | "thinking" | "tool" | "result" | "system". Left as a
+    /// raw string, like `Agent.status` and `SecretExposure.status` below, so a role
+    /// the daemon adds later degrades to the `default` case instead of a decode
+    /// failure that blanks the whole transcript.
+    var role: String
+    var text: String
+    var tool: ChatToolInfo?
+    var status: String?
+}
+
+/// One poll's worth of transcript. `source == "output"` means the daemon found no
+/// Claude/Codex transcript and fell back to capture-pane lines — render those as
+/// plain terminal blocks rather than trusting `messages` to carry real structure.
+struct ChatFeed: Codable, Hashable {
+    var name: String
+    var source: String
+    var cursor: String?
+    var messages: [ChatMessage]
+}
+
+// MARK: - Exposed secrets (meshd 0.6+, capability "redact")
+
+struct SecretExposure: Codable, Hashable, Identifiable {
+    var id: String { fp }
+    var fp: String
+    var kind: String
+    var hint: String
+    var first: String
+    var last: String
+    var count: Int
+    var channels: [String]
+    var status: String   // open | rotated | ignored
+}
+
+struct ExposureList: Codable, Hashable {
+    var count: Int
+    var open: Int
+    var items: [SecretExposure]
+}
+
+// MARK: - Hosted apps (meshd 0.6+, capability "apps")
+//
+// Deliberately NOT named `App`/`AppList` — those already mean "a running process on
+// the Mac" (`MacApp`/`AppList` above, backing `/apps` GET+POST for the app switcher).
+// This is a different feature living at the daemon's own hosted-app routes: a PWA or
+// native build an agent produced, published for the phone to open or install.
+struct MeshApp: Codable, Hashable, Identifiable {
+    var id: String { slug }
+    var slug: String
+    var name: String
+    var kind: String   // pwa | native
+    var url: String
+    var bundleId: String?
+    var updated: String
+}
+
+struct MeshAppList: Codable, Hashable {
+    var apps: [MeshApp]
+}
+
+struct MeshAppInstallResult: Codable, Hashable {
+    var ok: Bool
+    var error: String?
+}
+
 struct VolumeState: Codable, Hashable {
     var ok: Bool
     var level: Int?

@@ -417,6 +417,55 @@ struct MeshClient {
         _ = try await request("/apps", method: "POST", body: body)
     }
 
+    // MARK: - Chat (meshd 0.6+, capability "chat")
+
+    /// Structured transcript for a session, replacing client-side regex over
+    /// `capture-pane` text. `since` is the opaque cursor from the previous call's
+    /// `ChatFeed.cursor`; omit it for the first fetch. Callers append new messages by
+    /// `id` rather than replacing the list outright.
+    func chat(agent: String, since: String? = nil, limit: Int = 200) async throws -> ChatFeed {
+        var path = "/agents/\(Self.pathSegment(agent))/chat?limit=\(limit)"
+        if let since, !since.isEmpty {
+            let enc = since.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? since
+            path += "&since=\(enc)"
+        }
+        let data = try await request(path)
+        return try JSONDecoder().decode(ChatFeed.self, from: data)
+    }
+
+    // MARK: - Exposed secrets (meshd 0.6+, capability "redact")
+
+    func exposures() async throws -> ExposureList {
+        let data = try await request("/exposures")
+        return try JSONDecoder().decode(ExposureList.self, from: data)
+    }
+
+    /// Mark a fingerprinted secret rotated/ignored/open again. Returns the updated row.
+    @discardableResult
+    func setExposureStatus(_ fp: String, status: String) async throws -> SecretExposure {
+        let body = try JSONSerialization.data(withJSONObject: ["status": status])
+        let data = try await request("/exposures/\(Self.pathSegment(fp))", method: "POST", body: body)
+        return try JSONDecoder().decode(SecretExposure.self, from: data)
+    }
+
+    // MARK: - Hosted apps (meshd 0.6+, capability "apps")
+    //
+    // An agent-built PWA or native app, published on this machine — distinct from
+    // `apps()`/`activateApp(_:)` above, which list and front *running Mac processes*.
+
+    func meshApps() async throws -> [MeshApp] {
+        let data = try await request("/apps")
+        return try JSONDecoder().decode(MeshAppList.self, from: data).apps
+    }
+
+    /// `target`: "device" (this phone's paired iPhone, via devicectl) or "sim".
+    @discardableResult
+    func installMeshApp(slug: String, target: String) async throws -> MeshAppInstallResult {
+        let body = try JSONSerialization.data(withJSONObject: ["target": target])
+        let data = try await request("/apps/\(Self.pathSegment(slug))/install", method: "POST", body: body)
+        return try JSONDecoder().decode(MeshAppInstallResult.self, from: data)
+    }
+
     /// Register this phone's APNs device token so meshd can push alerts directly.
     func registerPush(deviceToken: String) async throws {
         // Read from the embedded profile, never hardcoded: a TestFlight build's token

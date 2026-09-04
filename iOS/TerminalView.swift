@@ -428,6 +428,18 @@ private struct SessionPeekScreen: View {
     /// it to decide between the 500ms interactive cadence and the 2s ambient one.
     @State private var lastInteraction = Date.distantPast
 
+    enum ViewMode: String, CaseIterable {
+        case chat = "Chat"
+        case terminal = "Terminal"
+    }
+    @State private var viewMode: ViewMode = .chat
+    /// meshd 0.6+ ("chat"): the structured transcript AgentChatView renders. Owned
+    /// here rather than by AgentChatView itself so both view modes share the one
+    /// adaptive poll loop below instead of each running their own.
+    @State private var chatMessages: [ChatMessage] = []
+    @State private var chatCursor: String?
+    @State private var chatSource: String = ""
+
     /// The store's constructor, never a bare `MeshClient(machine:)`: one built without
     /// capabilities silently switches every 0.5.0 feature off.
     private var client: MeshClient { store.client(for: machine) }
@@ -471,23 +483,49 @@ private struct SessionPeekScreen: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                headerCard
-                paneCard
-                outputCard
-                controlsCard
-                presetsCard
+        Group {
+            if viewMode == .chat {
+                AgentChatView(
+                    machine: machine,
+                    session: session,
+                    messages: chatMessages,
+                    chatSource: chatSource,
+                    rawLines: output,
+                    onSendText: { text in Task { await send(text: text) } },
+                    onSendKey: { key in Task { await send(key: key) } },
+                    onOpenTerminal: { viewMode = .terminal }
+                )
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        headerCard
+                        paneCard
+                        outputCard
+                        controlsCard
+                        presetsCard
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                }
+                .background(Color(.systemGroupedBackground))
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
         }
-        .background(Color(.systemGroupedBackground))
         .navigationTitle(session.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            Button { Task { await refresh() } } label: {
-                Image(systemName: loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+            ToolbarItem(placement: .principal) {
+                Picker("Mode", selection: $viewMode) {
+                    ForEach(ViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 150)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { Task { await refresh() } } label: {
+                    Image(systemName: loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                }
             }
         }
         .task(id: session.name) {
@@ -500,6 +538,7 @@ private struct SessionPeekScreen: View {
                 let parked = UIApplication.shared.applicationState == .background
                 if !parked {
                     await refresh()
+                    await refreshChat()
                 }
                 let fast = !parked && Date().timeIntervalSince(lastInteraction) < 10
                 try? await Task.sleep(for: .milliseconds(fast ? 500 : 2000))
@@ -896,6 +935,30 @@ private struct SessionPeekScreen: View {
             peekFailure = .none
         case (.failure(let outError), .failure):
             peekFailure = Self.classify(outError)
+        }
+    }
+
+    /// meshd 0.6+ ("chat"): poll the structured transcript alongside `refresh()`'s
+    /// output/panes fetch, on the same adaptive cadence. Gated client-side on the
+    /// capability string, never on version — an old daemon simply never gets asked.
+    /// New messages are appended by `id` rather than replacing the list, matching the
+    /// contract's "append by id; pass cursor back"; a transient poll failure leaves
+    /// the transcript exactly as it was rather than blanking it.
+    private func refreshChat() async {
+        guard client.supports("chat") else { return }
+        guard let feed = try? await client.chat(agent: session.name, since: chatCursor, limit: 200) else { return }
+        chatCursor = feed.cursor
+        chatSource = feed.source
+        if feed.source == "output" {
+            // The daemon found no real transcript either; AgentChatView falls back to
+            // rendering `output` (already fetched above) as a terminal block.
+            chatMessages = []
+        } else {
+            let known = Set(chatMessages.map(\.id))
+            chatMessages.append(contentsOf: feed.messages.filter { !known.contains($0.id) })
+            // Cap stored history — the daemon already caps a single poll at `limit`,
+            // this caps the running total for a session left open for hours.
+            if chatMessages.count > 500 { chatMessages.removeFirst(chatMessages.count - 500) }
         }
     }
 
