@@ -50,3 +50,6 @@ web/.scrollcraft/builds/
 reference-video/
 *.MP4
 *.mov
+
+# External reference material (repo clones + notes); never committed
+references/external/
