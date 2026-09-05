@@ -24,6 +24,7 @@ public struct VoiceInputSheet: View {
     @State private var transcriber = VoiceTranscriber.shared
     @State private var text: String = ""
     @State private var didFinish = false
+    @State private var locales: [VoiceTranscriber.RecognitionLocale] = []
 
     public init(onSend: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
         self.onSend = onSend
@@ -81,11 +82,29 @@ public struct VoiceInputSheet: View {
                 }
                 .padding(.horizontal, 16)
 
-                Text(transcriber.recognitionMode)
+                Menu {
+                    ForEach(locales) { locale in
+                        Button {
+                            switchLocale(to: locale.id)
+                        } label: {
+                            let title = locale.onDevice ? locale.name : "\(locale.name) (needs network)"
+                            if VoiceTranscriber.sameLocale(locale.id, transcriber.localeIdentifier) {
+                                Label(title, systemImage: "checkmark")
+                            } else {
+                                Text(title)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(transcriber.recognitionMode)
+                        Image(systemName: "chevron.up.chevron.down")
+                    }
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 if case .error(let message) = transcriber.state {
                     Text(message)
@@ -146,6 +165,7 @@ public struct VoiceInputSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .onAppear {
+            locales = VoiceTranscriber.offeredLocales(current: transcriber.localeIdentifier)
             Task { await transcriber.startRecording() }
         }
         .onChange(of: transcriber.recognizedText) { _, new in
@@ -168,6 +188,17 @@ public struct VoiceInputSheet: View {
 
     private func stop() {
         Task { await transcriber.stopRecording() }
+    }
+
+    /// Switching language mid-session: end the current session cleanly (its words are
+    /// kept), swap recognizers, and pick up again with the new one.
+    private func switchLocale(to id: String) {
+        Task {
+            let wasRecording = isRecording
+            if wasRecording { await transcriber.stopRecording() }
+            transcriber.setLocale(id)
+            if wasRecording { await transcriber.resumeRecording(withText: transcriber.recognizedText) }
+        }
     }
 
     private var stopResumeButton: some View {

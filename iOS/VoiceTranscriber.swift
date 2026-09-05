@@ -74,18 +74,63 @@ public final class VoiceTranscriber: NSObject {
     /// told apart from a flaky network: on-device recognition never needs the network,
     /// Apple's servers do, and they cap one request at about a minute.
     public var recognitionMode: String {
-        guard let speechRecognizer else { return "Speech recognition is not available on this phone." }
-        let locale = speechRecognizer.locale.identifier
+        guard let speechRecognizer else { return "Speech recognition is not available for \(localeName)." }
         return speechRecognizer.supportsOnDeviceRecognition
-            ? "On-device recognition · \(locale)"
-            : "Apple server recognition · \(locale) · needs network"
+            ? "On-device recognition · \(localeName)"
+            : "Apple server recognition · \(localeName) · needs network"
     }
 
-    /// The phone's locale first, en-US when Speech has no recognizer for it at all. A nil
+    // MARK: - Recognition Language
+
+    public struct RecognitionLocale: Identifiable, Equatable {
+        public let id: String
+        public let name: String
+        public let onDevice: Bool
+    }
+
+    public static let localeDefaultsKey = "voice.recognitionLocale"
+
+    /// The language the recognizer listens for, persisted across launches. Defaults to
+    /// the phone's locale when Speech has a recognizer for it, else en-US. A nil
     /// recognizer used to mean every optional chain below silently did nothing: the sheet
     /// sat on "Listening…" with the meter moving and not one word arriving.
-    private let speechRecognizer: SFSpeechRecognizer? =
-        SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    public private(set) var localeIdentifier: String = "en-US"
+    private var speechRecognizer: SFSpeechRecognizer?
+
+    public var localeName: String {
+        Locale.current.localizedString(forIdentifier: localeIdentifier) ?? localeIdentifier
+    }
+
+    public func setLocale(_ identifier: String) {
+        guard !Self.sameLocale(identifier, localeIdentifier) else { return }
+        localeIdentifier = identifier
+        UserDefaults.standard.set(identifier, forKey: Self.localeDefaultsKey)
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: identifier))
+    }
+
+    /// Every Speech-supported variant of the languages the user keeps on the phone (plus
+    /// English and the current choice), on-device ones first. The phone's region is not
+    /// the dictation language: a phone set to en_US can belong to someone who dictates
+    /// in English (India).
+    public static func offeredLocales(current: String) -> [RecognitionLocale] {
+        var wanted = Set(Locale.preferredLanguages.compactMap { Locale(identifier: $0).language.languageCode?.identifier })
+        wanted.insert("en")
+        var list = SFSpeechRecognizer.supportedLocales()
+            .filter { wanted.contains($0.language.languageCode?.identifier ?? "") || sameLocale($0.identifier, current) }
+            .map { locale in
+                RecognitionLocale(
+                    id: locale.identifier,
+                    name: Locale.current.localizedString(forIdentifier: locale.identifier) ?? locale.identifier,
+                    onDevice: SFSpeechRecognizer(locale: locale)?.supportsOnDeviceRecognition == true)
+            }
+        list.sort { ($0.onDevice ? 0 : 1, $0.name) < ($1.onDevice ? 0 : 1, $1.name) }
+        return list
+    }
+
+    /// "en-IN" and "en_IN" name the same locale; Speech hands back one form, Locale the other.
+    public static func sameLocale(_ a: String, _ b: String) -> Bool {
+        a.replacingOccurrences(of: "-", with: "_").lowercased() == b.replacingOccurrences(of: "-", with: "_").lowercased()
+    }
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
@@ -120,6 +165,9 @@ public final class VoiceTranscriber: NSObject {
 
     public override init() {
         super.init()
+        let stored = UserDefaults.standard.string(forKey: Self.localeDefaultsKey)
+        localeIdentifier = stored ?? (SFSpeechRecognizer(locale: Locale.current) != nil ? Locale.current.identifier : "en-US")
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier))
         let center = NotificationCenter.default
         center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
             let type = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt)
