@@ -318,9 +318,8 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       </div>
       <div class="beat">
         <span class="n">02</span>
-        <h3>Your wrist buzzes</h3>
-        <p>The machine, the session, and the actual question, in a notification you can
-           act on. A question that would force-push or delete gets a red button naming
+        <h3>Your watch shows the question</h3>
+        <p>The machine, the session, and the question, with Allow and Deny. A question that would force-push or delete gets a red button naming
            the verb — everything else is a calm Continue.</p>
         <div class="wristline">
           <span class="who">studio · deploy-api</span>
@@ -454,16 +453,16 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
       </div>
       <div class="card">
         <span class="tag">Notifications</span>
-        <h3>Answerable, not just readable</h3>
-        <p>Continue, Stop, or dictate a Reply straight from the notification. The reply is
-           typed into the real session on the real machine — and once the task is done,
-           the banner takes itself down.</p>
+        <h3>The alert, then the answer</h3>
+        <p>A notification tells you an agent has stopped; the watch app shows the
+           machine, the session and the question with Allow and Deny. Your answer is
+           typed into the real session on the real machine.</p>
       </div>
       <div class="card">
         <span class="tag">Live Activity</span>
         <h3>Lock Screen and Dynamic Island</h3>
-        <p>The one session that actually needs you, live on the Lock Screen and in the
-           Smart Stack — with how much of your fleet is online next to it. Blocked always
+        <p>The Lock Screen card appears while the app is open, showing the session that
+           needs you and how much of your fleet is online next to it. Blocked always
            outranks merely busy.</p>
       </div>
       <div class="card">
@@ -581,10 +580,10 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 
     <details>
       <summary>Does it work when I am away from home?</summary>
-      <p>Yes, if your phone and your machine are on the same private network — a Tailscale
-         tailnet is what this was built against, and it is what we use. There is no
-         hole-punching and no relay of ours, so if your phone cannot reach the machine,
-         neither can the app.</p>
+      <p>It works on your own network or your tailnet; off both it does not work yet.
+         A Tailscale tailnet is what this was built against, and it is what we use.
+         There is no hole-punching and no relay of ours, so if your phone cannot reach
+         the machine, neither can the app.</p>
     </details>
 
     <details>
@@ -621,7 +620,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
          one-line installer at
          <a href="https://github.com/LeSearch-AI/mesh-install">LeSearch-AI/mesh-install</a>.
          The part that runs on your machine is a small dependency-free TypeScript
-         codebase — about 3,000 lines you can read in a sitting.</p>
+         codebase — about 5,800 lines you can read in a sitting.</p>
     </details>
 
     <details>
