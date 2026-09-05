@@ -2,9 +2,10 @@
 
 **Use your Mac from your wrist.**
 
-Your AI coding agent stops to ask a question. Your wrist buzzes. You read what it asked,
-answer it, and it carries on — the laptop never opened. When you do need the machine
-itself, there is a real terminal session and a real trackpad on your phone and watch.
+Your AI coding agent stops to ask a question. The watch app shows the machine, the
+session and the question with Allow and Deny. Answer it, and it carries on — the
+laptop never opened. When you do need the machine itself, there is a real terminal
+session and a real trackpad on your phone and watch.
 
 No account. No cloud relay. No server of ours in the path. The phone talks straight to a
 small daemon on a machine you own.
@@ -89,12 +90,12 @@ before it runs. Nothing about setting this up should feel like a one-way door.
 
 | Surface | What is on it |
 |---|---|
-| **Watch** | **Needs you** — every blocked agent across every machine, with the question and a one-tap answer. Live sessions, a real terminal with the full key bar, one-tap dictation, a trackpad for the Mac, usage limits. |
+| **Watch** | **Needs you** — every blocked agent across every machine, with the question and a one-tap answer. Live sessions, a real terminal with the full key bar, system dictation, a trackpad for the Mac, usage limits. |
 | **iPhone** | Machines and stats, sessions with a **Chat** view (the agent's own conversation: prompt, reply, thinking, tool calls) beside the terminal, a native trackpad + keyboard + screen for the Mac, pairing, settings, the secrets the daemon redacted. |
 | **Apps your agent builds** | Ask for an app from the phone; the `app-brief` skill interviews you, then the agent builds a native iOS app installed to your paired iPhone, or a home-screen web app your Mac serves. |
 | **Complication** | How many agents are waiting, which one, and what it asked. Says when its reading is stale rather than asserting a count it cannot stand behind. |
-| **Notifications** | Continue / Reply / Stop, answerable without opening anything. Sent by *your* machine straight to APNs. |
-| **Live Activity** | The session that needs you, on the Lock Screen and in the Dynamic Island. Blocked outranks merely busy. |
+| **Notifications** | Alerts when an agent blocks; the watch app shows the machine, the session and the question with Allow and Deny. Sent by *your* machine straight to APNs. |
+| **Live Activity** | The session that needs you, on the Lock Screen and in the Dynamic Island while the app is open. Blocked outranks merely busy. |
 | **Mac menu bar** | Daemon status, a plain-English permissions window, and the pairing QR. |
 
 ### Your multiplexer, not ours
@@ -140,7 +141,7 @@ know what to rotate. Never the value.
 The watch reaches the mesh through the paired iPhone when it cannot reach a machine itself,
 so install the iPhone app first; the watch app follows from the Watch app on your phone.
 
-`meshd` is a single Bun + TypeScript process, about 3,000 lines, no dependencies. It is
+`meshd` is a single Bun + TypeScript process, about 5,800 lines, no dependencies. It is
 meant to be read before it is run: [`install/payload/meshd/`](install/payload/meshd/).
 
 ## What is, and is not, true yet
@@ -177,9 +178,10 @@ sends it as a cookie. A phone app older than 0.6 loses Terminal mode until it up
 **Built apps, honestly.** A native app needs an Apple developer account and an iPhone in
 Developer Mode that was paired with a Mac once. After that it installs without a cable:
 `mesh apps ota --enable` puts the machine's install links on its Tailscale name, and the
-Install button on the phone hands the link to iOS itself, from anywhere on your tailnet.
-Without Tailscale (or your own HTTPS in front of the machine) the install goes through the
-Mac, so the phone must be reachable from it. Building still needs a Mac: a Linux machine
+Install button on the phone hands the link to iOS itself, from any device on your tailnet.
+Off your tailnet and off your own network it does not work yet. Without Tailscale (or your
+own HTTPS in front of the machine) the install goes through the Mac, so the phone must be
+reachable from it. Building still needs a Mac: a Linux machine
 serves an `.ipa` a Mac in your mesh built (`mesh apps add --ipa`), it does not compile one.
 A web app is served by your Mac over plain HTTP on your network at an unguessable address;
 it keeps its data in the browser and works while the Mac is on, and it only works offline
@@ -197,8 +199,7 @@ The daemon sends one anonymized heartbeat per day: its version, its platform, it
 uptime in hours, coarse feature counters (how many hook events landed this week, by
 level, as numbers), and a random install id generated once on first send. That is the
 whole list — no commands, no keystrokes, no terminal or screen content, no hostnames,
-no paths, and nothing that identifies you. The apps never send anything at all; their
-App Store label is "Data Not Collected" and stays that way.
+no paths, and nothing that identifies you. The apps never send anything at all.
 
 Turn it off with `MESHD_TELEMETRY=off` in the daemon's environment (set it when you
 run the installer and it is carried into the service). The daemon works identically

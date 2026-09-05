@@ -7,7 +7,7 @@ install `curl -fsSL https://mesh.lesearch.ai/install.sh | sh`.
 
 ## The one sentence
 
-Watch and answer any CLI coding agent from your wrist, let it build you an app — native if
+Watch and answer Claude Code, Codex or cursor-agent from your wrist, let it build you an app — native if
 you have an Apple developer account, a home-screen web app if you don't — and never let a
 key it prints leave your Mac.
 
