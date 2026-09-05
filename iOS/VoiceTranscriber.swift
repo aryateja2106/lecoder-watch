@@ -13,6 +13,22 @@
 // SAME running engine tap — the user should never see the recognizer "start over." The
 // audio itself is also captured independently to a temp `.caf` file as a safety net: if
 // recognition produces nothing, `transcribeAgain()` re-runs it as a one-shot file request.
+//
+// Session lifecycle, and why it is strict about it. Four ways a session used to end
+// without the sheet noticing, each of which read as "voice input is flaky":
+//   1. Stop tapped, then Resume before the old task's final callback landed: the late
+//      final appended its text a second time and started a fresh task on a tap that no
+//      longer existed. Stop now bumps `generation` once it has read the text, so a late
+//      callback is ignored, and it waits (capped) for that final instead of a fixed 350ms.
+//   2. A phone call, Siri, or another app taking the microphone: the engine stopped, the
+//      state stayed `.recording`, the meter froze, nothing ever arrived again. Interruption
+//      and route-change notifications now end or restart the session explicitly.
+//   3. A recognizer that fails on every start (no network for the server path, a locale
+//      with no model): the old code restarted it forever, which from the outside looked
+//      exactly like listening. Fast repeated failures now surface as `.error`.
+//   4. SFSpeechRecognizer(locale:) returning nil for the phone's locale: every optional
+//      chain silently did nothing. The recognizer now falls back to en-US and reports
+//      which engine (on-device or Apple's servers) is actually doing the work.
 import Foundation
 import AVFoundation
 import Speech
@@ -54,8 +70,67 @@ public final class VoiceTranscriber: NSObject {
     /// "Transcribe again" has something to work with even if live recognition never
     /// produced a word.
     public private(set) var lastRecordingURL: URL?
+    /// Which engine the words come from. Shown in the sheet so a flaky session can be
+    /// told apart from a flaky network: on-device recognition never needs the network,
+    /// Apple's servers do, and they cap one request at about a minute.
+    public var recognitionMode: String {
+        guard let speechRecognizer else { return "Speech recognition is not available for \(localeName)." }
+        return speechRecognizer.supportsOnDeviceRecognition
+            ? "On-device recognition · \(localeName)"
+            : "Apple server recognition · \(localeName) · needs network"
+    }
 
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale.current)
+    // MARK: - Recognition Language
+
+    public struct RecognitionLocale: Identifiable, Equatable {
+        public let id: String
+        public let name: String
+        public let onDevice: Bool
+    }
+
+    public static let localeDefaultsKey = "voice.recognitionLocale"
+
+    /// The language the recognizer listens for, persisted across launches. Defaults to
+    /// the phone's locale when Speech has a recognizer for it, else en-US. A nil
+    /// recognizer used to mean every optional chain below silently did nothing: the sheet
+    /// sat on "Listening…" with the meter moving and not one word arriving.
+    public private(set) var localeIdentifier: String = "en-US"
+    private var speechRecognizer: SFSpeechRecognizer?
+
+    public var localeName: String {
+        Locale.current.localizedString(forIdentifier: localeIdentifier) ?? localeIdentifier
+    }
+
+    public func setLocale(_ identifier: String) {
+        guard !Self.sameLocale(identifier, localeIdentifier) else { return }
+        localeIdentifier = identifier
+        UserDefaults.standard.set(identifier, forKey: Self.localeDefaultsKey)
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: identifier))
+    }
+
+    /// Every Speech-supported variant of the languages the user keeps on the phone (plus
+    /// English and the current choice), on-device ones first. The phone's region is not
+    /// the dictation language: a phone set to en_US can belong to someone who dictates
+    /// in English (India).
+    public static func offeredLocales(current: String) -> [RecognitionLocale] {
+        var wanted = Set(Locale.preferredLanguages.compactMap { Locale(identifier: $0).language.languageCode?.identifier })
+        wanted.insert("en")
+        var list = SFSpeechRecognizer.supportedLocales()
+            .filter { wanted.contains($0.language.languageCode?.identifier ?? "") || sameLocale($0.identifier, current) }
+            .map { locale in
+                RecognitionLocale(
+                    id: locale.identifier,
+                    name: Locale.current.localizedString(forIdentifier: locale.identifier) ?? locale.identifier,
+                    onDevice: SFSpeechRecognizer(locale: locale)?.supportsOnDeviceRecognition == true)
+            }
+        list.sort { ($0.onDevice ? 0 : 1, $0.name) < ($1.onDevice ? 0 : 1, $1.name) }
+        return list
+    }
+
+    /// "en-IN" and "en_IN" name the same locale; Speech hands back one form, Locale the other.
+    public static func sameLocale(_ a: String, _ b: String) -> Bool {
+        a.replacingOccurrences(of: "-", with: "_").lowercased() == b.replacingOccurrences(of: "-", with: "_").lowercased()
+    }
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
@@ -65,18 +140,45 @@ public final class VoiceTranscriber: NSObject {
 
     private var segments = VoiceSegments()
     private var partialText: String = ""
-    /// Bumped on every fresh `startRecording()`/`cancelRecording()` so a completion
-    /// callback from an already-torn-down task can never mutate the session that
-    /// replaced it (a fast cancel-then-restart can otherwise race a late callback).
+    /// Bumped on every fresh `startRecording()`/`resumeRecording()`/`cancelRecording()`
+    /// and at the end of `stopRecording()`, so a completion callback from an already
+    /// torn-down task can never mutate the session that replaced it.
     private var generation = 0
     /// True from the moment `stopRecording()` begins until it finishes reading the
     /// final text. A task's completion callback arriving in that window should still
     /// commit its text — otherwise the last few words of a segment get lost — but must
     /// not restart a new request; `stopRecording()` owns what happens next.
     private var isStoppingSession = false
+    /// Set by the live task's final callback; `stopRecording()` waits on it.
+    private var liveTaskFinished = false
+    /// When the live task started, for telling a normal silence-ended task (seconds
+    /// long) from a recognizer that dies the moment it starts.
+    private var taskStartedAt = Date.distantPast
+    private var quickFailures = 0
+    private static let maxQuickFailures = 5
+    /// When the engine session started; a configuration-change notification inside the
+    /// first half second is our own setup, not a route change worth restarting for.
+    private var sessionStartedAt = Date.distantPast
+    /// An interruption ended our session; resume when the system says the other party
+    /// is done, unless the sheet has gone away meanwhile.
+    private var resumeAfterInterruption = false
 
     public override init() {
         super.init()
+        let stored = UserDefaults.standard.string(forKey: Self.localeDefaultsKey)
+        localeIdentifier = stored ?? (SFSpeechRecognizer(locale: Locale.current) != nil ? Locale.current.identifier : "en-US")
+        speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier))
+        let center = NotificationCenter.default
+        center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+            let type = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt)
+                .flatMap(AVAudioSession.InterruptionType.init(rawValue:))
+            let options = AVAudioSession.InterruptionOptions(
+                rawValue: note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0)
+            Task { @MainActor [weak self] in await self?.handleInterruption(type: type, options: options) }
+        }
+        center.addObserver(forName: .AVAudioEngineConfigurationChange, object: audioEngine, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.handleConfigurationChange() }
+        }
     }
 
     // MARK: - Permission Checks
@@ -111,8 +213,11 @@ public final class VoiceTranscriber: NSObject {
 
     /// Starts a brand-new session: clears any previously accumulated text.
     public func startRecording() async {
-        guard await requestPermissions() else { return }
         generation += 1
+        let mine = generation
+        // The permission prompts are real awaits: if the sheet was dismissed while they
+        // were up, `cancelRecording()` has moved on and this session must not start.
+        guard await requestPermissions(), mine == generation else { return }
         stopAndReset()
         segments = VoiceSegments()
         partialText = ""
@@ -125,7 +230,10 @@ public final class VoiceTranscriber: NSObject {
     /// the recognizer itself last committed.
     public func resumeRecording(withText text: String) async {
         if case .recording = state { return }
-        guard await requestPermissions() else { return }
+        generation += 1
+        let mine = generation
+        guard await requestPermissions(), mine == generation else { return }
+        stopAndReset()
         segments = VoiceSegments(committed: text.trimmingCharacters(in: .whitespacesAndNewlines))
         partialText = ""
         await beginEngineSession()
@@ -141,16 +249,25 @@ public final class VoiceTranscriber: NSObject {
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
 
-        // Give the in-flight task's final callback a moment to land and commit its text.
-        try? await Task.sleep(for: .milliseconds(350))
-
-        recordingFile = nil // finalize the safety-net file for this segment
-        let finalText = recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if finalText.isEmpty {
-            state = .idle
-        } else {
-            state = .readyForReview(text: finalText)
+        // Wait for the in-flight task's final callback so its last words commit. It
+        // usually lands well under half a second; the cap keeps a stalled server request
+        // from holding the sheet on "Stopping…".
+        let deadline = ContinuousClock.now + .seconds(2)
+        while recognitionTask != nil, !liveTaskFinished, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(40))
         }
+
+        // From here on the old task is history: a final that arrives late used to append
+        // its text a second time and start a fresh task on a tap that no longer existed.
+        generation += 1
+        isStoppingSession = false
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        recordingFile = nil // finalize the safety-net file for this segment
+
+        let finalText = recognizedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        state = finalText.isEmpty ? .idle : .readyForReview(text: finalText)
 
         try? AVAudioSession.sharedInstance().setActive(false)
     }
@@ -158,6 +275,8 @@ public final class VoiceTranscriber: NSObject {
     public func cancelRecording() {
         generation += 1
         isStoppingSession = false
+        resumeAfterInterruption = false
+        quickFailures = 0
         stopAndReset()
         segments = VoiceSegments()
         partialText = ""
@@ -198,6 +317,10 @@ public final class VoiceTranscriber: NSObject {
     /// Shared by `startRecording()` and `resumeRecording(withText:)` — the only difference
     /// between them is whether `segments`/`partialText` were reset first.
     private func beginEngineSession() async {
+        guard let speechRecognizer, speechRecognizer.isAvailable else {
+            state = .error(message: "Speech recognition is not available right now (\(Locale.current.identifier)). Check the network, or enable Dictation for this language in Settings › General › Keyboard.")
+            return
+        }
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
@@ -213,8 +336,13 @@ public final class VoiceTranscriber: NSObject {
             Self.pruneOldRecordings()
 
             isStoppingSession = false
+            quickFailures = 0
+            sessionStartedAt = Date()
             startRecognitionTask()
 
+            // The meter only needs to move when the level actually moved: every buffer
+            // (about 45 a second) used to hop to the main actor and redraw the sheet.
+            var lastSentLevel: Float = -1
             inputNode.removeTap(onBus: 0)
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
                 guard let self else { return }
@@ -231,6 +359,8 @@ public final class VoiceTranscriber: NSObject {
                 }
                 let rms = sqrt(sum / Float(frames))
                 let normalizedLevel = min(max((rms - 0.01) / 0.2, 0.0), 1.0)
+                guard abs(normalizedLevel - lastSentLevel) >= 0.03 else { return }
+                lastSentLevel = normalizedLevel
 
                 Task { @MainActor in
                     guard case .recording = self.state else { return }
@@ -259,6 +389,8 @@ public final class VoiceTranscriber: NSObject {
             request.requiresOnDeviceRecognition = true
         }
         recognitionRequest = request
+        liveTaskFinished = false
+        taskStartedAt = Date()
 
         let mySession = generation
         recognitionTask = speechRecognizer?.recognitionTask(with: request) { [weak self] result, error in
@@ -287,12 +419,65 @@ public final class VoiceTranscriber: NSObject {
             return
         }
 
-        segments.append(final: result?.bestTranscription.formattedString ?? partialText)
+        liveTaskFinished = true
+        let finalText = result?.bestTranscription.formattedString ?? partialText
+        segments.append(final: finalText)
         partialText = ""
 
+        // A task that ends on silence after a few seconds is normal. One that dies with
+        // an error within a second of starting, five times running, is a recognizer that
+        // cannot work right now (no network on the server path, no model for the locale).
+        let endedEmpty = finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if endedEmpty, error != nil, Date().timeIntervalSince(taskStartedAt) < 1 {
+            quickFailures += 1
+        } else {
+            quickFailures = 0
+        }
+
         guard !isStoppingSession, case .recording(let level, _) = state else { return }
+        if quickFailures >= Self.maxQuickFailures, let error {
+            generation += 1
+            stopAndReset()
+            state = .error(message: "Speech recognition keeps failing: \(error.localizedDescription)")
+            return
+        }
         state = .recording(audioLevel: level, partialText: "")
         startRecognitionTask()
+    }
+
+    // MARK: - System Events
+
+    /// A phone call, Siri, or another app taking the microphone stops the engine under
+    /// us. End the session the same way Stop does so the sheet shows Resume with the
+    /// text intact; when the system says the interruption is over, pick up again.
+    private func handleInterruption(type: AVAudioSession.InterruptionType?, options: AVAudioSession.InterruptionOptions) async {
+        switch type {
+        case .began:
+            guard case .recording = state else { return }
+            await stopRecording()
+            resumeAfterInterruption = true
+        case .ended:
+            guard resumeAfterInterruption else { return }
+            resumeAfterInterruption = false
+            if options.contains(.shouldResume) {
+                await resumeRecording(withText: recognizedText)
+            }
+        default:
+            return
+        }
+    }
+
+    /// The engine's input format changed (AirPods came or went, a call re-routed audio)
+    /// and the engine stopped itself. Keep everything recognized so far and start a fresh
+    /// tap in the new format.
+    private func handleConfigurationChange() async {
+        guard case .recording = state, !isStoppingSession, !audioEngine.isRunning,
+              Date().timeIntervalSince(sessionStartedAt) > 0.5 else { return }
+        generation += 1
+        stopAndReset()
+        segments.append(final: partialText)
+        partialText = ""
+        await beginEngineSession()
     }
 
     private func recognizeToCompletion(_ request: SFSpeechRecognitionRequest) async throws -> String {
