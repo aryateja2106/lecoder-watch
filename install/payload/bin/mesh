@@ -1687,12 +1687,15 @@ function firstPairedIphoneUdid(): string | null {
     if (!r.success || !existsSync(tmp)) return null;
     const j = JSON.parse(readFileSync(tmp, "utf8"));
     const devices: any[] = j?.result?.devices ?? [];
-    const connected = devices.find((d) =>
+    // A phone on the same Wi-Fi idles as tunnelState "disconnected" until something talks
+    // to it — devicectl opens the tunnel on demand — so "paired" is the real requirement.
+    // Prefer one whose tunnel is already up, then any paired physical iPhone.
+    const paired = devices.filter((d) =>
       d?.hardwareProperties?.platform === "iOS" &&
       d?.hardwareProperties?.reality === "physical" &&
-      d?.connectionProperties?.pairingState === "paired" &&
-      d?.connectionProperties?.tunnelState === "connected");
-    return connected?.hardwareProperties?.udid ?? null;
+      d?.connectionProperties?.pairingState === "paired");
+    const pick = paired.find((d) => d?.connectionProperties?.tunnelState === "connected") ?? paired[0];
+    return pick?.hardwareProperties?.udid ?? null;
   } catch { return null; }
   finally { rmSync(tmp, { force: true }); }
 }
