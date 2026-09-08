@@ -202,3 +202,16 @@ public struct MeshWidgetEntryView: View {
     }
 }
 ```
+
+## How a widget reads the app's data
+
+A widget runs in its own process with its own container: it cannot see the app's
+`UserDefaults.standard` or its Documents directory. Share through an App Group: the same
+`com.apple.security.application-groups` entitlement on the app target AND the extension
+target (XcodeGen: `entitlements: path:` on both), then `UserDefaults(suiteName:)` or
+`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` on both sides.
+`UserDefaults(suiteName:)` returns a non-nil object even when the entitlement is missing,
+so the failure is invisible at build time and at launch: the widget renders its empty
+state forever. Verify with `codesign -d --entitlements -` on the built `.app` and on the
+`.appex` before calling the widget done. The extension's bundle id must be the app's id
+plus a dot and a suffix.

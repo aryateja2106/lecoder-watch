@@ -226,6 +226,31 @@ Every app this skill produces must have, before `mesh apps install`:
 5. **Tests run once**, green. If something fails, fix it and run once more; never leave a
    loop running.
 
+## 6c. Entitlements — the silent killer
+
+A capability whose entitlement is missing compiles, signs, installs, launches and passes
+tests, and is dead. Two factory runs on 2026-09-08 shipped exactly that: a widget that
+could never read the app's data, and a Watch app whose HealthKit query was refused
+forever. XcodeGen adds no entitlement unless the target says
+`entitlements: path: <Target>.entitlements` — an `.entitlements` file nothing references
+is a dead file. HealthKit needs `com.apple.developer.healthkit` (on the watch target too).
+An App Group shared with a widget or a watch app needs
+`com.apple.security.application-groups` with the identical group id on BOTH targets;
+`UserDefaults(suiteName:)` returns a non-nil object even without it, so the failure is
+invisible at build time and at launch. An extension's bundle id must be the container
+app's id plus a dot and a suffix (`com.x.App.Widget`, never `com.x.AppWidget`). A usage
+string in Info.plist is not an entitlement. Before `mesh apps add`, prove it:
+
+```sh
+codesign -d --entitlements - build/Build/Products/Debug-iphoneos/<App>.app
+codesign -d --entitlements - build/Build/Products/Debug-iphoneos/<App>.app/PlugIns/*.appex
+codesign -d --entitlements - build/Build/Products/Debug-iphoneos/<App>.app/Watch/*.app
+```
+
+Every entitlement your code depends on must be in that output, and the output goes into
+the report. Run the screen the brief is about, not only the app that contains it: a green
+iPhone-target test proves nothing about a watchOS target.
+
 ## 7. Completion signal
 
 Once the app is really installable — `mesh apps install` succeeded, or the wireless
