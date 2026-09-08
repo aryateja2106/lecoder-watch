@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import UserNotifications
 
 /// Usage limit lifecycle notifications: budget tiers at 50% and 25% left, hit at
@@ -702,6 +703,15 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
         let action = info["action"] as? String
+        // `mesh apps push <slug>`: the Mac built an app and serves it wirelessly. The
+        // banner carries the itms-services link; iOS itself asks to install it. Works
+        // from any network the phone can reach APNs and the manifest from — no cable,
+        // no shared Wi-Fi, no Xcode.
+        if action == "installApp", let raw = info["url"] as? String, let url = URL(string: raw) {
+            UIApplication.shared.open(url)
+            completionHandler()
+            return
+        }
         let providerId = info["providerId"] as? String
         if let providerId,
            action == "limitReset" || action == "limitAvailable" {
