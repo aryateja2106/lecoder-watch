@@ -11,7 +11,7 @@ import { handlePush, pushAlert, passesPushGate, notePushDecision, pushLiveActivi
 import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
 import { handleDoctor, tokenWeakness } from "./doctor";
-import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
+import { sendWake, primaryMac, primaryIPv4, magicPacket, parseBroadcast } from "./wol";
 import { initTelemetry } from "./telemetry";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
@@ -1042,7 +1042,10 @@ Bun.serve({
         const mac = String(body?.mac ?? "");
         // Two catches so the phone can tell "fix the request" from "retry later": a
         // malformed MAC is 400, a packet that could not leave this machine is 502.
-        try { magicPacket(mac); } catch (e: any) { return json({ error: String(e?.message ?? e) }, 400); }
+        try {
+          magicPacket(mac);
+          if (body?.broadcast != null && String(body.broadcast).trim()) parseBroadcast(String(body.broadcast));
+        } catch (e: any) { return json({ error: String(e?.message ?? e) }, 400); }
         try { await sendWake(mac, body?.broadcast ? String(body.broadcast) : undefined); }
         catch (e: any) { return json({ error: String(e?.message ?? e) }, 502); }
         return json({ ok: true });

@@ -13,7 +13,7 @@
 // reported, not followed, so a listing cannot wander somewhere surprising.
 import { homedir } from "node:os";
 import { join, dirname, resolve, basename } from "node:path";
-import { readdir, stat, lstat, mkdir, rename, readFile } from "node:fs/promises";
+import { readdir, stat, lstat, mkdir, rename, open } from "node:fs/promises";
 
 const TEXT_LIMIT = 256 * 1024;
 
@@ -65,24 +65,33 @@ async function readTextFile(target: string, max: number) {
   if (!info || !info.isFile()) return json({ error: `not a file: ${path}` }, 404);
 
   const limit = Math.min(Math.max(max, 1024), TEXT_LIMIT);
-  const buffer = await readFile(path);
-  const slice = buffer.subarray(0, limit);
-  // A NUL in the first slice means binary; hand it back as a download instead of
-  // pretending it is text.
-  if (slice.includes(0)) {
-    return new Response(buffer, {
-      headers: {
-        "content-type": "application/octet-stream",
-        "content-disposition": `attachment; filename="${basename(path).replace(/"/g, "")}"`,
-      },
+  // Read only the first `limit` bytes. Slurping the whole file and slicing after
+  // the fact turned a 1 KB preview of a multi-GB log into a multi-GB heap allocation
+  // and an OOM kill — the response cap never bound what was read.
+  const handle = await open(path, "r");
+  try {
+    const buf = Buffer.alloc(limit);
+    const { bytesRead } = await handle.read(buf, 0, limit, 0);
+    const slice = buf.subarray(0, bytesRead);
+    // A NUL in the first slice means binary; stream it instead of loading it all.
+    if (slice.includes(0)) {
+      return new Response(Bun.file(path).stream(), {
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-disposition": `attachment; filename="${basename(path).replace(/"/g, "")}"`,
+          "content-length": String(info.size),
+        },
+      });
+    }
+    return json({
+      path,
+      size: info.size,
+      text: new TextDecoder().decode(slice),
+      truncated: info.size > slice.length,
     });
+  } finally {
+    await handle.close();
   }
-  return json({
-    path,
-    size: info.size,
-    text: new TextDecoder().decode(slice),
-    truncated: buffer.length > slice.length,
-  });
 }
 
 export async function handleFiles(req: Request, url: URL): Promise<Response | null> {

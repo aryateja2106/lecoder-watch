@@ -9,6 +9,14 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Fixed
+- **Folders whose names contain `+` or `&` open correctly in the phone file browser.**
+  Percent-encoding now treats those characters as part of the path instead of query
+  syntax, so names like `C++ Projects` and `R&D` list the right directory.
+- **Previewing a huge file no longer loads the whole file into the daemon.** Text
+  previews read only the requested slice; binary files stream out instead of being
+  buffered entirely in memory.
+
 ## [0.5.2] — 2026-08-27 (installer only)
 
 ### Fixed
