@@ -9,6 +9,20 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+### Security
+- **Loopback auth is harder to bypass through a reverse proxy.** meshd no longer skips
+  the bearer token for loopback peers when the request carries `X-Forwarded-For`,
+  `X-Real-IP`, or `Forwarded`. Set `MESHD_TRUST_LOOPBACK=0` to require Bearer on every
+  route, including `/desktop` and `mesh pair` on the same machine. Pairing codes are
+  still minted only from the real socket peer, unchanged.
+
+### Changed
+- **Docker compose publishes port 8899 on loopback by default.** Set `MESHD_PUBLISH=0.0.0.0`
+  to expose on all host interfaces. Bare-metal installs still bind `0.0.0.0` so phones on
+  the LAN keep working; meshd logs a startup warning unless you acknowledge exposure.
+- **Linux and container `/health` is honest again.** Screen peek and desktop input are not
+  advertised on Linux or inside Docker when those features are unavailable.
+
 ## [0.5.2] — 2026-08-27 (installer only)
 
 ### Fixed

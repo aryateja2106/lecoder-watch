@@ -1,6 +1,6 @@
 # docs/ — what is in here, and what is still true
 
-Seventeen files, written over three months, and until now nothing said which ones describe
+Eighteen files, written over three months, and until now nothing said which ones describe
 the product as it is versus the product as it was. An agent that opens
 `PROJECT-STATE-AND-LEARNINGS-2026-07-07.md` cold is told to work on branch
 `backup/2026-07-02` and never push — advice that was correct in July and is wrong now.
@@ -19,6 +19,7 @@ those three.
 |---|---|---|
 | [mac-remote-control.md](mac-remote-control.md) | Touching pointer, keyboard, media, windows or power | The control surface, end to end. Referenced from CONTEXT.md. |
 | [mesh-cli-and-remote-install.md](mesh-cli-and-remote-install.md) | Adding a machine, the `mesh` CLI, upgrade/uninstall | Start here for anything installer-shaped. |
+| [docker.md](docker.md) | Running meshd in Docker on Linux/VPS | Alternative to curl install; pairing via `docker compose exec`. |
 | [release-workflow.md](release-workflow.md) | Cutting a release | See the warning below — the fleet lags the repo. |
 | [backlog.md](backlog.md) | Asking "do we already have X?" before building it | 75 items graded against the code as done/partial/buried/missing. Generated — edit `.github/backlog.json`, not this. |
 | [updating.md](updating.md) | Anyone asks "how do I get the new version?" | Three components, three routes, no cable. Includes the internal-vs-external TestFlight trap. |

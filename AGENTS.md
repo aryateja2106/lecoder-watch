@@ -98,6 +98,17 @@ bridge. Opening a terminal could `kill -9` the user's running daemon. When the i
 lsof -ti "tcp:$port" -sTCP:LISTEN
 ```
 
+**9. Never reverse-proxy meshd so the peer looks like loopback without Bearer.** meshd
+exempts loopback peers from the bearer token (socket address via `requestIP`, never
+headers) so `/desktop` and `mesh pair` work on the same machine. If nginx or Caddy on
+the host terminates TLS and forwards to `127.0.0.1:8899`, every remote client appears
+as loopback and gets the full API. Do not do that. If a proxy is unavoidable, require
+Bearer on every request (`MESHD_TRUST_LOOPBACK=0`) or proxy to a non-loopback bind.
+Requests carrying `X-Forwarded-For`, `X-Real-IP`, or `Forwarded` never get the loopback
+exemption even when the socket peer is 127.0.0.1. Docker compose publishes
+`127.0.0.1:8899` by default; set `MESHD_PUBLISH=0.0.0.0` only when you mean to expose
+the host port on all interfaces. See [docs/docker.md](docs/docker.md).
+
 Secrets: real tokens live in `~/.mesh/hosts.json` and `~/.mesh/token`. Read them into a
 shell variable; never print one, never paste one into a file, and never write a literal
 token into code or docs. **There is no such thing as `testtoken`** — it was a real

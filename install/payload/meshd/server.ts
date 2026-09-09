@@ -13,6 +13,8 @@ import { isAuthorized } from "./auth";
 import { handleDoctor, tokenWeakness } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
+import { advertisedCapabilities, inContainer } from "./capabilities";
+import { loopbackExempt } from "./loopback-trust";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
@@ -24,7 +26,7 @@ const VERSION = "0.5.2";
 // + Live Activity pushes), sessionStatus (status fields on /agents rows), paste
 // (bracketed multiline paste on /agents/<s>/send), captureJoin (join=1/plain=1 on
 // the output route). Clients must gate new behavior on these strings, not on version.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin"];
+// Full macOS superset lives in capabilities.ts; /health uses advertisedCapabilities().
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -859,15 +861,9 @@ function json(data: any, status = 200) {
 // An empty MESHD_TOKEN no longer means "open": it means loopback-only, because this
 // daemon executes shell commands and a misconfigured unit file must not be an RCE.
 //
-// Loopback is the one exception, and it is not a relaxation: a process running as
-// this user on this machine can already read ~/.mesh/token (mode 600) and execute
-// anything, so demanding a bearer token from 127.0.0.1 protects nothing while
-// blocking this Mac's own browser from /desktop. Decided from the socket peer
-// address via server.requestIP — never from a header, which a remote client controls.
-function isLoopback(server: any, req: Request): boolean {
-  const address = server?.requestIP?.(req)?.address ?? "";
-  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
-}
+// Loopback bearer exemption — see loopback-trust.ts. Judged from the socket peer via
+// server.requestIP, never from client headers. Refused when forward headers are present
+// or MESHD_TRUST_LOOPBACK=0. /pair/new uses its own socket-only check in pair.ts.
 // A request a browser marks cross-site cannot be one of our clients: URLSession and
 // the mesh CLI send neither header, and the /desktop page fetches same-origin. So a
 // present Origin, or a cross-site Sec-Fetch-Site, is a page attacking the loopback
@@ -879,7 +875,7 @@ function isBrowserCrossSite(req: Request): boolean {
 }
 function authed(req: Request, server?: any): boolean {
   if (isBrowserCrossSite(req)) return false;
-  if (isLoopback(server, req)) return true;
+  if (loopbackExempt(server, req)) return true;
   return isAuthorized(TOKEN, req.headers.get("authorization") ?? "");
 }
 
@@ -1010,7 +1006,7 @@ Bun.serve({
       // the same reason: they let a phone compute this machine's directed broadcast
       // later and pick a wake peer that actually shares its LAN.
       const net = primaryIPv4();
-      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES, mac: primaryMac(), ipv4: net?.address ?? null, netmask: net?.netmask ?? null });
+      return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: advertisedCapabilities(), mac: primaryMac(), ipv4: net?.address ?? null, netmask: net?.netmask ?? null });
     }
     // Pairing is the one route that must answer without a token — it is how the
     // phone gets one. See pair.ts for why that is safe.
@@ -1148,6 +1144,21 @@ Bun.serve({
     return json({ error: "not found" }, 404);
   },
 });
+function warnPublicBind(): void {
+  if (inContainer()) return; // exposure is controlled by compose port publish, not in-container bind
+  const host = HOST.trim();
+  if (host !== "0.0.0.0" && host !== "::") return;
+  const publish = (process.env.MESHD_PUBLISH ?? "").trim().toLowerCase();
+  if (publish === "0.0.0.0" || publish === "all" || publish === "1" || publish === "true" || publish === "yes") return;
+  console.error(
+    `meshd: WARNING: listening on ${host}:${PORT} on all interfaces. ` +
+    "meshd expects a trusted LAN or Tailscale — not a public VPS without a VPN. " +
+    "Set MESHD_PUBLISH=0.0.0.0 to acknowledge intentional public exposure, " +
+    "or bind MESHD_HOST=127.0.0.1 and reach the daemon via Tailscale/VPN. " +
+    "Never reverse-proxy to meshd so the peer looks like loopback without requiring Bearer.",
+  );
+}
+warnPublicBind();
 console.log(`meshd ${VERSION} on http://${HOST}:${PORT}  (host=${os.hostname()} platform=${process.platform})`);
 initTelemetry(VERSION);
 // Warm the per-session status index from the stored tail, and settle the capture-pane
