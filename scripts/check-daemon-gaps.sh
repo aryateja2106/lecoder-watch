@@ -27,10 +27,14 @@ bad() { echo "FAIL: check-daemon-gaps.sh: $1"; ok=0; }
 wanted=$(grep -oE 'capability: "[a-zA-Z]+"' "$CAPS" | sed 's/.*"\(.*\)"/\1/' | sort -u)
 [ -n "$wanted" ] || bad "expected[] names no capabilities — the row can never fire"
 
-# The capabilities the daemon actually advertises, read out of its CAPABILITIES array.
-advertised=$(grep -m1 'const CAPABILITIES' "$SERVER" \
+# The capabilities the daemon can advertise at all (macOS superset in capabilities.ts).
+CAPS_TS="$ROOT/install/payload/meshd/capabilities.ts"
+[ -f "$CAPS_TS" ] || { bad "install/payload/meshd/capabilities.ts is missing"; exit 1; }
+advertised=$(grep -m1 'export const CAPABILITIES' "$CAPS_TS" \
   | grep -oE '"[a-zA-Z]+"' | sed 's/"//g' | sort -u)
-[ -n "$advertised" ] || bad "could not read CAPABILITIES out of server.ts"
+[ -n "$advertised" ] || advertised=$(grep -A25 'export const CAPABILITIES' "$CAPS_TS" \
+  | grep -oE '"[a-zA-Z]+"' | sed 's/"//g' | sort -u)
+[ -n "$advertised" ] || bad "could not read CAPABILITIES out of capabilities.ts"
 
 for cap in $wanted; do
   # (1) meshd must be able to advertise it, or the warning is permanent.

@@ -152,8 +152,10 @@ meantime.
 
 **Transport is plain HTTP with a bearer token, on your private network.** The token is
 per-machine, minted by that machine during pairing, sent as a header and never in a query
-string. The daemon binds `0.0.0.0:8899` so your phone can reach it, and it refuses requests
-whose `Host`/`Origin` headers look like a browser, which closes an earlier hole. That is
+string. The daemon binds `0.0.0.0:8899` so your phone can reach it (Docker compose defaults
+to `127.0.0.1` on the host — see [docs/docker.md](docs/docker.md)), and it refuses requests
+whose `Host`/`Origin` headers look like a browser, which closes an earlier hole. Never put a
+reverse proxy in front of meshd that forwards to loopback without requiring Bearer. That is
 adequate on a network you trust and **not adequate on a shared or public one** — treat it
 that way until TLS lands.
 
