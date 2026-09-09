@@ -69,6 +69,7 @@ async function harden(path: string) {
 }
 
 async function readTokens(): Promise<DeviceToken[]> {
+  await harden(TOKENS_PATH);
   const raw = await readFile(TOKENS_PATH, "utf8").catch(() => "[]");
   try { return JSON.parse(raw) as DeviceToken[]; } catch { return []; }
 }
@@ -84,6 +85,7 @@ async function writeTokens(tokens: DeviceToken[]) {
 /// (daemon restarts must not orphan a Lock Screen card that only these tokens can end).
 let laCache: LAToken[] | null = null;
 async function readLaTokens(): Promise<LAToken[]> {
+  await harden(LA_TOKENS_PATH);
   if (laCache) return laCache;
   const raw = await readFile(LA_TOKENS_PATH, "utf8").catch(() => "[]");
   try {
@@ -432,7 +434,8 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
     // LA tokens are hex like device tokens but longer and variable-length; validate
     // the alphabet and a sane range instead of pinning one size.
     if (!/^[0-9a-f]{32,512}$/.test(token)) return json({ error: "bad token" }, 400);
-    const session = body.session ? String(body.session) : undefined;
+    const sessionRaw = body.session ? String(body.session) : undefined;
+    const session = sessionRaw && sessionRaw.length <= 256 ? sessionRaw : undefined;
     // An update token with no session is unreachable: pushLiveActivity only targets
     // rows that name one, so nothing would ever send to it and no 410 would ever
     // prune it. Refuse it rather than storing a row that can only accumulate.

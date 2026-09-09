@@ -17,6 +17,8 @@ openssl ecparam -name prime256v1 -genkey -noout 2>/dev/null \
 cd "$ROOT/install/payload/meshd"
 HOME="$TMP" bun -e '
 import { handlePush } from "./push.ts";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 const u = (p) => new URL("http://x" + p);
 const call = async (path, body) => {
   const req = body
@@ -32,6 +34,19 @@ const good = await call("/push/register", { token: "ab".repeat(32) });
 if (good.devices !== 1) throw new Error("register failed");
 const again = await call("/push/register", { token: "ab".repeat(32) });
 if (again.devices !== 1) throw new Error("dedupe failed");
+
+// Loose token files from an older build must be re-tightened on read, not only on write.
+await writeFile(join(process.env.HOME, ".mesh/push-tokens.json"), JSON.stringify([{ token: "ab".repeat(32), env: "dev", addedISO: new Date().toISOString() }]), { mode: 0o644 });
+await writeFile(join(process.env.HOME, ".mesh/la-tokens.json"), "[]", { mode: 0o644 });
+await call("/push");
+const pushMode = (await import("node:fs/promises")).stat(join(process.env.HOME, ".mesh/push-tokens.json")).then((s) => s.mode & 0o777);
+const laMode = (await import("node:fs/promises")).stat(join(process.env.HOME, ".mesh/la-tokens.json")).then((s) => s.mode & 0o777);
+if ((await pushMode) !== 0o600) throw new Error("push-tokens.json was not re-hardened to 0600 on read");
+if ((await laMode) !== 0o600) throw new Error("la-tokens.json was not re-hardened to 0600 on read");
+
+// An absurd session string must be refused, not stored forever.
+const badLa = await call("/la/token", { kind: "update", token: "ab".repeat(64), session: "x".repeat(512) });
+if (!badLa.error) throw new Error("oversized LA session must be rejected");
 // send path must not throw even if APNs is unreachable (fire-and-forget contract)
 await call("/push/test", { title: "self-check" });
 

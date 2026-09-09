@@ -283,10 +283,19 @@ struct MeshClient {
 
     // MARK: - Remote files (endpoints live since 0.4.x — /fs ships in every deployed daemon)
 
+    /// Query value for `/fs?path=` — must not leave `+`, `&`, or `=` raw. URL parsing
+    /// treats `+` as space and `&` as a separator, so `C++ Projects` becomes
+    /// `C   Projects` and `R&D` is truncated at `&`.
+    private static let fsQueryAllowed: CharacterSet = {
+        var set = CharacterSet.urlQueryAllowed
+        set.remove(charactersIn: "+&=")
+        return set
+    }()
+
     /// List a directory on the machine. `nil` path = the daemon's home directory.
     func fsList(path: String? = nil) async throws -> FsListing {
         let query = path.map {
-            "?path=\($0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0)"
+            "?path=\($0.addingPercentEncoding(withAllowedCharacters: Self.fsQueryAllowed) ?? $0)"
         } ?? ""
         let data = try await request("/fs\(query)")
         return try JSONDecoder().decode(FsListing.self, from: data)

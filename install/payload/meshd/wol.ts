@@ -38,6 +38,32 @@ function parseMac(mac: string): Uint8Array {
   return Uint8Array.from(parts, (p) => parseInt(p, 16));
 }
 
+/** IPv4 broadcast only: limited (255.255.255.255) or directed (*.x.x.255). */
+export function parseBroadcast(addr: string | undefined): string {
+  const trimmed = String(addr ?? "").trim();
+  if (!trimmed) return "255.255.255.255";
+  const parts = trimmed.split(".");
+  if (parts.length !== 4) {
+    throw new Error(`invalid broadcast: ${JSON.stringify(trimmed)} (want an IPv4 broadcast address)`);
+  }
+  const octets = parts.map((part) => {
+    if (!/^\d{1,3}$/.test(part)) {
+      throw new Error(`invalid broadcast: ${JSON.stringify(trimmed)} (want an IPv4 broadcast address)`);
+    }
+    const n = Number(part);
+    if (!Number.isInteger(n) || n < 0 || n > 255) {
+      throw new Error(`invalid broadcast: ${JSON.stringify(trimmed)} (want an IPv4 broadcast address)`);
+    }
+    return n;
+  });
+  const isLimited = octets.every((o) => o === 255);
+  const isDirected = octets[3] === 255;
+  if (!isLimited && !isDirected) {
+    throw new Error(`invalid broadcast: ${JSON.stringify(trimmed)} (must be 255.255.255.255 or end in .255)`);
+  }
+  return trimmed;
+}
+
 /**
  * Emit the magic packet three times to `broadcast:9`. Fire-and-forget by nature: a
  * sleeping machine cannot acknowledge anything, so a resolved promise means "sent",
@@ -52,7 +78,8 @@ function parseMac(mac: string): Uint8Array {
  */
 export async function sendWake(mac: string, broadcast = "255.255.255.255"): Promise<void> {
   const packet = magicPacket(mac);           // validate before we bother opening a socket
-  const targets = [...new Set([broadcast, directedBroadcast()])].filter(Boolean) as string[];
+  const bcast = parseBroadcast(broadcast);
+  const targets = [...new Set([bcast, directedBroadcast()])].filter(Boolean) as string[];
   const sock = await Bun.udpSocket({});
   const failures: string[] = [];
   let sent = 0;

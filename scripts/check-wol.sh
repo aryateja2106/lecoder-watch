@@ -10,7 +10,7 @@ command -v bun >/dev/null 2>&1 || { echo "check-wol: SKIP (bun not installed)"; 
 cd "$ROOT/install/payload/meshd"
 
 bun -e '
-import { magicPacket, primaryMac } from "./wol.ts";
+import { magicPacket, primaryMac, parseBroadcast } from "./wol.ts";
 
 const hex = (u) => Array.from(u, (b) => b.toString(16).padStart(2, "0")).join(":");
 
@@ -48,6 +48,14 @@ if (mine !== null) {
   if (mine === "00:00:00:00:00:00") throw new Error("primaryMac() returned the all-zero MAC");
   if (mine === "02:00:00:00:00:00") throw new Error("primaryMac() returned macOS'"'"'s redacted placeholder MAC");
   magicPacket(mine);  // whatever it found must itself be packable
+}
+
+if (parseBroadcast(undefined) !== "255.255.255.255") throw new Error("empty broadcast must default to limited broadcast");
+if (parseBroadcast("192.168.1.255") !== "192.168.1.255") throw new Error("directed broadcast must pass");
+for (const bad of ["1.2.3.4", "10.0.0.1", "nope", "256.1.1.255"]) {
+  let threw = false;
+  try { parseBroadcast(bad); } catch { threw = true; }
+  if (!threw) throw new Error(`non-broadcast accepted: ${JSON.stringify(bad)}`);
 }
 console.log(`check-wol: OK (primaryMac -> ${mine ?? "null"})`);
 '
