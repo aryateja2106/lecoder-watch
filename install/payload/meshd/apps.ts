@@ -17,6 +17,7 @@
 //
 // The CLI (install/payload/bin/mesh) owns writing ~/.mesh/apps; this file only reads it.
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { pushInstall } from "./push";
 import { homedir } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
 
@@ -239,6 +240,18 @@ export async function installApp(slug: string, target: string, meshBin: string):
 /// (serveApp is mounted BEFORE it — see the comment at the top.)
 export async function handleApps(req: Request, url: URL, ctx: { host: string; port: number; meshBin: string }): Promise<Response | null> {
   if (url.pathname === "/built-apps" && req.method === "GET") return json(await listApps(ctx.host, ctx.port));
+  // POST /built-apps/<slug>/push: an APNs banner on every registered device whose tap
+  // opens Apple's installer for this app — the cable-free, any-network install.
+  const p = url.pathname.match(/^\/built-apps\/([a-z0-9][a-z0-9-]{1,40})\/push$/);
+  if (p && req.method === "POST") {
+    const m = await readMeta(p[1]);
+    if (!m || m.kind !== "native") return json({ ok: false, error: "no native app with that slug" }, 404);
+    if (!m.key || !m.ipa) return json({ ok: false, error: "no .ipa packaged for this app — re-run mesh apps add" }, 400);
+    const base = await otaBase();
+    if (!base) return json({ ok: false, error: "wireless install is off — run mesh apps ota --enable" }, 400);
+    const result = await pushInstall({ slug: m.slug, name: m.name, url: itmsUrl(`${base}/a/${m.slug}-${m.key}`), version: m.version });
+    return json({ ...result, slug: m.slug }, result.ok ? 200 : 400);
+  }
   const m = url.pathname.match(/^\/built-apps\/([a-z0-9][a-z0-9-]{1,40})\/install$/);
   if (m && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as { target?: string };

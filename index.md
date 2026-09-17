@@ -9,7 +9,11 @@ Read [CONTEXT.md](CONTEXT.md) first (the map and the shape), then [MEMORY.md](ME
 |---|---|
 | `CONTEXT.md` | Overall shape, where things live, things that cost hours |
 | `MEMORY.md` | Why things are the way they are; settled decisions and dead ends |
-| `CHANGELOG.md` | What shipped, in user words; 0.3.0 section is the current state |
+| `CHANGELOG.md` | What shipped, in user words; the `[Unreleased]` block is the 0.6 TestFlight notes |
+| `graphify-out/GRAPH_REPORT.md` | The generated codebase map: god nodes, communities, cross-file edges. `graphify query "…"` asks it; `sh scripts/codemap.sh` rebuilds it |
+| `docs/agents/codebase-map.md` | graphify + codegraph: what each holds, how every agent harness is wired to them |
+| `scripts/repo-status.sh` | Which tree is the truth right now: worktrees, branches vs `origin/main`, open PRs, map freshness |
+| `package.json` | The factory gate's task list: `typecheck` / `lint` / `test` / `build` → `scripts/gate-*.sh` + `check-all.sh` |
 | `install/payload/meshd/server.ts` | The daemon; routes, auth, Host/browser defenses |
 | `install/payload/meshd/auth.ts` | Fail-closed bearer auth; header-only, constant-time |
 | `install/payload/meshd/doctor.ts` | GET/POST /doctor; tests token/input/screen/mux/push |

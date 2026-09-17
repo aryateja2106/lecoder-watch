@@ -114,3 +114,15 @@ public final class WatchLinkManager: NSObject, WCSessionDelegate {
     }
 }
 ```
+
+## What a watch app may do overnight
+
+Nothing continuous. A watch app gets no background execution beyond a workout session
+and no background microphone. `WKExtendedRuntimeSession` is the only extension of
+runtime; its session types are `.alarm` (a window shortly before a scheduled alarm),
+`.selfCare`, `.mindfulness`, `.physicalTherapy` and `.underwaterDepth`, and none of them
+grants audio capture all night. Recording snoring on the wrist is not a feature a
+third-party app can ship. The honest substitute for "track my sleep" is HealthKit sleep
+analysis, which watchOS records on its own from motion and heart rate: read it in the
+morning (see `healthkit.md`) and say in the report that the pipeline is Apple's, not yours.
+Never put a sentence in the UI that promises what the limits section rules out.

@@ -4,8 +4,10 @@
 #   sh make-appicon.sh <path/to/Assets.xcassets> <sf-symbol-name> <hex-color> [<hex-color-2>]
 #
 # Renders the SF Symbol in white on a vertical gradient of the two colors (one color → a
-# flat fill) into a 1024×1024 PNG and writes an AppIcon.appiconset with the single
-# universal entry iOS 17+ accepts. Needs only macOS (Swift + AppKit), no dependencies.
+# flat fill) into a 1024×1024 PNG and writes an AppIcon.appiconset with the two
+# single-size entries Xcode 15+ accepts: iOS universal (covers iPhone AND iPad) and
+# watchOS universal, so the same catalog serves a watch target too. Needs only macOS
+# (Swift + AppKit), no dependencies. The iOS entry must have NO alpha (App Store rule).
 set -eu
 [ $# -ge 3 ] || { echo "usage: make-appicon.sh <Assets.xcassets> <sf-symbol> <hex> [<hex2>]" >&2; exit 2; }
 ASSETS="$1"; SYMBOL="$2"; C1="$3"; C2="${4:-$3}"
@@ -37,7 +39,13 @@ if let glyph = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
     FileHandle.standardError.write("unknown SF Symbol \(symbol); drawing a plain tile\n".data(using: .utf8)!)
 }
 image.unlockFocus()
-guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) else { exit(1) }
+// Flatten to RGB with no alpha channel: App Store Connect rejects iOS icons that carry one.
+guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let cg = rep.cgImage,
+      let ctx = CGContext(data: nil, width: cg.width, height: cg.height, bitsPerComponent: 8, bytesPerRow: 0,
+                          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+else { exit(1) }
+ctx.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+guard let flat = ctx.makeImage(), let png = NSBitmapImageRep(cgImage: flat).representation(using: .png, properties: [:]) else { exit(1) }
 try! png.write(to: URL(fileURLWithPath: out))
 EOF
 swiftc -O -o "$TMP/icon" "$TMP/icon.swift" 2>/dev/null || swiftc -o "$TMP/icon" "$TMP/icon.swift"
@@ -47,7 +55,8 @@ sips -z 1024 1024 "$SET/AppIcon.png" >/dev/null
 cat >"$SET/Contents.json" <<'EOF'
 {
   "images" : [
-    { "filename" : "AppIcon.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" }
+    { "filename" : "AppIcon.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" },
+    { "filename" : "AppIcon.png", "idiom" : "universal", "platform" : "watchos", "size" : "1024x1024" }
   ],
   "info" : { "author" : "xcode", "version" : 1 }
 }

@@ -289,6 +289,37 @@ export async function pushAlert(
   // Off the payload, not the options: the phone routes buttons by the host in the
   // payload, so the banner it clears has to be keyed by that same name.
   const collapse = collapseId(payload.host, payload.session);
+  return fanOut(tokens, payload, collapse);
+}
+
+/// An install invitation for a native app this Mac serves wirelessly: tapping the
+/// banner hands iOS the itms-services link and iOS asks "Install <name>?" — no cable,
+/// no shared Wi-Fi, from wherever the phone can reach APNs and the manifest. Never
+/// deduped (a rebuild is a new build), no session, "active" so it does not pierce a
+/// Focus. The `action`/`url` keys are read by NotificationManager.didReceive.
+export async function pushInstall(app: { slug: string; name: string; url: string; version?: string }) {
+  const tokens = await readTokens();
+  if (!tokens.length) return { ok: false, sent: 0, reason: "no registered devices" };
+  const payload = {
+    aps: {
+      alert: {
+        title: `${app.name} is ready to install`.slice(0, 120),
+        body: `Tap to install ${app.name}${app.version ? ` ${app.version}` : ""} on this device.`,
+      },
+      sound: "default",
+      "interruption-level": "active",
+    },
+    host: os.hostname().replace(/\.local$/i, ""),
+    action: "installApp",
+    slug: app.slug,
+    url: app.url,
+  };
+  return fanOut(tokens, payload, `install-${app.slug}`);
+}
+
+/// One payload to every registered device, with the environment flip and the dead-token
+/// sweep that every alert needs.
+async function fanOut(tokens: DeviceToken[], payload: any, collapse: string | null) {
   let sent = 0;
   let changed = false;
   const keep: DeviceToken[] = [];

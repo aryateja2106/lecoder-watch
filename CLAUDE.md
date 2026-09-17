@@ -20,10 +20,13 @@ Setup and the local dry run: [docs/factory/README.md](docs/factory/README.md).
 ## The gate
 
 ```sh
-./.claude/scripts/gates.sh fast   # shared-model compile + published-link check (~40s)
-./.claude/scripts/gates.sh full   # + sh scripts/check-all.sh  (MINUTES — runs xcodebuild)
-./.claude/scripts/gates.sh deep   # + auth surface + architecture assertions
+./.claude/scripts/gates.sh fast   # types (meshd tsc + Shared/ swiftc) + lint (shell syntax + published links) ~40s
+./.claude/scripts/gates.sh full   # + test (sh scripts/check-all.sh, incl. the sim smoke) + build (3 xcodebuilds)  MINUTES
+./.claude/scripts/gates.sh deep   # + npm audit (no deps here) + the architecture rule block
 ```
+
+The gate reads `package.json` at the root: `typecheck`, `lint`, `test`, `build` map to
+`scripts/gate-*.sh` and `scripts/check-all.sh`. Same commands as `npm run <name>`.
 
 Quote the final `FACTORY_GATES:` line verbatim. `RED` and `MISCONFIGURED` both block, and a
 required gate that could not run is `MISCONFIGURED`, never green. `.factory/gates.conf`
@@ -71,3 +74,21 @@ See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 Single-context: `CONTEXT.md`, `MEMORY.md`, `AGENTS.md`. See `docs/agents/domain.md`.
+
+## Codebase map
+
+Two local graphs, no API key, nothing leaves the machine. Build or refresh both with
+`sh scripts/codemap.sh` (once per clone, then after edits; `--full` after big deletes).
+
+- **graphify** — code + docs knowledge graph in `graphify-out/`. For any "where / how /
+  what talks to what" question, run `graphify query "<question>"` before grepping;
+  `graphify path "<A>" "<B>"` for a relationship, `graphify explain "<concept>"` for one
+  thing. `graphify-out/GRAPH_REPORT.md` is the committed readable map; read it whole only
+  for architecture review.
+- **codegraph** — symbol / caller / impact graph over MCP (`codegraph_explore`; CLI
+  `codegraph explore|callers|impact <symbol>`). Use it before changing a shared function.
+- `sh scripts/repo-status.sh` — which tree is the truth right now: worktrees, branches vs
+  `origin/main`, open PRs, and whether the map is stale.
+
+After modifying code, `graphify update .` (AST only, seconds) keeps the graph current.
+Per-harness wiring and what is committed: [docs/agents/codebase-map.md](docs/agents/codebase-map.md).

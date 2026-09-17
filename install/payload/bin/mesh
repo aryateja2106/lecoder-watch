@@ -1460,6 +1460,7 @@ function cmdApps(pos: string[], flags: Record<string, string>, bools: Set<string
     case "add": return cmdAppsAdd(pos, flags);
     case "list": return cmdAppsList();
     case "install": return cmdAppsInstall(pos, flags, bools);
+    case "push": return cmdAppsPush(pos, flags);
     case "remove": case "rm": return cmdAppsRemove(pos);
     case "ota": return cmdAppsOta(flags, bools);
     default: die(`unknown: mesh apps ${action ?? ""}  (config | publish | add | list | install | ota | remove)`);
@@ -1687,14 +1688,37 @@ function firstPairedIphoneUdid(): string | null {
     if (!r.success || !existsSync(tmp)) return null;
     const j = JSON.parse(readFileSync(tmp, "utf8"));
     const devices: any[] = j?.result?.devices ?? [];
-    const connected = devices.find((d) =>
+    // A phone on the same Wi-Fi idles as tunnelState "disconnected" until something talks
+    // to it — devicectl opens the tunnel on demand — so "paired" is the real requirement.
+    // Prefer one whose tunnel is already up, then any paired physical iPhone.
+    const paired = devices.filter((d) =>
       d?.hardwareProperties?.platform === "iOS" &&
       d?.hardwareProperties?.reality === "physical" &&
-      d?.connectionProperties?.pairingState === "paired" &&
-      d?.connectionProperties?.tunnelState === "connected");
-    return connected?.hardwareProperties?.udid ?? null;
+      d?.connectionProperties?.pairingState === "paired");
+    const pick = paired.find((d) => d?.connectionProperties?.tunnelState === "connected") ?? paired[0];
+    return pick?.hardwareProperties?.udid ?? null;
   } catch { return null; }
   finally { rmSync(tmp, { force: true }); }
+}
+
+/// The cable-free install: the daemon sends an APNs banner to every phone and iPad paired
+/// with this Mac; a tap opens Apple's installer for the app's wireless link. Needs
+/// `mesh apps ota --enable` (the link) and an APNs key (the banner).
+async function cmdAppsPush(pos: string[], flags: Record<string, string>) {
+  const slug = pos[0];
+  if (!slug || !SLUG_RE.test(slug)) appsErr(`invalid slug: ${slug ?? ""}`);
+  const meta = readAppMeta(slug);
+  if (meta.kind !== "native") appsErr(`${slug} is a ${meta.kind} app — send its url instead`);
+  const host = resolveHost(flags.host || flags.H || "local", loadConfig());
+  let r: any;
+  try {
+    r = await api(host, "POST", `/built-apps/${slug}/push`, {});
+  } catch (e: any) {
+    appsErr(`push failed: ${e?.message ?? e}`);
+  }
+  if (!r?.ok) appsErr(`push failed: ${r?.error ?? r?.reason ?? "no device took it"}`);
+  say(`  sent to ${r.sent} of ${r.of ?? r.sent} device(s) — tap the banner, iOS asks to install`);
+  appsOk(`push ${slug}`, { slug, sent: r.sent });
 }
 
 function cmdAppsInstall(pos: string[], flags: Record<string, string>, bools: Set<string>) {
@@ -2022,7 +2046,7 @@ and it never overwrites a directory it did not create itself — it prints and s
   mesh skills status           # what is installed, and how many clients are linked
   mesh skills install          # install/refresh
   mesh skills install --uninstall   # remove the symlinks and the managed copy`,
-  apps: `mesh apps <config|publish|add|list|install|remove> ...
+  apps: `mesh apps <config|publish|add|list|install|push|remove> ...
 
 Two build routes, both under ~/.mesh/apps/<slug>/. Slugs are ^[a-z0-9][a-z0-9-]{1,40}$.
 
@@ -2045,6 +2069,12 @@ Two build routes, both under ~/.mesh/apps/<slug>/. Slugs are ^[a-z0-9][a-z0-9-]{
       Native apps only. Installs to the first paired, connected iPhone via
       'xcrun devicectl device install app', or to a booted simulator with --sim
       ('xcrun simctl install booted'), or to --device <udid> if given.
+
+  mesh apps push <slug> [-H <host>]
+      Native apps only. Sends an APNs banner to every iPhone and iPad paired with this
+      Mac; tapping it opens Apple's installer for the app's wireless link. No cable, no
+      shared Wi-Fi — the device only needs to reach APNs and the tailnet. Needs
+      'mesh apps ota --enable' and an APNs key in ~/.mesh/apns.
 
   mesh apps remove <slug>
       Delete everything mesh stored for that slug.

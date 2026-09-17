@@ -18,6 +18,8 @@ those three.
 | Doc | Read it when | Notes |
 |---|---|---|
 | [PRODUCT-SPEC-V1.md](PRODUCT-SPEC-V1.md) | Deciding what to build or ship next | The consolidated launch spec, 2026-08-28. §1.4 and the open-decision answers record where the owner overrode its recommendations — the DECIDED/RESOLVED markers are the current truth. |
+| [agents/codebase-map.md](agents/codebase-map.md) | Orienting in the code before grepping; wiring a new agent harness | The two local graphs (graphify, codegraph), `sh scripts/codemap.sh`, `sh scripts/repo-status.sh`, and what each of Claude Code / Codex / Cursor / Antigravity reads. |
+| [self-serve-apps.md](self-serve-apps.md) | Building or changing the describe-it-anywhere → build-on-Mac → run-everywhere flow | The user-facing story for `mesh apps`; pairs with local-first-ade.md underneath it. |
 | [playbooks/](playbooks/README.md) | Before touching Xcode, simulators, devices, releases, asc, or the daemon from any agent harness | Six imperative playbooks; every trap in them was paid for at least once here. |
 | [mac-remote-control.md](mac-remote-control.md) | Touching pointer, keyboard, media, windows or power | The control surface, end to end. Referenced from CONTEXT.md. |
 | [mesh-cli-and-remote-install.md](mesh-cli-and-remote-install.md) | Adding a machine, the `mesh` CLI, upgrade/uninstall | Start here for anything installer-shaped. |
@@ -51,6 +53,7 @@ branch names, version numbers or "next steps" from them.**
 | [NEXT-AGENT-HANDOFF.md](NEXT-AGENT-HANDOFF.md) | "The mobile terminal is not usable" | The complaint is still live and worth reading. The plan around it has been overtaken. |
 | [PRODUCT-CONTEXT-2026-06-05.md](PRODUCT-CONTEXT-2026-06-05.md) | June feedback on the terminal UI | Same: the feedback matters, the surrounding state does not. |
 | [IMPECCABLE-SETUP.md](IMPECCABLE-SETUP.md) | A design-quality baseline that was parked | Explicitly says not to install it during handoff-only mode. Nobody has picked it up. |
+| [factory-eval-2026-09-08.md](factory-eval-2026-09-08.md) | Four apps built headless by Antigravity from plain-language briefs, 2026-09-08 | An evaluation record: timings, token costs, and the two apps that shipped a dead feature for want of an entitlement. The codesign lesson now lives in `scripts/check-entitlements.sh`. |
 
 ---
 
