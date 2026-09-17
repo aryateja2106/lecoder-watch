@@ -48,3 +48,13 @@ supabase/.temp/
 # else under .agents/skills is per-machine and must not ride into PRs.
 .agents/skills/*
 !.agents/skills/factory-*
+
+# External reference clones and local media: on disk, never in git
+references/external/
+reference-video/
+
+# Codebase map (sh scripts/codemap.sh). Only GRAPH_REPORT.md is committed — the readable
+# map; graph.json (6 MB, changes every run) and the viewer rebuild locally in ~1 minute.
+graphify-out/*
+!graphify-out/GRAPH_REPORT.md
+.codegraph/

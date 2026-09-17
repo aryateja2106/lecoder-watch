@@ -1,0 +1,5 @@
+# Project-level Codex config. Applies once this folder is trusted in ~/.codex/config.toml.
+# codegraph: symbol / caller / impact graph over this repo, built by `sh scripts/codemap.sh`.
+[mcp_servers.codegraph]
+command = "codegraph"
+args = ["serve", "--mcp"]
