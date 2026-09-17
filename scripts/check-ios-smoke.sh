@@ -47,6 +47,24 @@ MIN_MAJOR=26   # the app's deployment target; older runtimes cannot install it a
 command -v xcrun >/dev/null 2>&1 \
   || skip "xcrun is not on PATH — there is no Xcode on this machine to launch the app with."
 
+# `xcrun simctl` can hang forever: Xcode's simctl is a shell shim that compares the
+# installed CoreSimulator.framework version with the one it expects and, on a mismatch,
+# runs `xcodebuild -runFirstLaunch` — which waits for an admin password nobody is there to
+# type. Measured 2026-09-17 (framework 1166, shim expected 1051.55): every simctl call on
+# the machine sat until killed, and so did check-all.sh. A gate that hangs is worse than
+# one that skips, so simctl gets 30 s to answer `help` at all; the child is killed as a
+# process group so no orphaned xcodebuild is left behind.
+simctl_answers() {
+  perl -e '
+    my $pid = fork;
+    if (!$pid) { setpgrp(0, 0); exec @ARGV or exit 127 }
+    $SIG{ALRM} = sub { kill "TERM", -$pid; sleep 1; kill "KILL", -$pid; exit 124 };
+    alarm 30; waitpid($pid, 0); exit($? >> 8);
+  ' xcrun simctl help >/dev/null 2>&1
+}
+simctl_answers \
+  || skip "xcrun simctl did not answer within 30 s — CoreSimulator is newer than this Xcode's simctl shim expects. Fix once, as admin: sudo xcodebuild -runFirstLaunch"
+
 # Prints "udid|name|iOS X.Y" for the newest usable iPhone simulator, or nothing.
 sim=$(xcrun simctl list devices available -j 2>/dev/null | python3 -c '
 import json, sys
