@@ -12,16 +12,20 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 command -v bun >/dev/null 2>&1 || { echo "check-handoff: SKIP (bun not installed)"; exit 0; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-# Fixture conversation stores, one per CLI, for cwd /work/app
-mkdir -p "$TMP/claude/-work-app" "$TMP/codex/2026/09/04" "$TMP/cursor/work-app/agent-transcripts/chat-1"
+# Fixture conversation stores, one per CLI, for cwd /work/app.
+# The Codex rollout lives under today's UTC date: handoff.ts only reads the last seven
+# date folders, so a fixture pinned to the day this check was written (2026/09/04) went
+# silently red one week later and stayed red.
+CODEX_DAY="$(date -u +%Y/%m/%d)"
+mkdir -p "$TMP/claude/-work-app" "$TMP/codex/$CODEX_DAY" "$TMP/cursor/work-app/agent-transcripts/chat-1"
 printf '%s\n' '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Build a habit tracker with streaks"}]},"timestamp":"2026-09-04T10:00:00Z"}' \
   '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"On it."}]},"timestamp":"2026-09-04T10:00:05Z"}' >"$TMP/claude/-work-app/aaaa-1111.jsonl"
 printf '%s\n' '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>ignored</system-reminder>"}]}}' \
   '{"type":"user","message":{"role":"user","content":"Fix the crash on launch"}}' >"$TMP/claude/-work-app/bbbb-2222.jsonl"
 printf '%s\n' '{"type":"user","message":{"content":[{"type":"text","text":"subagent noise"}]}}' >"$TMP/claude/-work-app/agent-zzzz.jsonl"
 printf '%s\n' '{"type":"session_meta","payload":{"id":"codex-thread-9","cwd":"/work/app"}}' \
-  '{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Write the README"}]}}' >"$TMP/codex/2026/09/04/rollout-x.jsonl"
-printf '%s\n' '{"type":"session_meta","payload":{"id":"codex-other","cwd":"/elsewhere"}}' >"$TMP/codex/2026/09/04/rollout-y.jsonl"
+  '{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Write the README"}]}}' >"$TMP/codex/$CODEX_DAY/rollout-x.jsonl"
+printf '%s\n' '{"type":"session_meta","payload":{"id":"codex-other","cwd":"/elsewhere"}}' >"$TMP/codex/$CODEX_DAY/rollout-y.jsonl"
 printf '%s\n' '{"role":"user","message":{"content":[{"type":"text","text":"Add dark mode"}]}}' >"$TMP/cursor/work-app/agent-transcripts/chat-1/chat-1.jsonl"
 # A Claude conversation for the hand-off's own working directory (slug: "/" and "." → "-"),
 # fresh enough to be resumed by a hand-off TO claude.
