@@ -126,6 +126,7 @@ next steps that were correct in June and July and are wrong now; the index says 
 | `project.yml` | Canonical Xcode project. Run `xcodegen generate` after editing. |
 | `openspec/` | Specs and change proposals. |
 | `web/` | Landing page (Vercel). |
+| `marketing/` | Marketing workspace: its own brief, the shared product context, and the marketingskills library. Nothing there is loaded at the repo root. See `marketing/README.md`. |
 
 ## Build and verify
 
@@ -201,6 +202,12 @@ Several agents (Claude Code, Codex/ChatGPT, Cursor) work on this repo, sometimes
 OpenSpec is installed for all three: `openspec/config.yaml` is the shared brief, and each
 has the same `propose / apply / archive` commands, so a change proposed by one is legible to
 the others.
+
+**This file is trained, not only edited.** `backpass` (config: root `.backpassrc.json`)
+reads the Claude Code, Codex and Cursor sessions that ran in this repo and proposes
+evidence-backed edits to it; `backpass apply` is the human gate. The marketing brief
+(`marketing/AGENTS.md`) is trained the same way with `--target`. How to run it:
+[docs/backpass.md](docs/backpass.md).
 
 **Safe to hand out and run in parallel** — self-contained, hard to break the protocol:
 
