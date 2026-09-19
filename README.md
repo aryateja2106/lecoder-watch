@@ -228,6 +228,7 @@ MeshDesktop/       Mac menu bar app — status, permissions, pairing QR
 install/           the installer, the meshd payload, and the mesh CLI
 scripts/           self-checks, packaging, release
 web/               landing page (Vercel)
+marketing/         marketing workspace: brief, product context, skills (not loaded at the root)
 docs/              runbooks and design notes
 ```
 

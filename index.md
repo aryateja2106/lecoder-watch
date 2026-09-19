@@ -33,6 +33,8 @@ Read [CONTEXT.md](CONTEXT.md) first (the map and the shape), then [MEMORY.md](ME
 | `MeshWatchWidgets/` | Live Activity (Lock Screen, Dynamic Island, Smart Stack) |
 | `WatchWidgets/` | Watch complication; renders attention count/session/question |
 | `web/` | Landing page; redirect to install.sh |
+| `marketing/` | Marketing workspace: brief, product context, marketingskills library; not loaded at the root |
+| `.backpassrc.json` | backpass config: which briefs are trained from agent transcripts (`docs/backpass.md`) |
 
 ## Daemon routes
 

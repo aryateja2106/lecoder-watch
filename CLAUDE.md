@@ -1,2 +1,5 @@
-Read [AGENTS.md](AGENTS.md). It is the single brief for every agent working on this repo —
-Claude Code, Codex and Cursor all use the same one, so it does not get forked here.
+<!-- Claude Code reads CLAUDE.md, not AGENTS.md. AGENTS.md is the single brief for every agent
+     on this repo (Claude Code, Codex, Cursor), so it is imported here rather than forked.
+     Keep this file to the one import line: backpass treats it as a pointer and trains
+     AGENTS.md for all of them. -->
+@AGENTS.md

@@ -31,6 +31,7 @@ those three.
 | [CODEBASE-SURVEY.md](CODEBASE-SURVEY.md) | Tempted to merge code from another LeCoder/LeSearch folder | Verdicts on all 12. The rule it lands on: take assets, never merge old code lineages. |
 | [native-limits-recipe-2026-07-07.md](native-limits-recipe-2026-07-07.md) | Working on usage limits | Dated, but the recipe still describes the shipped path. |
 | [launch-posts.md](launch-posts.md) | Writing launch copy | Drafts only, nothing posted. Written for 0.3.0, so the version numbers need updating. |
+| [backpass.md](backpass.md) | Training AGENTS.md or the marketing brief from real agent sessions | Prerequisites and the exact commands for both briefs. |
 
 ## Dated snapshots — history, not instructions
 
