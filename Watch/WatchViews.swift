@@ -1,3 +1,4 @@
+// WatchViews.swift — every watch screen: machines list, attention rows, the crown-scrollable terminal with its key bar, events, screen peek, dictation.
 import SwiftUI
 import WatchKit
 #if canImport(UIKit)

@@ -1,3 +1,4 @@
+// FileBrowserView.swift — browse a machine's filesystem over /files and /fs, open links, read text files.
 import Foundation
 import SafariServices
 import SwiftUI

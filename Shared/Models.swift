@@ -1,3 +1,4 @@
+// Models.swift — every wire type the phone, the watch and meshd agree on (Agent, AgentEvent, Machine, WatchCommand…) plus the pure logic derived from them, above all `sessionsNeedingAttention(from:)`.
 import Foundation
 
 // MARK: - Machine

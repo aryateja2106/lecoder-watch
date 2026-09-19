@@ -1,3 +1,4 @@
+// AgentChatView.swift — the transcript chat for one agent session: bubbles, decision cards, artifacts, suggestion chips; reads /agents/:x/chat.
 import SwiftUI
 import UIKit
 

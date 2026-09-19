@@ -52,3 +52,8 @@ else
   echo "no graphify-out/GRAPH_REPORT.md — run: sh scripts/codemap.sh"
 fi
 [ -d .codegraph ] && echo "codegraph index present (.codegraph/)" || echo "no codegraph index — run: sh scripts/codemap.sh"
+if python3 scripts/codemap-index.py --check >/dev/null 2>&1; then
+  echo "docs/agents/CODEMAP.md matches the tree"
+else
+  echo "docs/agents/CODEMAP.md is STALE — run: python3 scripts/codemap-index.py"
+fi

@@ -1,3 +1,4 @@
+// ContentView.swift — the phone's tab shell: Machines, attention rows, machine detail, Settings, the daemon-update and Local Network banners.
 import SwiftUI
 import UIKit
 import WebKit

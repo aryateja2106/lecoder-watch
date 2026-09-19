@@ -1,3 +1,4 @@
+// RemoteScreenView.swift — the phone's Remote tab: live screen, trackpad gestures, chords and the key bar, driving meshd /screen.jpg and /input.
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers

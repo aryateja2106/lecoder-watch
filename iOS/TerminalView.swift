@@ -1,3 +1,4 @@
+// TerminalView.swift — the Terminal tab: session list, the xterm.js bridge WebView, the read-only peek screen, New Session sheet, and the built-apps screen.
 import SwiftUI
 import UIKit
 import WebKit

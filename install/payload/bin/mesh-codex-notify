@@ -1,4 +1,5 @@
 #!/bin/sh
+# mesh-codex-notify — Codex `notify` shim: runs the user's original notify hook if any, then posts a 'Codex turn ended' event to meshd.
 
 dry_run=0
 if [ "${1:-}" = "--dry-run" ]; then

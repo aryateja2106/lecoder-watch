@@ -73,5 +73,10 @@ else
   note "graphify unavailable — graphify-out/ was not refreshed"
 fi
 
+# --- the committed map (stdlib python, no graph tools needed) ------------------------
+note "codemap-index.py (docs/agents/CODEMAP, CONTRACTS, CHECKS, SYMBOLS)"
+python3 "$ROOT/scripts/codemap-index.py" | sed 's/^/codemap:   /'
+
+note "read:    docs/agents/CODEMAP.md first (~4k tokens), then ONE file"
 note "ask it:  graphify query \"how does pairing mint a token?\"   |   codegraph explore \"pairing\""
 note "tree:    sh scripts/repo-status.sh   (worktrees, branches, open PRs, map freshness)"

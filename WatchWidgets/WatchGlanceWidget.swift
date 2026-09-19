@@ -1,3 +1,4 @@
+// WatchGlanceWidget.swift — the watch complication: reads WatchGlance from the App Group and renders attention count, session and question.
 import WidgetKit
 import SwiftUI
 

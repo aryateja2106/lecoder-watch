@@ -1,3 +1,4 @@
+// SessionActivity.swift — the ActivityKit attributes and content state for one session's live card (Lock Screen, Dynamic Island, watch Smart Stack).
 import Foundation
 #if canImport(ActivityKit)
 import ActivityKit

@@ -1,3 +1,4 @@
+// MeshStore.swift — the phone brain: polls every machine, holds the machine list and tokens, relays snapshots to the watch, and executes the watch's WatchCommands (`handle(_:)`).
 import Foundation
 import Combine
 import CoreGraphics
