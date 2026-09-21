@@ -226,6 +226,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | HandoffResult | type | install/payload/meshd/handoff.ts:213 |
 | HandoffTarget | type | install/payload/meshd/handoff.ts:33 |
 | hasCap | func | iOS/ContentView.swift:975 |
+| hasSpoofableForwardHeaders | function | install/payload/meshd/loopback-trust.ts:16 |
 | HealthInfo | struct | Shared/Models.swift:277 |
 | help | function | install/payload/bin/mesh:2262 |
 | HERDR_KEYS | export | install/payload/meshd/herdr.ts:265 |
@@ -264,6 +265,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | isMeshManagedDir | function | install/payload/bin/mesh:1458 |
 | isResumable | function | install/payload/meshd/codex-state.ts:157 |
 | isShellPrompt | func | Shared/Models.swift:1561 |
+| isSocketLoopback | function | install/payload/meshd/loopback-trust.ts:29 |
 | isWrongEnvironment | function | install/payload/meshd/push.ts:276 |
 | KbEntry | type | install/payload/meshd/kb.ts:18 |
 | kbGet | function | install/payload/meshd/kb.ts:85 |
@@ -301,6 +303,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | LockScreen | struct | iOS/AppLock.swift:89 |
 | LoginItem | class | MeshDesktop/MeshDesktopApp.swift:186 |
 | looksLikeLocalNetworkDenial | func | Shared/Models.swift:990 |
+| loopbackExempt | function | install/payload/meshd/loopback-trust.ts:35 |
+| loopbackTrustEnabled | function | install/payload/meshd/loopback-trust.ts:24 |
 | lstatOrNull | function | install/payload/bin/mesh:1457 |
 | MacApp | struct | Shared/Models.swift:1080 |
 | Machine | struct | Shared/Models.swift:7 |

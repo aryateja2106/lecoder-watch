@@ -20,12 +20,12 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |
-| `install/payload/meshd/` | 22 | ~6,500 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
+| `install/payload/meshd/` | 23 | ~6,600 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
 | `install/payload/bin/` | 9 | ~3,400 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~900 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 3 | ~1,700 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 101 | ~10,000 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `scripts/` | 102 | ~10,000 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
@@ -125,11 +125,12 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `input-linux.ts` | M | Linux input backend — same wire contract as the Mac helper, delivered with stock desktop tools instead of a compiled helper: pointer/keys/text/scroll ->… | check-daemon-050, check-fleet, check-remote-screen-gestures |
 | `input.ts` | M | Mac remote control for meshd — cursor, keyboard, scroll, clipboard, volume | check-daemon-050, check-fleet, check-inspect-crop, check-mesh-chords, check-mesh-input, check-watch-terminal-wiring |
 | `kb.ts` | S | meshd KB — durable, searchable shared memory for agents (bun:sqlite + FTS5) | — |
+| `loopback-trust.ts` | S | when meshd may skip the bearer token for a loopback peer | check-pair-auth |
 | `pair.ts` | S | bring a phone onto the mesh without typing a 64-character token *[serialized — pairing and tokens]* | check-mesh-pair, check-pairing |
 | `push.ts` | M | APNs push — meshd notifies the phone directly (no cloud relay, local-first) | check-alert-gating, check-mesh-push |
 | `qr.ts` | L | a QR encoder with no dependencies, because the payload ships as plain .ts files that bun runs in place: an npm package here would mean an install step on every… | check-pair-qr |
 | `redact.ts` | M | every string that leaves this Mac for a phone, a watch, Apple's push servers or the events file passes through redact() first | check-redact |
-| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-apps-ota, check-apps-serve, check-brain, check-brand, check-cross-host-cp, check-daemon-050, check-daemon-gaps, check-fleet, check-harness-picker, check-host-guard, check-install-idempotent, check-kb-federation, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-package-mesh-install, check-paste-epipe, check-product-spec, check-roundtrip, check-watch-terminal-wiring, check-wol |
+| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-apps-ota, check-apps-serve, check-brain, check-brand, check-cross-host-cp, check-daemon-050, check-daemon-gaps, check-fleet, check-harness-picker, check-host-guard, check-install-idempotent, check-kb-federation, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-package-mesh-install, check-pair-auth, check-paste-epipe, check-product-spec, check-roundtrip, check-watch-terminal-wiring, check-wol |
 | `telemetry.ts` | S | one anonymized heartbeat a day, and nothing else, ever | — |
 | `wol.ts` | S | Wake-on-LAN, so "power that machine back on" works from the wrist | — |
 
@@ -137,7 +138,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 
 | file | size | purpose | checks |
 |---|---|---|---|
-| `mesh` | XL | command-line control for a LeSearch AI fleet (the meshd HTTP API) | check-apps-ota, check-brand, check-bridge-kill-scope, check-cross-host-cp, check-kb-federation, check-mesh-apps, check-mesh-doctor, check-mesh-hooks, check-mesh-onboarding, check-mesh-skills, check-mesh-uninstall, check-mesh-upgrade, check-mesh-version, check-remote-agent-loop, check-tmux-restart, check-token-rotate |
+| `mesh` | XL | command-line control for a LeSearch AI fleet (the meshd HTTP API) | check-apps-ota, check-brand, check-bridge-kill-scope, check-cross-host-cp, check-kb-federation, check-mesh-apps, check-mesh-doctor, check-mesh-hooks, check-mesh-onboarding, check-mesh-skills, check-mesh-uninstall, check-mesh-upgrade, check-mesh-version, check-pair-auth, check-remote-agent-loop, check-tmux-restart, check-token-rotate |
 | `mesh-agent-run` | S | run a command under an agent's name and post its start/finish (failures at level error) to meshd as events | check-daemon-050, check-mesh-hook, check-remote-agent-loop |
 | `mesh-codex-notify` | S | Codex `notify` shim: runs the user's original notify hook if any, then posts a 'Codex turn ended' event to meshd | check-mesh-hook |
 | `mesh-event` | S | post a small agent notification (source, title, body) to the local meshd /events feed | check-mesh-hook, check-package-mesh-install |

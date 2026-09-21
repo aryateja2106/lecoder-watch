@@ -64,6 +64,7 @@
 | `check-mesh-version.sh` | `mesh version` reports the daemon that is actually installed |
 | `check-overnight.sh` | the 2026-09-21 regression suite: every check the overnight run added, with its live half on |
 | `check-package-mesh-install.sh` | the packaged mesh-install tarball contains every payload file the daemon and CLI need |
+| `check-pair-auth.sh` | /pair/new honours the bearer and the MESHD_TRUST_LOOPBACK kill switch (SEC-03, opt-in) |
 | `check-pair-qr.sh` | qr.ts self-check: every payload is encoded and then read back by a decoder written against the standard… |
 | `check-pairing.swift` | Pairing writes real tokens into the saved machine list, so the merge has to be right: a wrong match silently… |
 | `check-paste-epipe.sh` | a big paste must not take the machine off the mesh |
