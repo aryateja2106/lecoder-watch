@@ -8,11 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are
 each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
+- Every agent can search and remember shared notes with `mesh kb` and the `/search` and `/remember` skill commands; searches reach online machines across the mesh.
 - Renamed to LeSearch AI everywhere a person reads it (bundle ids, targets and the meshwatch:// scheme stay); apps now report 0.6.0 like the daemon.
 - **Watch commands relayed through the iPhone now arrive.** Screen peek, new session, kill, split, remote-control keys and volume sent while the watch
   could not reach the machine directly were silently dropped on a real pair; the phone now receives them, and when a command fails the
   watch shows why instead of a tick.
 - Linux machines (Jetson, Raspberry Pi) show their screen to the phone and the watch (scrot); `mesh doctor` reports it.
+- The phone and watch now read the list of agent CLIs a machine has instead of assuming they are all there.
 
 
 ### Security

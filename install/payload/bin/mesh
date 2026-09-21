@@ -122,6 +122,7 @@ const VALUE_FLAGS = new Set([
   "--rotated", "--ignored", "--reopen",
   "--team", "--prefix", "--slug", "--name", "--app", "--bundle-id", "--device",
   "--ipa", "--icon", "--app-version", "--url",
+  "--scope", "--kind", "--limit", "--tags", "--source",
 ]);
 function parse(argv: string[]): { pos: string[]; flags: Record<string, string>; bools: Set<string> } {
   const pos: string[] = [], bools = new Set<string>(), flags: Record<string, string> = {};
@@ -454,6 +455,44 @@ async function cmdEvents(flags: Record<string, string>, cfg: Config) {
     const list = Array.isArray(ev) ? ev : (ev?.events || []);
     for (const e of list) console.log(`${e.createdISO || ""}  ${e.level || "info"}  ${e.title || ""}`);
   }, ev);
+}
+
+async function cmdKb(pos: string[], flags: Record<string, string>, bools: Set<string>, cfg: Config) {
+  const sub = pos.shift();
+  const h = resolveHost(hostOf(flags), cfg);
+  if (sub === "put") {
+    const [scope, key, title, ...body] = pos;
+    if (!scope || !key || !title) die("usage: mesh kb put <scope> <key> <title> [body...] [--kind K] [--tags a,b] [--source S] [-H host]");
+    const doc: Record<string, string> = { scope, key, title };
+    if (body.length) doc.body = body.join(" ");
+    for (const name of ["kind", "tags", "source"]) if (flags[name]) doc[name] = flags[name];
+    const r = await api(h, "PUT", "/kb", doc);
+    out(() => console.log(`${r.scope}/${r.key}  ${r.title ?? ""}`), r);
+    return;
+  }
+  if (sub === "search") {
+    const query = pos.join(" ");
+    if (!query) die('usage: mesh kb search "<query>" [--scope S] [--kind K] [--limit N] [--local] [-H host] [--json]');
+    const qs = new URLSearchParams({ q: query });
+    for (const name of ["scope", "kind", "limit"]) if (flags[name]) qs.set(name, flags[name]);
+    if (bools.has("local")) qs.set("federate", "0");
+    const r = await api(h, "GET", `/kb/search?${qs}`);
+    out(() => {
+      for (const hit of r?.results ?? []) {
+        const body = String(hit.body ?? "").replace(/\s+/g, " ").slice(0, 80);
+        console.log(`${hit.host ?? h.name}  ${hit.scope}/${hit.key}  ${hit.title ?? ""}  — ${body}`);
+      }
+    }, r);
+    return;
+  }
+  if (sub === "get") {
+    const [scope, key] = pos;
+    if (!scope || !key) die("usage: mesh kb get <scope> <key> [-H host]");
+    const r = await api(h, "GET", `/kb/${encodeURIComponent(scope)}/${encodeURIComponent(key)}`);
+    out(() => console.log(`${r.host ?? h.name}  ${r.scope}/${r.key}  ${r.title ?? ""}\n${r.body ?? ""}`), r);
+    return;
+  }
+  die("usage: mesh kb <put|search|get> ...  (mesh help kb)");
 }
 
 /**
@@ -2014,6 +2053,11 @@ STATUS
   events                      recent agent events           [--since ISO]
   exposures                   secrets the daemon redacted, to rotate  [--rotated FP | --ignored FP | --reopen FP]
 
+KNOWLEDGE
+  kb put <scope> <key> <title> [body...]  remember a note on one machine
+  kb search <query>           search every online machine             [--scope S] [--kind K] [--limit N] [--local]
+  kb get <scope> <key>        fetch one note
+
 MAINTENANCE
   upgrade                     install the latest meshd + tools and restart the daemon
                               [-H host] [--src URL|DIR|TGZ] [--no-restart]
@@ -2044,6 +2088,16 @@ GLOBAL
 Config: ${HOSTS_FILE}   ·   mesh man   for the full manual`;
 
 const CMD_HELP: Record<string, string> = {
+  kb: `mesh kb put <scope> <key> <title> [body...] [--kind K] [--tags a,b] [--source S] [-H host]
+mesh kb search "<query>" [--scope S] [--kind K] [--limit N] [--local] [-H host] [--json]
+mesh kb get <scope> <key> [-H host]
+
+Put and get target one daemon. Search asks the default daemon, which also searches every
+configured peer currently online in Tailscale; --local searches only that daemon.
+
+  mesh kb put project/mesh cli-help "Keep help current" "Update PRODUCT.md too" --kind note
+  mesh kb search "CLI help" --json
+  mesh kb get project/mesh cli-help`,
   cp: `mesh cp <src> <dst> [--force] [--mkdirs] [--json]
 
 Copy one file between this machine and a configured mesh host, or between two hosts.
@@ -2262,6 +2316,7 @@ async function main() {
     case "upgrade": case "update": return cmdUpgrade(flags, bools, cfg);
     case "doctor": return cmdDoctor(flags, cfg, bools);
     case "events": return cmdEvents(flags, cfg);
+    case "kb": return cmdKb(pos, flags, bools, cfg);
     case "exposures": return cmdExposures(flags, cfg);
     case "uninstall": return cmdUninstall(bools, cfg);
     default: die(`unknown command: ${cmd}  (try: mesh help)`);

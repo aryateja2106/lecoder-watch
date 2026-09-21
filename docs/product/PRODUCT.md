@@ -182,8 +182,9 @@ something happened), `mesh-kb`, `mesh-self-check`, `start-cmux-bridge`.
 | Files | `cp <src> <dst> [--force] [--mkdirs]` |
 | Sessions | `ls`, `peek`, `send`, `key`, `new`, `kill` |
 | Status | `status`, `usage`, `health`, `doctor [--fix]`, `events`, `exposures` |
+| Knowledge | `kb put\|search\|get` |
 | Maintenance | `upgrade`, `token rotate`, `uninstall` |
-| Apps and skills | `skills`, `apps config\|publish\|add\|list\|install\|ota\|remove` |
+| Apps and skills | `skills` (including `mesh-knowledge`), `apps config\|publish\|add\|list\|install\|ota\|remove` |
 | Global | `-H <host>`, `--json`, `version` |
 
 `--json` exists so that agents and scripts read the same answers people do.
@@ -213,7 +214,7 @@ through `LiveActivityController.swift`.
 | Pair machine — `PairMachineView.swift`, `PairingScanner.swift` | Turn a code or a QR into a paired fleet | Scan / enter code | `/pair/claim` (returns the token **and every host in `hosts.json`**) |
 | Manual bridge | Add a host by address when there is no code | Save | user input |
 | Monitor tab | Usage and limits per provider at the top (**0.6**), then events; dismiss one or clear all | Read | `/usage`, `/events`, `Shared/LimitHelpers.swift` |
-| Sessions and new session | List sessions per machine; start one with a chosen CLI, working directory and task; resume a previous conversation (**0.6**) | *New session* | `/agents`, `/agents/new` |
+| Sessions and new session | List sessions per machine; start one with a chosen CLI, working directory and task; resume a previous conversation (**0.6**). The agent list comes from `/doctor`'s `agents`. | *New session* | `/agents`, `/agents/new`, `/doctor` |
 | Session peek | Recent output of one session; the attention row when it is waiting | Answer / type | `sessionsNeedingAttention` |
 | Agent chat — `AgentChatView.swift` | A conversation with a running agent: bubbles, decision cards, tool-result cards, artifacts, thinking disclosure, quick-command pills (**0.6**) | Send / decide | `/chat`, `Shared/RiskClassifier.swift` for the decision cards |
 | Terminal tab — `TerminalView.swift` | A live terminal over the bridge; the fallback block when the bridge is unavailable | Type | bridge `:7820` (token cookie, **0.6**) |
