@@ -42,16 +42,25 @@ until "$MESH" peek "$NAME" -H "$HOST" -n 5 2>/dev/null | grep -q '[$#] *$'; do
   i=$((i+1)); [ $i -ge 15 ] && { echo "check-remote-agent-loop: FAIL — no shell prompt in $NAME on $HOST after 15s"; exit 1; }
   sleep 1
 done
-"$MESH" send "$NAME" -H "$HOST" "MESHD_SESSION=$NAME ~/.mesh/bin/mesh-agent-run loopcheck sh -c 'echo $MARK'" >/dev/null \
-  || { echo "check-remote-agent-loop: FAIL — mesh send to $HOST failed"; exit 1; }
+# The first keystrokes after a shell draws its prompt can still be dropped (readline is not
+# reading yet — seen on the Jetson: prompt at 1 s, first send lost, second lands). Settle,
+# send, and re-send once if the command text has not echoed within 5 s.
+sleep 1.5
+CMD="MESHD_SESSION=$NAME ~/.mesh/bin/mesh-agent-run loopcheck sh -c 'echo $MARK'"
+tries=0
+until "$MESH" peek "$NAME" -H "$HOST" -n 20 2>/dev/null | grep -q "loopcheck"; do
+  [ $tries -ge 2 ] && { echo "check-remote-agent-loop: FAIL — typed command never echoed in $NAME on $HOST after 2 sends"; exit 1; }
+  "$MESH" send "$NAME" -H "$HOST" "$CMD" >/dev/null || { echo "check-remote-agent-loop: FAIL — mesh send to $HOST failed"; exit 1; }
+  tries=$((tries+1)); sleep 5
+done
 
 # 2. The events land on THAT host's daemon, naming the session.
 i=0; got=0
-while [ $i -lt 20 ]; do
+while [ $i -lt 45 ]; do
   if "$MESH" events -H "$HOST" --since "$SINCE" --json 2>/dev/null | grep -q '"Completed"'; then got=1; break; fi
   i=$((i+1)); sleep 1
 done
-[ "$got" = 1 ] || { echo "check-remote-agent-loop: FAIL — no Completed event on $HOST within 20s"; "$MESH" events -H "$HOST" --since "$SINCE" 2>&1 | tail -5; exit 1; }
+[ "$got" = 1 ] || { echo "check-remote-agent-loop: FAIL — no Completed event on $HOST within 45s"; "$MESH" events -H "$HOST" --since "$SINCE" 2>&1 | tail -5; exit 1; }
 EV=$("$MESH" events -H "$HOST" --since "$SINCE" --json)
 echo "$EV" | grep -q "\"$NAME\"" || { echo "check-remote-agent-loop: FAIL — events on $HOST do not name session $NAME"; echo "$EV" | head -c 600; exit 1; }
 

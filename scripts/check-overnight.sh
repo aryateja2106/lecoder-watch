@@ -14,10 +14,12 @@ fail=0
 run() { # name, env..., -- script
   name="$1"; shift
   case "$SKIP" in *" $name "*) echo "skip: $name"; return ;; esac
-  if env "$@" sh "$ROOT/scripts/check-$name.sh" >"/tmp/check-overnight-$name.log" 2>&1; then
-    echo "ok:   $name — $(tail -1 "/tmp/check-overnight-$name.log")"
+  tag="$name"; for kv in "$@"; do case "$kv" in MESH_REMOTE_HOST=*) tag="$name-${kv#*=}";; esac; done
+  log="/tmp/check-overnight-$tag.log"
+  if env "$@" sh "$ROOT/scripts/check-$name.sh" >"$log" 2>&1; then
+    echo "ok:   $tag — $(tail -1 "$log")"
   else
-    echo "FAIL: $name"; tail -8 "/tmp/check-overnight-$name.log" | sed 's/^/      /'; fail=1
+    echo "FAIL: $tag"; tail -8 "$log" | sed 's/^/      /'; fail=1
   fi
 }
 run fleet             MESH_FLEET_LIVE=1 MESH_FLEET_HOSTS="mac pi jetson"
@@ -32,6 +34,6 @@ run pair-auth         X=1
 run intent            X=1
 run brain             MESH_FLEET_LIVE=1 MESH_FLEET_HOSTS="mac pi jetson" MESH_BRAIN_LIVE=1
 run watch-smoke       MESH_SMOKE_REQUIRED=1
-run sim-fleet         MESH_SIM_LIVE=1
+run sim-fleet         MESH_SIM_LIVE=1 MESH_SHOTS_DIR="${MESH_SHOTS_DIR:-$ROOT/docs/overnight/2026-09-21/shots}"
 [ "$fail" -eq 0 ] && echo "check-overnight: OK — every live check green" || echo "check-overnight: FAIL"
 exit "$fail"

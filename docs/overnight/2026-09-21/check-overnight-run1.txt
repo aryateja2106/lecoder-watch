@@ -1,0 +1,16 @@
+ok:   fleet — check-fleet: OK (live)
+FAIL: remote-agent-loop
+      check-remote-agent-loop: FAIL — no Completed event on jetson within 20s
+FAIL: remote-agent-loop
+      check-remote-agent-loop: FAIL — no Completed event on pi within 20s
+ok:   cross-host-cp — check-cross-host-cp: OK
+ok:   kb-federation — check-kb-federation: OK
+ok:   brand — check-brand: OK
+ok:   relay-receiver — check-relay-receiver: OK
+ok:   harness-picker — check-harness-picker: OK
+ok:   pair-auth — check-pair-auth: OK
+ok:   intent — check-intent: OK
+ok:   brain — check-brain: OK
+ok:   watch-smoke — check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 70054 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
+ok:   sim-fleet — check-sim-fleet: OK — iPhone, iPad, Watch and Mac all alive; shots in /Users/aryateja/Projects/lecoder-watch/.claude/worktrees/lesearch-ai-overnight/docs/overnight/2026-09-22/shots
+check-overnight: FAIL
