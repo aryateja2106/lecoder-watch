@@ -6,8 +6,21 @@
 //   lock / displaysleep      -> loginctl / xset
 // ponytail: X11 only — Wayland needs ydotool+uinput; add a ydotool branch when a
 // Wayland box actually joins the mesh. Apps/windows/displays stay unsupported here.
+import { existsSync } from "node:fs";
+import { readFile, unlink } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+
 const DISPLAY = process.env.MESH_DISPLAY ?? process.env.DISPLAY ?? ":0";
-const ENV = { ...process.env, DISPLAY };
+const XAUTHORITY = process.env.XAUTHORITY ?? [
+  join(homedir(), ".Xauthority"),
+  process.getuid?.() == null ? "" : `/run/user/${process.getuid()}/gdm/Xauthority`,
+].find((path) => path && existsSync(path));
+const ENV = { ...process.env, DISPLAY, ...(XAUTHORITY ? { XAUTHORITY } : {}) };
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+}
 
 async function run(cmd: string[], stdin?: string): Promise<{ out: string; stderr: string; code: number }> {
   try {
@@ -28,6 +41,55 @@ async function run(cmd: string[], stdin?: string): Promise<{ out: string; stderr
 
 async function has(bin: string): Promise<boolean> {
   return (await run(["/bin/sh", "-c", `command -v ${bin}`])).code === 0;
+}
+
+export async function linuxScreenStatus(): Promise<{ ok: boolean; tool: "scrot"; hint?: string }> {
+  const tool = await has("scrot");
+  const display = tool && (await run(["xdotool", "getdisplaygeometry"])).code === 0;
+  return {
+    ok: tool && display,
+    tool: "scrot",
+    hint: !tool ? "apt install scrot"
+      : !display ? `no X display at ${DISPLAY} (set MESH_DISPLAY if X is not on :0)` : undefined,
+  };
+}
+
+export async function linuxCaptureScreen(params: {
+  width?: number | null;
+  rect?: { x: number; y: number; w: number; h: number } | null;
+  quality?: number | null;
+}): Promise<Response> {
+  if (!(await has("scrot"))) return json({ error: "scrot not installed (apt install scrot)" }, 503);
+  const geometry = await run(["xdotool", "getdisplaygeometry"]);
+  const [screenWidth, screenHeight] = geometry.out.trim().split(/\s+/).map(Number);
+  if (geometry.code !== 0 || !(screenWidth > 0) || !(screenHeight > 0)) {
+    return json({ error: "screen geometry unavailable" }, 503);
+  }
+
+  const path = join(tmpdir(), `meshd-screen-linux-${process.pid}-${Date.now()}.jpg`);
+  const headers: Record<string, string> = { "content-type": "image/jpeg", "cache-control": "no-store" };
+  const args = ["scrot", "-o", "-q", String(params.quality ?? 70)];
+  if (params.rect) {
+    const { x, y, w, h } = params.rect;
+    args.push("-a", `${Math.round(x * screenWidth)},${Math.round(y * screenHeight)},${Math.max(1, Math.round(w * screenWidth))},${Math.max(1, Math.round(h * screenHeight))}`);
+  }
+  args.push("--pointer", path);
+
+  try {
+    let shot = await run(args);
+    if (shot.code !== 0 && /pointer/i.test(shot.stderr)) {
+      shot = await run(args.filter((arg) => arg !== "--pointer"));
+    }
+    if (shot.code !== 0) return json({ error: shot.stderr || "screenshot unavailable" }, 503);
+    const bytes = await readFile(path).catch(() => null);
+    // scrot can exit 0 and leave nothing behind (X gone mid-shot); an empty 200 would read as a black screen.
+    if (!bytes || bytes.byteLength === 0) return json({ error: "screenshot empty" }, 503);
+    if (params.rect) headers["x-mesh-rect"] = `${params.rect.x},${params.rect.y},${params.rect.w},${params.rect.h}`;
+    // ponytail: full-size JPEG; add ffmpeg/convert -resize when a watch chokes on 1080p.
+    return new Response(bytes, { headers });
+  } finally {
+    await unlink(path).catch(() => {});
+  }
 }
 
 // Watch key names -> X keysyms. Letters/digits pass through untouched.

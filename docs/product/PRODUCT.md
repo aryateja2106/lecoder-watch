@@ -137,7 +137,7 @@ route line). That is the rule for adding anything.
 | `server.ts` | Routing, the capability list, the Origin/Host guard that runs before auth, sessions and stats. |
 | `auth.ts` | Fail-closed bearer check, constant-time. Loopback is exempt only after the browser guard has passed. |
 | `doctor.ts` | `GET /doctor` and `POST /doctor/fix`. Every check exercises the real path (a green row means it works now). Checks: `token`, `input`, `screen`, `mux`, `push`, `exposures`, `agents`. |
-| `input.ts` / `input-linux.ts` | Pointer, keyboard, media, windows, power, clipboard, screen capture and regions. Linux uses xdotool/xclip. |
+| `input.ts` / `input-linux.ts` | Pointer, keyboard, media, windows, power, clipboard, screen capture and regions. Linux uses xdotool/xclip and screen capture via scrot. |
 | `push.ts` | APNs direct from the daemon (ES256), one-buzz dedupe, Live Activity push-to-start tokens. |
 | `pair.ts` / `qr.ts` | One-use 8-character codes, ten minutes; `/pair/claim` is the only route that answers without a token. The QR carries `meshwatch://pair?h=&p=&c=`. |
 | `files.ts` / `files.html` | File browser and the daemon-served file page. |

@@ -20,12 +20,12 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |
-| `install/payload/meshd/` | 21 | ~6,200 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
+| `install/payload/meshd/` | 21 | ~6,300 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
 | `install/payload/bin/` | 9 | ~3,200 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~900 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 3 | ~1,700 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 84 | ~8,400 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `scripts/` | 87 | ~9,000 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
@@ -121,14 +121,14 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `files.ts` | S | File browsing for meshd — the part of "remote desktop" that works on a headless box | — |
 | `handoff.ts` | M | move a task between agents, and pick a conversation back up | check-handoff |
 | `herdr.ts` | M | the third multiplexer, alongside rmux and cmux | check-herdr-sessions |
-| `input-linux.ts` | S | Linux input backend — same wire contract as the Mac helper, delivered with stock desktop tools instead of a compiled helper: pointer/keys/text/scroll ->… | check-daemon-050, check-remote-screen-gestures |
+| `input-linux.ts` | M | Linux input backend — same wire contract as the Mac helper, delivered with stock desktop tools instead of a compiled helper: pointer/keys/text/scroll ->… | check-daemon-050, check-remote-screen-gestures |
 | `input.ts` | M | Mac remote control for meshd — cursor, keyboard, scroll, clipboard, volume | check-daemon-050, check-inspect-crop, check-mesh-chords, check-mesh-input, check-watch-terminal-wiring |
 | `kb.ts` | S | meshd KB — durable, searchable shared memory for agents (bun:sqlite + FTS5) | — |
 | `pair.ts` | S | bring a phone onto the mesh without typing a 64-character token *[serialized — pairing and tokens]* | check-mesh-pair, check-pairing |
 | `push.ts` | M | APNs push — meshd notifies the phone directly (no cloud relay, local-first) | check-alert-gating, check-mesh-push |
 | `qr.ts` | L | a QR encoder with no dependencies, because the payload ships as plain .ts files that bun runs in place: an npm package here would mean an install step on every… | check-pair-qr |
 | `redact.ts` | M | every string that leaves this Mac for a phone, a watch, Apple's push servers or the events file passes through redact() first | check-redact |
-| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-apps-ota, check-apps-serve, check-daemon-050, check-daemon-gaps, check-host-guard, check-install-idempotent, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-package-mesh-install, check-paste-epipe, check-roundtrip, check-watch-terminal-wiring, check-wol |
+| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-apps-ota, check-apps-serve, check-daemon-050, check-daemon-gaps, check-host-guard, check-install-idempotent, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-package-mesh-install, check-paste-epipe, check-product-spec, check-roundtrip, check-watch-terminal-wiring, check-wol |
 | `telemetry.ts` | S | one anonymized heartbeat a day, and nothing else, ever | — |
 | `wol.ts` | S | Wake-on-LAN, so "power that machine back on" works from the wrist | — |
 

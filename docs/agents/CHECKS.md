@@ -16,6 +16,7 @@
 | `check-apps-serve.sh` | apps.ts self-check: a registered web app is served token-free at /a/<slug>-<key>/ with the right content… |
 | `check-bridge-auth.sh` | rmux-bridge auth self-check. The bridge can type into any tmux/rmux session, and until 0.6 it answered anyone… |
 | `check-bridge-kill-scope.sh` | nothing shipped in the payload may enumerate processes by port without restricting to the LISTENING one |
+| `check-codemap.sh` | the committed codebase map matches the tree, and every code file says what it is |
 | `check-codex-state.sh` | the rollout reader, against fixtures that encode the exact traps measured on a real stalled session… |
 | `check-connection-phase.swift` | The watch reaches the mesh through the phone, and WCSession drops isReachable to false every few seconds when… |
 | `check-daemon-050.sh` | The 0.5.x daemon contract, end to end against a throwaway meshd: - push gate: an info event is stored for… |
@@ -60,6 +61,7 @@
 | `check-phone-input-and-wake.sh` | Two defects that a green build cannot see, because in both cases the wrong code compiles, renders and behaves… |
 | `check-pointer-gain.swift` | The gain curve decides whether the pad can both cross two screens and hit a close button |
 | `check-preview-mapping.swift` | Tap-to-place-cursor is the flagship interaction |
+| `check-product-spec.sh` | docs/product/PRODUCT.md is the one place the product is defined, so it must name every screen file, every… |
 | `check-redact.sh` | redact.ts self-check: one fixture per rule is replaced and fingerprinted, benign strings that merely look… |
 | `check-remote-screen-gestures.sh` | The phone's remote-screen surface, checked against the two things it talks to: the host input backends, and… |
 | `check-risk.swift` | Continue" on a watch sends Return, and Return takes whichever option the agent has highlighted |
@@ -76,6 +78,7 @@
 | `check-watch-scrollback.swift` | Two properties of the watch terminal that cannot be checked by running it — a view is needed for that — but… |
 | `check-watch-terminal-wiring.sh` | The watch terminal was "clean but unusable" for one boring reason: meshd accepted fourteen keys, the phone… |
 | `check-wol.sh` | wol.ts self-check: packet shape and MAC parsing, with no UDP leaving the machine |
+| `codemap-index.py` | generate the committed codebase map from the tree itself |
 | `codemap.sh` | rebuild the codebase map every agent reads before it greps |
 | `gate-build.sh` | the factory "build" gate (gates.sh full): the three apps compile for their simulators, the way CI builds them |
 | `gate-lint.sh` | the factory "lint" gate (gates.sh fast) |

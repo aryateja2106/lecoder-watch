@@ -34,6 +34,7 @@ import { stat, mkdir, readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   linuxInjectEvents, linuxInputStatus, linuxClipboard, linuxVolume, linuxSystemAction,
+  linuxCaptureScreen, linuxScreenStatus,
 } from "./input-linux";
 
 const IS_MAC = process.platform === "darwin";
@@ -195,7 +196,7 @@ export async function injectEvents(events: any[]): Promise<{ ok: boolean; count?
 }
 
 export async function inputStatus(prompt = false) {
-  if (!IS_MAC) return linuxInputStatus();
+  if (!IS_MAC) return { ...(await linuxInputStatus()), screen: (await linuxScreenStatus()).ok };
   const bin = await ensureHelper();
   if (!bin) return { ok: false, trusted: false, helper: HELPER_BIN, error: buildError };
   const out = await run(prompt ? [bin, "--check", "--prompt"] : [bin, "--check"]);
@@ -395,7 +396,7 @@ async function imagePixelWidth(path: string): Promise<number> {
 /// The served crop is echoed in x-mesh-rect (normalized) + x-mesh-display; a response
 /// without those headers is a full frame and the client must not interpret it as a crop.
 export async function captureScreen(params: CaptureParams): Promise<Response> {
-  if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
+  if (!IS_MAC) return linuxCaptureScreen(params);
   const { display, rect, quality } = params;
   // Full frames keep their historical default (480) so old clients see identical
   // behavior; a region defaults to native pixels — downscaling is opt-in via width.
@@ -502,9 +503,9 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
   // The whole capture route lives here now — with or without a display named — so
   // rect/width/quality mean exactly one thing. server.ts no longer carries its own copy.
   if (path === "/screen.jpg" && req.method === "GET") {
-    if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
     const params = parseCaptureParams(url);
     if (params.error) return json({ error: params.error }, 400);
+    if (!IS_MAC) return await linuxCaptureScreen(params);
     if (params.display != null && (!Number.isInteger(params.display) || params.display < 1)) {
       return json({ error: "bad display" }, 400);
     }

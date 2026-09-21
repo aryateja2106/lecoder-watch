@@ -83,7 +83,9 @@ export async function doctorReport(prompt: boolean, info: DoctorInfo) {
           fix: input?.hint ?? (IS_MAC ? "mesh doctor --fix, then toggle mesh-input on in System Settings › Privacy & Security › Accessibility" : "install xdotool/xclip"),
         },
     screen: !IS_MAC
-      ? { ok: true, detail: "screen capture not supported on Linux yet" }
+      ? input?.screen === true
+        ? { ok: true, detail: "scrot + X display; /screen.jpg shows the desktop" }
+        : { ok: false, detail: "screen capture unavailable", fix: "apt install scrot (and set MESH_DISPLAY if X is not on :0)" }
       : input?.screen
         ? { ok: true, detail: "Screen Recording granted; /screen.jpg shows real windows" }
         : {

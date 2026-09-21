@@ -807,14 +807,19 @@ MESHD_STATUS="skipped"; BRIDGE_STATUS="skipped"
 if [ "$NO_START" = "1" ]; then
   log "Installed (services not started: --no-start)."
 else
+  SERVICE_PATH=$PATH
+  case ":$SERVICE_PATH:" in *":$HOME/.bun/bin:"*) ;; *) SERVICE_PATH="$HOME/.bun/bin:$SERVICE_PATH" ;; esac
+  case ":$SERVICE_PATH:" in *":$HOME/.local/bin:"*) ;; *) SERVICE_PATH="$HOME/.local/bin:$SERVICE_PATH" ;; esac
   if want_component meshd; then
     {
-      printf 'PATH=%s\n' "$PATH"
+      printf 'PATH=%s\n' "$SERVICE_PATH"
       printf 'HOME=%s\n' "$HOME"
       printf 'USER=%s\n' "$(id -un)"
       printf 'MESHD_TOKEN=%s\n' "$TOKEN_VALUE"
       printf 'MESHD_PORT=%s\n' "$MESHD_PORT_VALUE"
       [ -n "${MESHD_HOST:-}" ] && printf 'MESHD_HOST=%s\n' "$MESHD_HOST"
+      [ -n "${MESH_DISPLAY:-}" ] && printf 'MESH_DISPLAY=%s\n' "$MESH_DISPLAY"
+      [ -n "${XAUTHORITY:-}" ] && printf 'XAUTHORITY=%s\n' "$XAUTHORITY"
       [ -n "$EFFECTIVE_MESHD_MUX" ] && printf 'MESH_MUX=%s\n' "$EFFECTIVE_MESHD_MUX"
       [ -n "${CMUX_PORT:-}" ] && printf 'CMUX_PORT=%s\n' "$CMUX_PORT"
       # An install-time opt-out must survive into the service environment, or
@@ -825,7 +830,7 @@ else
   fi
   if want_component bridge; then
     {
-      printf 'PATH=%s\n' "$PATH"
+      printf 'PATH=%s\n' "$SERVICE_PATH"
       printf 'PORT=%s\n' "$BRIDGE_PORT_VALUE"
       [ -n "${BRIDGE_HOST:-}" ] && printf 'BRIDGE_HOST=%s\n' "$BRIDGE_HOST"
       [ -n "$EFFECTIVE_BRIDGE_MUX" ] && printf 'MUX=%s\n' "$EFFECTIVE_BRIDGE_MUX"
