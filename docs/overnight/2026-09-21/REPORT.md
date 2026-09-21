@@ -9,7 +9,7 @@ under `docs/factory/runs/2026-09-21T*-overnight-*`.*
 
 | Machine | Before | Now |
 |---|---|---|
-| Mac | meshd 0.6.0 live (release build) | still the release build on :8899 — **upgraded to the branch build in S12** (see below) |
+| Mac | meshd 0.6.0 live (release build) | **branch build** on :8899 (`mesh upgrade --src`, backup at `~/.mesh/backups/meshd-0.6.0-1790020360`, auto-rollback armed); `mesh cp` / `mesh kb` in the installed CLI; edge0-8b served on :8001 |
 | Raspberry Pi 5 (`pi`, user `arya`) | meshd **0.2.0**, weak default token | **0.6.0 branch build**, token rotated (re-pair the phone), systemd unit enabled, screen peek works, ollama qwen3:1.7b |
 | Jetson Orin Nano (`jetson`, user `aryateja`) | **no meshd** | **0.6.0 branch build**, systemd unit enabled + linger, screen peek works (3440×1440), `claude` on the service PATH, ollama qwen3:4b (CUDA) |
 
@@ -30,8 +30,8 @@ task inside a mesh session, posted Started/Completed events (the notify path), a
 | S7 | Harness picker reads the machine's real CLIs; one catalogue in the daemon | b6ddc7e | `check-harness-picker.sh`, `check-launchable.swift` | Pi shows claude/cursor-agent/agy/hermes, Jetson claude |
 | S8 | **`mesh kb` + `/search` `/remember` skill**; federation proven | 912c966 | `check-kb-federation.sh` | note on the Jetson found from the Mac |
 | S9 | `/brain` route; ollama on both Linux boxes; **edge0-8b tool calling** (our patch); **Needle 2 measured** | 86ae97e, 1cc9681 | `check-brain.sh`, `check-intent.sh` | table in the ADR |
-| S10 | Bearer on `/pair/new` + `MESHD_TRUST_LOOPBACK=0` (SEC-03) | (see STATE) | `check-pair-auth.sh` | |
-| S11 | Aggregate `check-overnight.sh`; codemap; gates | (see STATE) | | `FACTORY_GATES:` line in STATE.md |
+| S10 | `loopback-trust.ts` + `MESHD_TRUST_LOOPBACK=0` kill switch covering `/pair/new` (SEC-03, **opt-in** — default kept because `check-token-rotate.sh` mints tokenless) | 95d6406 | `check-pair-auth.sh` | trust off: tokenless mint 401, `mesh pair` still works |
+| S11 | Aggregate `check-overnight.sh` (all live halves green); codemap; **`FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none`** | e3f737a, 4a17d9d | `check-overnight.sh` | `check-overnight-run1.txt` |
 
 ## Numbers worth knowing
 
@@ -58,7 +58,7 @@ task inside a mesh session, posted Started/Completed events (the notify path), a
 4. **Physical iPhone + Watch**: confirm S6 — from the watch, with Wi-Fi off on the watch so it relays, open a screen peek and start a session; a failed command must show a reason, not a tick (T06/T07/T21).
 5. Tap **Allow** on the watch simulator's notification alert (or grant Claude the device).
 6. Promote `share/skills-staged/mesh-knowledge` → `share/skills` and bump the count in `scripts/check-mesh-skills.sh` to 5.
-7. Decide: iPad `TARGETED_DEVICE_FAMILY "1,2"` (App Store listing consequence), the Mac `.app` filename (still `MeshWatch.app`), app-icon regeneration for the new name.
+7. Decide the `/pair/new` default (flip needs a one-line edit in `check-token-rotate.sh` so it sends the bearer) and: iPad `TARGETED_DEVICE_FAMILY "1,2"` (App Store listing consequence), the Mac `.app` filename (still `MeshWatch.app`), app-icon regeneration for the new name.
 8. TestFlight: `MESH_ALLOW_VERSION_DOWNGRADE=1 sh scripts/release-testflight-asc.sh --external` (Keychain dialog), then publish meshd 0.6.0 to mesh-install (`sh scripts/release-mesh-install.sh --publish`) and `mesh upgrade -H pi/jetson` from the release.
 9. Wire the live halves (`scripts/check-overnight.sh`) into CI or a nightly on this Mac — CI has no fleet.
 10. Turn off tonight's installer share when done: `tailscale serve --https=8890 off`; `pkill -f "http.server 8897"`; stop edge0 (`pkill -f "edge0 serve"`).

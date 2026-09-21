@@ -17,8 +17,8 @@ Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.s
 | S8 mesh kb + /search skill | DONE (912c966); skill staged (count in check-mesh-skills.sh needs a human) | check-kb-federation.sh | structural + live (jetson note found from mac) OK |
 | S9 brains | DONE (86ae97e, 1cc9681): /brain ported; ollama qwen3:4b on jetson (12 s tool call), qwen3:1.7b on pi (23-40 s); edge0-8b on Mac :8001 tool call 3.8 s via our patch; Needle 26/28 tool, 0.7 s, 34 MB; ADR written | check-brain.sh, check-intent.sh | OK |
 | S10 bearer on /pair/new | DONE opt-in (95d6406): loopback-trust.ts + MESHD_TRUST_LOOPBACK=0 covers /pair/new; default kept because check-token-rotate.sh mints tokenless (test edit = human) | check-pair-auth.sh | OK; token-rotate/pair/csrf/host-guard/auth/daemon-050 OK |
-| S11 suite + gates full + ADR | in progress: ADR 1cc9681; check-overnight.sh running; gates full next | check-overnight.sh | |
-| S12 ship | in progress: Mac daemon upgraded from the branch (backup ~/.mesh/backups/meshd-0.6.0-1790020360), pi+jetson redeployed (28 caps each); PR/REPORT/notify next | | |
+| S11 suite + gates full + ADR | DONE — check-overnight.sh: every live check green (run-1 log beside this file; the two loop FAILs were the first-keystroke drop, fixed in 4a17d9d, 4/4 after); `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none` | check-overnight.sh | GREEN |
+| S12 ship | DONE — fleet on the branch build (Mac backup ~/.mesh/backups/meshd-0.6.0-1790020360); draft PR opened (see REPORT); Telegram + files sent | | |
 
 ## Log
 - 10:5x IST S0 started. Worktree created, PRODUCT.md cherry-picked (efe9cb1).
@@ -28,3 +28,4 @@ Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.s
 - 00:30 IST S5/S6/S7/S9 landed. Finding: the simulator loses paired machines on every `simctl install` of an unsigned build (Keychain items become inaccessible) — a simulator/unsigned-build artefact; on a real iPhone the Keychain survives even delete-and-reinstall (measured 2026-08-28). Re-pair the sim via the meshwatch:// deep link when screenshots need machines.
 - 00:35 IST Codex running S8 (kb + skill). S10 brief written (pair auth), dispatch after S8 lands (serialized files).
 - 01:2x IST S8, S10 landed; Mac live daemon upgraded from the branch; fleet all on the branch build (28 caps). Note: my side-port smoke used :8901 which is the cmux bridge's port — no harm (bind failed), use 893x next time. check-overnight.sh running.
+- 02:1x IST gates.sh full: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none` (first run RED only on a stale codemap). Draft PR opened. Night closed.
