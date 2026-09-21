@@ -12,12 +12,12 @@
 | ANY | `/agents` | token | server.ts:1333 |
 | DELETE | `/agents/:x` | token | server.ts:1398 |
 | GET | `/agents/:x/chat` | token | server.ts:1369 |
-| POST | `/agents/:x/handoff` | token | handoff.ts:282 |
+| POST | `/agents/:x/handoff` | token | handoff.ts:287 |
 | GET | `/agents/:x/output` | token | server.ts:1376 |
 | GET | `/agents/:x/panes` | token | server.ts:1356 |
 | POST | `/agents/:x/panes` | token | server.ts:1360 |
 | DELETE | `/agents/:x/panes/:x` | token | server.ts:1393 |
-| GET | `/agents/:x/resumable` | token | handoff.ts:276 |
+| GET | `/agents/:x/resumable` | token | handoff.ts:281 |
 | POST | `/agents/:x/send` | token | server.ts:1387 |
 | POST | `/agents/new` | token | server.ts:1402 |
 | GET | `/apps` | token | input.ts:528 |
@@ -56,7 +56,7 @@
 | GET | `/push` | token | push.ts:441 |
 | POST | `/push/register` | token | push.ts:444 |
 | POST | `/push/test` | token | push.ts:494 |
-| GET | `/resumable` | token | handoff.ts:270 |
+| GET | `/resumable` | token | handoff.ts:275 |
 | GET | `/screen.jpg` | token | input.ts:505 |
 | ANY | `/stats` | token | server.ts:1331 |
 | POST | `/system` | token | input.ts:537 |
@@ -100,7 +100,7 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `tailscale` | — (nothing gates it) | no |
 | `kb` | — (nothing gates it) | no |
 | `screenPeek` | RemoteScreenView.swift:109 | no |
-| `input` | WatchViews.swift:323, WatchViews.swift:802, ContentView.swift:1520, ContentView.swift:1521 | no |
+| `input` | WatchViews.swift:323, WatchViews.swift:821, ContentView.swift:1520, ContentView.swift:1521 | no |
 | `files` | — (nothing gates it) | no |
 | `push` | — (nothing gates it) | no |
 | `pair` | — (nothing gates it) | no |
@@ -114,7 +114,7 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `paste` | MeshClient.swift:300, RemoteScreenView.swift:111 | yes |
 | `captureJoin` | MeshClient.swift:280, WatchMeshStore.swift:544 | yes |
 | `redact` | ExposedSecretsScreen.swift:43, ExposedSecretsScreen.swift:84 | no |
-| `chat` | TerminalView.swift:1200 | no |
+| `chat` | TerminalView.swift:1212 | no |
 | `apps` | TerminalView.swift:113 | no |
 | `handoff` | MeshClient.swift:565, MeshClient.swift:574, MeshClient.swift:586 | no |
 | `brain` | — (nothing gates it) | no |

@@ -14,12 +14,14 @@
 | `check-app-icons.sh` | App icon audit: catches the specific things that make App Store Connect reject a build — a missing 1024x1024… |
 | `check-apps-ota.sh` | Wireless (OTA) install self-check: `mesh apps add --app` on a device build packages a valid .ipa… |
 | `check-apps-serve.sh` | apps.ts self-check: a registered web app is served token-free at /a/<slug>-<key>/ with the right content… |
+| `check-brain.sh` | every machine has a local model that answers with a tool call, and meshd knows it |
 | `check-brand.sh` | the product reads "LeSearch AI" everywhere a person sees it, and the identifiers Apple, the Keychain, the App… |
 | `check-bridge-auth.sh` | rmux-bridge auth self-check. The bridge can type into any tmux/rmux session, and until 0.6 it answered anyone… |
 | `check-bridge-kill-scope.sh` | nothing shipped in the payload may enumerate processes by port without restricting to the LISTENING one |
 | `check-codemap.sh` | the committed codebase map matches the tree, and every code file says what it is |
 | `check-codex-state.sh` | the rollout reader, against fixtures that encode the exact traps measured on a real stalled session… |
 | `check-connection-phase.swift` | The watch reaches the mesh through the phone, and WCSession drops isReachable to false every few seconds when… |
+| `check-cross-host-cp.sh` | Proves raw daemon file writes and `mesh cp` round trips without touching the live fleet |
 | `check-daemon-050.sh` | The 0.5.x daemon contract, end to end against a throwaway meshd: - push gate: an info event is stored for… |
 | `check-daemon-gaps.sh` | hold the "your agent is out of date" row to the three other files it makes claims about |
 | `check-daemon-gaps.swift` | the capability-gap logic behind the "your agent is out of date" row |
@@ -30,11 +32,14 @@
 | `check-fleet.sh` | every machine in ~/.mesh/hosts.json runs THIS tree's meshd and is usable |
 | `check-glance.swift` | A complication is the most-seen and least-interactive surface in the product: it is on the watch face all day… |
 | `check-handoff.sh` | handoff.ts self-check: HANDOFF.md carries the last assistant message, the recent turns and the tool activity |
+| `check-harness-picker.sh` | scripts/check-harness-picker.sh — verify agent CLI lists and usage |
 | `check-herdr-sessions.sh` | the herdr lane, against a stub `herdr` binary |
 | `check-host-guard.sh` | this machine answers to its own name, and to nobody else's |
 | `check-inspect-crop.sh` | Inspect mode: does the watch draw a cropped frame as the viewport it already is, and can a side tap actually… |
 | `check-install-idempotent.sh` | re-running the one-liner does not reinstall on top of itself, an older install still upgrades, and an unset… |
+| `check-intent.sh` | Needle 2 turns wrist phrases into the right daemon call (PRODUCT.md §9, slice 1) |
 | `check-ios-smoke.sh` | Launch the iOS app and put a text field on screen |
+| `check-launchable.swift` | scripts/check-launchable.swift — verify DoctorReport.launchable logic |
 | `check-limit-helpers.swift` | Run: swiftc Shared/Models.swift Shared/LimitHelpers.swift scripts/check-limit-helpers.swift -o /tmp/clh &&… |
 | `check-links.sh` | the front door still opens. |
 | `check-live-card.swift` | The live card is the one thing on the Lock Screen and the watch Smart Stack, so picking the wrong session is… |

@@ -184,7 +184,7 @@ something happened), `mesh-kb`, `mesh-self-check`, `start-cmux-bridge`.
 | Status | `status`, `usage`, `health`, `doctor [--fix]`, `events`, `exposures` |
 | Knowledge | `kb put\|search\|get` |
 | Maintenance | `upgrade`, `token rotate`, `uninstall` |
-| Apps and skills | `skills` (including `mesh-knowledge`), `apps config\|publish\|add\|list\|install\|ota\|remove` |
+| Apps and skills | `skills` (`mesh-knowledge` is staged under `share/skills-staged/` until the skill count in `check-mesh-skills.sh` is raised), `apps config\|publish\|add\|list\|install\|ota\|remove` |
 | Global | `-H <host>`, `--json`, `version` |
 
 `--json` exists so that agents and scripts read the same answers people do.
