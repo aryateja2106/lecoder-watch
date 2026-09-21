@@ -14,6 +14,7 @@
 | `check-app-icons.sh` | App icon audit: catches the specific things that make App Store Connect reject a build — a missing 1024x1024… |
 | `check-apps-ota.sh` | Wireless (OTA) install self-check: `mesh apps add --app` on a device build packages a valid .ipa… |
 | `check-apps-serve.sh` | apps.ts self-check: a registered web app is served token-free at /a/<slug>-<key>/ with the right content… |
+| `check-brand.sh` | the product reads "LeSearch AI" everywhere a person sees it, and the identifiers Apple, the Keychain, the App… |
 | `check-bridge-auth.sh` | rmux-bridge auth self-check. The bridge can type into any tmux/rmux session, and until 0.6 it answered anyone… |
 | `check-bridge-kill-scope.sh` | nothing shipped in the payload may enumerate processes by port without restricting to the LISTENING one |
 | `check-codemap.sh` | the committed codebase map matches the tree, and every code file says what it is |
@@ -64,6 +65,8 @@
 | `check-preview-mapping.swift` | Tap-to-place-cursor is the flagship interaction |
 | `check-product-spec.sh` | docs/product/PRODUCT.md is the one place the product is defined, so it must name every screen file, every… |
 | `check-redact.sh` | redact.ts self-check: one fixture per rule is replaced and fingerprinted, benign strings that merely look… |
+| `check-relay-ack.swift` | The watch → phone relay used to say "delivered" for every command the phone accepted, including the ones the… |
+| `check-relay-receiver.sh` | Structural check: the relay receiver delegate, failure-reason wiring, and honest ack guards |
 | `check-remote-agent-loop.sh` | start a session on ANOTHER machine, see its events, type into it, kill it |
 | `check-remote-screen-gestures.sh` | The phone's remote-screen surface, checked against the two things it talks to: the host input backends, and… |
 | `check-risk.swift` | Continue" on a watch sends Return, and Return takes whichever option the agent has highlighted |

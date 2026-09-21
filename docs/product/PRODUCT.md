@@ -125,7 +125,7 @@ string, and when a capability is missing they name the symptom the user sees
 
 `events` `newPane` `paneTarget` `usage` `agents` `cmux` `herdr` `tailscale` `kb`
 `screenPeek` `input` `files` `push` `pair` `doctor` `wake` `screenRegion` `openUrl`
-`power` `laPush` `sessionStatus` `paste` `captureJoin` `redact` `chat` `apps` `handoff`
+`power` `laPush` `sessionStatus` `paste` `captureJoin` `redact` `chat` `apps` `handoff` `brain`
 
 ### 5.2 Modules (`install/payload/meshd/`)
 
@@ -140,11 +140,12 @@ route line). That is the rule for adding anything.
 | `input.ts` / `input-linux.ts` | Pointer, keyboard, media, windows, power, clipboard, screen capture and regions. Linux uses xdotool/xclip and screen capture via scrot. |
 | `push.ts` | APNs direct from the daemon (ES256), one-buzz dedupe, Live Activity push-to-start tokens. |
 | `pair.ts` / `qr.ts` | One-use 8-character codes, ten minutes; `/pair/claim` is the only route that answers without a token. The QR carries `meshwatch://pair?h=&p=&c=`. |
-| `files.ts` / `files.html` | File browser and the daemon-served file page. |
+| `files.ts` / `files.html` | File browser and daemon-served file page; `/fs/write` accepts file bytes and `/fs/read?raw=1` returns them unchanged. |
 | `kb.ts` | Knowledge base: SQLite FTS5, read federation across hosts. |
 | `apps.ts` | Mesh Apps: publish a static web app, register a built native app, wireless (OTA) install links. |
 | `chat.ts` | **0.6** Transcript chat: talk to a running coding agent from the phone. |
 | `handoff.ts` | **0.6** Hand a session to a different agent CLI via `HANDOFF.md` in the working directory. |
+| `brain.ts` | **0.7** `GET /brain`: which local model server answers on this machine (edge0 :8001, mference :8080, ollama :11434, LM Studio :1234, or `MESHD_BRAIN_URL`), its model, and measured capabilities. Never starts or stops one. Ported from PR #119. |
 | `redact.ts` | **0.6** Every line leaving the machine is redacted; exposures are counted by fingerprint, never by value. |
 | `codex-state.ts` | Reads why Codex stopped and when its window resets. |
 | `cmux-bridge.ts` / `herdr.ts` | Multiplexer adapters. |
@@ -178,6 +179,7 @@ something happened), `mesh-kb`, `mesh-self-check`, `start-cmux-bridge`.
 | --- | --- |
 | Getting started | `setup` (daemon → doctor → pair → status), `desktop`, `shellenv` |
 | Hosts | `pair`, `hooks [status\|install\|remove]`, `hosts`, `host add\|rm\|default` |
+| Files | `cp <src> <dst> [--force] [--mkdirs]` |
 | Sessions | `ls`, `peek`, `send`, `key`, `new`, `kill` |
 | Status | `status`, `usage`, `health`, `doctor [--fix]`, `events`, `exposures` |
 | Maintenance | `upgrade`, `token rotate`, `uninstall` |
@@ -278,6 +280,13 @@ TypeScript by `check-mesh-push.sh`), `AlertGating.swift` (which events buzz),
 `LimitHelpers.swift`, `RiskClassifier.swift` (mirrored in the daemon's `risk.ts`),
 `ScreenZoom.swift`, `SecureStore.swift`, `DaemonCapabilities.swift`, `APNsEnvironment.swift`,
 `VoiceSegments.swift`, `WatchGlance.swift`.
+
+**Relay contract (watch → phone → meshd).** Commands the watch sends without a reply handler
+land in `PhoneConnectivity.session(_:didReceiveMessage:)` (added 2026-09-22; before it they
+were dropped on every physical pair). Fire-and-forget commands answer `mesh-error: <reason>`
+(`RelayReply.encodeFailure`) when the phone cannot route them or the daemon refuses; the watch
+decodes it with `RelayReply.failureReason(in:)` and shows the reason instead of a tick.
+Pinned by `check-relay-ack.swift` and `check-relay-receiver.sh`.
 
 ---
 

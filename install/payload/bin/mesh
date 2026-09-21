@@ -4,7 +4,7 @@
 // Human output by default; --json for agents/scripts. `mesh help <cmd>` for details.
 
 import { homedir, networkInterfaces } from "os";
-import { join } from "path";
+import { dirname, join, resolve } from "path";
 import {
   existsSync, readFileSync, writeFileSync, mkdirSync,
   statSync, readdirSync, renameSync, rmSync, copyFileSync, chmodSync,
@@ -137,6 +137,116 @@ function parse(argv: string[]): { pos: string[]; flags: Record<string, string>; 
 const hostOf = (f: Record<string, string>) => f.host || f.H;
 
 // ---------- commands ----------
+
+type CopySide = { raw: string; path: string; host?: ReturnType<typeof resolveHost> };
+
+function copySide(raw: string, cfg: Config): CopySide {
+  const colon = raw.indexOf(":");
+  if (colon <= 0 || raw.startsWith("~/") || raw.startsWith("./") || raw.startsWith("/")) return { raw, path: raw };
+  const name = raw.slice(0, colon);
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) return { raw, path: raw };
+  const known = name === "local" || name === "default" || !!cfg.hosts[name];
+  if (!known) die(`unknown host: ${name}  (known: ${["local", ...Object.keys(cfg.hosts)].join(", ")})`);
+  return { raw, path: raw.slice(colon + 1), host: resolveHost(name === "default" ? undefined : name, cfg) };
+}
+
+function localPath(path: string) {
+  return resolve(path.startsWith("~/") ? join(homedir(), path.slice(2)) : path);
+}
+
+async function cmdCp(pos: string[], bools: Set<string>, cfg: Config) {
+  const [fromRaw, toRaw] = pos;
+  if (!fromRaw || !toRaw || pos.length !== 2) die("usage: mesh cp <src> <dst> [--force] [--mkdirs]");
+  const from = copySide(fromRaw, cfg), to = copySide(toRaw, cfg);
+  if (!from.host && !to.host) die("use cp");
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 10 * 60 * 1000);
+  const request = async (host: ReturnType<typeof resolveHost>, method: string, path: string, body?: BodyInit, length?: string | null) => {
+    const res = await fetch(`http://${host.ip}:${host.port}${path}`, {
+      method,
+      headers: {
+        ...(host.token ? { Authorization: `Bearer ${host.token}` } : {}),
+        ...(body ? { "content-type": "application/octet-stream" } : {}),
+        ...(length ? { "content-length": length } : {}),
+      },
+      body,
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({})) as any;
+      throw new Error(detail.error || `${method} ${path} → HTTP ${res.status} on ${host.name} (${host.ip}:${host.port})`);
+    }
+    return res;
+  };
+
+  let bytes = 0;
+  const hasher = new Bun.CryptoHasher("sha256");
+  const counted = (stream: ReadableStream<Uint8Array>) => stream.pipeThrough(new TransformStream({
+    transform(chunk: Uint8Array, controller) {
+      bytes += chunk.byteLength;
+      hasher.update(chunk);
+      controller.enqueue(chunk);
+    },
+  }));
+
+  try {
+    let expected = "";
+    let writeResult: any = null;
+    if (!from.host) {
+      const source = Bun.file(localPath(from.path));
+      if (!(await source.exists()) || !statSync(source.name!).isFile()) throw new Error(`not a file: ${localPath(from.path)}`);
+      const query = new URLSearchParams({ path: to.path });
+      if (bools.has("force")) query.set("overwrite", "1");
+      if (bools.has("mkdirs")) query.set("mkdirs", "1");
+      const res = await request(to.host!, "POST", `/fs/write?${query}`, counted(source.stream()), String(source.size));
+      writeResult = await res.json();
+    } else {
+      const query = new URLSearchParams({ path: from.path, raw: "1" });
+      const read = await request(from.host, "GET", `/fs/read?${query}`);
+      expected = read.headers.get("x-mesh-sha256") || "";
+      if (to.host) {
+        const writeQuery = new URLSearchParams({ path: to.path });
+        if (bools.has("force")) writeQuery.set("overwrite", "1");
+        if (bools.has("mkdirs")) writeQuery.set("mkdirs", "1");
+        const res = await request(to.host, "POST", `/fs/write?${writeQuery}`, counted(read.body!), read.headers.get("content-length"));
+        writeResult = await res.json();
+      } else {
+        const dest = localPath(to.path);
+        if (existsSync(dest) && !bools.has("force")) throw new Error(`destination exists: ${dest}`);
+        if (!existsSync(dirname(dest))) {
+          if (!bools.has("mkdirs")) throw new Error(`no such directory: ${dirname(dest)}`);
+          mkdirSync(dirname(dest), { recursive: true });
+        }
+        const part = `${dest}.part-${process.pid}`;
+        try {
+          // Bun.write(path, ReadableStream) wrote an empty file on Bun 1.3; a FileSink loop streams for real.
+          const sink = Bun.file(part).writer();
+          for await (const chunk of counted(read.body!) as unknown as AsyncIterable<Uint8Array>) sink.write(chunk);
+          await sink.end();
+          renameSync(part, dest);
+        } finally {
+          rmSync(part, { force: true });
+        }
+      }
+    }
+    const sha256 = hasher.digest("hex");
+    if (expected && expected !== sha256) throw new Error(`sha256 mismatch reading ${from.raw}: expected ${expected}, got ${sha256}`);
+    if (writeResult?.sha256 && writeResult.sha256 !== sha256) {
+      throw new Error(`sha256 mismatch writing ${to.raw}: sent ${sha256}, destination reported ${writeResult.sha256}`);
+    }
+    out(() => console.log(`copied ${bytes} B  ${from.raw} → ${to.raw}  sha256 ${sha256.slice(0, 12)}`),
+      { ok: true, from: from.raw, to: to.raw, bytes, sha256 });
+  } catch (e: any) {
+    if (e?.name === "AbortError") throw new Error(`timeout after 600000ms → file copy did not finish`);
+    if (e?.code === "ConnectionRefused" || /refused|ECONNREFUSED/.test(String(e?.code || e?.cause?.code || e))) {
+      throw new Error("connection refused → meshd not running on the source or destination host");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 async function cmdHosts(cfg: Config) {
   const names = Object.keys(cfg.hosts);
@@ -1885,6 +1995,9 @@ HOSTS
   host rm <name>              remove a host
   host default <name>         set the default host
 
+FILES
+  cp <src> <dst>              copy a file between machines   host:path on either side   [--force] [--mkdirs]
+
 SESSIONS  (default host, or -H <name>)
   ls                          list sessions/agents          (alias: agents)
   peek <session>              print recent output           [-n lines] [--pane P]
@@ -1931,6 +2044,14 @@ GLOBAL
 Config: ${HOSTS_FILE}   ·   mesh man   for the full manual`;
 
 const CMD_HELP: Record<string, string> = {
+  cp: `mesh cp <src> <dst> [--force] [--mkdirs] [--json]
+
+Copy one file between this machine and a configured mesh host, or between two hosts.
+Prefix either path with host:; a bare path means this machine. Existing destinations
+are refused unless --force is set. --mkdirs creates a missing destination directory.
+
+  mesh cp jetson:~/lesearch-probe/hello.txt mac:~/Downloads/hello.txt
+  mesh cp ./report.pdf jetson:~/reports/ --mkdirs`,
   new: `mesh new <name> [-H host] [--cmd C] [--cwd DIR] [--task "..."]
 
 Start a new session. --cmd is any CLI (claude, codex, pi, bun, a shell one-liner);
@@ -2128,6 +2249,7 @@ async function main() {
       if (sub === "default") return cmdHostDefault(pos, cfg);
       return die("usage: mesh host <add|rm|default> ...");
     }
+    case "cp": return cmdCp(pos, bools, cfg);
     case "ls": case "agents": return cmdLs(flags, cfg);
     case "peek": case "output": case "logs": return cmdPeek(pos, flags, cfg);
     case "send": return cmdSend(pos, flags, cfg);

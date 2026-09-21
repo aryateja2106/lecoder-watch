@@ -7,6 +7,7 @@ import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 import { handleInput } from "./input";
 import { handleFiles } from "./files";
+import { handleBrain } from "./brain";
 import { handlePush, pushAlert, passesPushGate, notePushDecision, pushLiveActivity } from "./push";
 import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
@@ -43,7 +44,7 @@ const VERSION = "0.6.0";
 // "handoff": POST /agents/<s>/handoff {to} writes HANDOFF.md from the conversation and
 // relaunches the pane under another CLI agent; GET /resumable?cwd= and
 // GET /agents/<s>/resumable list the conversations each CLI can reopen, with the command.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -1308,6 +1309,8 @@ Bun.serve({
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
       const remote = await handleInput(req, url);
       if (remote) return remote;
+      const brain = await handleBrain(req, url);
+      if (brain) return brain;
       const files = await handleFiles(req, url);
       if (files) return files;
       // APNs device registration + status + test — see push.ts.

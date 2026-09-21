@@ -21,11 +21,11 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |
 | `install/payload/meshd/` | 21 | ~6,300 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
-| `install/payload/bin/` | 9 | ~3,200 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
+| `install/payload/bin/` | 9 | ~3,400 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~900 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 3 | ~1,700 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 91 | ~9,300 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `scripts/` | 94 | ~9,500 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
@@ -39,11 +39,11 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `DaemonCapabilities.swift` | S | what this app asks of meshd, and what a user loses when the daemon on their machine is older than the app on their wrist | check-daemon-gaps |
 | `LimitHelpers.swift` | S | pure formatting of an agent's usage-limit status (available / near / hit) for the phone and the watch | check-limit-helpers, check-usage-alert-identity |
 | `MeshClient.swift` | L | Talks to a single machine's `meshd` over Tailscale *[serialized — every endpoint call]* | check-agent-identity-transport, check-inspect-crop, check-watch-terminal-wiring |
-| `Models.swift` | XL | every wire type the phone, the watch and meshd agree on (Agent, AgentEvent, Machine, WatchCommand…) plus the pure logic derived from them, above all… *[serialized — every wire type incl. WatchCommand]* | check-inspect-crop, check-limit-helpers, check-mesh-push, check-session-state, check-usage-alert-identity, check-watch-terminal-wiring |
+| `Models.swift` | XL | every wire type the phone, the watch and meshd agree on (Agent, AgentEvent, Machine, WatchCommand…) plus the pure logic derived from them, above all… *[serialized — every wire type incl. WatchCommand]* | check-brand, check-inspect-crop, check-limit-helpers, check-mesh-push, check-session-state, check-usage-alert-identity, check-watch-terminal-wiring |
 | `RiskClassifier.swift` | S | How much damage a one-tap answer could do | check-inspect-crop, check-usage-alert-identity |
 | `ScreenZoom.swift` | S | Geometry for a zoomable remote screen with a pointer drawn on it | check-inspect-crop |
 | `SecureStore.swift` | S | Keychain storage for anything that grants access to a user's machines | — |
-| `SessionActivity.swift` | S | the ActivityKit attributes and content state for one session's live card (Lock Screen, Dynamic Island, watch Smart Stack) | — |
+| `SessionActivity.swift` | S | the ActivityKit attributes and content state for one session's live card (Lock Screen, Dynamic Island, watch Smart Stack) | check-brand |
 | `SessionCard.swift` | S | The shared vocabulary for "what is this session doing right now" — phone, watch, Lock Screen and Dynamic Island all say it the same way, so a glance means the… | — |
 | `VoiceSegments.swift` | S | pure accumulation for streaming speech recognition | check-voice-accumulate |
 | `WatchGlance.swift` | S | The handful of facts a watch face can show, written by the watch app and read by its complications | — |
@@ -60,11 +60,11 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `FileBrowserView.swift` | M | browse a machine's filesystem over /files and /fs, open links, read text files | — |
 | `LiveActivityController.swift` | M | Runs the live card for whichever session currently deserves one | — |
 | `MeshRelayApp.swift` | S | Receives the APNs device token and hands it to whoever registered interest | check-phone-input-and-wake |
-| `MeshStore.swift` | XL | the phone brain: polls every machine, holds the machine list and tokens, relays snapshots to the watch, and executes the watch's WatchCommands (`handle(_:)`) | check-inspect-crop, check-watch-scrollback, check-watch-terminal-wiring |
+| `MeshStore.swift` | XL | the phone brain: polls every machine, holds the machine list and tokens, relays snapshots to the watch, and executes the watch's WatchCommands (`handle(_:)`) | check-inspect-crop, check-relay-receiver, check-watch-scrollback, check-watch-terminal-wiring |
 | `NotificationManager.swift` | L | Usage limit lifecycle notifications: budget tiers at 50% and 25% left, hit at 95% used, session-window-open, scheduled reset alert, ping when a blocked limit… | check-usage-alert-identity |
 | `PairMachineView.swift` | M | Onboarding. Two fields, because everything else is derivable: the machine's address and a code it prints. The code buys the real token over `/pair/claim`, and… | — |
 | `PairingScanner.swift` | S | Camera-based reader for a `meshwatch://pair` QR, opened from inside the pairing sheet | — |
-| `PhoneConnectivity.swift` | S | Phone side of the relay: receives commands from the watch, forwards the latest mesh snapshot to the watch via WatchConnectivity (option A — the watch never… | check-watch-scrollback |
+| `PhoneConnectivity.swift` | S | Phone side of the relay: receives commands from the watch, forwards the latest mesh snapshot to the watch via WatchConnectivity (option A — the watch never… | check-relay-receiver, check-watch-scrollback |
 | `RemoteScreenView.swift` | L | the phone's Remote tab: live screen, trackpad gestures, chords and the key bar, driving meshd /screen.jpg and /input | check-inspect-crop, check-mesh-chords, check-remote-screen-gestures |
 | `ShellSafeText.swift` | S | Undo iOS smart punctuation on text that is going to reach a shell | — |
 | `TerminalView.swift` | XL | the Terminal tab: session list, the xterm.js bridge WebView, the read-only peek screen, New Session sheet, and the built-apps screen | check-phone-input-and-wake, check-watch-terminal-wiring |
@@ -77,7 +77,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 |---|---|---|---|
 | `MeshWatchApp.swift` | S | the watch app's entry point and root scene | — |
 | `RemoteView.swift` | XL | Drive the Mac from the wrist: screen preview + trackpad + crown scroll + keys | check-drag-lock-release, check-inspect-crop, check-mesh-input, check-watch-terminal-wiring |
-| `WatchLink.swift` | S | Thin WCSession wrapper for the watch | check-watch-terminal-wiring |
+| `WatchLink.swift` | S | Thin WCSession wrapper for the watch | check-relay-receiver, check-watch-terminal-wiring |
 | `WatchLinks.swift` | S | Finding the link an agent just printed, so the wrist can push it to the Mac | — |
 | `WatchMeshStore.swift` | L | Watch brain. Two private paths to the mesh: 1. DIRECT — talk to each machine's meshd over the tailnet. Works in the simulator and whenever the watch can reach… | check-inspect-crop, check-watch-scrollback, check-watch-terminal-wiring |
 | `WatchNotifications.swift` | S | The watch half of "answer a blocked agent from the notification" | check-watch-terminal-wiring |
@@ -104,7 +104,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 
 | file | size | purpose | checks |
 |---|---|---|---|
-| `WatchGlanceWidget.swift` | S | the watch complication: reads WatchGlance from the App Group and renders attention count, session and question | — |
+| `WatchGlanceWidget.swift` | S | the watch complication: reads WatchGlance from the App Group and renders attention count, session and question | check-brand |
 
 ## `install/payload/meshd/`
 
@@ -128,7 +128,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `push.ts` | M | APNs push — meshd notifies the phone directly (no cloud relay, local-first) | check-alert-gating, check-mesh-push |
 | `qr.ts` | L | a QR encoder with no dependencies, because the payload ships as plain .ts files that bun runs in place: an npm package here would mean an install step on every… | check-pair-qr |
 | `redact.ts` | M | every string that leaves this Mac for a phone, a watch, Apple's push servers or the events file passes through redact() first | check-redact |
-| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-apps-ota, check-apps-serve, check-daemon-050, check-daemon-gaps, check-fleet, check-host-guard, check-install-idempotent, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-package-mesh-install, check-paste-epipe, check-product-spec, check-roundtrip, check-watch-terminal-wiring, check-wol |
+| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-apps-ota, check-apps-serve, check-brand, check-daemon-050, check-daemon-gaps, check-fleet, check-host-guard, check-install-idempotent, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-package-mesh-install, check-paste-epipe, check-product-spec, check-roundtrip, check-watch-terminal-wiring, check-wol |
 | `telemetry.ts` | S | one anonymized heartbeat a day, and nothing else, ever | — |
 | `wol.ts` | S | Wake-on-LAN, so "power that machine back on" works from the wrist | — |
 
@@ -136,7 +136,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 
 | file | size | purpose | checks |
 |---|---|---|---|
-| `mesh` | XL | command-line control for a LeSearch AI fleet (the meshd HTTP API) | check-apps-ota, check-bridge-kill-scope, check-mesh-apps, check-mesh-doctor, check-mesh-hooks, check-mesh-onboarding, check-mesh-skills, check-mesh-uninstall, check-mesh-upgrade, check-mesh-version, check-remote-agent-loop, check-tmux-restart, check-token-rotate |
+| `mesh` | XL | command-line control for a LeSearch AI fleet (the meshd HTTP API) | check-apps-ota, check-brand, check-bridge-kill-scope, check-mesh-apps, check-mesh-doctor, check-mesh-hooks, check-mesh-onboarding, check-mesh-skills, check-mesh-uninstall, check-mesh-upgrade, check-mesh-version, check-remote-agent-loop, check-tmux-restart, check-token-rotate |
 | `mesh-agent-run` | S | run a command under an agent's name and post its start/finish (failures at level error) to meshd as events | check-daemon-050, check-mesh-hook, check-remote-agent-loop |
 | `mesh-codex-notify` | S | Codex `notify` shim: runs the user's original notify hook if any, then posts a 'Codex turn ended' event to meshd | check-mesh-hook |
 | `mesh-event` | S | post a small agent notification (source, title, body) to the local meshd /events feed | check-mesh-hook, check-package-mesh-install |
@@ -160,7 +160,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | file | size | purpose | checks |
 |---|---|---|---|
 | `hooks/agent-wrapper-examples.sh` | S | Run interactive agents through MeshWatch event wrappers | — |
-| `install.sh` | L | Mesh installer — one command to install or uninstall the mesh stack (meshd, rmux-bridge, agent hook tools) on any macOS or Linux machine | check-daemon-gaps, check-install-idempotent, check-mesh-onboarding, check-package-mesh-install, check-tmux-restart, check-token-rotate |
+| `install.sh` | L | Mesh installer — one command to install or uninstall the mesh stack (meshd, rmux-bridge, agent hook tools) on any macOS or Linux machine | check-brand, check-daemon-gaps, check-install-idempotent, check-mesh-onboarding, check-package-mesh-install, check-tmux-restart, check-token-rotate |
 | `payload/share/skills/native-app-builder/scripts/make-appicon.sh` | S | an app icon in one command, so no generated app ships iconless | — |
 
 ## `web/`
@@ -168,5 +168,5 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | file | size | purpose | checks |
 |---|---|---|---|
 | `brand/index.html` | L | — | — |
-| `index.html` | L | — | — |
+| `index.html` | L | — | check-brand |
 | `privacy.html` | M | — | — |

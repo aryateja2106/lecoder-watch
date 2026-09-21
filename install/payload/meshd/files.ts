@@ -3,7 +3,8 @@
 // with no X server, no VNC and no extra packages.
 //
 //   GET  /fs?path=/home/arya        -> { path, parent, entries: [...] }
-//   GET  /fs/read?path=…[&max=]     -> { path, text, truncated } | binary download
+//   GET  /fs/read?path=…[&max=][&raw=1] -> { path, text, truncated } | binary download
+//   POST /fs/write?path=…             raw bytes -> { ok, path, bytes, sha256 }
 //   POST /fs/mkdir  { path }
 //   POST /fs/move   { from, to }
 //   GET  /files                     -> browser page
@@ -12,10 +13,12 @@
 // token, so restricting paths would be theatre rather than a boundary. Symlinks are
 // reported, not followed, so a listing cannot wander somewhere surprising.
 import { homedir } from "node:os";
-import { join, dirname, resolve, basename } from "node:path";
-import { readdir, stat, lstat, mkdir, rename, readFile } from "node:fs/promises";
+import { join, dirname, resolve, basename, sep } from "node:path";
+import { readdir, stat, lstat, mkdir, rename, readFile, unlink } from "node:fs/promises";
 
 const TEXT_LIMIT = 256 * 1024;
+const HASH_LIMIT = 64 * 1024 * 1024;
+const WRITE_MAX = Number(process.env.MESHD_FS_WRITE_MAX) || 512 * 1024 * 1024;
 
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -59,10 +62,28 @@ async function listDirectory(target: string) {
   return { ok: true, path, parent: path === "/" ? null : dirname(path), home: homedir(), entries: rows };
 }
 
-async function readTextFile(target: string, max: number) {
-  const path = resolve(target);
+function expandPath(target: string) {
+  return resolve(target.startsWith("~/") ? join(homedir(), target.slice(2)) : target);
+}
+
+async function binaryResponse(path: string, size: number, body: Blob | Uint8Array) {
+  const headers: Record<string, string> = {
+    "content-type": "application/octet-stream",
+    "content-disposition": `attachment; filename="${basename(path).replace(/"/g, "")}"`,
+  };
+  if (size <= HASH_LIMIT) {
+    headers["x-mesh-sha256"] = new Bun.CryptoHasher("sha256")
+      .update(new Uint8Array(await Bun.file(path).arrayBuffer())).digest("hex");
+  }
+  return new Response(body, { headers });
+}
+
+async function readTextFile(target: string, max: number, raw: boolean) {
+  const path = expandPath(target);
   const info = await stat(path).catch(() => null);
   if (!info || !info.isFile()) return json({ error: `not a file: ${path}` }, 404);
+
+  if (raw) return await binaryResponse(path, info.size, Bun.file(path));
 
   const limit = Math.min(Math.max(max, 1024), TEXT_LIMIT);
   const buffer = await readFile(path);
@@ -70,12 +91,7 @@ async function readTextFile(target: string, max: number) {
   // A NUL in the first slice means binary; hand it back as a download instead of
   // pretending it is text.
   if (slice.includes(0)) {
-    return new Response(buffer, {
-      headers: {
-        "content-type": "application/octet-stream",
-        "content-disposition": `attachment; filename="${basename(path).replace(/"/g, "")}"`,
-      },
-    });
+    return await binaryResponse(path, info.size, buffer);
   }
   return json({
     path,
@@ -100,7 +116,55 @@ export async function handleFiles(req: Request, url: URL): Promise<Response | nu
   if (path === "/fs/read" && req.method === "GET") {
     const target = url.searchParams.get("path");
     if (!target) return json({ error: "path required" }, 400);
-    return await readTextFile(target, Number(url.searchParams.get("max") ?? "65536") || 65536);
+    return await readTextFile(target, Number(url.searchParams.get("max") ?? "65536") || 65536, url.searchParams.get("raw") === "1");
+  }
+  if (path === "/fs/write" && req.method === "POST") {
+    const target = url.searchParams.get("path");
+    if (!target) return json({ error: "path required" }, 400);
+    const dest = expandPath(target);
+    const meshHome = resolve(homedir(), ".mesh");
+    if (dest === meshHome || dest.startsWith(meshHome + sep)) {
+      return json({ error: "refusing to write inside ~/.mesh" }, 403);
+    }
+    if (await Bun.file(dest).exists() && url.searchParams.get("overwrite") !== "1") {
+      return json({ error: `destination exists: ${dest}` }, 409);
+    }
+    const parent = dirname(dest);
+    const parentInfo = await stat(parent).catch(() => null);
+    if (!parentInfo) {
+      if (url.searchParams.get("mkdirs") !== "1") return json({ error: `no such directory: ${parent}` }, 404);
+      await mkdir(parent, { recursive: true });
+    } else if (!parentInfo.isDirectory()) {
+      return json({ error: `no such directory: ${parent}` }, 404);
+    }
+    const length = Number(req.headers.get("content-length"));
+    if (Number.isFinite(length) && length > WRITE_MAX) return json({ error: `file exceeds ${WRITE_MAX} byte limit` }, 413);
+
+    const part = `${dest}.part-${process.pid}`;
+    const hasher = new Bun.CryptoHasher("sha256");
+    let bytes = 0;
+    // Stream to a sibling .part file and rename into place, so a half-written upload never
+    // masquerades as the file. Bun.write(path, ReadableStream) silently wrote nothing on
+    // Bun 1.3 (bytes:0, sha of empty) — the FileSink loop below is what actually streams.
+    const sink = Bun.file(part).writer();
+    try {
+      if (req.body) {
+        for await (const chunk of req.body as AsyncIterable<Uint8Array>) {
+          bytes += chunk.byteLength;
+          if (bytes > WRITE_MAX) {
+            await sink.end();
+            return json({ error: `file exceeds ${WRITE_MAX} byte limit` }, 413);
+          }
+          hasher.update(chunk);
+          sink.write(chunk);
+        }
+      }
+      await sink.end();
+      await rename(part, dest);
+      return json({ ok: true, path: dest, bytes, sha256: hasher.digest("hex") }, 201);
+    } finally {
+      await unlink(part).catch(() => {});
+    }
   }
   if (path === "/fs/mkdir" && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as any;
