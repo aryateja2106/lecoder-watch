@@ -180,7 +180,7 @@ private struct LocalNetworkBlockedBanner: View {
                 .foregroundStyle(.orange)
             Text("Your machines are on addresses iOS treats as a local network — a "
                  + "192.168.x home LAN, or the 100.x range a VPN like Tailscale uses. "
-                 + "MeshWatch needs Local Network permission, and every request is "
+                 + "LeSearch AI needs Local Network permission, and every request is "
                  + "being dropped before it leaves the phone until it has one.")
                 .font(.caption)
                 .foregroundStyle(.secondary)

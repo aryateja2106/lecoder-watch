@@ -1,6 +1,6 @@
-# LeSearch Mesh — the product, in one place
+# LeSearch AI — the product, in one place
 
-**Status: canonical.** This is the only document that defines what LeSearch Mesh is:
+**Status: canonical.** This is the only document that defines what LeSearch AI is:
 its names, surfaces, screens, daemon capabilities, commands, install contract,
 permissions and non-goals. Everything else under `docs/` is a runbook or a dated
 record. When a change adds or removes a screen, a daemon module, a `mesh` verb or a
@@ -62,11 +62,11 @@ function, `sessionsNeedingAttention(from:)` in `Shared/Models.swift`.
 | Role | Exact form | Notes |
 | --- | --- | --- |
 | Company | **LeSearch AI** | GitHub org `LeSearch-AI`. |
-| Product | **LeSearch Mesh** | The only public product name. Tagline: *Less Search. More Agents.* |
+| Product | **LeSearch AI** | The only public product name. Tagline: *Less Search. More Agents.* |
 | Daemon | `meshd` | One per machine. Bun + TypeScript. Port `8899`. |
 | Command line | `mesh` | `~/.mesh/bin/mesh`. Every surface is a client of the same daemon API. |
-| Mac menu bar app | **LeSearch Mesh** (`LeSearch Mesh.app`) | Xcode target `MeshDesktop`, bundle id `com.lecoder.meshdesktop`. |
-| iPhone + Watch app | **LeSearch Mesh** | Xcode target `MeshWatch`, bundle prefix `com.lecoder.meshwatch`. App Store Connect app `6803438426`. TestFlight `pVYPTxc7`. |
+| Mac menu bar app | **LeSearch AI** (on disk still `MeshWatch.app`: `PRODUCT_NAME` is frozen) | Xcode target `MeshDesktop`, bundle id `com.lecoder.meshdesktop`. |
+| iPhone + Watch app | **LeSearch AI** | Xcode target `MeshWatch`, bundle prefix `com.lecoder.meshwatch`. App Store Connect app `6803438426`. TestFlight `pVYPTxc7`. |
 | Input helper | `mesh-input` | Swift binary, macOS only, owns the Accessibility grant. |
 | Local agent | `mesh-code` | **proposed** (PR #119): a local coding agent driven through the daemon. |
 | Internal lane | *Mesh Apps* | The daemon serving and installing apps the user asked an agent to build. Internal name only. |
@@ -81,7 +81,7 @@ function, `sessionsNeedingAttention(from:)` in `Shared/Models.swift`.
 | --- | --- | --- | --- | --- |
 | Daemon, CLI, hook tools | `curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh \| sh` | `~/.mesh/` (`meshd/`, `bin/`, `hooks/`, `token`, `hosts.json`, `apns/`, `apps/`); launchd `ai.lesearch.meshd` on macOS, systemd `--user` on Linux | `mesh uninstall --yes` (prints exactly what it deletes first), or `install.sh --uninstall --purge` | shipped, `mesh-install` v0.5.2 (2026-08-27); 0.6 payload in flight |
 | iPhone + Watch app | TestFlight public link | App Store | Delete the app | shipped to TestFlight; the public build lags (external testers need Beta App Review) |
-| Mac menu bar app | `mesh desktop` opens it; distribution of the `.app` itself | `/Applications/LeSearch Mesh.app` | Drag to Trash; "Start at login" unregisters itself | **built, not distributed** |
+| Mac menu bar app | `mesh desktop` opens it; distribution of the `.app` itself | `/Applications/MeshWatch.app` (shows as LeSearch AI) | Drag to Trash; "Start at login" unregisters itself | **built, not distributed** |
 | Web console | Menu bar → *Open web console*, or `http://127.0.0.1:8899/desktop` | Served by the daemon | Nothing to remove | shipped |
 | Website | `https://mesh.lesearch.ai` | `web/` on Vercel (`lesearch-mesh-web`) | — | live (DNS resolves as of 2026-09-06) |
 

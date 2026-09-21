@@ -1114,7 +1114,7 @@ final class MeshStore: ObservableObject {
             // Say why instead.
             guard UIApplication.shared.applicationState == .active else {
                 return try? JSONEncoder().encode(RelayReply.failure(
-                    "open MeshWatch on your iPhone — iOS only shares the clipboard with an app you're looking at"))
+                    "open LeSearch AI on your iPhone — iOS only shares the clipboard with an app you're looking at"))
             }
             return try? JSONEncoder().encode(UIPasteboard.general.string ?? "")
         case .openURL:

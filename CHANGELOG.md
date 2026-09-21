@@ -8,6 +8,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are
 each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
+- Renamed to LeSearch AI everywhere a person reads it (bundle ids, targets and the meshwatch:// scheme stay); apps now report 0.6.0 like the daemon.
+
 
 ### Security
 - **The terminal bridge now asks who you are.** The live terminal on port 7820 could type

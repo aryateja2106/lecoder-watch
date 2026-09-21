@@ -7,7 +7,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "0.5.1"
+    MARKETING_VERSION: "0.6.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     GENERATE_INFOPLIST_FILE: NO
@@ -61,7 +61,7 @@ targets:
     info:
       path: Generated/iOS-Info.plist
       properties:
-        CFBundleDisplayName: LeSearch Mesh
+        CFBundleDisplayName: LeSearch AI
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
@@ -75,10 +75,10 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
+        NSLocalNetworkUsageDescription: "LeSearch AI connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSSpeechRecognitionUsageDescription: "Turn what you say into text for your agents, on this device."
-        NSFaceIDUsageDescription: "Unlock MeshWatch so only you can reach your machines."
+        NSFaceIDUsageDescription: "Unlock LeSearch AI so only you can reach your machines."
         NSCameraUsageDescription: "Scan a machine's pairing QR code."
         UIBackgroundModes:
           - fetch
@@ -119,7 +119,7 @@ targets:
       properties:
         # No Dock icon, no main window: the menu bar item is the whole app.
         LSUIElement: true
-        CFBundleDisplayName: LeSearch Mesh
+        CFBundleDisplayName: LeSearch AI
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
     settings:
@@ -140,7 +140,7 @@ targets:
     info:
       path: MeshWatchWidgets/Info.plist
       properties:
-        CFBundleDisplayName: LeSearch Mesh Sessions
+        CFBundleDisplayName: LeSearch AI Sessions
         # Extensions must match the parent app's version or App Store Connect
         # rejects the upload — xcodegen defaults them to 1.0 unless told.
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -168,7 +168,7 @@ targets:
     info:
       path: Generated/Watch-Info.plist
       properties:
-        CFBundleDisplayName: LeSearch Mesh
+        CFBundleDisplayName: LeSearch AI
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
@@ -176,7 +176,7 @@ targets:
         WKCompanionAppBundleIdentifier: com.lecoder.meshwatch
         # The watch dials meshd directly (f3e88d0), so it needs its own Local
         # Network grant — the phone's does not carry over.
-        NSLocalNetworkUsageDescription: "MeshWatch connects to your machines over your private network."
+        NSLocalNetworkUsageDescription: "LeSearch AI connects to your machines over your private network."
         NSMicrophoneUsageDescription: "Dictate commands to your agents."
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
@@ -198,7 +198,7 @@ targets:
     info:
       path: WatchWidgets/Info.plist
       properties:
-        CFBundleDisplayName: LeSearch Mesh
+        CFBundleDisplayName: LeSearch AI
         # Extensions must match the parent app's version or App Store Connect
         # rejects the upload — xcodegen defaults them to 1.0 unless told.
         CFBundleShortVersionString: $(MARKETING_VERSION)

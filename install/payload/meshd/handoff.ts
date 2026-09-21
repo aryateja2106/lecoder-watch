@@ -81,7 +81,7 @@ export function handoffMarkdown(session: string, page: ChatPage, now = new Date(
   const lines: string[] = [];
   lines.push(`# Hand-off from session \`${session}\``);
   lines.push("");
-  lines.push(`Written ${now.toISOString()} by LeSearch Mesh from the ${page.source} transcript. Continue the task; do not restart it.`);
+  lines.push(`Written ${now.toISOString()} by LeSearch AI from the ${page.source} transcript. Continue the task; do not restart it.`);
   lines.push("");
   lines.push("## Where it stopped");
   lines.push("");

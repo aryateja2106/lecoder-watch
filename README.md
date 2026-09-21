@@ -1,4 +1,4 @@
-# LeSearch Mesh
+# LeSearch AI
 
 **Use your Mac from your wrist.**
 

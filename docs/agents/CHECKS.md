@@ -26,6 +26,7 @@
 | `check-drag-lock-release.sh` | the watch must never walk away holding the Mac's mouse button down |
 | `check-entitlements.sh` | the capabilities the code calls are the capabilities the build is entitled to |
 | `check-file-browser-filter.swift` | Run via `sh scripts/check-all.sh`, which compiles every check-*.swift against the full Shared/ dependency set |
+| `check-fleet.sh` | every machine in ~/.mesh/hosts.json runs THIS tree's meshd and is usable |
 | `check-glance.swift` | A complication is the most-seen and least-interactive surface in the product: it is on the watch face all day… |
 | `check-handoff.sh` | handoff.ts self-check: HANDOFF.md carries the last assistant message, the recent turns and the tool activity |
 | `check-herdr-sessions.sh` | the herdr lane, against a stub `herdr` binary |
@@ -63,6 +64,7 @@
 | `check-preview-mapping.swift` | Tap-to-place-cursor is the flagship interaction |
 | `check-product-spec.sh` | docs/product/PRODUCT.md is the one place the product is defined, so it must name every screen file, every… |
 | `check-redact.sh` | redact.ts self-check: one fixture per rule is replaced and fingerprinted, benign strings that merely look… |
+| `check-remote-agent-loop.sh` | start a session on ANOTHER machine, see its events, type into it, kill it |
 | `check-remote-screen-gestures.sh` | The phone's remote-screen surface, checked against the two things it talks to: the host input backends, and… |
 | `check-risk.swift` | Continue" on a watch sends Return, and Return takes whichever option the agent has highlighted |
 | `check-roundtrip.sh` | The notification round-trip: an event an agent hook posts must carry a session name the reply route can… |
@@ -70,12 +72,14 @@
 | `check-session-state.swift` | Run: swiftc Shared/Models.swift scripts/check-session-state.swift -o /tmp/css && /tmp/css |
 | `check-shell-quoting.swift` | shellQuotedArgument() single-quotes anything a shell would split or interpret, and leaves plain paths alone |
 | `check-shell-startup.sh` | The shell hook must never make opening a terminal slow |
+| `check-sim-fleet.sh` | the app runs on an iPhone, an iPad and a paired Watch simulator, and the Mac menu bar app launches — all four… |
 | `check-tmux-restart.sh` | the daemon can be restarted more than once |
 | `check-token-rotate.sh` | End-to-end proof of `mesh token rotate` against a throwaway MESH_HOME |
 | `check-trackpad-clicks.swift` | Full-pad trackpad: single tap = left click, second tap inside the window = right click |
 | `check-usage-alert-identity.sh` | The usage-alert dedup key must be exactly as fine-grained as the banner the user reads |
 | `check-voice-accumulate.sh` | VoiceSegments self-check: pure accumulation logic for streaming speech recognition (pause mid-sentence,… |
 | `check-watch-scrollback.swift` | Two properties of the watch terminal that cannot be checked by running it — a view is needed for that — but… |
+| `check-watch-smoke.sh` | the watch app must LAUNCH on a watch simulator, not merely compile |
 | `check-watch-terminal-wiring.sh` | The watch terminal was "clean but unusable" for one boring reason: meshd accepted fourteen keys, the phone… |
 | `check-wol.sh` | wol.ts self-check: packet shape and MAC parsing, with no UDP leaving the machine |
 | `codemap-index.py` | generate the committed codebase map from the tree itself |

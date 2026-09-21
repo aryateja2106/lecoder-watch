@@ -9,7 +9,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>LeSearch Mesh</string>
+	<string>LeSearch AI</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -45,9 +45,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Scan a machine's pairing QR code.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Unlock MeshWatch so only you can reach your machines.</string>
+	<string>Unlock LeSearch AI so only you can reach your machines.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>MeshWatch connects to your machines over your private network.</string>
+	<string>LeSearch AI connects to your machines over your private network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Dictate commands to your agents.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
