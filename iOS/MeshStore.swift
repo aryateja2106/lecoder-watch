@@ -1012,6 +1012,22 @@ final class MeshStore: ObservableObject {
     /// Service one command relayed from the watch. Returns payload data for the
     /// commands the watch is waiting on an answer for, nil for fire-and-forget ones.
     func handle(_ command: WatchCommand) async -> Data? {
+        // Shared guard: almost every case needs a machine. The few that do not
+        // (refresh, agentOutput, screenPeek, readPhoneClipboard) skip this.
+        func machine(for host: String?) -> Machine? {
+            guard let host else { return nil }
+            return machines.first(where: { $0.host == host })
+        }
+        func noMachine(_ host: String?) -> Data? {
+            RelayReply.encodeFailure("no machine \(host ?? "?") on this phone")
+        }
+        /// First line of an error description, capped at 80 chars.
+        func shortError(_ error: Error) -> String {
+            let full = Self.describe(error)
+            let line = full.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? full
+            return String(line.prefix(80))
+        }
+
         switch command.kind {
         case .refresh:
             // Hand the snapshot straight back. updateApplicationContext is best-effort
@@ -1020,21 +1036,31 @@ final class MeshStore: ObservableObject {
             return snapshot.flatMap { try? JSONEncoder().encode($0) }
         case .agentSend:
             guard let host = command.host, let agent = command.agent,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await client(for: machine).send(agent: agent, text: command.text, key: command.key, pane: command.pane)
-            await refresh()
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            do {
+                try await client(for: m).send(agent: agent, text: command.text, key: command.key, pane: command.pane)
+                await refresh()
+            } catch { return RelayReply.encodeFailure(shortError(error)) }
         case .killAgent:
             guard let host = command.host, let agent = command.agent,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
-            await kill(on: machine, name: agent)
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            do {
+                try await client(for: m).kill(agent: agent)
+                await refresh()
+            } catch {
+                fail("kill session failed: \(Self.describe(error))")
+                return RelayReply.encodeFailure(shortError(error))
+            }
         case .killPane:
             guard let host = command.host, let agent = command.agent, let pane = command.pane,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await client(for: machine).killPane(agent: agent, paneId: pane)
-            if watchedHost == host, watchedAgent == agent, watchedPane == pane {
-                watchedPane = nil
-            }
-            await refresh()
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            do {
+                try await client(for: m).killPane(agent: agent, paneId: pane)
+                if watchedHost == host, watchedAgent == agent, watchedPane == pane {
+                    watchedPane = nil
+                }
+                await refresh()
+            } catch { return RelayReply.encodeFailure(shortError(error)) }
         case .agentOutput:
             // Watch asked to watch (or stop watching) an agent's live output.
             watchedHost = command.host
@@ -1059,37 +1085,52 @@ final class MeshStore: ObservableObject {
             await refresh()
         case .newAgent:
             guard let host = command.host, let name = command.text,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
-            await newSession(on: machine, name: name, cmd: command.cmd, cwd: command.cwd,
-                             initialText: command.initialText, cols: command.cols, rows: command.rows)
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            do {
+                try await client(for: m).newSession(name: name, cmd: command.cmd, cwd: command.cwd,
+                                                     initialText: command.initialText,
+                                                     cols: command.cols, rows: command.rows)
+                await refresh()
+            } catch {
+                fail("create session failed: \(Self.describe(error))")
+                return RelayReply.encodeFailure(shortError(error))
+            }
         case .newPane:
             guard let host = command.host, let agent = command.agent,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await client(for: machine).newPane(agent: agent)
-            await refresh()
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            do {
+                try await client(for: m).newPane(agent: agent)
+                await refresh()
+            } catch { return RelayReply.encodeFailure(shortError(error)) }
         case .input:
             // Watch trackpad/keys, relayed when the watch itself can't reach meshd.
             guard let host = command.host, let events = command.input,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await client(for: machine).input(events)
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            do {
+                try await client(for: m).input(events)
+            } catch { return RelayReply.encodeFailure(shortError(error)) }
         case .volume:
             guard let host = command.host,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
-            _ = try? await client(for: machine).volume(delta: command.volumeDelta, muted: command.volumeMuted)
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            do {
+                _ = try await client(for: m).volume(delta: command.volumeDelta, muted: command.volumeMuted)
+            } catch { return RelayReply.encodeFailure(shortError(error)) }
         case .clipboard:
             guard let host = command.host, let text = command.text,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await client(for: machine).setClipboard(text)
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            do {
+                try await client(for: m).setClipboard(text)
+            } catch { return RelayReply.encodeFailure(shortError(error)) }
         case .system:
             guard let host = command.host, let action = command.text,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
+                  let m = machine(for: host) else { return noMachine(command.host) }
             // Answer with the daemon's real verdict instead of dropping it. A watch
             // that ignores the reply is unaffected; one that decodes `SystemResult`
             // can finally say "that failed" instead of animating a success it did not
             // observe. Client-side refusals (shutdown on a daemon without "power")
             // come back as a result too, not as silence.
             do {
-                let result = try await client(for: machine).systemAction(action)
+                let result = try await client(for: m).systemAction(action)
                 if let line = result.failureLine { fail("\(action) on \(host): \(line)") }
                 return try? JSONEncoder().encode(result)
             } catch MeshClient.MeshError.unsupported(let capability) {
@@ -1103,8 +1144,8 @@ final class MeshStore: ObservableObject {
             }
         case .readClipboard:
             guard let host = command.host,
-                  let machine = machines.first(where: { $0.host == host }),
-                  let text = try? await client(for: machine).clipboard() else { return nil }
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            guard let text = try? await client(for: m).clipboard() else { return nil }
             return try? JSONEncoder().encode(text)
         case .readPhoneClipboard:
             // The *iPhone's* pasteboard, not the Mac's — that one is `readClipboard`.
@@ -1123,35 +1164,38 @@ final class MeshStore: ObservableObject {
             // and the wrist is the least verifiable place a URL can come from.
             guard let host = command.host, let raw = command.url,
                   let url = URL(string: raw),
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
+                  let m = machine(for: host) else { return noMachine(command.host) }
             do {
-                try await client(for: machine).openURL(url)
+                try await client(for: m).openURL(url)
             } catch {
                 fail("Couldn't open that link on \(host): \(Self.describe(error))")
+                return RelayReply.encodeFailure(shortError(error))
             }
         case .fsList:
             guard let host = command.host,
-                  let machine = machines.first(where: { $0.host == host }),
-                  let listing = try? await client(for: machine).fsList(path: command.path) else { return nil }
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            guard let listing = try? await client(for: m).fsList(path: command.path) else { return nil }
             return try? JSONEncoder().encode(listing)
         case .listApps:
             guard let host = command.host,
-                  let machine = machines.first(where: { $0.host == host }),
-                  let apps = try? await client(for: machine).apps() else { return nil }
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            guard let apps = try? await client(for: m).apps() else { return nil }
             return try? JSONEncoder().encode(apps)
         case .activateApp:
             guard let host = command.host, let name = command.text,
-                  let machine = machines.first(where: { $0.host == host }) else { return nil }
-            try? await client(for: machine).activateApp(name)
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            do {
+                try await client(for: m).activateApp(name)
+            } catch { return RelayReply.encodeFailure(shortError(error)) }
         case .listDisplays:
             guard let host = command.host,
-                  let machine = machines.first(where: { $0.host == host }),
-                  let list = try? await client(for: machine).displays() else { return nil }
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            guard let list = try? await client(for: m).displays() else { return nil }
             return try? JSONEncoder().encode(list)
         case .inputStatus:
             guard let host = command.host,
-                  let machine = machines.first(where: { $0.host == host }),
-                  let status = try? await client(for: machine).inputStatus(prompt: command.text == "prompt")
+                  let m = machine(for: host) else { return noMachine(command.host) }
+            guard let status = try? await client(for: m).inputStatus(prompt: command.text == "prompt")
             else { return nil }
             return try? JSONEncoder().encode(status)
         }

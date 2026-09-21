@@ -1305,6 +1305,22 @@ enum RelayReply {
 
     /// The failure form of a relayed read.
     static func failure(_ why: String) -> String { errorPrefix + " " + why }
+
+    /// Encode a failure reason as JSON `Data` suitable for a relay reply's `"data"` field.
+    /// Fire-and-forget commands use this so the watch can tell a failure from silence.
+    static func encodeFailure(_ why: String) -> Data? {
+        try? JSONEncoder().encode(failure(why))
+    }
+
+    /// Extract the human reason from relay reply data when it carries a failure.
+    /// Returns `nil` for success payloads, non-string JSON, or nil data.
+    static func failureReason(in data: Data?) -> String? {
+        guard let data, let text = try? JSONDecoder().decode(String.self, from: data),
+              text.hasPrefix(errorPrefix) else { return nil }
+        let reason = String(text.dropFirst(errorPrefix.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return reason.isEmpty ? nil : reason
+    }
 }
 
 enum WatchCommandKind: String, Codable {
