@@ -11,6 +11,7 @@ import { handleBrain } from "./brain";
 import { handlePush, pushAlert, passesPushGate, notePushDecision, pushLiveActivity } from "./push";
 import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
+import { loopbackExempt } from "./loopback-trust";
 import { redact, redactAndRecord, record, addKnownSecrets, envSecrets, handleExposures, listExposures, type Finding } from "./redact";
 import { chatFor, outputPage } from "./chat";
 import { handleApps, serveApp } from "./apps";
@@ -1117,11 +1118,6 @@ function json(data: any, status = 200) {
 // proxy stamps X-Forwarded-For, so its presence withdraws the exemption. A header can
 // only ever take the exemption away here, never grant it, so a client forging one gains
 // nothing.
-function isLoopback(server: any, req: Request): boolean {
-  if (req.headers.has("x-forwarded-for")) return false;
-  const address = server?.requestIP?.(req)?.address ?? "";
-  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
-}
 // A request a browser marks cross-site cannot be one of our clients: URLSession and
 // the mesh CLI send neither header, and the /desktop page fetches same-origin. So a
 // present Origin, or a cross-site Sec-Fetch-Site, is a page attacking the loopback
@@ -1133,7 +1129,7 @@ function isBrowserCrossSite(req: Request): boolean {
 }
 function authed(req: Request, server?: any): boolean {
   if (isBrowserCrossSite(req)) return false;
-  if (isLoopback(server, req)) return true;
+  if (loopbackExempt(server, req)) return true;
   return isAuthorized(TOKEN, req.headers.get("authorization") ?? "");
 }
 
@@ -1273,8 +1269,13 @@ Bun.serve({
       const served = await serveApp(path, req);
       if (served) return served;
     }
-    // Pairing is the one route that must answer without a token — it is how the
-    // phone gets one. See pair.ts for why that is safe.
+    if (isBrowserCrossSite(req)) return json({ error: "unauthorized" }, 401);
+    // Claiming is token-free because the short-lived code is the credential. Minting goes
+    // through authed(): the bearer, or the loopback exemption while MESHD_TRUST_LOOPBACK is
+    // on (the default — check-token-rotate.sh and `mesh pair` on a fresh box rely on it).
+    // With MESHD_TRUST_LOOPBACK=0 a local process can no longer mint a code without the
+    // token (SEC-03). Flipping the default is a decision + a test edit for a human.
+    if (path === "/pair/new" && !authed(req, server)) return json({ error: "unauthorized" }, 401);
     const paired = await handlePair(req, url, server, { port: PORT, token: TOKEN });
     if (paired) return paired;
     if (!authed(req, server)) return json({ error: "unauthorized" }, 401);

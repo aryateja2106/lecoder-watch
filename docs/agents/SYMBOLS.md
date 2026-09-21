@@ -216,7 +216,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | handleFiles | function | install/payload/meshd/files.ts:104 |
 | handleHandoff | function | install/payload/meshd/handoff.ts:274 |
 | handleInput | function | install/payload/meshd/input.ts:469 |
-| handlePair | function | install/payload/meshd/pair.ts:97 |
+| handlePair | function | install/payload/meshd/pair.ts:93 |
 | handlePush | function | install/payload/meshd/push.ts:437 |
 | handoff | function | install/payload/meshd/handoff.ts:215 |
 | HANDOFF_TARGETS | export | install/payload/meshd/handoff.ts:29 |
@@ -294,7 +294,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | liveSessionPick | func | Shared/Models.swift:760 |
 | loadAppsConfig | function | install/payload/bin/mesh:1567 |
 | loadConfig | function | install/payload/bin/mesh:35 |
-| LocalDaemon | enum | MeshDesktop/LocalDaemon.swift:15 |
+| LocalDaemon | enum | MeshDesktop/LocalDaemon.swift:12 |
 | LocalNetworkBlockedBanner | struct | iOS/ContentView.swift:175 |
 | localPath | function | install/payload/bin/mesh:154 |
 | localToken | function | install/payload/bin/mesh:52 |
@@ -341,7 +341,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MeshStore | class | iOS/MeshStore.swift:28 |
 | MeshWatchApp | struct | Watch/MeshWatchApp.swift:5 |
 | MeshWatchWidgetBundle | struct | MeshWatchWidgets/MeshWatchWidgetBundle.swift:6 |
-| mintCode | function | install/payload/meshd/pair.ts:46 |
+| mintCode | function | install/payload/meshd/pair.ts:42 |
 | mintToken | function | install/payload/bin/mesh:1027 |
 | MonitorTab | struct | iOS/ContentView.swift:47 |
 | mouseButton | func | install/payload/bin/mesh-input.swift:224 |
@@ -353,7 +353,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | NewSessionSheet | struct | iOS/TerminalView.swift:333 |
 | NoMachinesView | struct | iOS/PairMachineView.swift:312 |
 | normalizeChords | function | install/payload/meshd/input.ts:160 |
-| normalizeCode | function | install/payload/meshd/pair.ts:55 |
+| normalizeCode | function | install/payload/meshd/pair.ts:51 |
 | normalizedPairingCode | func | Shared/Models.swift:135 |
 | normalizedPoint | func | Shared/ScreenZoom.swift:140 |
 | normalizedPreviewPoint | func | Shared/Models.swift:1306 |
@@ -403,7 +403,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | post | func | install/payload/bin/mesh-input.swift:197 |
 | pressKey | func | install/payload/bin/mesh-input.swift:275 |
 | pressMedia | func | install/payload/bin/mesh-input.swift:320 |
-| pretty | function | install/payload/meshd/pair.ts:59 |
+| pretty | function | install/payload/meshd/pair.ts:55 |
 | primaryIPv4 | function | install/payload/meshd/wol.ts:137 |
 | primaryMac | function | install/payload/meshd/wol.ts:121 |
 | ProcInfo | struct | Shared/Models.swift:257 |

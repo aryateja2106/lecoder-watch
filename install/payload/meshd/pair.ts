@@ -1,6 +1,6 @@
 // pair.ts — bring a phone onto the mesh without typing a 64-character token.
 //
-//   GET  /pair/new    (loopback only)  -> mints a short code, prints via `mesh pair`
+//   GET  /pair/new    (loopback + bearer) -> mints a short code, prints via `mesh pair`
 //   POST /pair/claim  { code }         -> { host, port, token, fleet: [...] }
 //
 // /pair/claim is the ONE unauthenticated route, so server.ts must call handlePair
@@ -23,6 +23,7 @@ import os from "node:os";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { isSocketLoopback } from "./loopback-trust";
 
 const ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 const CODE_LEN = 8;
@@ -35,11 +36,6 @@ let pending: Pending | null = null;
 
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
-}
-
-function isLoopback(server: any, req: Request): boolean {
-  const a = server?.requestIP?.(req)?.address ?? "";
-  return a === "127.0.0.1" || a === "::1" || a === "::ffff:127.0.0.1";
 }
 
 /** 8 unambiguous characters. Shown grouped ("K7M4-QP2X"); compared ungrouped. */
@@ -98,7 +94,7 @@ export async function handlePair(
   req: Request, url: URL, server: any, opts: { port: number; token: string },
 ): Promise<Response | null> {
   if (url.pathname === "/pair/new" && req.method === "GET") {
-    if (!isLoopback(server, req)) return json({ error: "pairing codes are minted on the machine itself" }, 403);
+    if (!isSocketLoopback(server, req)) return json({ error: "pairing codes are minted on the machine itself" }, 403);
     const code = mintCode();
     pending = { code, expires: Date.now() + TTL_MS, attempts: 0 };
     return json({

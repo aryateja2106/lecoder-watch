@@ -135,11 +135,11 @@ route line). That is the rule for adding anything.
 | File | Owns |
 | --- | --- |
 | `server.ts` | Routing, the capability list, the Origin/Host guard that runs before auth, sessions and stats. |
-| `auth.ts` | Fail-closed bearer check, constant-time. Loopback is exempt only after the browser guard has passed. |
+| `auth.ts` / `loopback-trust.ts` | Fail-closed bearer check, constant-time. Loopback is exempt only after the browser guard has passed and while `MESHD_TRUST_LOOPBACK` permits it. |
 | `doctor.ts` | `GET /doctor` and `POST /doctor/fix`. Every check exercises the real path (a green row means it works now). Checks: `token`, `input`, `screen`, `mux`, `push`, `exposures`, `agents`. |
 | `input.ts` / `input-linux.ts` | Pointer, keyboard, media, windows, power, clipboard, screen capture and regions. Linux uses xdotool/xclip and screen capture via scrot. |
 | `push.ts` | APNs direct from the daemon (ES256), one-buzz dedupe, Live Activity push-to-start tokens. |
-| `pair.ts` / `qr.ts` | One-use 8-character codes, ten minutes; `/pair/claim` is the only route that answers without a token. The QR carries `meshwatch://pair?h=&p=&c=`. |
+| `pair.ts` / `qr.ts` | One-use 8-character codes, ten minutes; `/pair/new` requires loopback and — with `MESHD_TRUST_LOOPBACK=0` — the bearer; `/pair/claim` uses the code as its credential. The QR carries `meshwatch://pair?h=&p=&c=`. |
 | `files.ts` / `files.html` | File browser and daemon-served file page; `/fs/write` accepts file bytes and `/fs/read?raw=1` returns them unchanged. |
 | `kb.ts` | Knowledge base: SQLite FTS5, read federation across hosts. |
 | `apps.ts` | Mesh Apps: publish a static web app, register a built native app, wireless (OTA) install links. |
@@ -162,6 +162,7 @@ something happened), `mesh-kb`, `mesh-self-check`, `start-cmux-bridge`.
 ### 5.4 Security rules that are not negotiable
 
 - Auth is fail-closed. No token configured means off-box requests are refused.
+- Loopback skips the bearer by default; `MESHD_TRUST_LOOPBACK=0` disables that exemption everywhere, pair-code minting included (SEC-03; flipping the default is an open decision because `check-token-rotate.sh` and a fresh box's `mesh pair` rely on it).
 - A request with an `Origin` header or a cross-site `Sec-Fetch-Site` is rejected before
   the loopback exemption; the `Host` header is validated against known addresses. This
   is the DNS-rebinding defence and it runs before auth.

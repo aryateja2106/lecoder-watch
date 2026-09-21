@@ -39,6 +39,7 @@
 | `check-install-idempotent.sh` | re-running the one-liner does not reinstall on top of itself, an older install still upgrades, and an unset… |
 | `check-intent.sh` | Needle 2 turns wrist phrases into the right daemon call (PRODUCT.md §9, slice 1) |
 | `check-ios-smoke.sh` | Launch the iOS app and put a text field on screen |
+| `check-kb-federation.sh` | Proves mesh KB CLI wiring locally and, when opted in, federation across the live fleet |
 | `check-launchable.swift` | scripts/check-launchable.swift — verify DoctorReport.launchable logic |
 | `check-limit-helpers.swift` | Run: swiftc Shared/Models.swift Shared/LimitHelpers.swift scripts/check-limit-helpers.swift -o /tmp/clh &&… |
 | `check-links.sh` | the front door still opens. |
@@ -61,6 +62,7 @@
 | `check-mesh-uninstall.sh` | `mesh uninstall` is a trust feature, not a convenience: someone non-technical pastes a curl command onto a… |
 | `check-mesh-upgrade.sh` | End-to-end proof of `mesh upgrade` against a throwaway MESH_HOME |
 | `check-mesh-version.sh` | `mesh version` reports the daemon that is actually installed |
+| `check-overnight.sh` | the 2026-09-21 regression suite: every check the overnight run added, with its live half on |
 | `check-package-mesh-install.sh` | the packaged mesh-install tarball contains every payload file the daemon and CLI need |
 | `check-pair-qr.sh` | qr.ts self-check: every payload is encoded and then read back by a decoder written against the standard… |
 | `check-pairing.swift` | Pairing writes real tokens into the saved machine list, so the merge has to be right: a wrong match silently… |

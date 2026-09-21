@@ -18,6 +18,7 @@ each entry as you ship the slice, not at release time.
 
 
 ### Security
+- **A kill switch for the loopback exemption.** `MESHD_TRUST_LOOPBACK=0` makes every private route — including minting a pairing code — require the bearer even from the machine itself; forwarded-for headers never earn the exemption. The default stays on so `mesh pair` on a fresh box keeps working; the Mac menu bar app now sends the token so it works either way.
 - **The terminal bridge now asks who you are.** The live terminal on port 7820 could type
   into any session on the machine and answered anyone who could reach the port — no
   token, no origin check, on every network interface. It now requires the same token as
