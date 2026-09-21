@@ -61,7 +61,8 @@ task inside a mesh session, posted Started/Completed events (the notify path), a
 7. Decide the `/pair/new` default (flip needs a one-line edit in `check-token-rotate.sh` so it sends the bearer) and: iPad `TARGETED_DEVICE_FAMILY "1,2"` (App Store listing consequence), the Mac `.app` filename (still `MeshWatch.app`), app-icon regeneration for the new name.
 8. TestFlight: `MESH_ALLOW_VERSION_DOWNGRADE=1 sh scripts/release-testflight-asc.sh --external` (Keychain dialog), then publish meshd 0.6.0 to mesh-install (`sh scripts/release-mesh-install.sh --publish`) and `mesh upgrade -H pi/jetson` from the release.
 9. Wire the live halves (`scripts/check-overnight.sh`) into CI or a nightly on this Mac — CI has no fleet.
-10. Turn off tonight's installer share when done: `tailscale serve --https=8890 off`; `pkill -f "http.server 8897"`; stop edge0 (`pkill -f "edge0 serve"`).
+10. Telegram notify did not go out: no `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` in `~/.config/secrets.env` and no `~/.alook/bin/notify-arya` — add the two exports (vault-managed) if you want the `notify` skill to work. The report and screenshots were sent to you as files instead.
+11. Turn off tonight's installer share when done: `tailscale serve --https=8890 off`; `pkill -f "http.server 8897"`; stop edge0 (`pkill -f "edge0 serve"`).
 
 ## Screens
 
