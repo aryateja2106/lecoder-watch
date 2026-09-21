@@ -14,11 +14,11 @@ Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.s
 | S5 mesh cp + /fs/write | DONE (86ae97e) — pi hello.txt → Mac ~/Downloads and → jetson, sha-verified | check-cross-host-cp.sh | structural + live (jetson, pi) OK |
 | S6 relay receiver (ARCH-01/02) | DONE (473d40e); physical-pair proof = morning | check-relay-receiver.sh + check-relay-ack.swift | OK |
 | S7 harness picker from /doctor | DONE (b6ddc7e) | check-harness-picker.sh + check-launchable.swift | OK |
-| S8 mesh kb + /search skill | in progress (codex) | check-kb-federation.sh | |
+| S8 mesh kb + /search skill | DONE (912c966); skill staged (count in check-mesh-skills.sh needs a human) | check-kb-federation.sh | structural + live (jetson note found from mac) OK |
 | S9 brains | DONE (86ae97e, 1cc9681): /brain ported; ollama qwen3:4b on jetson (12 s tool call), qwen3:1.7b on pi (23-40 s); edge0-8b on Mac :8001 tool call 3.8 s via our patch; Needle 26/28 tool, 0.7 s, 34 MB; ADR written | check-brain.sh, check-intent.sh | OK |
-| S10 bearer on /pair/new | pending | check-pair-auth.sh | |
-| S11 suite + gates full + ADR | pending | check-overnight.sh | |
-| S12 ship: fleet upgrade, PR, REPORT, notify | pending | | |
+| S10 bearer on /pair/new | DONE opt-in (95d6406): loopback-trust.ts + MESHD_TRUST_LOOPBACK=0 covers /pair/new; default kept because check-token-rotate.sh mints tokenless (test edit = human) | check-pair-auth.sh | OK; token-rotate/pair/csrf/host-guard/auth/daemon-050 OK |
+| S11 suite + gates full + ADR | in progress: ADR 1cc9681; check-overnight.sh running; gates full next | check-overnight.sh | |
+| S12 ship | in progress: Mac daemon upgraded from the branch (backup ~/.mesh/backups/meshd-0.6.0-1790020360), pi+jetson redeployed (28 caps each); PR/REPORT/notify next | | |
 
 ## Log
 - 10:5x IST S0 started. Worktree created, PRODUCT.md cherry-picked (efe9cb1).
@@ -27,3 +27,4 @@ Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.s
 - 23:35 IST S1 committed 4a2a151 after verifier ACCEPT. S4 proven with agy on the Pi (claude OAuth expired on both Linux hosts). Installer server moved to loopback :8897 (tailscale serve :8890 → 8897). Next: S3 (agy running), then S5 mesh cp (codex, after agy finishes — both touch bin/mesh).
 - 00:30 IST S5/S6/S7/S9 landed. Finding: the simulator loses paired machines on every `simctl install` of an unsigned build (Keychain items become inaccessible) — a simulator/unsigned-build artefact; on a real iPhone the Keychain survives even delete-and-reinstall (measured 2026-08-28). Re-pair the sim via the meshwatch:// deep link when screenshots need machines.
 - 00:35 IST Codex running S8 (kb + skill). S10 brief written (pair auth), dispatch after S8 lands (serialized files).
+- 01:2x IST S8, S10 landed; Mac live daemon upgraded from the branch; fleet all on the branch build (28 caps). Note: my side-port smoke used :8901 which is the cmux bridge's port — no harm (bind failed), use 893x next time. check-overnight.sh running.
