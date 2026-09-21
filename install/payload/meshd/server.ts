@@ -15,7 +15,7 @@ import { redact, redactAndRecord, record, addKnownSecrets, envSecrets, handleExp
 import { chatFor, outputPage } from "./chat";
 import { handleApps, serveApp } from "./apps";
 import { handleHandoff } from "./handoff";
-import { handleDoctor, tokenWeakness } from "./doctor";
+import { handleDoctor, tokenWeakness, AGENT_CLIS } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
 import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount } from "./herdr";
@@ -878,7 +878,7 @@ async function paneAgentType(name: string): Promise<string | undefined> {
 
 /// The CLI agents this daemon recognises in a process tree, by the basename of the
 /// command's first word. Order matters only for the label; one process, one agent.
-const AGENT_BINS = ["claude", "codex", "cursor-agent", "omp", "agy", "hermes", "pi", "gemini", "aider"];
+// AGENT_CLIS imported from doctor.ts
 
 /// Which agent runs under a pane, walking the pane process and its descendants.
 /// The pane's own command name is not enough: Claude Code's shows as its version
@@ -895,7 +895,7 @@ function agentFromTree(root: number, table: Map<number, { ppid: number; cmd: str
     seen.add(pid);
     const first = (table.get(pid)?.cmd ?? "").trim().split(/\s+/)[0] ?? "";
     const base = first.split("/").pop() ?? "";
-    if (AGENT_BINS.includes(base)) return base;
+    if (AGENT_CLIS.includes(base as any)) return base;
     for (const c of children.get(pid) ?? []) stack.push(c);
   }
   return undefined;

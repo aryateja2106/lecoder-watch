@@ -23,8 +23,13 @@ const CODEX_SESSIONS = process.env.MESH_CODEX_SESSIONS ?? join(process.env.CODEX
 const CURSOR_PROJECTS = process.env.MESH_CURSOR_PROJECTS ?? join(homedir(), ".cursor", "projects");
 const PER_KIND = 8;
 
+import { AGENT_CLIS } from "./doctor";
 /// The agents a session can be handed to, and how each is started in a shell.
+/// Must be a subset of AGENT_CLIS.
 export const HANDOFF_TARGETS = ["claude", "codex", "cursor-agent", "omp", "agy", "hermes"] as const;
+for (const target of HANDOFF_TARGETS) {
+  if (!AGENT_CLIS.includes(target as any)) throw new Error(`HANDOFF_TARGETS mismatch: ${target} not in AGENT_CLIS`);
+}
 export type HandoffTarget = (typeof HANDOFF_TARGETS)[number];
 
 const CONTINUE = "Read HANDOFF.md in this folder and continue the task from where it stopped.";

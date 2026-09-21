@@ -358,9 +358,17 @@ struct NewSessionSheet: View {
     @State private var resumableItems: [ResumableItem] = []
     @State private var resumableTask: Task<Void, Never>?
 
+    @State private var report: DoctorReport?
+
     // Common launchers; "shell" means just a plain rmux session.
-    private let presets = ["shell", "claude", "codex", "pi", "agy", "bun", "python3"]
-    private let taskAgents = ["claude", "codex", "pi"]
+    private var presets: [String] {
+        let list = report?.launchable ?? ["shell", "claude", "codex", "pi", "agy"]
+        return list.filter { $0 != "bun" && $0 != "python3" }
+    }
+    private var taskAgents: [String] {
+        let list = report?.launchable ?? ["claude", "codex", "pi"]
+        return list.filter { $0 != "shell" && $0 != "bun" && $0 != "python3" }
+    }
 
     // A chosen command always wins (so `pi` or any custom CLI keeps its task); only fall
     // back to the task-agent default when no command was picked. The task goes out as
@@ -463,6 +471,9 @@ struct NewSessionSheet: View {
                     Picker("Agent", selection: $taskAgent) {
                         ForEach(taskAgents, id: \.self) { Text($0).tag($0) }
                     }
+                    Text("on \(machine.host)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     TextField("Describe the task", text: $taskText.shellSafe, axis: .vertical)
                         .lineLimit(2...5)
                         .autocorrectionDisabled()
@@ -497,6 +508,7 @@ struct NewSessionSheet: View {
             }
             .onAppear {
                 if cwd.isEmpty, let initialCwd, !initialCwd.isEmpty { cwd = initialCwd }
+                Task { report = try? await store.client(for: machine).doctor() }
             }
             .onChange(of: cwd) { _, newValue in
                 resumableTask?.cancel()

@@ -589,6 +589,8 @@ struct SessionsView: View {
     @State private var customCwd = ""
     @State private var showHelp = false
     @State private var openAgent: SessionRoute?
+    // The static list until /doctor answers, so the section is never blank.
+    @State private var launchableList: [String] = ["shell", "claude", "codex", "cursor-agent"]
 
     private var snap: MachineSnapshot? { store.snaps.first { $0.host == host } }
 
@@ -651,26 +653,40 @@ struct SessionsView: View {
                 }
             }
             Section("New") {
-                Button { openNewSession(cmd: nil) } label: {
-                    Label("Shell", systemImage: "terminal")
+                ForEach(launchableList, id: \.self) { item in
+                    Button { openNewSession(cmd: item == "shell" ? nil : item) } label: {
+                        if item == "shell" {
+                            Label("Shell", systemImage: "terminal")
+                        } else if item == "claude" {
+                            Label("Claude", systemImage: "sparkles")
+                        } else if item == "codex" {
+                            Label("Codex", systemImage: "curlybraces")
+                        } else if item == "cursor-agent" {
+                            Label("Cursor", systemImage: "cursorarrow.rays")
+                        } else if item == "agy" {
+                            Label("Antigravity", systemImage: "airplane")
+                        } else if item == "hermes" {
+                            Label("Hermes", systemImage: "brain")
+                        } else {
+                            Label(item.capitalized, systemImage: "terminal")
+                        }
+                    }
                 }
-                Button { openNewSession(cmd: "claude") } label: {
-                    Label("Claude", systemImage: "sparkles")
+                
+                if launchableList.contains("claude") {
+                    Button { taskAgent = "claude"; showTask = true } label: {
+                        Label("Claude task", systemImage: "text.bubble")
+                    }
                 }
-                Button { openNewSession(cmd: "codex") } label: {
-                    Label("Codex", systemImage: "curlybraces")
+                if launchableList.contains("codex") {
+                    Button { taskAgent = "codex"; showTask = true } label: {
+                        Label("Codex task", systemImage: "text.badge.checkmark")
+                    }
                 }
-                Button { openNewSession(cmd: "cursor-agent") } label: {
-                    Label("Cursor", systemImage: "cursorarrow.rays")
-                }
-                Button { taskAgent = "claude"; showTask = true } label: {
-                    Label("Claude task", systemImage: "text.bubble")
-                }
-                Button { taskAgent = "codex"; showTask = true } label: {
-                    Label("Codex task", systemImage: "text.badge.checkmark")
-                }
-                Button { taskAgent = "pi"; showTask = true } label: {
-                    Label("Pi task", systemImage: "brain")
+                if launchableList.contains("pi") {
+                    Button { taskAgent = "pi"; showTask = true } label: {
+                        Label("Pi task", systemImage: "brain")
+                    }
                 }
                 // The three buttons above cover three programs. Anything else the machine
                 // can run — herdr, tmux, a REPL, a script — needed a shell session plus a
@@ -680,6 +696,9 @@ struct SessionsView: View {
                 }
             }
             .disabled(snap?.reachable != true || snap?.authError != nil)
+            .task {
+                launchableList = await store.launchable(host: host)
+            }
             if let s = snap?.stats {
                 Section("Machine") {
                     Text(store.routeLabel(for: host))

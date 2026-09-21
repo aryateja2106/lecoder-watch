@@ -309,6 +309,12 @@ struct DoctorReport: Codable, Hashable {
     var version: String
     var bind: String
     var checks: [String: Check]
+    
+    struct AgentCLI: Codable, Hashable {
+        var name: String
+        var path: String?
+    }
+    var agents: [AgentCLI]?
 
     /// A stable render order — JSON object key order is not guaranteed, and a setup
     /// list that reshuffles every refresh is hard to read.
@@ -323,6 +329,24 @@ struct DoctorReport: Codable, Hashable {
     /// (input = Accessibility, screen = Screen Recording). Everything else is a fix the
     /// user does at a shell, so the button would lie.
     static func isRemotelyFixable(_ name: String) -> Bool { name == "input" || name == "screen" }
+
+    var launchable: [String] {
+        guard let agents = agents else {
+            return ["shell", "claude", "codex", "pi", "agy"]
+        }
+        var names = [String]()
+        var seen = Set<String>()
+        for agent in agents {
+            if !seen.contains(agent.name) {
+                seen.insert(agent.name)
+                names.append(agent.name)
+            }
+        }
+        if !seen.contains("shell") {
+            names.append("shell")
+        }
+        return names
+    }
 }
 
 // MARK: - Tailnet

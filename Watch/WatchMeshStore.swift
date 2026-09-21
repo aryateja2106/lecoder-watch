@@ -942,4 +942,15 @@ final class WatchMeshStore: ObservableObject {
         let prefix = raw.replacingOccurrences(of: " ", with: "-").lowercased()
         return "watch-\(prefix)-\(Int(Date().timeIntervalSince1970) % 100000)"
     }
+
+    func launchable(host: String) async -> [String] {
+        guard let machine = machines.first(where: { $0.host == host }) else {
+            return ["shell", "claude", "codex", "pi", "agy"]
+        }
+        let c = MeshClient(machine: machine)
+        if let report = try? await c.doctor() {
+            return report.launchable
+        }
+        return ["shell", "claude", "codex", "pi", "agy"]
+    }
 }
