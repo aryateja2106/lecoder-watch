@@ -52,7 +52,7 @@ task inside a mesh session, posted Started/Completed events (the notify path), a
 
 ## Morning TODO (your hands)
 
-1. **Read this branch** (`gh pr view` once S12 opens the draft PR) and the STATE.md gate line; land the stack #124 → #131 → this.
+1. **Read this branch** — draft PR https://github.com/aryateja2106/lecoder-watch/pull/133 and the STATE.md gate line; land the stack #124 → #131 → this.
 2. `claude /login` on the Jetson and the Pi (browser).
 3. **Re-pair the phone to `pi`** (token rotated): `mesh pair -H pi` on the Pi or scan its QR.
 4. **Physical iPhone + Watch**: confirm S6 — from the watch, with Wi-Fi off on the watch so it relays, open a screen peek and start a session; a failed command must show a reason, not a tick (T06/T07/T21).
