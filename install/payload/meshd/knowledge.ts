@@ -3,7 +3,8 @@
 // opens a socket: no Supabase client, no model call, no download.
 //
 //   POST /knowledge      { path, speak? } | { audio } | { pdf, title?, speak? }
-//   POST /knowledge/:id  { body } | { audio, speak? }       -> { id, title, body, spoken? }
+//   POST /knowledge/:id  { body } | { audio, speak? } | { speak: true }
+//                        -> { id, title, body?, spoken? }
 //   GET  /knowledge                                     -> { notes: [{ id, title }] }
 //   GET  /knowledge?q=text                              -> { id, title } for a title or body match
 //   GET  /knowledge/:id                                 -> { id, title, body }
@@ -537,6 +538,19 @@ async function replaceNoteBody(id: string, req: Request): Promise<Response> {
     await chmod(dir, DIR_MODE);
     const spoken = speak ? await speakReplaced(`${raw.title}\n${transcript}`.trim()) : false;
     return json({ id: decoded, title: raw.title, body: transcript, spoken });
+  }
+  const wantSpeak = payload?.speak === true;
+  const hasAudio = typeof payload?.audio === "string" && payload.audio.trim();
+  const hasPath = typeof payload?.path === "string" && payload.path.trim();
+  const hasUrl = typeof payload?.url === "string" && payload.url.trim();
+  const hasBodyField = typeof payload?.body === "string";
+  if (wantSpeak && !hasBodyField && !hasAudio && !hasPath && !hasUrl) {
+    const ttsBin = (process.env.MESH_TTS ?? "").trim();
+    if (!ttsBin || refusesRemote(ttsBin)) {
+      return json({ error: "tts must be a local binary" }, 400);
+    }
+    const spoken = await speakReplaced(`${raw.title}\n${raw.body}`.trim());
+    return json({ id: decoded, title: raw.title, spoken });
   }
   if (!payload || typeof payload.body !== "string") return json({ error: "body required" }, 400);
   const next = clip(payload.body.replace(/\u0000/g, ""), MAX_BODY);

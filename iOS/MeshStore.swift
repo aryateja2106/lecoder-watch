@@ -772,6 +772,28 @@ final class MeshStore: ObservableObject {
         }
     }
 
+    /// Speak one loaded note. Nothing is posted until the user confirms.
+    func speakKnowledgeNote(host: String, title: String, confirmed: Bool) {
+        guard confirmed else { return }
+        let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let loaded = loadedKnowledgeNote, loaded.title == named else { return }
+        guard let machine = machineMatching(host, in: machines),
+              let snap = snapshot?.machines.first(where: { $0.host == machine.host }),
+              snap.reachable, snap.authError == nil else {
+            fail("Speak needs a direct link to this Mac")
+            return
+        }
+        lastError = nil
+        let c = client(for: machine)
+        Task {
+            do {
+                _ = try await c.speakKnowledgeNote(id: loaded.id)
+            } catch {
+                fail("speak failed")
+            }
+        }
+    }
+
     /// Save a typed note on this machine. Nothing is posted until the user confirms.
     func saveKnowledgeNote(host: String, title: String, body: String, confirmed: Bool) {
         guard confirmed else { return }

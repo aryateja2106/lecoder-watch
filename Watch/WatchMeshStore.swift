@@ -1005,6 +1005,25 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Speak one loaded note. Nothing is posted until the user confirms.
+    func speakKnowledgeNote(host: String, title: String, confirmed: Bool) {
+        guard confirmed else { return }
+        let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let loaded = loadedKnowledgeNote, loaded.title == named else { return }
+        guard directReachable(host), let c = client(for: host) else {
+            lastError = "Speak needs a direct link to this Mac"
+            return
+        }
+        lastError = nil
+        Task {
+            do {
+                _ = try await c.speakKnowledgeNote(id: loaded.id)
+            } catch {
+                lastError = "speak failed"
+            }
+        }
+    }
+
     /// Save a typed knowledge note. Nothing is posted until the user confirms.
     func saveKnowledgeNote(host: String, title: String, body: String, confirmed: Bool) {
         guard confirmed else { return }
