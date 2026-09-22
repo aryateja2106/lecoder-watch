@@ -5,7 +5,12 @@
 //   POST /knowledge      { path, speak? } | { audio }       -> { id, title, spoken }
 //   POST /knowledge/:id  { body } | { audio, speak? }       -> { id, title, body, spoken? }
 //   GET  /knowledge                                     -> { notes: [{ id, title }] }
+//   GET  /knowledge?q=text                              -> titles that contain text
 //   GET  /knowledge/:id                                 -> { id, title, body }
+//
+// q is local text. A remote URL, a scheme, a protocol-relative value, or
+// any string containing :// is refused and is not opened. The list stays
+// titles only either way. No title match is an empty list.
 //
 // Posting an existing id replaces that one note's body. A missing id does
 // not create a note. A remote URL, a scheme, or a protocol-relative path
@@ -212,6 +217,16 @@ function isRemote(path: string): boolean {
 function refusesRemote(value: string): boolean {
   const text = value.trim();
   return isRemote(text) || text.startsWith("//") || text.includes("://");
+}
+
+// A title search is text, not an address. null means the query is refused.
+// An empty string means there is nothing to filter.
+function titleNeedle(raw: string | null): string | null {
+  if (raw === null) return "";
+  const text = raw.trim();
+  if (!text) return "";
+  if (refusesRemote(text) || /^[a-z][a-z0-9+.-]*:/i.test(text)) return null;
+  return text.toLowerCase();
 }
 
 async function readCapped(stream: ReadableStream<Uint8Array<ArrayBuffer>>, max: number): Promise<string> {
@@ -460,7 +475,15 @@ export async function handleKnowledge(req: Request, url: URL): Promise<Response 
     return json({ error: "method not allowed" }, 405);
   }
   if (url.pathname !== "/knowledge") return null;
-  if (req.method === "GET") return json({ notes: await listNotes() });
+  if (req.method === "GET") {
+    const needle = titleNeedle(url.searchParams.get("q"));
+    if (needle === null) return json({ error: "query must be local text" }, 400);
+    const notes = await listNotes();
+    const shown = needle
+      ? notes.filter((note) => note.title.toLowerCase().includes(needle))
+      : notes;
+    return json({ notes: shown });
+  }
   if (req.method === "POST") return ingest(req);
   return json({ error: "method not allowed" }, 405);
 }
