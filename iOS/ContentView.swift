@@ -523,11 +523,19 @@ struct KnowledgeNoteAskView: View {
         }
         .confirmationDialog("Speak this note?", isPresented: $confirmingSpeak, titleVisibility: .visible) {
             Button("Speak") {
-                store.speakKnowledgeNote(host: host, title: note, confirmed: true)
+                if let answer = store.knowledgeAnswer, !answer.isEmpty {
+                    store.speakShownAnswer(host: host, question: ask, confirmed: true)
+                } else {
+                    store.speakKnowledgeNote(host: host, title: note, confirmed: true)
+                }
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text(namedNote)
+            if let answer = store.knowledgeAnswer, !answer.isEmpty {
+                Text(question)
+            } else {
+                Text(namedNote)
+            }
         }
     }
 }
