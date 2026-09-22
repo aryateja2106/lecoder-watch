@@ -532,7 +532,7 @@ Pull request 199 SHALL remain the PDF note draft. It adds only `scripts/check-pd
 
 ### Requirement: An optional local ask is sent with the note
 
-`POST /agent-note` SHALL accept an optional local `ask`. The model SHALL receive the note, a blank line, and the ask. An ask that would move a pairing code, `hosts.json`, `.mesh/token`, or a mesh token MUST be held before the model. An ask containing `://` MUST write nothing. A missing ask SHALL still draft the note text only. `knowledge.ts` was not edited. `server.ts` was not edited. This behavior is pull request 201. The files are `install/payload/meshd/agent-note.ts` and `scripts/check-note-ask.sh`. The coordinator re-ran `sh scripts/check-note-ask.sh`, `sh scripts/check-query-note-draft.sh`, and `sh scripts/check-pdf-note-draft.sh` on `127.0.0.1:8898` at `ae83b95` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `ae83b95` (check run `35747085140`). Apps (Xcode) is still running on that run. An agent MUST NOT claim both jobs are green on `ae83b95`. Pull request 200 stays the PDF note speak at `d4486c4`, with daemon CI and Xcode CI both green (check run `35746494919`). Daemon CI and Xcode CI are both green on handoff tip `bd904b19dc5dc85752888193ad365c2d3a176c8a` (check run `35747820842`).
+`POST /agent-note` SHALL accept an optional local `ask`. The model SHALL receive the note, a blank line, and the ask. An ask that would move a pairing code, `hosts.json`, `.mesh/token`, or a mesh token MUST be held before the model. An ask containing `://` MUST write nothing. A missing ask SHALL still draft the note text only. `knowledge.ts` was not edited. `server.ts` was not edited. This behavior is pull request 201. The files are `install/payload/meshd/agent-note.ts` and `scripts/check-note-ask.sh`. The coordinator re-ran `sh scripts/check-note-ask.sh`, `sh scripts/check-query-note-draft.sh`, and `sh scripts/check-pdf-note-draft.sh` on `127.0.0.1:8898` at `ae83b95` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). Pull request 200 stays the PDF note speak at `d4486c4`, with daemon CI and Xcode CI both green (check run `35746494919`). Daemon CI and Xcode CI are both green on handoff tip `bd904b19dc5dc85752888193ad365c2d3a176c8a` (check run `35747820842`).
 
 #### Scenario: The model receives the note, a blank line, and the ask
 
@@ -557,8 +557,7 @@ Pull request 199 SHALL remain the PDF note draft. It adds only `scripts/check-pd
 #### Scenario: Daemon-only CI on the note ask is not both jobs green
 
 - **WHEN** `sh scripts/check-note-ask.sh`, `sh scripts/check-query-note-draft.sh`, and `sh scripts/check-pdf-note-draft.sh` pass on `127.0.0.1:8898` at `ae83b95`
-- **THEN** the agent records that all three checks exited 0 and that daemon CI is green on `ae83b95` (check run `35747085140`) while apps (Xcode) is still running
-- **AND** the agent does not claim both jobs are green on `ae83b95`
+- **THEN** the agent records that all three checks exited 0 and that daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`)
 
 ### Requirement: A spoken PDF note can be asked
 
