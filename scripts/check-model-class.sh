@@ -24,15 +24,50 @@ need curl
 TMP=$(mktemp -d /tmp/mesh-model-class.XXXXXX)
 DAEMON_PID=""
 STUB_PID=""
+
+# Background jobs stay in this shell's process group unless they call setsid.
+# The spare daemon is a bun child of that leader; killing only the leader
+# leaves bun on 8898. Start each job in its own session and signal the group.
+spawn_group() {
+  _log=$1
+  _dir=$2
+  shift 2
+  python3 - "$_log" "$_dir" "$@" << 'PY' &
+import os, sys
+log, work = sys.argv[1], sys.argv[2]
+argv = sys.argv[3:]
+os.chdir(work)
+os.setsid()
+fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+os.dup2(fd, 1)
+os.dup2(fd, 2)
+if fd > 2:
+    os.close(fd)
+os.execvp(argv[0], argv)
+PY
+}
+
+stop_group() {
+  pgid=$1
+  [ -n "$pgid" ] || return 0
+  kill -TERM -"$pgid" 2>/dev/null || true
+  kill -TERM "$pgid" 2>/dev/null || true
+  n=0
+  while kill -0 "$pgid" 2>/dev/null && [ "$n" -lt 25 ]; do
+    n=$((n + 1))
+    sleep 0.1
+  done
+  kill -KILL -"$pgid" 2>/dev/null || true
+  kill -KILL "$pgid" 2>/dev/null || true
+  wait "$pgid" 2>/dev/null || true
+  return 0
+}
+
 cleanup() {
-  if [ -n "$DAEMON_PID" ]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
-  fi
-  if [ -n "$STUB_PID" ]; then
-    kill "$STUB_PID" 2>/dev/null || true
-    wait "$STUB_PID" 2>/dev/null || true
-  fi
+  stop_group "$DAEMON_PID"
+  stop_group "$STUB_PID"
+  DAEMON_PID=
+  STUB_PID=
   rm -rf "$TMP"
 }
 trap cleanup EXIT INT TERM
@@ -114,7 +149,7 @@ if __name__ == "__main__":
 PY
 
 : > "$TMP/meta/stub.jsonl"
-python3 "$TMP/meta/stub.py" "$STUB_PORT" "$TMP/meta/stub.jsonl" >"$TMP/meta/stub.log" 2>&1 &
+spawn_group "$TMP/meta/stub.log" "$TMP" python3 "$TMP/meta/stub.py" "$STUB_PORT" "$TMP/meta/stub.jsonl"
 STUB_PID=$!
 
 stub_ready=0
@@ -135,10 +170,7 @@ fi
 # The readiness probe is not an agent-note call. Drop it so hit counts start clean.
 : > "$TMP/meta/stub.jsonl"
 
-(
-  cd "$TMP/work"
-  bun run "$ROOT/install/payload/meshd/server.ts"
-) >"$TMP/meta/daemon.log" 2>&1 &
+spawn_group "$TMP/meta/daemon.log" "$TMP/work" bun run "$ROOT/install/payload/meshd/server.ts"
 DAEMON_PID=$!
 
 ready=0
@@ -160,7 +192,8 @@ if [ "$ready" -ne 1 ]; then
   exit 1
 fi
 
-if tr '\0' '\n' < "/proc/${DAEMON_PID}/environ" | grep -q '^AI_GATEWAY_API_KEY='; then
+# The spare daemon inherits this shell. macOS has no /proc; do not read one.
+if [ -n "${AI_GATEWAY_API_KEY-}" ]; then
   echo "AI_GATEWAY_API_KEY is set in the spare daemon" >&2
   exit 1
 fi
