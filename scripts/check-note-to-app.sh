@@ -1,8 +1,11 @@
 #!/bin/sh
-# Spare daemon: the caller's local model writes one relative app file and
-# does not run it. A shell command runs only when confirm is true. The model
-# stub listens on 127.0.0.1 and is never port 8899. This script starts the
-# daemon and stops it. It does not kill a foreign listener on 8898.
+# Spare daemon: read one local note, ask the caller's model for a draft,
+# and write that text to one held file in the session directory. A missing
+# note is not sent to the model. A shell command runs only when confirm is
+# true. The note stays on this machine: the model stub is loopback, and the
+# daemon is not allowed a socket to supabase.co. This script starts the
+# daemon and stops it. It does not use port 8899 and does not kill a
+# foreign listener.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,21 +17,39 @@ command -v bun >/dev/null 2>&1 || { echo "FAIL: bun is required"; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "FAIL: python3 is required"; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "FAIL: curl is required"; exit 1; }
 
-if grep -E -n 'supabase|ai-gateway' "$ROOT/install/payload/meshd/agent-note.ts"; then
-  echo "FAIL: agent-note.ts names supabase or the AI gateway"
+if grep -E -n 'supabase|ai-gateway' \
+  "$ROOT/install/payload/meshd/agent-note.ts" \
+  "$ROOT/install/payload/meshd/knowledge.ts"; then
+  echo "FAIL: note path names supabase or the AI gateway"
   exit 1
 fi
 
 TH="$(mktemp -d)"
 STATE="$TH/state"
 WORK="$TH/session"
-OUTSIDE="$TH/outside"
 PDF="$TH/paper.pdf"
 LOG="$TH/meshd.log"
-PORT=8898
 TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
 SRV=
 STUB=
+
+PORT="$(python3 - <<'PY'
+import socket
+reserved = {8898, 8899}
+for _ in range(16):
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    if port not in reserved:
+        print(port)
+        raise SystemExit(0)
+raise SystemExit("FAIL: no spare localhost port")
+PY
+)"
+case "$PORT" in
+  ""|8898|8899) echo "FAIL: spare daemon port is not free"; exit 1 ;;
+esac
 
 stop_stub() {
   [ -n "${STUB:-}" ] || return 0
@@ -84,48 +105,14 @@ out += b"trailer\n<< /Root 1 0 R /Info 6 0 R >>\n%%EOF\n"
 open(path, "wb").write(out)
 PY
 
-if command -v lsof >/dev/null 2>&1; then
-  if lsof -nP -iTCP:8898 -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "FAIL: port 8898 is already in use"
-    exit 1
-  fi
-elif command -v ss >/dev/null 2>&1; then
-  if ss -ltn | grep -q ':8898 '; then
-    echo "FAIL: port 8898 is already in use"
-    exit 1
-  fi
-else
-  if python3 - <<'PY'
-import socket
-s = socket.socket()
-try:
-    s.bind(("127.0.0.1", 8898))
-except OSError:
-    raise SystemExit(1)
-finally:
-    s.close()
-PY
-  then
-    :
-  else
-    echo "FAIL: port 8898 is already in use"
-    exit 1
-  fi
-fi
-
-mkdir -p "$WORK/nested" "$OUTSIDE"
-ln -s "$OUTSIDE" "$WORK/out"
-ln -s "$WORK/nested" "$WORK/inside"
-ln -s "$OUTSIDE" "$WORK/nested/escape"
+mkdir -p "$WORK"
 python3 - "$TH/stub.port" "$TH/stub.body" "$TH/stub.path" "$TH/stub.headers" "$TH/stub.reply" 2>"$TH/stub.err" <<'PY' &
-import os, sys
+import json, os, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 port_file, body_file, path_file, header_file, reply_file = sys.argv[1:6]
-reply = b"<!DOCTYPE html><html><head><title>Held</title></head><body><p>Held app</p></body></html>"
-if b"\n" in reply or b"\r" in reply:
-    raise SystemExit("stub reply is not one line")
-with open(reply_file, "wb") as fh:
+reply = "Draft stays on this machine.\n"
+with open(reply_file, "w") as fh:
     fh.write(reply)
 
 class Handler(BaseHTTPRequestHandler):
@@ -138,14 +125,20 @@ class Handler(BaseHTTPRequestHandler):
             fh.write(raw + b"\n")
         with open(path_file, "a") as fh:
             fh.write(self.path + "\n")
+        host = self.headers.get("Host", "")
         with open(header_file, "a") as fh:
             fh.write(str(self.headers))
             fh.write("\n")
+        if "supabase.co" in host.lower() or "supabase.co" in self.path.lower():
+            raise SystemExit("stub saw supabase.co")
+        payload = json.dumps({
+            "choices": [{"message": {"role": "assistant", "content": reply}}],
+        }).encode()
         self.send_response(200)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(reply)))
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(reply)
+        self.wfile.write(payload)
 
     def log_message(self, fmt, *args):
         return
@@ -178,11 +171,11 @@ if [ ! -s "$TH/stub.port" ]; then
   exit 1
 fi
 STUB_PORT="$(tr -d '[:space:]' < "$TH/stub.port")"
-if [ -z "$STUB_PORT" ] || [ "$STUB_PORT" = "8899" ] || [ "$STUB_PORT" = "8898" ]; then
-  echo "FAIL: model stub port is not a spare 127.0.0.1 port"
+if [ -z "$STUB_PORT" ] || [ "$STUB_PORT" = "$PORT" ] || [ "$STUB_PORT" = "8899" ] || [ "$STUB_PORT" = "8898" ]; then
+  echo "FAIL: model stub port is not a spare localhost port"
   exit 1
 fi
-echo "check-held-app-file: model stub is on 127.0.0.1:${STUB_PORT}"
+echo "check-note-to-app: model stub is on 127.0.0.1:${STUB_PORT}"
 
 MESHD_PORT=$PORT \
 MESHD_HOST=127.0.0.1 \
@@ -207,7 +200,8 @@ while [ "$i" -lt 50 ]; do
   sleep 0.1
   i=$((i + 1))
 done
-[ "$up" -eq 1 ] || { echo "FAIL: meshd never came up on $PORT"; cat "$LOG"; exit 1; }
+[ "$up" -eq 1 ] || { echo "FAIL: meshd never came up"; cat "$LOG"; exit 1; }
+echo "check-note-to-app: spare daemon is on 127.0.0.1:${PORT}"
 
 code="$(curl --connect-timeout 1 --max-time 5 -sS -o "$TH/post.json" -w '%{http_code}' \
   -H "authorization: Bearer ${TOKEN}" \
@@ -224,6 +218,8 @@ if not isinstance(ident, str) or not ident:
 open(sys.argv[2], "w").write(ident)
 PY
 ID="$(cat "$TH/id")"
+[ -f "$STATE/knowledge/${ID}.json" ] || { echo "FAIL: note is not in the local knowledge store"; exit 1; }
+echo "check-note-to-app: local note stored"
 
 post_note() {
   name="$1"
@@ -235,147 +231,90 @@ post_note() {
     "http://127.0.0.1:$PORT/agent-note" || true
 }
 
+WORK="$WORK" STUB_PORT="$STUB_PORT" python3 - "$TH/missing-req.json" <<'PY'
+import json, os, sys
+open(sys.argv[1], "w").write(json.dumps({
+    "id": "00000000-0000-4000-8000-000000000099",
+    "cwd": os.environ["WORK"],
+    "model": "http://127.0.0.1:%s/v1" % os.environ["STUB_PORT"],
+    "command": "touch " + os.environ["WORK"] + "/missing-ran",
+    "confirm": True,
+}))
+PY
+code="$(post_note "$TH/missing-req.json" "$TH/missing.json")"
+[ "$code" = "404" ] || { echo "FAIL: missing note -> ${code}"; cat "$TH/missing.json"; echo; exit 1; }
+python3 - "$TH/missing.json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+if data.get("error") != "note not found":
+    raise SystemExit("FAIL: missing note error is %r" % (data.get("error"),))
+PY
+[ ! -e "$TH/stub.body" ] || { echo "FAIL: missing note called the model"; exit 1; }
+[ ! -e "$WORK/missing-ran" ] || { echo "FAIL: missing note ran a command"; exit 1; }
+[ ! -e "$WORK/draft.txt" ] || { echo "FAIL: missing note wrote a file"; exit 1; }
+echo "check-note-to-app: missing note did not call the model"
+
 NOTE_ID="$ID" WORK="$WORK" python3 - "$TH/refuse-req.json" <<'PY'
 import json, os, sys
 open(sys.argv[1], "w").write(json.dumps({
     "id": os.environ["NOTE_ID"],
     "cwd": os.environ["WORK"],
     "model": "ftp://127.0.0.1/v1",
-    "file": "index.html",
     "command": "touch " + os.environ["WORK"] + "/refused-ran",
     "confirm": True,
 }))
 PY
 code="$(post_note "$TH/refuse-req.json" "$TH/refuse.json")"
-[ "$code" = "400" ] || { echo "FAIL: non-http model -> ${code}"; cat "$TH/refuse.json"; echo; exit 1; }
+[ "$code" = "400" ] || { echo "FAIL: refused url -> ${code}"; cat "$TH/refuse.json"; echo; exit 1; }
 python3 - "$TH/refuse.json" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
 if data.get("error") != "model url not allowed":
-    raise SystemExit("FAIL: non-http model was not refused before a fetch")
+    raise SystemExit("FAIL: refused url was not rejected")
 PY
-[ ! -e "$WORK/refused-ran" ] || { echo "FAIL: command ran for a refused model"; exit 1; }
-[ ! -e "$WORK/index.html" ] || { echo "FAIL: refused model wrote a file"; exit 1; }
-[ ! -e "$TH/stub.body" ] || { echo "FAIL: refused model called the stub"; exit 1; }
-echo "check-held-app-file: refused url was not fetched"
-
-NOTE_ID="$ID" WORK="$WORK" OUTSIDE="$OUTSIDE" STUB_PORT="$STUB_PORT" python3 - "$TH/abs-req.json" <<'PY'
-import json, os, sys
-open(sys.argv[1], "w").write(json.dumps({
-    "id": os.environ["NOTE_ID"],
-    "cwd": os.environ["WORK"],
-    "model": "http://127.0.0.1:%s/v1" % os.environ["STUB_PORT"],
-    "file": os.environ["OUTSIDE"] + "/abs.html",
-    "command": "touch " + os.environ["WORK"] + "/abs-ran",
-    "confirm": True,
-}))
-PY
-code="$(post_note "$TH/abs-req.json" "$TH/abs.json")"
-[ "$code" = "400" ] || { echo "FAIL: absolute file -> ${code}"; cat "$TH/abs.json"; echo; exit 1; }
-python3 - "$TH/abs.json" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-if data.get("error") != "file must stay inside cwd":
-    raise SystemExit("FAIL: absolute file was not refused")
-PY
-[ ! -e "$OUTSIDE/abs.html" ] || { echo "FAIL: absolute path was written"; exit 1; }
-[ ! -e "$WORK/abs-ran" ] || { echo "FAIL: command ran for an absolute path"; exit 1; }
-[ ! -e "$TH/stub.body" ] || { echo "FAIL: absolute path called the stub"; exit 1; }
-echo "check-held-app-file: absolute path was refused"
-
-NOTE_ID="$ID" WORK="$WORK" STUB_PORT="$STUB_PORT" python3 - "$TH/dot-req.json" <<'PY'
-import json, os, sys
-open(sys.argv[1], "w").write(json.dumps({
-    "id": os.environ["NOTE_ID"],
-    "cwd": os.environ["WORK"],
-    "model": "http://127.0.0.1:%s/v1" % os.environ["STUB_PORT"],
-    "file": "nested/../index.html",
-    "command": "touch " + os.environ["WORK"] + "/dot-ran",
-    "confirm": True,
-}))
-PY
-code="$(post_note "$TH/dot-req.json" "$TH/dot.json")"
-[ "$code" = "400" ] || { echo "FAIL: dotdot file -> ${code}"; cat "$TH/dot.json"; echo; exit 1; }
-[ ! -e "$WORK/index.html" ] || { echo "FAIL: dotdot path was written"; exit 1; }
-[ ! -e "$WORK/dot-ran" ] || { echo "FAIL: command ran for a dotdot path"; exit 1; }
-[ ! -e "$TH/stub.body" ] || { echo "FAIL: dotdot path called the stub"; exit 1; }
-echo "check-held-app-file: parent segment was refused"
-
-NOTE_ID="$ID" WORK="$WORK" STUB_PORT="$STUB_PORT" python3 - "$TH/link-req.json" <<'PY'
-import json, os, sys
-open(sys.argv[1], "w").write(json.dumps({
-    "id": os.environ["NOTE_ID"],
-    "cwd": os.environ["WORK"],
-    "model": "http://127.0.0.1:%s/v1" % os.environ["STUB_PORT"],
-    "file": "out/app.html",
-    "command": "touch " + os.environ["WORK"] + "/link-ran",
-    "confirm": True,
-}))
-PY
-code="$(post_note "$TH/link-req.json" "$TH/link.json")"
-[ "$code" = "400" ] || { echo "FAIL: symlink file -> ${code}"; cat "$TH/link.json"; echo; exit 1; }
-[ ! -e "$OUTSIDE/app.html" ] || { echo "FAIL: path outside cwd was written"; exit 1; }
-[ ! -e "$WORK/link-ran" ] || { echo "FAIL: command ran for a path outside cwd"; exit 1; }
-[ ! -e "$TH/stub.body" ] || { echo "FAIL: path outside cwd called the stub"; exit 1; }
-echo "check-held-app-file: path outside cwd was refused"
-
-NOTE_ID="$ID" WORK="$WORK" STUB_PORT="$STUB_PORT" python3 - "$TH/chain-req.json" <<'PY'
-import json, os, sys
-open(sys.argv[1], "w").write(json.dumps({
-    "id": os.environ["NOTE_ID"],
-    "cwd": os.environ["WORK"],
-    "model": "http://127.0.0.1:%s/v1" % os.environ["STUB_PORT"],
-    "file": "inside/escape/app.html",
-    "command": "touch " + os.environ["WORK"] + "/chain-ran",
-    "confirm": True,
-}))
-PY
-code="$(post_note "$TH/chain-req.json" "$TH/chain.json")"
-[ "$code" = "400" ] || { echo "FAIL: chained symlink -> ${code}"; cat "$TH/chain.json"; echo; exit 1; }
-[ ! -e "$OUTSIDE/app.html" ] || { echo "FAIL: chained symlink wrote outside cwd"; exit 1; }
-[ ! -e "$WORK/chain-ran" ] || { echo "FAIL: command ran for a chained symlink"; exit 1; }
-[ ! -e "$TH/stub.body" ] || { echo "FAIL: chained symlink called the stub"; exit 1; }
-echo "check-held-app-file: chained path outside cwd was refused"
+[ ! -e "$TH/stub.body" ] || { echo "FAIL: refused url called the model"; exit 1; }
+[ ! -e "$WORK/refused-ran" ] || { echo "FAIL: refused url ran a command"; exit 1; }
+[ ! -e "$WORK/draft.txt" ] || { echo "FAIL: refused url wrote a file"; exit 1; }
+echo "check-note-to-app: refused url was not fetched"
 
 NOTE_ID="$ID" WORK="$WORK" STUB_PORT="$STUB_PORT" python3 - "$TH/job-req.json" <<'PY'
 import json, os, sys
 open(sys.argv[1], "w").write(json.dumps({
     "id": os.environ["NOTE_ID"],
     "cwd": os.environ["WORK"],
-    "model": "http://user:not-a-key@127.0.0.1:%s/v1?access=not-a-key" % os.environ["STUB_PORT"],
-    "file": "index.html",
+    "model": "http://127.0.0.1:%s/v1" % os.environ["STUB_PORT"],
     "command": "touch " + os.environ["WORK"] + "/held-ran",
     "confirm": False,
 }))
 PY
 code="$(post_note "$TH/job-req.json" "$TH/job.json")"
 [ "$code" = "200" ] || { echo "FAIL: POST /agent-note -> ${code}"; cat "$TH/job.json"; echo; cat "$LOG"; exit 1; }
-python3 - "$TH/job.json" "$WORK/index.html" "$TH/stub.reply" "$TH/stub.body" "$TH/stub.path" "$TH/stub.headers" <<'PY'
+python3 - "$TH/job.json" "$WORK/draft.txt" "$TH/stub.reply" "$TH/stub.body" "$TH/stub.path" "$TH/stub.headers" <<'PY'
 import json, os, stat, sys
 raw = open(sys.argv[1]).read()
 data = json.loads(raw)
-if data.get("modelClass") != "local":
-    raise SystemExit("FAIL: modelClass is %r" % (data.get("modelClass"),))
 if data.get("modelClass") not in ("local", "user-subscription"):
-    raise SystemExit("FAIL: model was not recorded as a class")
+    raise SystemExit("FAIL: modelClass is %r" % (data.get("modelClass"),))
+if data.get("modelClass") != "local":
+    raise SystemExit("FAIL: localhost model was not class local")
 if data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: command was not held")
-if data.get("draft") != "index.html":
+if data.get("draft") != "draft.txt":
     raise SystemExit("FAIL: draft name is %r" % (data.get("draft"),))
-for needle in ("127.0.0.1", "not-a-key", "http", "supabase", "chat/completions"):
+for needle in ("127.0.0.1", "http", "supabase", "chat/completions"):
     if needle in raw:
         raise SystemExit("FAIL: transcript contains %s" % needle)
 reply = open(sys.argv[3], "rb").read()
 got = open(sys.argv[2], "rb").read()
-if b"\n" in reply or b"\r" in reply or not reply.startswith(b"<!DOCTYPE html>"):
-    raise SystemExit("FAIL: stub reply is not a one-line HTML document")
 if got != reply:
-    raise SystemExit("FAIL: app file is not the stub reply")
+    raise SystemExit("FAIL: held file is not the stub reply")
+if b"Draft stays on this machine." not in got:
+    raise SystemExit("FAIL: held file is not the assistant text")
 mode = stat.S_IMODE(os.stat(sys.argv[2]).st_mode)
 if mode != 0o600:
-    raise SystemExit("FAIL: app file mode is %o" % mode)
+    raise SystemExit("FAIL: held file mode is %o" % mode)
 if mode & 0o111:
-    raise SystemExit("FAIL: app file is executable")
+    raise SystemExit("FAIL: held file is executable")
 bodies = [ln for ln in open(sys.argv[4], "rb").read().splitlines() if ln]
 if len(bodies) != 1:
     raise SystemExit("FAIL: stub request count is %d" % len(bodies))
@@ -383,25 +322,25 @@ payload = json.loads(bodies[0])
 if payload.get("model") != "local":
     raise SystemExit("FAIL: stub saw a model name that is not a class")
 messages = json.dumps(payload.get("messages"))
-if "The body stays on this machine" not in messages:
-    raise SystemExit("FAIL: stub did not receive the note text")
-for needle in ("not-a-key", "127.0.0.1", "http", "supabase"):
+if "Spare note" not in messages or "The body stays on this machine" not in messages:
+    raise SystemExit("FAIL: stub did not receive the note title and body")
+for needle in ("supabase", "http", "127.0.0.1"):
     if needle in messages:
         raise SystemExit("FAIL: stub body contains %s" % needle)
 paths = [ln.strip() for ln in open(sys.argv[5]).read().splitlines() if ln.strip()]
 if paths != ["/v1/chat/completions"]:
-    raise SystemExit("FAIL: stub path is not /v1/chat/completions")
+    raise SystemExit("FAIL: stub path is not the completions endpoint")
 headers = open(sys.argv[6]).read().lower()
-if "authorization" in headers or "not-a-key" in headers or "bearer" in headers:
-    raise SystemExit("FAIL: stub saw a key or authorization header")
+if "supabase.co" in headers or "authorization" in headers or "bearer" in headers:
+    raise SystemExit("FAIL: stub saw supabase.co or an authorization header")
 PY
 [ ! -e "$WORK/held-ran" ] || { echo "FAIL: command ran without confirm"; exit 1; }
-[ ! -e "$WORK/draft.txt" ] || { echo "FAIL: default draft was also written"; exit 1; }
-echo "check-held-app-file: app file is the stub reply"
-echo "check-held-app-file: command without confirm did not run"
+[ ! -e "$WORK/missing-ran" ] || { echo "FAIL: missing-note command ran later"; exit 1; }
+echo "check-note-to-app: held file is the stub reply"
+echo "check-note-to-app: command without confirm did not run"
 
-if grep -E -q 'supabase\.co|ai-gateway|not-a-key' "$LOG"; then
-  echo "FAIL: daemon log records a url or a key"
+if grep -E -q 'supabase\.co|ai-gateway' "$LOG"; then
+  echo "FAIL: daemon log records supabase.co or the AI gateway"
   exit 1
 fi
 
@@ -554,5 +493,5 @@ if bad:
     sys.exit("FAIL: daemon has a non-loopback socket: %s" % ", ".join(bad))
 PY
 fi
-echo "check-held-app-file: no supabase.co call"
-echo "check-held-app-file: OK"
+echo "check-note-to-app: no supabase.co call"
+echo "check-note-to-app: OK"
