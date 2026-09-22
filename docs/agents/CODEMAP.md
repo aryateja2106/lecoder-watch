@@ -16,7 +16,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 |---|---|---|---|
 | `Shared/` | 17 | ~3,900 | Wire types and pure logic both apps compile; the self-checks link against these |
 | `iOS/` | 26 | ~11,700 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
-| `Watch/` | 7 | ~4,600 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
+| `Watch/` | 7 | ~4,700 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |

@@ -102,36 +102,15 @@ private struct AppsTab: View {
 struct MonitorView: View {
     @EnvironmentObject var store: MeshStore
     @ObservedObject private var notifications = NotificationManager.shared
-    /// IDs the owner swiped away, client-side only — the daemon keeps its own event
-    /// file untouched. Ordered by dismissal so the cap below drops the oldest first,
-    /// same idiom as `chatMessages`' 500-message cap in TerminalView.swift.
-    @State private var dismissedEventIDs: [String] =
-        UserDefaults.standard.stringArray(forKey: "mesh.dismissedEventIDs.v1") ?? []
     @State private var confirmingClearAll = false
 
-    /// Newest first by the event's own clock, not by arrival: hosts are polled in turn,
-    /// so a machine paired later lands its whole backlog on top of fresher rows.
-    private var visibleEvents: [AgentEvent] {
-        store.events.filter { !dismissedEventIDs.contains($0.id) }.sorted { $0.createdISO > $1.createdISO }
-    }
+    /// The store owns dismissal now, so the bell's badge and the Machines tab's
+    /// "Needs you" rows clear with this list instead of outliving it.
+    private var visibleEvents: [AgentEvent] { store.visibleEvents }
 
-    private func dismiss(_ event: AgentEvent) {
-        guard !dismissedEventIDs.contains(event.id) else { return }
-        dismissedEventIDs.append(event.id)
-        saveDismissedEventIDs()
-    }
+    private func dismiss(_ event: AgentEvent) { store.dismissEvent(event) }
 
-    private func clearAllVisible() {
-        for event in visibleEvents where !dismissedEventIDs.contains(event.id) {
-            dismissedEventIDs.append(event.id)
-        }
-        saveDismissedEventIDs()
-    }
-
-    private func saveDismissedEventIDs() {
-        if dismissedEventIDs.count > 500 { dismissedEventIDs.removeFirst(dismissedEventIDs.count - 500) }
-        UserDefaults.standard.set(dismissedEventIDs, forKey: "mesh.dismissedEventIDs.v1")
-    }
+    private func clearAllVisible() { store.dismissAllVisibleEvents() }
 
     /// The agent row an event belongs to, if this phone can address it — id first, then
     /// name, the same rule the "Needs you" rows use. Nil for a Claude that ran outside a

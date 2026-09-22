@@ -901,6 +901,8 @@ struct AgentLiveView: View {
     @State private var reply = ""
     @State private var showReply = false
     @State private var showMore = false
+    /// Which modifier the letter grid on the Terminal options page sends.
+    @State private var chordModifier = "ctrl"
     @State private var confirmInterrupt = false
     @AppStorage("watchTerminalFontSize") private var fontSize: Double = 13
     @State private var selectedPane: String?
@@ -1211,6 +1213,16 @@ struct AgentLiveView: View {
 
     private var replySheet: some View {
         NavigationStack {
+            replyBody
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showReply = false } } }
+        }
+    }
+
+    /// The reply form without its own NavigationStack, so the terminal screen — itself a
+    /// sheet — can PUSH it. watchOS does not reliably present a sheet over a sheet, which
+    /// is why the Reply chip in the key bar did nothing at all: it asked for a second one.
+    private var replyBody: some View {
+        Group {
             ScrollView {
                 VStack(spacing: 12) {
                     Text("Send to \(currentAgent?.displayName ?? agent)")
@@ -1248,7 +1260,6 @@ struct AgentLiveView: View {
                 }
                 .padding()
             }
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showReply = false } } }
         }
     }
 
@@ -1270,6 +1281,10 @@ struct AgentLiveView: View {
             }
             .navigationTitle(currentAgent?.displayName ?? agent)
             .navigationBarTitleDisplayMode(.inline)
+            // Without this there is no way off this screen: it opens scrolled to the
+            // newest line, so the swipe-down that dismisses a sheet lands on the output
+            // and scrolls it instead.
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showMore = false } } }
             .safeAreaInset(edge: .bottom) { terminalKeyBar }
         }
     }
@@ -1364,7 +1379,14 @@ struct AgentLiveView: View {
                         store.readerOutput ? "arrow.left.and.right" : "text.alignleft") {
                     store.readerOutput.toggle()
                 }
-                keyChip("Reply", "text.bubble") { showReply = true }
+                // A push, not a sheet: this bar lives inside one already.
+                NavigationLink {
+                    replyBody.navigationTitle("Reply")
+                } label: {
+                    Image(systemName: "text.bubble")
+                        .frame(minWidth: WatchTouch.minWidth, minHeight: WatchTouch.minHeight)
+                }
+                .accessibilityLabel("Reply")
                 keyChip("Enter", "return") { store.send(key: "enter") }
                 keyChip("Interrupt", "xmark.octagon", role: .destructive) { store.send(key: "ctrl-c") }
                 keyChip("Tab", "arrow.right.to.line") { store.send(key: "tab") }
@@ -1416,6 +1438,44 @@ struct AgentLiveView: View {
                     Spacer()
                     Text("\(Int(fontSize))pt")
                         .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            // The readline vocabulary: ctrl-a/e/k/u/w, ctrl-l, ctrl-r, alt-b/f. meshd
+            // resolves every `ctrl-<letter>`/`alt-<letter>` by pattern, so 49 chords were
+            // already accepted and the wrist could reach exactly two of them.
+            if currentAgent?.isHerdr != true {
+                Section("Keys") {
+                    // watchOS has no segmented picker; a two-state button is clearer on a
+                    // 45 mm screen than a wheel anyway.
+                    Button {
+                        chordModifier = chordModifier == "ctrl" ? "alt" : "ctrl"
+                    } label: {
+                        HStack {
+                            Text(chordModifier == "ctrl" ? "Control" : "Option")
+                                .font(.caption.weight(.semibold))
+                            Spacer()
+                            Image(systemName: "arrow.triangle.2.circlepath").font(.caption2)
+                        }
+                    }
+                    .accessibilityLabel("Modifier: \(chordModifier == "ctrl" ? "Control" : "Option"). Tap to switch.")
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5), spacing: 4) {
+                        // ctrl-z is deliberately absent: meshd refuses it over /send,
+                        // because there is no client here to resume a suspended job.
+                        ForEach(Array("abcdefghijklmnopqrstuvwxy"), id: \.self) { letter in
+                            Button {
+                                store.send(key: "\(chordModifier)-\(letter)")
+                            } label: {
+                                Text(String(letter))
+                                    .font(.caption2.monospaced())
+                                    .frame(minWidth: WatchTouch.minWidth - 12, minHeight: WatchTouch.minHeight - 8)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("\(chordModifier) \(String(letter))")
+                        }
+                    }
+                    Text("Tap a letter to send \(chordModifier == "ctrl" ? "Control" : "Option") and that key.")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }

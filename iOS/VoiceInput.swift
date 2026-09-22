@@ -122,6 +122,16 @@ public struct VoiceInputSheet: View {
         .onChange(of: transcriber.recognizedText) { _, new in
             if isRecording { text = new }
         }
+        // The tail of a dictation is committed AFTER the Stop tap: the recognizer's final
+        // callback lands ~350 ms later. `isRecording` is already false by then, so the
+        // mirror above had stopped and Resume rebased the accumulator onto the stale
+        // editor string — every word between the last partial and the pause was dropped.
+        // This is the one moment the transcriber's own text must win over the field.
+        .onChange(of: transcriber.state) { _, new in
+            if case .readyForReview = new, !transcriber.recognizedText.isEmpty {
+                text = transcriber.recognizedText
+            }
+        }
         .onDisappear {
             // Covers every way out — Send, Cancel, or an interactive swipe-dismiss the
             // buttons below never see — so the mic never keeps listening in the background.

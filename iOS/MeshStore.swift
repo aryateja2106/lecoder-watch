@@ -31,6 +31,44 @@ final class MeshStore: ObservableObject {
     @Published var pinnedLimitSessions: [PinnedLimitSession] = []
     @Published var snapshot: MeshSnapshot?
     @Published var events: [AgentEvent] = []
+
+    /// Events the owner swiped away, client-side only — the daemon's event file is never
+    /// touched. It lives here rather than in MonitorView because every attention surface
+    /// is derived from the same `snapshot.events`: while the set was private to that one
+    /// screen, a swipe cleared the Monitor list and left the bell's badge and the Machines
+    /// tab's "Needs you" row standing forever, recomputed from the unfiltered array on
+    /// every poll. One filter, at the source, clears all of them together — and a genuinely
+    /// new question arrives with a new id, so it comes straight back.
+    @Published var dismissedEventIDs: [String] =
+        UserDefaults.standard.stringArray(forKey: "mesh.dismissedEventIDs.v1") ?? []
+
+    /// What the UI should show: everything the owner has not dismissed, newest first by the
+    /// event's own clock (hosts are polled in turn, so arrival order lies).
+    var visibleEvents: [AgentEvent] {
+        let dismissed = Set(dismissedEventIDs)
+        return events.filter { !dismissed.contains($0.id) }.sorted { $0.createdISO > $1.createdISO }
+    }
+
+    func dismissEvent(_ event: AgentEvent) {
+        guard !dismissedEventIDs.contains(event.id) else { return }
+        dismissedEventIDs.append(event.id)
+        saveDismissedEvents()
+    }
+
+    func dismissAllVisibleEvents() {
+        let dismissed = Set(dismissedEventIDs)
+        dismissedEventIDs.append(contentsOf: visibleEvents.map(\.id).filter { !dismissed.contains($0) })
+        saveDismissedEvents()
+    }
+
+    private func saveDismissedEvents() {
+        if dismissedEventIDs.count > 500 { dismissedEventIDs.removeFirst(dismissedEventIDs.count - 500) }
+        UserDefaults.standard.set(dismissedEventIDs, forKey: "mesh.dismissedEventIDs.v1")
+        // The snapshot feeds the bell, the attention rows, the watch mirror and the Live
+        // Activity: rebuild it now rather than at the next poll, or a swipe looks ignored.
+        snapshot?.events = visibleEvents
+        objectWillChange.send()
+    }
     @Published var lastError: StoreError?
     @Published var polling = false
     /// False until the very first poll has finished. "No machines online" and "we have
@@ -616,7 +654,7 @@ final class MeshStore: ObservableObject {
                                 machines: liveOrdered,
                                 usage: usage,
                                 quickCommands: quickCommands,
-                                events: events,
+                                events: visibleEvents,
                                 screenHost: watchedScreenHost,
                                 screenFetchedISO: screenJPEGData == nil ? nil : now,
                                 screenJPEGData: screenJPEGData,
@@ -678,7 +716,7 @@ final class MeshStore: ObservableObject {
                                 machines: merged,
                                 usage: snapshot?.usage,
                                 quickCommands: quickCommands,
-                                events: events,
+                                events: visibleEvents,
                                 pinnedLimitSessions: pinnedLimitSessions)
         PhoneConnectivity.shared.push(snapshot!)
     }
