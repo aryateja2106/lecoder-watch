@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, a spoken replace with `speak: true` drafts that new transcript to a held file, `GET /knowledge?q=` matches a title or a body and returns only `{ id, title }`, a local `q` on `POST /agent-note` selects one note when `id` is absent, `POST /knowledge` accepts `{ pdf, title? }` whose body is stdout from a local `MESH_PDF` executable, a stub `MESH_PDF` sentence that includes "summarize this paper" becomes one note that a query with no id drafts to one relative file, and `POST /knowledge` accepts `{ pdf, title?, speak? }` where `spoken: true` requires a local `MESH_TTS` that exits 0. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, pull request 193, pull request 195, pull request 197, pull request 198, pull request 199, and pull request 200 do not prove a microphone or a speaker. Pull request 200 does not prove a speaker played audio. Pull request 198 and pull request 199 also do not prove that a paper was read. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, a spoken replace with `speak: true` drafts that new transcript to a held file, `GET /knowledge?q=` matches a title or a body and returns only `{ id, title }`, a local `q` on `POST /agent-note` selects one note when `id` is absent, `POST /knowledge` accepts `{ pdf, title? }` whose body is stdout from a local `MESH_PDF` executable, a stub `MESH_PDF` sentence that includes "summarize this paper" becomes one note that a query with no id drafts to one relative file, and `POST /knowledge` accepts `{ pdf, title?, speak? }` where `spoken: true` requires a local `MESH_TTS` that exits 0, `POST /agent-note` accepts an optional local `ask` that the model receives after the note and a blank line, and a stub `MESH_PDF` sentence spoken by a local `MESH_TTS` can then be asked. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, pull request 193, pull request 195, pull request 197, pull request 198, pull request 199, and pull request 200 do not prove a microphone or a speaker. Pull request 200 does not prove a speaker played audio. Pull request 201 and pull request 202 do not prove a microphone or a speaker. Pull request 202 does not prove a speaker played audio or that a paper was read. Pull request 198 and pull request 199 also do not prove that a paper was read. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
 
 ## ADDED Requirements
 
@@ -399,7 +399,7 @@ After `speak: true` with local `MESH_STT` and local `MESH_TTS` returns `spoken` 
 
 ### Requirement: A local query selects one note when id is absent
 
-When `id` is absent, `POST /agent-note` SHALL accept a local `q` and SHALL select with `listNotes`. One match SHALL draft one relative file. That file SHALL be mode 600 and SHALL NOT be executed. Zero matches MUST answer 404. Several matches MUST answer 409. A remote or empty `q` MUST answer 400. Those results MUST NOT call the model. The hold SHALL match `textMovesSecret` for a pairing code, hosts.json, a mesh token, `.mesh/token`, and the upload/send sentence, and MUST NOT import `route.ts` or `filter.ts`. `id` without `q` SHALL still draft. `server.ts` was not edited. This behavior is pull request 197. The typecheck and `sh scripts/check-query-note-draft.sh` on `127.0.0.1:8898` at `e11483d` both exited 0 with the gateway key unset. Daemon CI and Xcode CI are both green on `e11483d` (check run `35739420177`). Daemon CI and Xcode CI are both green on handoff tip `1e78b081f2c64b038008054bedad1fd3a037ec6b` (check run `35740060386`). Daemon CI and Xcode CI are both green on handoff tip `c140ce7bf73c7f979a28d55d9a4784cc723e0027` (check run `35741550431`). Daemon CI and Xcode CI are both green on handoff tip `978bdbe17099174c5ff5f4cb5b401fa7f6555f6c` (check run `35743157250`). Daemon CI and Xcode CI are both green on handoff tip `dcfa77f5894058d1b815a0400c7396b17e356f87` (check run `35744449505`). Daemon CI and Xcode CI are both green on handoff tip `b3e91609e5a8c488dded8cc4d3aeae1e840c1b2e` (check run `35745531307`). Daemon CI and Xcode CI are both green on handoff tip `2aad3fd833efbf725f57c9e3c76fbf470a07d44a` (check run `35746528962`). An agent MUST NOT rebuild this draft, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. This does not prove a microphone or a speaker. Pull request 195 stays the local note search at `1238daa`, with daemon CI and Xcode CI both green (check run `35736830546`).
+When `id` is absent, `POST /agent-note` SHALL accept a local `q` and SHALL select with `listNotes`. One match SHALL draft one relative file. That file SHALL be mode 600 and SHALL NOT be executed. Zero matches MUST answer 404. Several matches MUST answer 409. A remote or empty `q` MUST answer 400. Those results MUST NOT call the model. The hold SHALL match `textMovesSecret` for a pairing code, hosts.json, a mesh token, `.mesh/token`, and the upload/send sentence, and MUST NOT import `route.ts` or `filter.ts`. `id` without `q` SHALL still draft. `server.ts` was not edited. This behavior is pull request 197. The typecheck and `sh scripts/check-query-note-draft.sh` on `127.0.0.1:8898` at `e11483d` both exited 0 with the gateway key unset. Daemon CI and Xcode CI are both green on `e11483d` (check run `35739420177`). Daemon CI and Xcode CI are both green on handoff tip `1e78b081f2c64b038008054bedad1fd3a037ec6b` (check run `35740060386`). Daemon CI and Xcode CI are both green on handoff tip `c140ce7bf73c7f979a28d55d9a4784cc723e0027` (check run `35741550431`). Daemon CI and Xcode CI are both green on handoff tip `978bdbe17099174c5ff5f4cb5b401fa7f6555f6c` (check run `35743157250`). Daemon CI and Xcode CI are both green on handoff tip `dcfa77f5894058d1b815a0400c7396b17e356f87` (check run `35744449505`). Daemon CI and Xcode CI are both green on handoff tip `b3e91609e5a8c488dded8cc4d3aeae1e840c1b2e` (check run `35745531307`). Daemon CI and Xcode CI are both green on handoff tip `2aad3fd833efbf725f57c9e3c76fbf470a07d44a` (check run `35746528962`). Daemon CI and Xcode CI are both green on handoff tip `bd904b19dc5dc85752888193ad365c2d3a176c8a` (check run `35747820842`). An agent MUST NOT rebuild this draft, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. This does not prove a microphone or a speaker. Pull request 195 stays the local note search at `1238daa`, with daemon CI and Xcode CI both green (check run `35736830546`).
 
 #### Scenario: One match drafts one relative file
 
@@ -472,7 +472,7 @@ When `id` is absent, `POST /agent-note` SHALL accept a local `q` and SHALL selec
 
 ### Requirement: A stub PDF sentence drafts one held note
 
-Pull request 199 SHALL remain the PDF note draft. It adds only `scripts/check-pdf-note-draft.sh`. A stub `MESH_PDF` sentence that includes "summarize this paper" SHALL become one note. A query with no id SHALL draft that note to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code note and a hosts.json note SHALL stay on the existing hold and the model MUST NOT be called. A pdf value containing `://` and a remote `MESH_PDF` MUST write nothing. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-pdf-note-draft.sh` on `127.0.0.1:8898` at `bd04cc0` and it exited 0. An agent MUST NOT rebuild this check, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. Daemon CI and Xcode CI are both green on `bd04cc0` (check run `35743446950`). This does not prove a microphone, a speaker, or that a paper was read. Pull request 198 stays the local PDF note at `42211d0`, with daemon CI and Xcode CI both green (check run `35742140469`). Pull request 197 stays the query-note draft at `e11483d`, with daemon CI and Xcode CI both green (check run `35739420177`). Pull request 195 stays the local note search at `1238daa`, with daemon CI and Xcode CI both green (check run `35736830546`). Daemon CI and Xcode CI are both green on handoff tip `978bdbe17099174c5ff5f4cb5b401fa7f6555f6c` (check run `35743157250`). Daemon CI and Xcode CI are both green on handoff tip `dcfa77f5894058d1b815a0400c7396b17e356f87` (check run `35744449505`). Daemon CI and Xcode CI are both green on handoff tip `b3e91609e5a8c488dded8cc4d3aeae1e840c1b2e` (check run `35745531307`). Daemon CI and Xcode CI are both green on handoff tip `2aad3fd833efbf725f57c9e3c76fbf470a07d44a` (check run `35746528962`).
+Pull request 199 SHALL remain the PDF note draft. It adds only `scripts/check-pdf-note-draft.sh`. A stub `MESH_PDF` sentence that includes "summarize this paper" SHALL become one note. A query with no id SHALL draft that note to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code note and a hosts.json note SHALL stay on the existing hold and the model MUST NOT be called. A pdf value containing `://` and a remote `MESH_PDF` MUST write nothing. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-pdf-note-draft.sh` on `127.0.0.1:8898` at `bd04cc0` and it exited 0. An agent MUST NOT rebuild this check, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. Daemon CI and Xcode CI are both green on `bd04cc0` (check run `35743446950`). This does not prove a microphone, a speaker, or that a paper was read. Pull request 198 stays the local PDF note at `42211d0`, with daemon CI and Xcode CI both green (check run `35742140469`). Pull request 197 stays the query-note draft at `e11483d`, with daemon CI and Xcode CI both green (check run `35739420177`). Pull request 195 stays the local note search at `1238daa`, with daemon CI and Xcode CI both green (check run `35736830546`). Daemon CI and Xcode CI are both green on handoff tip `978bdbe17099174c5ff5f4cb5b401fa7f6555f6c` (check run `35743157250`). Daemon CI and Xcode CI are both green on handoff tip `dcfa77f5894058d1b815a0400c7396b17e356f87` (check run `35744449505`). Daemon CI and Xcode CI are both green on handoff tip `b3e91609e5a8c488dded8cc4d3aeae1e840c1b2e` (check run `35745531307`). Daemon CI and Xcode CI are both green on handoff tip `2aad3fd833efbf725f57c9e3c76fbf470a07d44a` (check run `35746528962`). Daemon CI and Xcode CI are both green on handoff tip `bd904b19dc5dc85752888193ad365c2d3a176c8a` (check run `35747820842`).
 
 #### Scenario: A paper sentence becomes one note and one draft
 
@@ -499,7 +499,7 @@ Pull request 199 SHALL remain the PDF note draft. It adds only `scripts/check-pd
 
 ### Requirement: A local TTS exit speaks a PDF note
 
-`POST /knowledge` SHALL accept `{ pdf, title?, speak? }`. When `speak` is true, a local `MESH_TTS` that exits 0 SHALL return `spoken: true`. A remote value, a value containing `://`, or a protocol-relative `MESH_TTS` MUST return 400 before `MESH_PDF` runs and MUST write nothing. When `speak` is omitted, the response SHALL stay `{ id, title }` and TTS MUST NOT start. A missing or failing TTS binary SHALL still store the note and SHALL return `spoken: false`. `server.ts` was not edited. This behavior is pull request 200. The files are `install/payload/meshd/knowledge.ts` and `scripts/check-pdf-note-speak.sh` only. The coordinator re-ran `sh scripts/check-pdf-note-speak.sh`, `sh scripts/check-local-pdf-note.sh`, and `sh scripts/check-pdf-note-draft.sh` on `127.0.0.1:8898` at `d4486c4` and all exited 0. An agent MUST NOT rebuild `extractPdf` or `MESH_PDF`, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `d4486c4` (check run `35746494919`). Apps (Xcode) is still running on that run. An agent MUST NOT claim both jobs are green on `d4486c4`. This does not prove a speaker played audio. Pull request 199 stays the PDF note draft at `bd04cc0`, with daemon CI and Xcode CI both green (check run `35743446950`). Daemon CI and Xcode CI are both green on handoff tip `b3e91609e5a8c488dded8cc4d3aeae1e840c1b2e` (check run `35745531307`). Daemon CI and Xcode CI are both green on handoff tip `2aad3fd833efbf725f57c9e3c76fbf470a07d44a` (check run `35746528962`).
+`POST /knowledge` SHALL accept `{ pdf, title?, speak? }`. When `speak` is true, a local `MESH_TTS` that exits 0 SHALL return `spoken: true`. A remote value, a value containing `://`, or a protocol-relative `MESH_TTS` MUST return 400 before `MESH_PDF` runs and MUST write nothing. When `speak` is omitted, the response SHALL stay `{ id, title }` and TTS MUST NOT start. A missing or failing TTS binary SHALL still store the note and SHALL return `spoken: false`. `server.ts` was not edited. This behavior is pull request 200. The files are `install/payload/meshd/knowledge.ts` and `scripts/check-pdf-note-speak.sh` only. The coordinator re-ran `sh scripts/check-pdf-note-speak.sh`, `sh scripts/check-local-pdf-note.sh`, and `sh scripts/check-pdf-note-draft.sh` on `127.0.0.1:8898` at `d4486c4` and all exited 0. An agent MUST NOT rebuild `extractPdf` or `MESH_PDF`, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. Daemon CI and Xcode CI are both green on `d4486c4` (check run `35746494919`). This does not prove a speaker played audio. Pull request 199 stays the PDF note draft at `bd04cc0`, with daemon CI and Xcode CI both green (check run `35743446950`). Daemon CI and Xcode CI are both green on handoff tip `b3e91609e5a8c488dded8cc4d3aeae1e840c1b2e` (check run `35745531307`). Daemon CI and Xcode CI are both green on handoff tip `2aad3fd833efbf725f57c9e3c76fbf470a07d44a` (check run `35746528962`). Daemon CI and Xcode CI are both green on handoff tip `bd904b19dc5dc85752888193ad365c2d3a176c8a` (check run `35747820842`).
 
 #### Scenario: A local TTS exit returns spoken true
 
@@ -527,6 +527,67 @@ Pull request 199 SHALL remain the PDF note draft. It adds only `scripts/check-pd
 #### Scenario: The speak check does not prove a speaker played audio
 
 - **WHEN** `sh scripts/check-pdf-note-speak.sh`, `sh scripts/check-local-pdf-note.sh`, and `sh scripts/check-pdf-note-draft.sh` pass on `127.0.0.1:8898` at `d4486c4`
-- **THEN** the agent records that all three checks exited 0 and that daemon CI is green on `d4486c4` (check run `35746494919`) while apps (Xcode) is still running
-- **AND** the agent does not claim both jobs are green on `d4486c4`
+- **THEN** the agent records that all three checks exited 0 and that daemon CI and Xcode CI are both green on `d4486c4` (check run `35746494919`)
 - **AND** the agent does not claim a speaker played audio
+
+### Requirement: An optional local ask is sent with the note
+
+`POST /agent-note` SHALL accept an optional local `ask`. The model SHALL receive the note, a blank line, and the ask. An ask that would move a pairing code, `hosts.json`, `.mesh/token`, or a mesh token MUST be held before the model. An ask containing `://` MUST write nothing. A missing ask SHALL still draft the note text only. `knowledge.ts` was not edited. `server.ts` was not edited. This behavior is pull request 201. The files are `install/payload/meshd/agent-note.ts` and `scripts/check-note-ask.sh`. The coordinator re-ran `sh scripts/check-note-ask.sh`, `sh scripts/check-query-note-draft.sh`, and `sh scripts/check-pdf-note-draft.sh` on `127.0.0.1:8898` at `ae83b95` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `ae83b95` (check run `35747085140`). Apps (Xcode) is still running on that run. An agent MUST NOT claim both jobs are green on `ae83b95`. Pull request 200 stays the PDF note speak at `d4486c4`, with daemon CI and Xcode CI both green (check run `35746494919`). Daemon CI and Xcode CI are both green on handoff tip `bd904b19dc5dc85752888193ad365c2d3a176c8a` (check run `35747820842`).
+
+#### Scenario: The model receives the note, a blank line, and the ask
+
+- **WHEN** `POST /agent-note` includes a local `ask`
+- **THEN** the model receives the note, a blank line, and the ask
+
+#### Scenario: A secret-moving ask is held before the model
+
+- **WHEN** the ask would move a pairing code, `hosts.json`, `.mesh/token`, or a mesh token
+- **THEN** the ask is held before the model
+
+#### Scenario: An ask containing a scheme writes nothing
+
+- **WHEN** the ask contains `://`
+- **THEN** the daemon writes nothing
+
+#### Scenario: A missing ask drafts the note text only
+
+- **WHEN** the ask is omitted
+- **THEN** the draft is the note text only
+
+#### Scenario: Daemon-only CI on the note ask is not both jobs green
+
+- **WHEN** `sh scripts/check-note-ask.sh`, `sh scripts/check-query-note-draft.sh`, and `sh scripts/check-pdf-note-draft.sh` pass on `127.0.0.1:8898` at `ae83b95`
+- **THEN** the agent records that all three checks exited 0 and that daemon CI is green on `ae83b95` (check run `35747085140`) while apps (Xcode) is still running
+- **AND** the agent does not claim both jobs are green on `ae83b95`
+
+### Requirement: A spoken PDF note can be asked
+
+The new commit on pull request 202 SHALL add only `scripts/check-spoken-note-ask.sh` after merging pull request 201. A stub `MESH_PDF` sentence spoken by a local `MESH_TTS` that exits 0, then ask "build a reader", SHALL draft one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A remote `MESH_TTS` MUST return 400 and MUST NOT start `MESH_PDF`. A pairing-code ask MUST NOT call the model. A command without confirm MUST NOT run. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-spoken-note-ask.sh`, `sh scripts/check-pdf-note-speak.sh`, and `sh scripts/check-note-ask.sh` on `127.0.0.1:8898` at `b4ce6ac` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `b4ce6ac` (check run `35748224297`). Apps (Xcode) is still running on that run. An agent MUST NOT claim both jobs are green on `b4ce6ac`. This does not prove a speaker played audio or that a paper was read. Pull request 201 stays the note ask draft at `ae83b95`. Pull request 200 stays `d4486c4`, with daemon CI and Xcode CI both green (check run `35746494919`).
+
+#### Scenario: A spoken note and an ask draft one file
+
+- **WHEN** a stub `MESH_PDF` sentence is spoken by a local `MESH_TTS` that exits 0 and the ask is "build a reader"
+- **THEN** the draft is one relative file, mode 600, and is not executed
+
+#### Scenario: A remote TTS value does not start MESH_PDF
+
+- **WHEN** `MESH_TTS` is remote
+- **THEN** the daemon answers 400
+- **AND** `MESH_PDF` does not start
+
+#### Scenario: A pairing-code ask does not call the model
+
+- **WHEN** the ask is a pairing code
+- **THEN** the model is not called
+
+#### Scenario: A command without confirm does not run
+
+- **WHEN** a further command has no confirm
+- **THEN** that command does not run
+
+#### Scenario: The spoken ask check does not prove a speaker or a paper
+
+- **WHEN** `sh scripts/check-spoken-note-ask.sh`, `sh scripts/check-pdf-note-speak.sh`, and `sh scripts/check-note-ask.sh` pass on `127.0.0.1:8898` at `b4ce6ac`
+- **THEN** the agent records that all three checks exited 0 and that daemon CI is green on `b4ce6ac` (check run `35748224297`) while apps (Xcode) is still running
+- **AND** the agent does not claim both jobs are green on `b4ce6ac`
+- **AND** the agent does not claim a speaker played audio or that a paper was read
