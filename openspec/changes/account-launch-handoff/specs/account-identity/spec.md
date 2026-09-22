@@ -25,6 +25,28 @@ The heartbeat project `zmisjteztezaqfflwbgf` remains the telemetry database. An 
 - **THEN** that write is a failed account design
 - **AND** the agent MUST NOT add the column or the log
 
+### Requirement: Email confirmation gates the first session
+
+When email confirmation is required before the first sign-in, sign-up SHALL return no session and SHALL write no profile row. After the person opens the confirmation link from the recovery email, sign-in SHALL write `{id, username}` to the profile. Another signed-in user MUST NOT be able to select that profile. Pull request 178 is that proof on a local stack. The proof script turns confirmations on for the run and restores them to off. `account.js` was not edited. Do not rebuild it.
+
+#### Scenario: Sign-up before the email is confirmed
+
+- **WHEN** a person signs up with a new email while confirmation is required
+- **THEN** the response contains no session
+- **AND** no profile row exists for that user
+
+#### Scenario: Sign-in after the confirmation link
+
+- **WHEN** the person opens the local confirmation link and then signs in
+- **THEN** the response contains a session
+- **AND** the profile row is `{id, username}` for that auth user
+
+#### Scenario: Another user tries to claim the profile
+
+- **WHEN** a second signed-in user attempts to select the first user's profile
+- **THEN** that selection is refused
+- **AND** the first user's profile stays tied to the first auth user
+
 ### Requirement: Install and pairing work logged out
 
 Installing the daemon and pairing a phone with the 8-character code SHALL work when nobody is signed in. An account MUST NOT be required to install. Until a later native change lands, signing in on the website SHALL NOT move a mesh token, a tailnet address, or a host list onto a second device.
