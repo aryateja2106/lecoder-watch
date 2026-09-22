@@ -15,12 +15,19 @@
 // file is an optional relative path and defaults to draft.txt. Absolute
 // paths, "..", and any path that resolves outside cwd are refused.
 //
-//   POST /agent-note  { id, cwd, model, file?, command?, confirm? }
+//   POST /agent-note  { id?, q?, cwd, model, file?, command?, confirm? }
 //        -> { modelClass, draft, commandRan, held }
+//
+// id alone is the note, as before. When id is absent, q selects one note
+// with the same local-text refusal as knowledge search and the listNotes
+// needle. One match continues this draft path. A note that names a pairing
+// code, hosts.json, a mesh token, or .mesh/token is held before any model
+// call. No match is 404. Several matches are 409 and are not guessed. An
+// empty q is 400.
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { constants as fsConstants } from "node:fs";
 import { chmod, lstat, mkdir, open, realpath, stat } from "node:fs/promises";
-import { readNote } from "./knowledge";
+import { listNotes, readNote } from "./knowledge";
 
 const FILE_MODE = 0o600;
 const DRAFT_NAME = "draft.txt";
@@ -98,6 +105,34 @@ export function completionsEndpoint(model: string): string | null {
   else if (path.endsWith("/v1")) parsed.pathname = `${path}/chat/completions`;
   else parsed.pathname = `${path}/v1/chat/completions`;
   return parsed.toString();
+}
+
+// Same refusal as knowledge search: a remote URL, a scheme, a
+// protocol-relative value, or any string containing :// is not a needle.
+// Empty means the caller passed no query. null means the query is refused.
+function localNeedle(raw: string): string | null {
+  const text = raw.trim();
+  if (!text) return "";
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text) || text.startsWith("//") || text.includes("://")) return null;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(text)) return null;
+  return text.toLowerCase();
+}
+
+// Same asks textMovesSecret holds. Copied here so the daemon does not import
+// that module. A clean note continues to the draft path.
+function textHeldByRoute(value: string): boolean {
+  // The credential can already be gone. The ask still names what would move.
+  if (/\bmesh\s+(?:token|bearer)\b/i.test(value)) return true;
+  if (/\bpairing\s+code\b/i.test(value)) return true;
+  if (/\bhosts\.json\b/i.test(value)) return true;
+  if (/\.mesh\/token\b/i.test(value)) return true;
+  return /\b(?:upload|send|post|forward|exfiltrate)\b[^.!?\n]{0,80}\b(?:token|password|secret|credential)\b/i.test(
+    value,
+  );
+}
+
+function heldByRoute(note: { title: string; body: string }): boolean {
+  return textHeldByRoute(note.title) || textHeldByRoute(note.body);
 }
 
 function noteText(note: { title: string; body: string }): string {
@@ -301,20 +336,39 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
   const body = (await req.json().catch(() => null)) as {
     id?: unknown;
+    q?: unknown;
     cwd?: unknown;
     model?: unknown;
     file?: unknown;
     command?: unknown;
     confirm?: unknown;
   } | null;
-  if (!body || typeof body.id !== "string" || !body.id.trim() || typeof body.cwd !== "string" || !body.cwd.trim()) {
+  if (!body || typeof body.cwd !== "string" || !body.cwd.trim()) {
     return json({ error: "id and cwd required" }, 400);
   }
   if (typeof body.model !== "string") return json({ error: "model required" }, 400);
   if (body.file !== undefined && typeof body.file !== "string") return json({ error: "file must stay inside cwd" }, 400);
+  const givenId = typeof body.id === "string" ? body.id.trim() : "";
+  let id = givenId;
+  if (!givenId) {
+    if (typeof body.q !== "string") return json({ error: "id and cwd required" }, 400);
+    const needle = localNeedle(body.q);
+    if (needle === null) return json({ error: "query must be local text" }, 400);
+    if (!needle) return json({ error: "q required" }, 400);
+    const notes = await listNotes(needle);
+    if (notes.length === 0) return json({ error: "note not found" }, 404);
+    if (notes.length > 1) return json({ error: "more than one note" }, 409);
+    id = notes[0].id;
+    const note = await readNote(id);
+    if (!note) return json({ error: "note not found" }, 404);
+    if (heldByRoute(note)) {
+      if (!body.model.trim()) return json({ error: "model required" }, 400);
+      return json({ modelClass: modelClassOf(body.model), draft: null, commandRan: false, held: true });
+    }
+  }
   try {
     const result = await runAgentNote({
-      id: body.id,
+      id,
       cwd: body.cwd,
       model: body.model,
       file: typeof body.file === "string" ? body.file : undefined,
