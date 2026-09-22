@@ -53,19 +53,19 @@ An agent executing this change MUST NOT edit `Shared/Models.swift`, `Shared/Mesh
 
 #### Scenario: An executing agent starts a product edit
 
-- **WHEN** an agent begins to add an account page, a SQL file, a seal, a key file, a note draft, a Jev filter, or a daemon route while executing this change
+- **WHEN** an agent begins to add an account page, a SQL file, a node seal/open helper, a Swift seal check, menu-bar sealed upload bodies, a key file, a note draft, a Jev filter, an account flow check, a sealed mailbox round trip, a route-gated draft, or a daemon route while executing this change
 - **THEN** the agent stops that edit
-- **AND** the finished slice stays on its existing pull request: pages on 150, identity SQL on 135, the seal on 152, the key file on 155 and 157, the note draft on 154, the Jev filter on 156
+- **AND** the finished slice stays on its existing pull request: pages on 150, identity SQL on 135, the node seal/open helper on 138, the Swift seal check on 141, the menu-bar sealed upload bodies on 152 (that file is not in the Xcode target), the key file on 155 and 157, the note draft on 154, the Jev filter on 156, the account flow check on 158, the sealed mailbox round trip on 159, the route-gated draft on 160
 
 ### Requirement: Finished slices are not new work
 
-An agent MUST treat the account pages, the identity SQL, the seal, the key file, the note draft, and the Jev filter as already drafted. The agent MUST re-check the pull request tip before editing any of those files, and MUST NOT open a second implementation from this change.
+An agent MUST treat the account pages, the identity SQL, the node seal/open helper, the Swift seal check, the menu-bar sealed upload bodies, the key file, the note draft, the Jev filter, the account flow check, the sealed mailbox round trip, and the route-gated draft as already drafted. Pull request 138 is the node seal/open helper. Pull request 141 is the Swift seal check. Pull request 152 is the menu-bar sealed upload bodies, and that file is not in the Xcode target. Pull request 158 is the account flow check. Pull request 159 is the sealed mailbox round trip. Pull request 160 is the route-gated draft. The agent MUST re-check the pull request tip before editing any of those files, and MUST NOT open a second implementation from this change.
 
 No task in this change requires Arya's physical iPhone or Apple Watch.
 
 #### Scenario: The named tip is still the draft
 
-- **WHEN** an agent re-checks pull request 150, 135, 152, 154, 155, 156, or 157 and the tip still matches the design
+- **WHEN** an agent re-checks pull request 150, 135, 138, 141, 152, 154, 155, 156, 157, 158, 159, or 160 and the tip still matches the design
 - **THEN** the agent leaves that pull request as the implementation
 - **AND** this change gains no product file
 
