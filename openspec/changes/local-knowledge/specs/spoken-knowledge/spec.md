@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, optional local TTS speaks a note, and a held app draft waits for confirm before any further command.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, optional local TTS speaks a note, and a held app draft waits for confirm before any further command. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase.
 
 ## ADDED Requirements
 
@@ -35,7 +35,7 @@ A second request SHALL list the note's title and id so a later agent can find wh
 
 ### Requirement: Spoken-out uses a local MESH_TTS binary
 
-The daemon MAY hand the note text to a TTS binary the user already has, and only when the request asks for speech and `MESH_TTS` names that local binary. The daemon SHALL NOT download a speech program. The note SHALL still be written when speech is not asked for or the binary is absent. Spoken is reported only when that local process exits 0.
+The daemon MAY hand the note text to a TTS binary the user already has, and only when the request asks for speech and `MESH_TTS` names that local binary. The daemon SHALL NOT download a speech program. The note SHALL still be written when speech is not asked for or the binary is absent. Spoken is reported only when that local process exits 0. A spoken note is that local TTS exit code. An agent MUST NOT claim a speaker was proven.
 
 #### Scenario: Speech was not requested
 
@@ -52,7 +52,7 @@ The daemon MAY hand the note text to a TTS binary the user already has, and only
 
 ### Requirement: Spoken-in uses a local MESH_STT binary
 
-The daemon MAY accept a local audio file and run only the local binary named by `MESH_STT`. A remote URL for the binary or for the audio path MUST NOT run. Do not start a second speech-in path beside the finished draft on pull request 162. When the binary is missing, unset, remote, nonzero, or timed out, the daemon SHALL write no note from that request.
+The daemon MAY accept a local audio file and run only the local binary named by `MESH_STT`. A remote URL for the binary or for the audio path MUST NOT run. Do not start a second speech-in path beside the finished draft on pull request 162. When the binary is missing, unset, remote, nonzero, or timed out, the daemon SHALL write no note from that request. A spoken note is that local binary transcript. An agent MUST NOT claim a microphone was proven.
 
 #### Scenario: A local transcript becomes the note body
 
@@ -97,3 +97,49 @@ Jev SHALL choose a dispatch route. Jev MUST NOT write the assistant reply, the s
 - **WHEN** the route-gated draft check runs with the gateway key unset
 - **THEN** the check still decides from the local route result
 - **AND** no request is sent to the AI Gateway
+
+### Requirement: POST /knowledge/:id replaces that note's body in the same file
+
+When a note already exists, `POST /knowledge/:id` SHALL replace that note's body in the same file under the knowledge directory. The list SHALL stay `{ id, title }` for each note. A missing id SHALL create nothing. A remote URL SHALL NOT write. Notes stay on the machine. Nothing from the note is stored in Supabase. This behavior is pull request 174. An agent MUST NOT add a second replace path, and MUST NOT add a second `/knowledge` route. On `origin/main`, `/knowledge` is unregistered. The knowledge branch already registers it once.
+
+#### Scenario: The same file receives the new body
+
+- **WHEN** a client posts local text to `/knowledge/:id` for a note that is already on disk
+- **THEN** that note's body is the posted text
+- **AND** the write is the same file
+- **AND** a list request still returns that note as id and title
+
+#### Scenario: A missing id creates nothing
+
+- **WHEN** the id in `POST /knowledge/:id` is not a note on disk
+- **THEN** the daemon creates no note
+- **AND** no new file is written under the knowledge directory
+
+#### Scenario: A remote URL does not write
+
+- **WHEN** the posted body, path, audio, or url is an `http`, `https`, scheme, or protocol-relative URL
+- **THEN** the daemon does not write a note
+- **AND** the existing note body stays as it was
+
+### Requirement: After a replace, the agent-note path drafts the new body
+
+After `POST /knowledge/:id` replaces a note, the agent-note path SHALL draft that new body. The held file SHALL be mode 600 and SHALL NOT be executed. A missing id SHALL NOT call the model. An unconfirmed command SHALL stay unrun. Notes stay on the machine. Nothing from the note is stored in Supabase. This behavior is pull request 176. An agent MUST NOT add a second draft of a replaced note.
+
+#### Scenario: The draft follows the replaced body
+
+- **WHEN** a note's body has been replaced in the same file and a client asks the agent-note path to draft that id
+- **THEN** the draft is from the new body
+- **AND** the held file is mode 600
+- **AND** the held file is not executed
+
+#### Scenario: A missing id does not call the model
+
+- **WHEN** the agent-note path is asked for an id that is not on disk
+- **THEN** the model is not called
+- **AND** no draft file is created
+
+#### Scenario: An unconfirmed command stays unrun
+
+- **WHEN** the replaced-note draft has written a held file and confirm is not true
+- **THEN** the command stays unrun
+- **AND** the held file remains on disk unexecuted
