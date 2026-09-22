@@ -961,6 +961,15 @@ struct SystemResult: Codable, Hashable {
     }
 }
 
+/// Answer from `POST /agent-note`: which model answered, the draft file, and
+/// whether a command ran or the ask was held.
+struct AgentNoteAsk: Codable, Hashable {
+    var modelClass: String
+    var draft: String?
+    var commandRan: Bool
+    var held: Bool
+}
+
 /// Wrist rotation → cursor velocity, the air-mouse mapping.
 ///
 /// WowMouse does this on Wear OS by pairing as a Bluetooth HID mouse. watchOS gives
