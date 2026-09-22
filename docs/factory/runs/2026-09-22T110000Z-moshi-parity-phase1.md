@@ -7,7 +7,7 @@ status: succeeded
 issue: none (Arya's ask in-session: "make our mobile terminal UI look and work like Moshi")
 pull_request: https://github.com/aryateja2106/lecoder-watch/pull/133
 gate_level: full
-gate_status: see the log line appended below
+gate_status: RED on test — three reds, none of them this work (see below)
 verifier: not-run (orchestrator drove every slice on the simulator against a side-port daemon; a fresh-context verify is the next step)
 human_required: true
 ---
@@ -30,3 +30,34 @@ gained the SwiftTerm package (pinned 1.18.0; ≥ 1.19 needs plugin validation).
 --src` on the Mac, `mesh upgrade -H pi|jetson --src <tgz>`), then judge the terminal on the real
 iPhone — gestures, the keyboard, latency over Tailscale; the Metal toolchain was installed
 into Xcode on this Mac (`xcodebuild -downloadComponent MetalToolchain`).
+
+## Gate
+
+```
+FACTORY_GATES: level=full status=RED passed=3 failed=1 failing=test skipped=none misconfigured=none
+```
+
+Full log: `docs/overnight/2026-09-21/gate-full-moshi-parity.txt`. Every check this pass touches
+is green in it — `check-native-terminal-keys`, `check-pty-route`, `check-daemon-gaps`,
+`check-approve-path`, `check-phone-input-and-wake`, and `check-ios-smoke: OK — the app
+launches, every tab renders, and a text field can appear · iPhone 18 Pro · iOS 27.0`.
+
+The three reds belong to the publish lane a second session is landing on the same branch
+(`check-web-docs`: five `web/product/shots/iphone-*.png` its `docs/getting-started.md` embeds
+do not exist yet; `check-docs-index`: that file is not in the index; `check-published`:
+`PUBLISHED.md` carries `Gate SHA: pending` and names an uncommitted gate log). Reported to
+that session rather than edited from here.
+
+An earlier run of the same gate was RED on three of ours, all fixed in this pass: the two new
+`DaemonCapabilities.expected` rows (that list is pinned against a literal 0.5.0 snapshot),
+`ctrl-z` newly accepted by the ctrl-/alt-letter pattern, and a `check-ios-smoke` that two
+sessions' `xcodebuild` runs kept killing on the one simulator it picks.
+
+## Live fleet
+
+The Mac and the Pi run this build: `/health` advertises `pty` and `captureAnsi` on both, no
+session was lost (`pi-claude` is 18 h old and still there), and the stream was driven from a
+WebSocket client against each — scrollback replay, the pane resized to the client, 38 ms
+round trip to the Pi over Tailscale and 6 ms to rmux on the Mac. The Jetson is still on the
+previous 0.8.0 payload and will fall back to `captureAnsi` polling until it is upgraded.
+
