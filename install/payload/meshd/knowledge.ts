@@ -2,8 +2,9 @@
 // becomes one file under the daemon state directory. Nothing in this module
 // opens a socket: no Supabase client, no model call, no download.
 //
-//   POST /knowledge  { path, speak? }  -> { id, title, spoken }
-//   GET  /knowledge                    -> { notes: [{ id, title }] }
+//   POST /knowledge      { path, speak? }  -> { id, title, spoken }
+//   GET  /knowledge                        -> { notes: [{ id, title }] }
+//   GET  /knowledge/:id                    -> { id, title, body }
 //
 // speak is optional. When it is true and MESH_TTS names a binary the user
 // already has, that binary receives the note text on stdin. The note is
@@ -154,6 +155,21 @@ async function ensureDir(dir: string): Promise<void> {
 
 export type NoteSummary = { id: string; title: string };
 
+const NOTE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function readNote(id: string): Promise<{ id: string; title: string; body: string } | null> {
+  let decoded = id;
+  try { decoded = decodeURIComponent(id); } catch { return null; }
+  if (!NOTE_ID.test(decoded)) return null;
+  try {
+    const raw = JSON.parse(await readFile(join(knowledgeDir(), `${decoded}.json`), "utf8"));
+    if (raw?.id !== decoded || typeof raw.title !== "string" || typeof raw.body !== "string") return null;
+    return { id: raw.id, title: raw.title, body: raw.body };
+  } catch {
+    return null;
+  }
+}
+
 export async function listNotes(): Promise<NoteSummary[]> {
   let names: string[];
   try { names = await readdir(knowledgeDir()); } catch { return []; }
@@ -229,6 +245,12 @@ async function ingest(req: Request): Promise<Response> {
 }
 
 export async function handleKnowledge(req: Request, url: URL): Promise<Response | null> {
+  const one = url.pathname.match(/^\/knowledge\/([^/]+)$/);
+  if (one) {
+    if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
+    const note = await readNote(one[1]);
+    return note ? json(note) : json({ error: "not found" }, 404);
+  }
   if (url.pathname !== "/knowledge") return null;
   if (req.method === "GET") return json({ notes: await listNotes() });
   if (req.method === "POST") return ingest(req);
