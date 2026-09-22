@@ -58,6 +58,9 @@ sessions' `xcodebuild` runs kept killing on the one simulator it picks.
 The Mac and the Pi run this build: `/health` advertises `pty` and `captureAnsi` on both, no
 session was lost (`pi-claude` is 18 h old and still there), and the stream was driven from a
 WebSocket client against each — scrollback replay, the pane resized to the client, 38 ms
-round trip to the Pi over Tailscale and 6 ms to rmux on the Mac. The Jetson is still on the
-previous 0.8.0 payload and will fall back to `captureAnsi` polling until it is upgraded.
+round trip to the Pi over Tailscale and 6 ms to rmux on the Mac. The Jetson was upgraded the
+same way afterwards (tmux 3.2a, bun 1.4.2) and streams too — replay, 18×57, 6 ms — so all
+three machines advertise `pty`. One trap for anyone writing a probe: `tmux send-keys` 0.3 s
+after `new-session` is eaten by a shell that has not finished starting, which looks exactly
+like "replay is broken" and is not.
 

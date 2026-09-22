@@ -176,7 +176,8 @@ The pane's own SGR bytes arrive intact; a raw ESC typed into an interactive shel
 line-editor keypress, not text, which is why the probe's `printf '\033[32m…'` came back
 without its escapes. The Mac's own daemon was upgraded the same way and **rmux 0.3.1 attaches
 under the pty exactly like tmux** — replay, resize to 57 columns, 6 ms echo on loopback —
-which was the open question in the map's "verify before coding" list.
+which was the open question in the map's "verify before coding" list. The Jetson followed
+(tmux 3.2a, bun 1.4.2): replay, 18×57, 6 ms — the whole fleet streams.
 
 Verify-before-coding results: SwiftTerm ≥ 1.19 ships a build-tool plugin xcodebuild refuses
 without `-skipPackagePluginValidation` — pinned to 1.18.0. Its GPU renderer needs the Xcode
