@@ -56,6 +56,17 @@ field() { # field <Key> — first `Key: value` line of PUBLISHED.md, value only,
   sed -n "s/^[-* ]*$1:[[:space:]]*//p" "$PUB" 2>/dev/null | head -1 | sed 's/`//g; s/[[:space:]]*$//'
 }
 have() { command -v "$1" >/dev/null 2>&1; }
+# Every probe here crosses a network. A single dropped request is not evidence that a
+# service is off — reporting it as one sent this check red twice on things that were
+# provably fine (the auth provider, a GitHub issue). Three tries, then believe it.
+retry() {
+  _out=""; _i=1
+  while [ "$_i" -le 3 ]; do
+    _out="$("$@" 2>/dev/null)" && [ -n "$_out" ] && { printf '%s' "$_out"; return 0; }
+    _i=$((_i + 1)); sleep 2
+  done
+  printf '%s' "$_out"; return 1
+}
 
 daemon_version() {
   sed -n 's/^[[:space:]]*const VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/install/payload/meshd/server.ts" | head -1
@@ -150,7 +161,7 @@ live() {
   shots="$(git ls-files 'docs/overnight/2026-09-21/shots/*.png' | wc -l | tr -d ' ')"
   [ "$shots" -ge 4 ] || FAIL "2 fewer than 4 committed docs/overnight/2026-09-21/shots/*.png ($shots)"
   if have gh; then
-    body="$(gh pr view "$PR_NUMBER" --json body,state -q '.state + "\n" + .body' 2>/dev/null)"
+    body="$(retry gh pr view "$PR_NUMBER" --json body,state -q '.state + "\n" + .body')"
     printf '%s' "$body" | grep -q 'third pass' || FAIL "2 PR #$PR_NUMBER body lacks the third-pass table"
     printf '%s' "$body" | grep -q '0\.8\.0' || FAIL "2 PR #$PR_NUMBER body does not mention 0.8.0"
   else
@@ -160,7 +171,7 @@ live() {
   # 3. lesearch.ai serves the published build; clean-device install recorded.
   v="$(daemon_version)"
   [ -n "$v" ] || FAIL "3 no daemon VERSION in install/payload/meshd/server.ts"
-  page="$(curl -fsSL --max-time 20 "$LANDING" 2>/dev/null)"
+  page="$(retry curl -fsSL --max-time 20 "$LANDING")"
   if [ -z "$page" ]; then
     FAIL "3 $LANDING did not answer 200"
   else
@@ -170,7 +181,7 @@ live() {
   fi
   installer="$(field Installer)"
   [ -n "$installer" ] || installer="$LANDING/install.sh"
-  inst="$(curl -fsSL --max-time 30 "$installer" 2>/dev/null)"
+  inst="$(retry curl -fsSL --max-time 30 "$installer")"
   if [ -z "$inst" ]; then
     FAIL "3 $installer does not resolve to an installer"
   else
@@ -213,7 +224,7 @@ live() {
   if [ -n "$ANON" ]; then
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -H "apikey: $ANON" -H "Authorization: Bearer $ANON" "$SB_URL/rest/v1/feedback?select=id&limit=1")"
     case "$code" in 401|403) ok "4 anon-key GET /rest/v1/feedback -> $code (no read for anon)" ;; *) FAIL "4 anon-key GET /rest/v1/feedback answered $code (want 401/403: anon must not read feedback)" ;; esac
-    settings="$(curl -fsS --max-time 20 -H "apikey: $ANON" "$SB_URL/auth/v1/settings" 2>/dev/null)"
+    settings="$(retry curl -fsS --max-time 20 -H "apikey: $ANON" "$SB_URL/auth/v1/settings")"
     printf '%s' "$settings" | grep -q '"email":true' || FAIL "4 Supabase auth email provider is not enabled"
   fi
   uid="$(field 'Signup user')"
@@ -225,7 +236,7 @@ live() {
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -H "apikey: $SRK" -H "Authorization: Bearer $SRK" "$SB_URL/auth/v1/admin/users/$uid1")"
     [ "$code" = "200" ] || FAIL "4 signup user $uid1 not found via auth admin ($code)"
     rid1="$(printf '%s' "$rid" | cut -c1-36)"
-    row="$(curl -fsS --max-time 20 -H "apikey: $SRK" -H "Authorization: Bearer $SRK" "$SB_URL/rest/v1/feedback?id=eq.$rid1&select=id,kind,app_version,source,issue_url" 2>/dev/null)"
+    row="$(retry curl -fsS --max-time 20 -H "apikey: $SRK" -H "Authorization: Bearer $SRK" "$SB_URL/rest/v1/feedback?id=eq.$rid1&select=id,kind,app_version,source,issue_url")"
     printf '%s' "$row" | grep -q "\"id\":\"$rid1\"" || FAIL "4 feedback row $rid1 not present in Supabase"
     printf '%s' "$row" | grep -q "\"app_version\":\"$v\"" || FAIL "4 feedback row $rid1 was not written by the published app $v (app_version)"
     # 5. …and that row became an issue.
@@ -234,7 +245,7 @@ live() {
     printf '%s' "$row" | grep -q "\"issue_url\":\"$issue\"" || FAIL "5 feedback row $rid1 is not linked back to $issue (issue_url column)"
     if have gh && printf '%s' "$issue" | grep -Eq '/issues/[0-9]+$'; then
       n="${issue##*/}"
-      ij="$(gh issue view "$n" --repo "$FEEDBACK_REPO" --json labels,body,state -q '(.labels|map(.name)|join(",")) + "\n" + .state + "\n" + .body' 2>/dev/null)"
+      ij="$(retry gh issue view "$n" --repo "$FEEDBACK_REPO" --json labels,body,state -q '(.labels|map(.name)|join(",")) + "\n" + .state + "\n" + .body')"
       printf '%s' "$ij" | head -1 | grep -q 'from-users' || FAIL "5 issue #$n on $FEEDBACK_REPO is not labeled from-users"
       printf '%s' "$ij" | grep -q "$rid1" || FAIL "5 issue #$n does not cite feedback row $rid1"
     fi
