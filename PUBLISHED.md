@@ -5,7 +5,7 @@ produced by running something, not by describing it. Written 2026-09-22 from the
 run recorded in [docs/factory/runs/2026-09-22T093000Z-publish.md](docs/factory/runs/2026-09-22T093000Z-publish.md).
 
 Gate: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none`
-Gate SHA: 2c1444b48fea52bfbb9d1942336a564c23e759c0
+Gate SHA: 0235b35eb9ddc7b3452c69b7a8ed7df437eaa90a
 Gate log: docs/overnight/2026-09-21/gate-full-publish.txt
 PR: #133 OPEN (draft) — https://github.com/aryateja2106/lecoder-watch/pull/133
 Landing: https://lesearch.ai
