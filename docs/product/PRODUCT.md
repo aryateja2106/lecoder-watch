@@ -36,9 +36,10 @@ buzzes; the person reads the question, answers it, and the agent carries on with
 laptop closed. When the machine itself is needed there is a real terminal, a real
 trackpad and the screen, on the phone and on the watch.
 
-No account. No cloud relay. No server of ours in the data path. The phone talks
-directly to a small daemon on a machine the user owns, over their own Tailscale mesh or
-LAN.
+No account to pair or control anything. No cloud relay. No server of ours in the data
+path. The phone talks directly to a small daemon on a machine the user owns, over their
+own Tailscale mesh or LAN. The one thing that reaches us is a problem report the user
+sends on purpose (Settings → Report a problem), with an optional account so we can reply.
 
 **Who it is for.** People who want to use AI agents every day, whether or not they call
 themselves developers. Every other way to reach a machine from a phone assumes SSH keys,
@@ -226,7 +227,8 @@ through `LiveActivityController.swift`.
 | Screen & control — `RemoteScreenView.swift` | Screen, trackpad gestures, zoom to a region that arrives sharp; frames back-to-back; the edge back-swipe waits for the trackpad. One floating capsule (pointer/pan, zoom, keyboard, open-an-app, ⋯). **The keyboard is the machine's**: the system keyboard types straight through; the bar above it shows the machine's own modifiers (⌘⌥⌃⇧ on a Mac, Ctrl/Alt/Super on Linux) with a held key filled orange, escapes and arrows, the machine's launcher and a terminal one tap each, and the chords. Two monitors are two pictures with chips to switch (**0.6**) | Tap / drag / zoom / type | `/screen.jpg`, `screenRegion`, `/input` (moveTo absolute on Linux too), `/apps` (`terminal`, `launcher`, activate-or-launch by name; Linux lists .desktop apps; `MESH_LAUNCHER`) |
 | Files — `FileBrowserView.swift`, `FileViewer.swift` | Browse a machine's files; tap one to read it on the phone — Markdown rendered (headings, lists, code, tables), HTML shown, code and text sized by pinch; copy or share (**0.6**) | Open / read | `/fs`, `/fs/read` |
 | Apps tab — `AppsLibraryView.swift` | Every app an agent built, across every paired machine, grouped by name, newest first; "Less Search. More Agents." as the header line. Its own tab (**0.6**). Each build shows the devices it runs on (iPhone, iPad, Watch, Mac, Vision — read off the bundle by the daemon) and whether it is on this iPhone (proven by opening its URL scheme) | Open / Install | `/built-apps` (`platforms`, `scheme`) on each machine |
-| Report a problem — `FeedbackView.swift` | Your words plus a redacted bundle (app build, machines, daemon versions, last 50 events, the last error, Live Activity state) you read before it goes anywhere; share it, or save it on a machine under `~/.mesh/feedback/` for an agent to read (**0.6**) | Write / share / save | `/fs/write`; `check-feedback-redact.swift` pins the secret patterns |
+| Report a problem — `FeedbackView.swift`, `LeSearchCloud.swift` | Kind (bug / idea / other), title, your words, an optional screenshot or recording you pick, an optional contact e-mail, and a redacted bundle (app build, machines, daemon versions, last 50 events, the last error, Live Activity state) you read before it goes anywhere. **Send to LeSearch AI** writes one insert-only row to Supabase (`public.feedback`) that `scripts/feedback-to-issues.ts` turns into a deduped GitHub issue labeled `from-users` on LeSearch-AI/mesh; or share it, or save it on a machine under `~/.mesh/feedback/` for an agent to read (**0.6**, sent to us in **0.8**) | Send / share / save | `/fs/write`; `check-feedback-redact.swift` pins the secret patterns; `check-feedback-cloud.sh` pins the contract; `check-feedback-pipeline.sh` the worker |
+| Account — `AccountView.swift`, `LeSearchCloud.swift` | Optional. E-mail + password (Supabase Auth, session in the Keychain via `SecureStore.swift`) so a report can carry the reporter and we can reply. Never needed to pair or control a machine; `Sign out` removes the session (**0.8**) | Create / sign in / sign out | `check-feedback-cloud.sh` |
 | Guides — `GuidesView.swift` | The steps no app can do for the owner: pairing, Developer Mode on iPhone and Watch, signing team, Mac permissions, a Linux desktop, running an agent overnight (**0.6**) | Read | static; linked from Settings and the empty states |
 | Exposed secrets — `ExposedSecretsScreen.swift` | **0.6** What the daemon redacted, by kind and fingerprint; mark rotated | Mark rotated | `/exposures` |
 | Mesh Apps | Apps published or added on a machine; install one on this phone, with or without a cable | Install | `/apps` |
@@ -419,7 +421,7 @@ phrases, and the numbers from that run — before any code lands in the apps.
   design.
 - **VNC.** The daemon already serves screen and input over bearer-authed HTTP; setup never
   asks anyone to enable Screen Sharing.
-- **An account system.** Pairing is a code the user's own machine printed.
+- **An account system for access.** Pairing is a code the user's own machine printed; no login ever gates a machine. The optional account in Settings (0.8) exists only so a problem report can be answered — it is a contact detail, not a permission.
 - **Vision models on the local brain.** Text-only, by decision (2026-09-03).
 - **A second answer to "what needs me".** One function.
 

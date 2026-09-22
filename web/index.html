@@ -260,7 +260,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     <div class="spacer"></div>
     <a class="link hide-sm" href="#how">How it works</a>
     <a class="link hide-sm" href="#wrist">On your wrist</a>
-    <a class="link hide-sm" href="#agents">New in 0.6</a>
+    <a class="link hide-sm" href="#agents">New in 0.8</a>
     <a class="link hide-sm" href="#faq">FAQ</a>
     <a class="link" href="https://github.com/LeSearch-AI/mesh">GitHub</a>
     <a class="btn btn-primary" href="https://testflight.apple.com/join/pVYPTxc7">Join the beta</a>
@@ -268,7 +268,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 </header>
 
 <div class="wrap hero">
-  <span class="eyebrow"><span class="dot"></span>Free TestFlight beta · iPhone + Apple Watch</span>
+  <span class="eyebrow"><span class="dot"></span>Version 0.8.0 · iPhone + Apple Watch · Mac and Linux daemon</span>
   <h1>Your agents stop and ask. You answer from your wrist.</h1>
   <p class="lede">
     Coding agents run for hours and then freeze on one question — <em>can I force-push?</em>,
@@ -294,7 +294,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     <div class="term-body">
       <div class="term-line">
         <span class="dollar">$</span>
-        <code id="cmd-install">curl -fsSL https://mesh.lesearch.ai/install.sh | sh</code>
+        <code id="cmd-install">curl -fsSL https://lesearch.ai/install.sh | sh</code>
       </div>
       <div class="term-out"><span class="ok">✓</span> meshd installed · launchd · survives reboot</div>
       <div class="term-out"><span class="ok">✓</span> run <span style="color:var(--ink)">mesh pair</span> to put it on your phone</div>
@@ -395,7 +395,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
              script and the daemon source is public.</p>
           <div class="cmd">
             <span class="dollar">$</span>
-            <code id="cmd-1">curl -fsSL https://mesh.lesearch.ai/install.sh | sh</code>
+            <code id="cmd-1">curl -fsSL https://lesearch.ai/install.sh | sh</code>
             <button class="copy" data-copy="#cmd-1">Copy</button>
           </div>
         </div>
@@ -530,7 +530,39 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
 
 <section id="agents">
   <div class="wrap">
-    <span class="kicker">New in 0.6</span>
+    <span class="kicker">New in 0.8</span>
+    <h2>The whole machine from your phone. Linux too.</h2>
+    <p class="sub">What landed between 0.6 and 0.8.0, each one driven live on a Raspberry Pi, a Jetson and a Mac before it shipped.</p>
+
+    <div class="beats">
+      <div class="beat">
+        <span class="n">01</span>
+        <h3>Screen &amp; control, on Mac and Linux</h3>
+        <p>Every machine's row shows its live screen. Open it and the keyboard is <em>that</em>
+           machine's: ⌘⌥⌃⇧ on a Mac, Ctrl Alt Super on Linux, held keys lit, chords like
+           ⌘space and ⌘tab as one tap, the machine's own launcher and an app search sheet.
+           Two-finger tap is a right click. Two displays are two pictures with chips to switch.</p>
+      </div>
+      <div class="beat">
+        <span class="n">02</span>
+        <h3>Answer the agent's menus, not just its prompts</h3>
+        <p>When Claude Code shows a numbered permission list or a trust-this-folder question,
+           the phone and the watch show it as buttons. Pick one; the cursor moves and Enter is
+           sent, in order. Gauges on the machine page say how many more agents fit in memory,
+           and when one agent hits its usage limit a banner hands the session to another.</p>
+      </div>
+      <div class="beat">
+        <span class="n">03</span>
+        <h3>Report a problem and it reaches us</h3>
+        <p>Settings → Report a problem: your words, the kind (bug, idea, other), an optional
+           screenshot or recording you pick yourself, and a diagnostic bundle you read before it
+           goes — secrets replaced by their kind on the phone. Real reports become GitHub
+           issues labeled <code>from-users</code>, deduplicated, with your contact hashed. An
+           account is optional and only lets us reply.</p>
+      </div>
+    </div>
+
+    <span class="kicker" style="margin-top:56px">Since 0.6</span>
     <h2>Talk to the agent. Ship what it builds. Keep your keys.</h2>
     <p class="sub">Three things that were missing from a control plane for coding agents.</p>
 
@@ -657,6 +689,8 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     <a href="https://github.com/LeSearch-AI/mesh/blob/main/CHANGELOG.md">Changelog</a>
     <a href="https://github.com/LeSearch-AI/mesh/blob/main/ROADMAP.md">Roadmap</a>
     <a href="/install.sh">install.sh</a>
+    <a href="/getting-started">Getting started</a>
+    <a href="https://github.com/LeSearch-AI/mesh/issues?q=label%3Afrom-users">Reported problems</a>
     <a href="/privacy">Privacy</a>
     <a href="https://lesearch.ai">lesearch.ai</a>
   </div>

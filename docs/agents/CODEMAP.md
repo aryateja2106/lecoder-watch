@@ -15,7 +15,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | area | files | lines | what it is |
 |---|---|---|---|
 | `Shared/` | 17 | ~3,900 | Wire types and pure logic both apps compile; the self-checks link against these |
-| `iOS/` | 24 | ~11,000 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
+| `iOS/` | 26 | ~11,500 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
 | `Watch/` | 7 | ~4,600 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
@@ -24,8 +24,8 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `install/payload/bin/` | 9 | ~3,500 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
-| `web/` | 3 | ~1,700 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 111 | ~10,800 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `web/` | 4 | ~1,800 | Landing page (mesh.lesearch.ai) and the privacy page |
+| `scripts/` | 117 | ~11,300 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
@@ -55,16 +55,18 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 
 | file | size | purpose | checks |
 |---|---|---|---|
+| `AccountView.swift` | S | create or sign in to the optional LeSearch AI feedback account | — |
 | `AgentChatView.swift` | L | the transcript chat for one agent session: bubbles, decision cards, artifacts, suggestion chips | — |
 | `AppLock.swift` | S | Biometric gate in front of the app | — |
 | `AppsLibraryView.swift` | M | every app an agent built for you, across every machine, in one list | — |
 | `BackgroundRefresh.swift` | S | Periodic usage/limit polling while the app is closed | — |
 | `ContentView.swift` | XL | the phone's tab shell: Machines, attention rows, machine detail, Settings, the daemon-update and Local Network banners | — |
 | `ExposedSecretsScreen.swift` | S | Settings → Exposed secrets. meshd 0.6+ ("redact") replaces a token, key or password in event and output text before it ever leaves the machine — but printing… | — |
-| `FeedbackView.swift` | S | report a problem from the phone: what happened in your words, plus a redacted bundle (app build, machines, daemon versions, recent events, the last error) you… | check-feedback-redact |
+| `FeedbackView.swift` | M | report a problem from the phone: kind, title, what happened in your words, an optional screenshot or recording you pick, an optional contact email, and a… | check-feedback-cloud, check-feedback-redact |
 | `FileBrowserView.swift` | M | browse a machine's filesystem over /files and /fs, open links, read text files | — |
 | `FileViewer.swift` | M | read a file off a machine on the phone: Markdown rendered, HTML shown, code and text with a pinch to size — because most of watching an agent work is reading… | — |
 | `GuidesView.swift` | S | the short how-tos a new owner needs: pairing, letting agents install apps on this phone and watch, granting a Mac, a Linux desktop, overnight agents | — |
+| `LeSearchCloud.swift` | M | send feedback and manage the optional LeSearch AI account with Supabase over URLSession | check-feedback-cloud |
 | `LiveActivityController.swift` | M | Runs the live card for whichever session currently deserves one | — |
 | `MachineStatsView.swift` | S | a machine's load at a glance: memory, disk and CPU gauges, a live line of the last minute, the heaviest processes, and how many more agents would fit | — |
 | `MeshRelayApp.swift` | S | Receives the APNs device token and hands it to whoever registered interest | check-phone-input-and-wake |
@@ -141,7 +143,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `qr.ts` | L | a QR encoder with no dependencies, because the payload ships as plain .ts files that bun runs in place: an npm package here would mean an install step on every… | check-pair-qr |
 | `redact.ts` | M | every string that leaves this Mac for a phone, a watch, Apple's push servers or the events file passes through redact() first | check-redact |
 | `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-approve-path, check-apps-ota, check-apps-serve, check-brain, check-brand, check-cross-host-cp, check-daemon-050, check-daemon-gaps, check-fleet, check-harness-picker, check-host-guard, check-install-idempotent, check-kb-federation, check-linux-desktop, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-native-terminal-keys, check-package-mesh-install, check-pair-auth, check-paste-epipe, check-product-spec, check-pty-route, check-published, check-roundtrip, check-watch-terminal-wiring, check-wol |
-| `telemetry.ts` | S | one anonymized heartbeat a day, and nothing else, ever | — |
+| `telemetry.ts` | S | one anonymized heartbeat a day, and nothing else, ever | check-feedback-cloud |
 | `wol.ts` | S | Wake-on-LAN, so "power that machine back on" works from the wrist | — |
 
 ## `install/payload/bin/`
@@ -180,5 +182,6 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | file | size | purpose | checks |
 |---|---|---|---|
 | `brand/index.html` | L | — | — |
-| `index.html` | L | — | check-brand |
-| `privacy.html` | M | — | — |
+| `getting-started.html` | S | — | check-web-docs |
+| `index.html` | L | — | check-brand, check-web-docs |
+| `privacy.html` | M | — | check-web-docs |

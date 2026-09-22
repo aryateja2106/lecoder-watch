@@ -6,6 +6,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 
 | symbol | kind | where |
 |---|---|---|
+| AccountView | struct | iOS/AccountView.swift:8 |
 | activeDisplays | func | install/payload/bin/mesh-input.swift:77 |
 | activeFirst | func | Watch/WatchViews.swift:471 |
 | activeFirst | func | iOS/ContentView.swift:1064 |
@@ -95,7 +96,10 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | clampedZoom | func | Shared/ScreenZoom.swift:82 |
 | classifyRisk | func | Shared/RiskClassifier.swift:63 |
 | claudeProjectSlug | function | install/payload/meshd/chat.ts:48 |
+| clean | function | scripts/feedback-to-issues.ts:98 |
 | click | func | install/payload/bin/mesh-input.swift:232 |
+| CloudError | struct | iOS/LeSearchCloud.swift:21 |
+| CloudSession | struct | iOS/LeSearchCloud.swift:5 |
 | cmdApps | function | install/payload/bin/mesh:1669 |
 | cmdAppsAdd | function | install/payload/bin/mesh:1841 |
 | cmdAppsConfig | function | install/payload/bin/mesh:1800 |
@@ -139,12 +143,13 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | CodexStop | type | install/payload/meshd/codex-state.ts:26 |
 | COLLAPSE_ID_MAX_BYTES | export | install/payload/meshd/push.ts:112 |
 | collapseId | function | install/payload/meshd/push.ts:130 |
-| compactEventBody | func | iOS/ContentView.swift:1763 |
+| compactEventBody | func | iOS/ContentView.swift:1789 |
 | confirmOrDie | function | install/payload/bin/mesh:1124 |
 | ConnectionPhase | enum | Shared/Models.swift:627 |
 | connectionPhase | func | Shared/Models.swift:642 |
+| contactHash | function | scripts/feedback-to-issues.ts:104 |
 | ContentView | struct | iOS/ContentView.swift:8 |
-| ControlWebView | struct | iOS/ContentView.swift:1615 |
+| ControlWebView | struct | iOS/ContentView.swift:1641 |
 | copyableCommand | func | iOS/ContentView.swift:1036 |
 | CopyableCommand | struct | iOS/PairMachineView.swift:281 |
 | copySide | function | install/payload/bin/mesh:144 |
@@ -162,7 +167,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | describe | func | install/payload/bin/mesh-input.swift:186 |
 | describeFlags | func | install/payload/bin/mesh-input.swift:168 |
 | detectedLinks | func | iOS/FileBrowserView.swift:335 |
-| DiagnoseRow | struct | iOS/ContentView.swift:1498 |
+| DiagnoseRow | struct | iOS/ContentView.swift:1524 |
 | DictateLink | struct | Watch/WatchViews.swift:34 |
 | die | function | install/payload/bin/mesh:112 |
 | DirectKeyboard | struct | iOS/RemoteScreenView.swift:1290 |
@@ -181,7 +186,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | envSecrets | function | install/payload/meshd/redact.ts:103 |
 | EventAlertDeduper | struct | Shared/AlertGating.swift:45 |
 | EventsView | struct | Watch/WatchViews.swift:489 |
-| eventTime | func | iOS/ContentView.swift:1754 |
+| eventTime | func | iOS/ContentView.swift:1780 |
 | eventToArgs | function | install/payload/meshd/input-linux.ts:152 |
 | ExpandedDetailBlock | struct | iOS/AgentChatView.swift:935 |
 | ExposedSecretsScreen | struct | iOS/ExposedSecretsScreen.swift:8 |
@@ -190,8 +195,9 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | ExposureRow | struct | iOS/ExposedSecretsScreen.swift:107 |
 | ExposureStatus | type | install/payload/meshd/redact.ts:28 |
 | externalFootprint | function | install/payload/bin/mesh:1968 |
-| FeedbackBundle | enum | iOS/FeedbackView.swift:85 |
-| FeedbackView | struct | iOS/FeedbackView.swift:11 |
+| FeedbackBundle | enum | iOS/FeedbackView.swift:255 |
+| FeedbackReport | struct | iOS/LeSearchCloud.swift:12 |
+| FeedbackView | struct | iOS/FeedbackView.swift:16 |
 | FileBrowserView | struct | iOS/FileBrowserView.swift:19 |
 | fileSizeLabel | func | iOS/FileBrowserView.swift:315 |
 | fileSymbol | func | iOS/FileBrowserView.swift:371 |
@@ -283,6 +289,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | isResumable | function | install/payload/meshd/codex-state.ts:157 |
 | isShellPrompt | func | Shared/Models.swift:1585 |
 | isSocketLoopback | function | install/payload/meshd/loopback-trust.ts:29 |
+| issueBody | function | scripts/feedback-to-issues.ts:133 |
+| issueTitle | function | scripts/feedback-to-issues.ts:129 |
 | isWrongEnvironment | function | install/payload/meshd/push.ts:276 |
 | KbEntry | type | install/payload/meshd/kb.ts:18 |
 | kbGet | function | install/payload/meshd/kb.ts:85 |
@@ -293,6 +301,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | lastPathBit | func | Watch/WatchViews.swift:1625 |
 | launchCommand | function | install/payload/meshd/handoff.ts:51 |
 | LaunchSheet | struct | iOS/RemoteScreenView.swift:1362 |
+| LeSearchCloud | enum | iOS/LeSearchCloud.swift:26 |
 | LevelMeter | struct | iOS/VoiceInput.swift:155 |
 | LimitHandoffBanner | struct | iOS/TerminalView.swift:996 |
 | LimitHelpers | enum | Shared/LimitHelpers.swift:18 |
@@ -346,7 +355,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MachineStatsRow | struct | iOS/MachineStatsView.swift:19 |
 | MachineStatsView | struct | iOS/MachineStatsView.swift:67 |
 | machineSummary | func | iOS/ContentView.swift:1078 |
-| MachineThumbnail | struct | iOS/ContentView.swift:1774 |
+| MachineThumbnail | struct | iOS/ContentView.swift:1800 |
 | magicPacket | function | install/payload/meshd/wol.ts:24 |
 | main | function | install/payload/bin/mesh:2334 |
 | MarkdownBlocks | struct | iOS/AgentChatView.swift:750 |
@@ -396,6 +405,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | normalizedPoint | func | Shared/ScreenZoom.swift:140 |
 | normalizedPreviewPoint | func | Shared/Models.swift:1330 |
 | notePushDecision | function | install/payload/meshd/push.ts:176 |
+| Notification | extension | iOS/AccountView.swift:4 |
 | notificationIdsToClear | func | Shared/AlertGating.swift:123 |
 | NotificationManager | class | iOS/NotificationManager.swift:9 |
 | NotificationPermission | class | MeshDesktop/PermissionsView.swift:221 |
@@ -432,9 +442,10 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | phoneClipboardText | func | iOS/TerminalView.swift:967 |
 | PhoneConnectivity | class | iOS/PhoneConnectivity.swift:7 |
 | pickPane | function | install/payload/meshd/handoff.ts:207 |
-| PinnedLimitEditor | struct | iOS/ContentView.swift:1537 |
+| PinnedLimitEditor | struct | iOS/ContentView.swift:1563 |
 | PinnedLimitSession | struct | Shared/Models.swift:596 |
 | placeWindow | func | install/payload/bin/mesh-input.swift:402 |
+| plan | function | scripts/feedback-to-issues.ts:157 |
 | plistValue | function | install/payload/bin/mesh:1754 |
 | pointerGain | func | Shared/Models.swift:1305 |
 | pointerScreenPosition | func | Shared/ScreenZoom.swift:50 |
@@ -482,10 +493,11 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | RemoteSystemView | struct | Watch/RemoteView.swift:1352 |
 | RemoteTouch | enum | Watch/RemoteView.swift:1077 |
 | RemoteView | struct | Watch/RemoteView.swift:435 |
-| RemoteWebScreen | struct | iOS/ContentView.swift:1588 |
+| RemoteWebScreen | struct | iOS/ContentView.swift:1614 |
 | RemoteWindowView | struct | Watch/RemoteView.swift:1256 |
+| render | function | scripts/build-web-docs.ts:30 |
 | resetText | func | Watch/WatchViews.swift:1630 |
-| resetText | func | iOS/ContentView.swift:1749 |
+| resetText | func | iOS/ContentView.swift:1775 |
 | resolveHost | function | install/payload/bin/mesh:58 |
 | restartDaemon | function | install/payload/bin/mesh:890 |
 | Resumable | type | install/payload/meshd/handoff.ts:19 |
@@ -505,12 +517,12 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | ScreenPeekView | struct | Watch/WatchViews.swift:1468 |
 | scroll | func | install/payload/bin/mesh-input.swift:259 |
 | SecretExposure | struct | Shared/Models.swift:1145 |
-| SectionLabel | struct | iOS/ContentView.swift:1738 |
+| SectionLabel | struct | iOS/ContentView.swift:1764 |
 | SecureStore | enum | Shared/SecureStore.swift:17 |
 | sendWake | function | install/payload/meshd/wol.ts:53 |
 | SentDecisionLine | struct | iOS/AgentChatView.swift:706 |
 | serveApp | function | install/payload/meshd/apps.ts:224 |
-| ServiceStatusRow | struct | iOS/ContentView.swift:1721 |
+| ServiceStatusRow | struct | iOS/ContentView.swift:1747 |
 | SessionActivityAttributes | struct | Shared/SessionActivity.swift:13 |
 | sessionCost | func | iOS/ContentView.swift:1052 |
 | SessionDisplayState | enum | Shared/Models.swift:833 |
@@ -535,11 +547,12 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | shellQuotedArgument | func | Shared/Models.swift:1521 |
 | shortName | func | Watch/WatchViews.swift:1619 |
 | shouldSend | function | install/payload/meshd/push.ts:205 |
+| similar | function | scripts/feedback-to-issues.ts:119 |
 | skillsPayloadDir | function | install/payload/bin/mesh:1508 |
 | smokeTest | function | install/payload/bin/mesh:730 |
 | snapshotMachineMatching | func | Shared/Models.swift:167 |
 | stagePayload | function | install/payload/bin/mesh:684 |
-| StatRow | struct | iOS/ContentView.swift:1703 |
+| StatRow | struct | iOS/ContentView.swift:1729 |
 | Stats | struct | Shared/Models.swift:272 |
 | StatsSample | struct | iOS/MachineStatsView.swift:11 |
 | statusColor | func | Watch/WatchViews.swift:479 |
@@ -569,6 +582,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | TerminalTab | struct | iOS/TerminalView.swift:9 |
 | TerminalTheme | struct | iOS/NativeTerminalScreen.swift:320 |
 | ThinkingDisclosure | struct | iOS/AgentChatView.swift:823 |
+| tokens | function | scripts/feedback-to-issues.ts:109 |
 | tokenWeakness | function | install/payload/meshd/doctor.ts:35 |
 | ToolResultCard | struct | iOS/AgentChatView.swift:863 |
 | TrackpadSurface | struct | iOS/RemoteScreenView.swift:656 |

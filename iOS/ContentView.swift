@@ -1251,6 +1251,8 @@ private struct SettingsTab: View {
     @ObservedObject private var notifications = NotificationManager.shared
     @State private var newCommand = ""
     @State private var pairing = false
+    @State private var cloudSession = LeSearchCloud.currentSession()
+    @State private var signingOut = false
     @FocusState private var newCommandFocused: Bool
     /// Read from ActivityKit rather than from our own controller so the row states the
     /// system's answer, not our cache of it, and follows the same stream the controller
@@ -1334,6 +1336,27 @@ private struct SettingsTab: View {
                         Label("Report a problem", systemImage: "ladybug")
                     }
                 }
+                Section("Account") {
+                    if let cloudSession {
+                        LabeledContent("Signed in") { Text(cloudSession.email).foregroundStyle(.secondary) }
+                        Button("Sign out", role: .destructive) {
+                            Task {
+                                signingOut = true
+                                await LeSearchCloud.signOut()
+                                self.cloudSession = nil
+                                signingOut = false
+                            }
+                        }
+                        .disabled(signingOut)
+                    } else {
+                        NavigationLink { AccountView() } label: {
+                            Label("Sign in or create an account", systemImage: "person.crop.circle")
+                        }
+                        Text("Optional. Lets us reply to your reports.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Section("Machines") {
                     ForEach($store.machines) { $m in
                         VStack(alignment: .leading, spacing: 10) {
@@ -1395,8 +1418,6 @@ private struct SettingsTab: View {
                     .font(.caption)
                 }
 
-                alertsSection
-
                 Section("Quick send") {
                     ForEach($store.quickCommands, id: \.self) { $cmd in
                         TextField("command", text: $cmd.shellSafe)
@@ -1421,6 +1442,8 @@ private struct SettingsTab: View {
                         .buttonStyle(.borderless)
                     }
                 }
+
+                alertsSection
 
                 Section {
                     Text("When a provider session limit resets, tap the alert to send continue to the pinned rmux or cmux session.")
@@ -1476,6 +1499,9 @@ private struct SettingsTab: View {
                 Button("Save") { store.save(); Task { await store.refresh() } }
             }
             .sheet(isPresented: $pairing) { PairMachineView().environmentObject(store) }
+            .onReceive(NotificationCenter.default.publisher(for: .cloudSessionChanged)) { _ in
+                cloudSession = LeSearchCloud.currentSession()
+            }
             // TabView keeps every tab mounted, so switching away from Settings never
             // tore this view down — with no @FocusState, nothing told a focused
             // TextField to resign, and the keyboard stayed parked over whatever tab

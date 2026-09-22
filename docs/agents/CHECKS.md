@@ -4,6 +4,7 @@
 
 | script | proves / does |
 |---|---|
+| `build-web-docs.ts` | renders docs/getting-started.md into web/getting-started.html so lesearch.ai serves the same page the repo… |
 | `check-agent-identity-transport.sh` | two ways a session identity gets silently lost in transit, both verified against a live daemon before this… |
 | `check-agent-menu.swift` | AgentMenu recognises the menus real agents print and picks options with the right keys |
 | `check-agent-new-latency.sh` | the 900ms toll on session creation must stay dead |
@@ -31,6 +32,8 @@
 | `check-docs-index.sh` | every doc is findable, and the index does not point at ghosts |
 | `check-drag-lock-release.sh` | the watch must never walk away holding the Mac's mouse button down |
 | `check-entitlements.sh` | the capabilities the code calls are the capabilities the build is entitled to |
+| `check-feedback-cloud.sh` | the in-app feedback client talks to the live contract and nothing more: the anon key is the daemon's (one… |
+| `check-feedback-pipeline.sh` | the feedback worker files the right issues: a report that matches an open from-users issue becomes a comment… |
 | `check-feedback-redact.swift` | the problem report never carries a secret: every key shape the daemon's redactor knows is replaced by its… |
 | `check-file-browser-filter.swift` | Run via `sh scripts/check-all.sh`, which compiles every check-*.swift against the full Shared/ dependency set |
 | `check-fleet.sh` | every machine in ~/.mesh/hosts.json runs THIS tree's meshd and is usable |
@@ -100,14 +103,17 @@
 | `check-watch-scrollback.swift` | Two properties of the watch terminal that cannot be checked by running it — a view is needed for that — but… |
 | `check-watch-smoke.sh` | the watch app must LAUNCH on a watch simulator, not merely compile |
 | `check-watch-terminal-wiring.sh` | The watch terminal was "clean but unusable" for one boring reason: meshd accepted fourteen keys, the phone… |
+| `check-web-docs.sh` | web/getting-started.html is the rendering of docs/getting-started.md (one source |
 | `check-wol.sh` | wol.ts self-check: packet shape and MAC parsing, with no UDP leaving the machine |
 | `codemap-index.py` | generate the committed codebase map from the tree itself |
 | `codemap.sh` | rebuild the codebase map every agent reads before it greps |
+| `feedback-to-issues.ts` | the feedback pipeline: unprocessed public.feedback rows become deduped GitHub issues labeled from-users on… |
 | `gate-build.sh` | the factory "build" gate (gates.sh full): the three apps compile for their simulators, the way CI builds them |
 | `gate-lint.sh` | the factory "lint" gate (gates.sh fast) |
 | `gate-types.sh` | the factory "types" gate (gates.sh fast): does the daemon typecheck, and do the shared models the phone, the… |
 | `native-terminal-keys-test.swift` | TerminalKeyRouter turns emulator bytes into the keys meshd accepts |
 | `package-mesh-install.sh` | Package the mesh installer for hosting |
+| `product-shots.sh` | regenerate docs/product/shots/*.png from the current build: the iPhone screens through… |
 | `release-mesh-install.sh` | cut a daemon release to LeSearch-AI/mesh-install |
 | `release-testflight-asc.sh` | build, upload and distribute the app to TestFlight |
 | `release-testflight.sh` | RETIRED — this is now a shim onto scripts/release-testflight-asc.sh |

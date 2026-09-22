@@ -82,15 +82,16 @@ footer a:hover{color:var(--ink)}
 
 <main class="wrap">
   <h1>Privacy</h1>
-  <div class="updated">Last updated 25 August 2026</div>
+  <div class="updated">Last updated 22 September 2026</div>
 
   <div class="tldr">
     <div class="badge">Data Not Collected</div><br>
-    <strong>The apps collect nothing and send nothing to us.</strong> LeSearch AI has no
-    accounts, no analytics and no servers of ours in the data path. Your phone and watch
-    talk straight to machines you own, over a network you already control. The two
-    exceptions worth knowing about — the daemon's optional heartbeat and push
-    notifications passing through Apple — are each explained in full below.
+    <strong>The apps collect nothing and send nothing to us on their own.</strong> LeSearch AI
+    has no analytics and no servers of ours in the data path. Your phone and watch talk
+    straight to machines you own, over a network you already control. The exceptions worth
+    knowing about — a problem report you choose to send, the optional account that goes
+    with it, the daemon's optional heartbeat and push notifications passing through Apple
+    — are each explained in full below.
   </div>
 
   <h2>Who this is</h2>
@@ -167,11 +168,36 @@ footer a:hover{color:var(--ink)}
     you open the app and pair.
   </p>
 
-  <h2>No accounts</h2>
+  <h2>Report a problem (only when you tap Send)</h2>
   <p>
-    There is nothing to sign up for, nothing to log into, and no password to forget.
-    Pairing is a code your own machine shows you; the trust lives between your devices
-    and goes no further.
+    Settings → <em>Report a problem</em> sends a report to us <strong>only when you tap
+    “Send to LeSearch AI”</strong>. What leaves the phone is listed above that button and
+    is exactly this: the kind (bug / idea / other), your title and note, the app version
+    and build, the device model and iOS version, a contact e-mail if you typed one, a
+    screenshot or screen recording if you picked one yourself, and — when the toggle is on
+    — a diagnostic bundle (recent event titles, machine names and daemon versions, the last
+    error the app saw) that the phone redacts first: anything shaped like a key or token is
+    replaced by its kind before the bundle exists. Tokens, file contents and screen frames
+    never leave the phone this way; the app cannot capture a screenshot by itself.
+  </p>
+  <p>
+    Reports land in a database we run (Supabase, project <code>zmisjteztezaqfflwbgf</code>)
+    where the app may only ever <em>add</em> a row — it cannot read anyone's reports back.
+    A worker turns each report into a public GitHub issue on
+    <a href="https://github.com/LeSearch-AI/mesh/issues?q=label%3Afrom-users">LeSearch-AI/mesh</a>
+    labeled <code>from-users</code>, after redacting every string again. Your e-mail address
+    is never copied into the issue; only a short hash of it is, so two reports from the same
+    person can be matched. An attachment is linked by a URL that expires after seven days.
+    To have a report deleted, mail the address above with the reference the app showed you.
+  </p>
+
+  <h2>Accounts are optional</h2>
+  <p>
+    There is nothing you must sign up for. Pairing is a code your own machine shows you;
+    the trust lives between your devices and goes no further. Settings → <em>Account</em>
+    lets you create an account with an e-mail and a password if you want us to be able to
+    reply to your reports; it is used for nothing else. The session token is kept in the
+    iOS Keychain. Sign out removes it; to delete the account, mail the address above.
   </p>
 
   <h2>What Apple collects on its own</h2>
