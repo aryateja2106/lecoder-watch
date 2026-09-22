@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, a spoken replace with `speak: true` drafts that new transcript to a held file, and `GET /knowledge?q=` matches a title or a body and returns only `{ id, title }`. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, pull request 193, and pull request 195 do not prove a microphone or a speaker. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, a spoken replace with `speak: true` drafts that new transcript to a held file, `GET /knowledge?q=` matches a title or a body and returns only `{ id, title }`, and a local `q` on `POST /agent-note` selects one note when `id` is absent. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, pull request 193, pull request 195, and pull request 197 do not prove a microphone or a speaker. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
 
 ## ADDED Requirements
 
@@ -396,3 +396,50 @@ After `speak: true` with local `MESH_STT` and local `MESH_TTS` returns `spoken` 
 - **WHEN** `sh scripts/check-local-note-search.sh` passes on `127.0.0.1:8898` at `1238daa` with the gateway key unset
 - **THEN** the agent records that spare-daemon check and that daemon CI and Xcode CI are both green on `1238daa` (check run `35736830546`)
 - **AND** the agent does not claim a microphone or a speaker was proven
+
+### Requirement: A local query selects one note when id is absent
+
+When `id` is absent, `POST /agent-note` SHALL accept a local `q` and SHALL select with `listNotes`. One match SHALL draft one relative file. That file SHALL be mode 600 and SHALL NOT be executed. Zero matches MUST answer 404. Several matches MUST answer 409. A remote or empty `q` MUST answer 400. Those results MUST NOT call the model. The hold SHALL match `textMovesSecret` for a pairing code, hosts.json, a mesh token, `.mesh/token`, and the upload/send sentence, and MUST NOT import `route.ts` or `filter.ts`. `id` without `q` SHALL still draft. `server.ts` was not edited. This behavior is pull request 197. The typecheck and `sh scripts/check-query-note-draft.sh` on `127.0.0.1:8898` at `e11483d` both exited 0 with the gateway key unset. Daemon CI is green on `e11483d`. Apps (Xcode) is still running on that tip (run `35739420177`). An agent MUST NOT claim both jobs are green on `e11483d`, MUST NOT rebuild this draft, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. This does not prove a microphone or a speaker. Pull request 195 stays the local note search at `1238daa`, with daemon CI and Xcode CI both green (check run `35736830546`).
+
+#### Scenario: One match drafts one relative file
+
+- **WHEN** `id` is absent and `q` matches exactly one note
+- **THEN** the agent-note path drafts that note to one relative file
+- **AND** that file is mode 600 and is not executed
+
+#### Scenario: Zero matches is 404
+
+- **WHEN** `id` is absent and `q` matches no note
+- **THEN** the daemon answers 404
+- **AND** the model is not called
+
+#### Scenario: Several matches is 409
+
+- **WHEN** `id` is absent and `q` matches more than one note
+- **THEN** the daemon answers 409
+- **AND** the model is not called
+
+#### Scenario: A remote or empty query is 400
+
+- **WHEN** `id` is absent and `q` is remote or empty
+- **THEN** the daemon answers 400
+- **AND** the model is not called
+
+#### Scenario: A secret note is held without importing the route modules
+
+- **WHEN** the selected note asks to move a pairing code, hosts.json, a mesh token, `.mesh/token`, or matches the upload/send sentence
+- **THEN** the note stays on hold
+- **AND** the draft does not import `route.ts` or `filter.ts`
+
+#### Scenario: An id without a query still drafts
+
+- **WHEN** a client posts `/agent-note` with `id` and without `q`
+- **THEN** that id is drafted
+- **AND** `listNotes` is not required to choose it
+
+#### Scenario: The query draft does not prove a microphone or a speaker
+
+- **WHEN** `sh scripts/check-query-note-draft.sh` passes on `127.0.0.1:8898` at `e11483d` with the gateway key unset
+- **THEN** the agent records that spare-daemon check, that daemon CI is green on `e11483d`, and that apps (Xcode) is still running on run `35739420177`
+- **AND** the agent does not claim a microphone or a speaker was proven
+- **AND** the agent does not claim both CI jobs are green on `e11483d`
