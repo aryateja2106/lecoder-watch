@@ -3,8 +3,13 @@
 // opens a socket: no Supabase client, no model call, no download.
 //
 //   POST /knowledge      { path, speak? } | { audio }  -> { id, title, spoken }
+//   POST /knowledge/:id  { body }                      -> { id, title, body }
 //   GET  /knowledge                        -> { notes: [{ id, title }] }
 //   GET  /knowledge/:id                    -> { id, title, body }
+//
+// Posting an existing id replaces that one note's body. A missing id does
+// not create a note. A remote URL, a scheme, or a protocol-relative path
+// does not write.
 //
 // speak is optional. When it is true and MESH_TTS names a binary the user
 // already has, that binary receives the note text on stdin. The note is
@@ -306,6 +311,47 @@ async function maybeSpeak(text: string, speak: boolean): Promise<boolean> {
   return true;
 }
 
+// Replace the body of a note that is already on disk. The id in the path is
+// the only note this writes. A missing file stays missing. The text itself
+// is stored; a remote URL is not fetched and is not written.
+async function replaceNoteBody(id: string, req: Request): Promise<Response> {
+  let decoded = id;
+  try { decoded = decodeURIComponent(id); } catch { return json({ error: "not found" }, 404); }
+  if (!NOTE_ID.test(decoded)) return json({ error: "not found" }, 404);
+  const dir = knowledgeDir();
+  const file = join(dir, `${decoded}.json`);
+  let raw: { id?: unknown; title?: unknown; body?: unknown };
+  try {
+    raw = JSON.parse(await readFile(file, "utf8"));
+  } catch {
+    return json({ error: "not found" }, 404);
+  }
+  if (raw?.id !== decoded || typeof raw.title !== "string" || typeof raw.body !== "string") {
+    return json({ error: "not found" }, 404);
+  }
+  const payload = (await req.json().catch(() => null)) as {
+    body?: unknown;
+    path?: unknown;
+    audio?: unknown;
+    url?: unknown;
+  } | null;
+  const presented = [payload?.body, payload?.path, payload?.audio, payload?.url];
+  for (const value of presented) {
+    if (typeof value === "string" && refusesRemote(value)) {
+      return json({ error: "body must be local text" }, 400);
+    }
+  }
+  if (!payload || typeof payload.body !== "string") return json({ error: "body required" }, 400);
+  const next = clip(payload.body.replace(/\u0000/g, ""), MAX_BODY);
+  if (!next.trim()) return json({ error: "body required" }, 400);
+  raw.body = next;
+  await ensureDir(dir);
+  await writeFile(file, `${JSON.stringify(raw)}\n`, { mode: FILE_MODE });
+  await chmod(file, FILE_MODE);
+  await chmod(dir, DIR_MODE);
+  return json({ id: decoded, title: raw.title, body: next });
+}
+
 async function ingest(req: Request): Promise<Response> {
   const body = (await req.json().catch(() => null)) as { path?: unknown; speak?: unknown; audio?: unknown } | null;
   if (body && typeof body.audio === "string" && body.audio.trim()) return ingestSpoken(body.audio);
@@ -348,9 +394,12 @@ async function ingest(req: Request): Promise<Response> {
 export async function handleKnowledge(req: Request, url: URL): Promise<Response | null> {
   const one = url.pathname.match(/^\/knowledge\/([^/]+)$/);
   if (one) {
-    if (req.method !== "GET") return json({ error: "method not allowed" }, 405);
-    const note = await readNote(one[1]);
-    return note ? json(note) : json({ error: "not found" }, 404);
+    if (req.method === "GET") {
+      const note = await readNote(one[1]);
+      return note ? json(note) : json({ error: "not found" }, 404);
+    }
+    if (req.method === "POST") return replaceNoteBody(one[1], req);
+    return json({ error: "method not allowed" }, 405);
   }
   if (url.pathname !== "/knowledge") return null;
   if (req.method === "GET") return json({ notes: await listNotes() });
