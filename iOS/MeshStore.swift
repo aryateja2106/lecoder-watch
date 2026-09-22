@@ -31,6 +31,10 @@ final class MeshStore: ObservableObject {
     @Published var snapshot: MeshSnapshot?
     @Published var events: [AgentEvent] = []
     @Published var lastError: StoreError?
+    /// The knowledge note this phone is asking. Empty until the user names one.
+    @Published var currentKnowledgeNote = ""
+    /// The last ask's draft, or a short status when the daemon held it.
+    @Published var knowledgeAskLine: String?
     @Published var polling = false
     /// False until the very first poll has finished. "No machines online" and "we have
     /// not looked yet" are different sentences, and showing the first one during launch
@@ -688,6 +692,42 @@ final class MeshStore: ObservableObject {
         }
         await refresh()
         return failure
+    }
+
+    /// Ask the current knowledge note. Nothing is posted until the user confirms.
+    func askCurrentKnowledgeNote(host: String, ask: String, confirmed: Bool) {
+        guard confirmed else { return }
+        let q = currentKnowledgeNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let question = ask.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty, !question.isEmpty else {
+            fail("Name the note and the question first")
+            return
+        }
+        guard let machine = machineMatching(host, in: machines),
+              let snap = snapshot?.machines.first(where: { $0.host == machine.host }),
+              snap.reachable, snap.authError == nil else {
+            fail("Ask needs a direct link to this Mac")
+            return
+        }
+        lastError = nil
+        let c = client(for: machine)
+        Task {
+            do {
+                let reply = try await c.askAgentNote(q: q, ask: question, confirm: true)
+                knowledgeAskLine = Self.knowledgeAskLine(reply)
+            } catch {
+                fail("ask failed")
+                knowledgeAskLine = nil
+            }
+        }
+    }
+
+    private static func knowledgeAskLine(_ reply: AgentNoteAsk) -> String {
+        if reply.held { return "Held" }
+        if let draft = reply.draft, !draft.isEmpty {
+            return reply.commandRan ? "Ran \(draft)" : draft
+        }
+        return reply.modelClass
     }
 
     // MARK: Power
