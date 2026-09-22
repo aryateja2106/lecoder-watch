@@ -91,12 +91,12 @@ check-inspect-crop: OK
 check-install-idempotent: OK (live daemon skips, dead one is repaired, --force overrides, older upgrades, unset SHELL survives)
 check-intent: SKIP — no needle CLI at /Users/aryateja/Projects/lecoder-watch/.claude/worktrees/compassionate-cohen-53d9fb/references/external/models/needle2/macos-arm64/needle (hf download Cactus-Compute/needle2 macos-arm64/needle --local-dir references/external/models/needle2)
 check-ios-smoke: running UI smoke tests on iPhone 18 Pro (iOS 27.0), simulator F28EA5EE-B84E-4FBB-846F-7DECC5E3EE4C
-  Test Case '-[MeshWatchUITests.SmokeTests testATextFieldCanAppear]' passed (16.417 seconds).
-  Test Case '-[MeshWatchUITests.SmokeTests testEveryTabSurvives]' passed (28.019 seconds).
-  Test Case '-[MeshWatchUITests.SmokeTests testPairSheetOpens]' passed (15.378 seconds).
+  Test Case '-[MeshWatchUITests.SmokeTests testATextFieldCanAppear]' passed (16.453 seconds).
+  Test Case '-[MeshWatchUITests.SmokeTests testEveryTabSurvives]' passed (26.601 seconds).
+  Test Case '-[MeshWatchUITests.SmokeTests testPairSheetOpens]' passed (14.147 seconds).
 check-ios-smoke: OK — the app launches, every tab renders, and a text field can appear
 check-ios-smoke:      ran on: iPhone 18 Pro · iOS 27.0 · F28EA5EE-B84E-4FBB-846F-7DECC5E3EE4C
-no notes match "kb-structural-77769" on this machine
+no notes match "kb-structural-43231" on this machine
 check-kb-federation: OK
   200  https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh
   200  https://github.com/LeSearch-AI/mesh-install/releases/latest/download/mesh-install.tgz
@@ -128,9 +128,9 @@ note: meshd is not answering on 127.0.0.1:8998 — upgrading the files anyway
   trial run ok: it reports meshd 0.8.0
   installed meshd 0.8.0  (bin: mesh, mesh-kb, mesh-agent-run, mesh-codex-notify, mesh-hook, mesh-self-check, start-cmux-bridge, mesh-event, mesh-input.swift)
   hooks: cmux-bridge.zsh
-  --no-restart: /var/folders/wl/2qjnl0_954zgnxtthcl_g8600000gn/T/tmp.7dCS8WoXVK/mesh/meshd is 0.8.0, the running daemon is still whatever it was
+  --no-restart: /var/folders/wl/2qjnl0_954zgnxtthcl_g8600000gn/T/tmp.7siQgNjJxo/mesh/meshd is 0.8.0, the running daemon is still whatever it was
 mesh upgrade: 0.0.1-test → 0.8.0 on local
-  backup   /var/folders/wl/2qjnl0_954zgnxtthcl_g8600000gn/T/tmp.7dCS8WoXVK/mesh/backups/meshd-0.0.1-test-1790082206
+  backup   /var/folders/wl/2qjnl0_954zgnxtthcl_g8600000gn/T/tmp.7siQgNjJxo/mesh/backups/meshd-0.0.1-test-1790083841
   restart  skipped (--no-restart)
 check-mesh-upgrade: OK (0.0.1-test -> 0.8.0, state preserved, hooks synced, failure is a no-op, daemon really restarted)
 check-mesh-version: OK (CLI reports 0.8.0 from the payload, and defers to an installed tree)
@@ -147,7 +147,7 @@ ok:   harness-picker — check-harness-picker: OK
 ok:   pair-auth — check-pair-auth: OK
 ok:   intent — check-intent: SKIP — no needle CLI at /Users/aryateja/Projects/lecoder-watch/.claude/worktrees/compassionate-cohen-53d9fb/references/external/models/needle2/macos-arm64/needle (hf download Cactus-Compute/needle2 macos-arm64/needle --local-dir references/external/models/needle2)
 ok:   brain — check-brain: OK
-ok:   watch-smoke — check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 80389 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
+ok:   watch-smoke — check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 45740 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
 ok:   sim-fleet — check-sim-fleet: OK — iPhone, iPad, Watch and Mac all alive; shots in /Users/aryateja/Projects/lecoder-watch/.claude/worktrees/compassionate-cohen-53d9fb/docs/overnight/2026-09-21/shots
 check-overnight: OK — every live check green
 check-pair-auth: OK
@@ -184,15 +184,15 @@ check-remote-screen-gestures: natural scrolling has a control bound to it
 check-remote-screen-gestures: the idle timer is held and released in 1 matching pair(s)
 check-remote-screen-gestures: OK
 check-roundtrip: OK
-check-shell-startup: the bridge hook returns in 101ms with no bridge running (budget 1000ms)
-check-shell-startup: a wedged bridge (accepts, never answers) costs 1119ms (budget 2500ms)
+check-shell-startup: the bridge hook returns in 99ms with no bridge running (budget 1000ms)
+check-shell-startup: a wedged bridge (accepts, never answers) costs 1121ms (budget 2500ms)
 check-shell-startup: OK
 check-sim-fleet: SKIP (set MESH_SIM_LIVE=1 to launch on the simulators)
 check-tmux-restart: OK (session names carry no dots, so the restart can find and replace its own session)
 check-token-rotate: OK (file+backup+modes, hosts preserved, push/LA devices forgotten, daemon restarted on the NEW token, no token in any argv)
 check-usage-alert-identity: ok
 check-voice-accumulate: OK
-check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 84332 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
+check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 49645 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
 check-watch-terminal-wiring: watch reaches every key meshd accepts (except: delete, allowed)
 check-watch-terminal-wiring: cwd travels on the direct route and the phone relay
 check-watch-terminal-wiring: the watch can launch an arbitrary command
