@@ -624,6 +624,92 @@ for (const line of ciphers) {
   }
 }
 
+// Deleting the auth user is the account-delete path. The identity SQL
+// cascades that row to profiles, devices, and mailbox. A miss here is a
+// real failure: the other user's rows must still be there, and no stored
+// ciphertext may keep the fixture token, an address, a hostname, or a key.
+psql(`DELETE FROM auth.users WHERE id = '${userA}'::uuid;`);
+
+const afterDelete = rows(`
+SELECT 'a_profile|' || count(*) FROM public.profiles WHERE id = '${userA}'::uuid;
+SELECT 'a_devices|' || count(*) FROM public.devices WHERE user_id = '${userA}'::uuid;
+SELECT 'a_mailbox|' || count(*) FROM public.mailbox WHERE user_id = '${userA}'::uuid;
+SELECT 'b_profile|' || count(*) FROM public.profiles WHERE id = '${userB}'::uuid;
+SELECT 'b_devices|' || count(*) FROM public.devices WHERE user_id = '${userB}'::uuid;
+SELECT 'b_mailbox|' || count(*) FROM public.mailbox WHERE user_id = '${userB}'::uuid;
+SELECT 'auth_a|' || count(*) FROM auth.users WHERE id = '${userA}'::uuid;
+SELECT 'auth_b|' || count(*) FROM auth.users WHERE id = '${userB}'::uuid;
+SELECT 'a_device_refs|' || count(*) FROM public.mailbox
+  WHERE sender_device_id = '${senderId}'::uuid
+     OR recipient_device_id = '${senderId}'::uuid
+     OR sender_device_id = '${recipientId}'::uuid
+     OR recipient_device_id = '${recipientId}'::uuid;
+`);
+must(afterDelete, "auth_a", "0");
+must(afterDelete, "a_profile", "0");
+must(afterDelete, "a_devices", "0");
+must(afterDelete, "a_mailbox", "0");
+must(afterDelete, "a_device_refs", "0");
+must(afterDelete, "auth_b", "1");
+must(afterDelete, "b_profile", "1");
+must(afterDelete, "b_devices", "2");
+must(afterDelete, "b_mailbox", "1");
+
+const bProfile = psql(`
+SELECT 'profile|' || username FROM public.profiles WHERE id = '${userB}'::uuid;
+`);
+if (bProfile.length !== 1 || bProfile[0] !== "profile|user_b") {
+  fail("user B profile did not remain after user A was deleted");
+}
+
+const bStored = psql(`
+SELECT 'stored|' || label || '|' || platform || '|' || public_key
+FROM public.devices
+WHERE user_id = '${userB}'::uuid
+ORDER BY public_key;
+`);
+const expectedB = [
+  `stored|Kitchen Mac|macos|${registrationA.public_key}`,
+  `stored|Wrist|watchos|${registrationB.public_key}`,
+].sort();
+const gotB = bStored.filter((line) => line.startsWith("stored|")).sort();
+if (gotB.length !== expectedB.length || gotB.join("\n") !== expectedB.join("\n")) {
+  fail("user B devices did not remain after user A was deleted");
+}
+
+const remaining = psql(`SELECT 'cipher|' || ciphertext FROM public.mailbox;`);
+if (remaining.length !== 1) fail("ciphertext remained for a deleted user or user B lost the mailbox");
+for (const line of remaining) {
+  const text = line.slice("cipher|".length);
+  if (text !== mailbox.ciphertext) fail("remaining ciphertext is not user B's sealed mailbox");
+  let raw;
+  try {
+    raw = Buffer.from(text, "base64url");
+  } catch {
+    fail("remaining ciphertext is not base64url");
+  }
+  if (text.includes(TOKEN) || raw.includes(Buffer.from(TOKEN))) {
+    fail("ciphertext remains that contains the fixture token");
+  }
+  if (text.includes(ADDRESS) || raw.includes(Buffer.from(ADDRESS))) {
+    fail("ciphertext remains that contains the IP");
+  }
+  if (text.includes(HOST) || raw.includes(Buffer.from(HOST))) {
+    fail("ciphertext remains that contains the hostname");
+  }
+  if (machine.length >= 4 && (text.includes(machine) || raw.includes(Buffer.from(machine)))) {
+    fail("ciphertext remains that contains the hostname");
+  }
+  for (const encoding of encodings) {
+    for (const secret of encoding.texts) {
+      if (secret.length > 0 && text.includes(secret)) {
+        fail("ciphertext remains that contains the private key");
+      }
+    }
+    if (raw.includes(encoding.raw)) fail("ciphertext remains that contains the private key");
+  }
+}
+
 if (fs.existsSync(path.join(process.env.HOME, ".mesh"))) fail("a mesh directory was created");
 console.log("users: 2");
 console.log("devices: 2");
@@ -638,6 +724,16 @@ console.log("ciphertext_has_ip: false");
 console.log("ciphertext_has_hostname: false");
 console.log("ciphertext_has_private_key: false");
 console.log("password_columns: none");
+console.log("a_profile_after_delete: 0");
+console.log("a_devices_after_delete: 0");
+console.log("a_mailbox_after_delete: 0");
+console.log("b_profile_after_delete: 1");
+console.log("b_devices_after_delete: 2");
+console.log("b_mailbox_after_delete: 1");
+console.log("ciphertext_after_delete_has_token: false");
+console.log("ciphertext_after_delete_has_ip: false");
+console.log("ciphertext_after_delete_has_hostname: false");
+console.log("ciphertext_after_delete_has_private_key: false");
 console.log("check-sync-rls: node OK");
 END_NODE
 
