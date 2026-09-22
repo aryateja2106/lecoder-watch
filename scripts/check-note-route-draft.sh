@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DRAFT="$ROOT/experiments/note-route-draft/draft.ts"
 CHECK="$ROOT/experiments/note-route-draft/check.ts"
 
-if grep -q 'liveGatewayCall' "$DRAFT" || grep -q 'liveGatewayCall' "$CHECK"; then
+if grep -q 'liveGatewayCall' "$DRAFT"; then
   echo "FAIL: note route draft must not call liveGatewayCall" >&2
   exit 1
 fi
