@@ -1,0 +1,17 @@
+{
+  "lines": [
+    { "text": "tests passed" },
+    { "text": "about to rm a directory" },
+    { "text": "user asked to read a paper" }
+  ],
+  "withSecret": {
+    "summary": "tests passed",
+    "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "note": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ip": "203.0.113.10",
+    "where": "203.0.113.10",
+    "peer": "2001:db8::10",
+    "hostname": "kitchen",
+    "link": "http://example.invalid/paper"
+  }
+}
