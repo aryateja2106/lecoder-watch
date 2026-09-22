@@ -190,3 +190,28 @@ without `-skipPackagePluginValidation` — pinned to 1.18.0. Its GPU renderer ne
 Metal toolchain, installed with `xcodebuild -downloadComponent MetalToolchain`. `Bun.Terminal`
 exists on bun 1.3.14 (mac, pi) and 1.4.2 (jetson).
 
+## Night, fifth pass — the real-device round (13e5317 → )
+
+Arya ran 0.8.0 on his own iPhone and Apple Watch. Everything below was reported from the
+devices, not from a simulator, and four of the six had a cause a simulator can never show.
+
+| Reported | Cause | Fix |
+|---|---|---|
+| "I could not add the pi" | The phone had tombstoned it (`mesh.removedHosts.v1` held both `arya-pi` and its ip, read off the device's own preferences): removing a machine bans it from every future fleet adoption, and the sheet said "Added 2 machines" with no hint a third was skipped | Skipped entries are listed under **Not added** with an **Add anyway** button; pairing with the machine itself still clears its own tombstone |
+| "every time I try to move around it's trying to select text" | `hold.allowableMovement = .greatestFiniteMagnitude` — the long press could never fail, so any finger still down after 0.35 s pressed the mouse button. A simulator swipe ends well inside 0.35 s | 12 pt threshold + a hold arriving after the pan has travelled is ignored (`check-trackpad-drag.sh`) |
+| "the scroll is not working" in the terminal | **The gesture was never the bug.** `tmux attach` leaves the emulator on the alternate buffer, where there is no scrollback to drag through (`canScroll` is false by definition), and with `mouse on` tmux turns the drag into its own selection | A one-finger pan sends wheel events to the program (SGR 64/65, arrows when the program asks for no mouse reporting); `pageUp`/`pageDown` switch buffer-aware; `/output?ansi=1` captures `-S` history (76 lines vs 29 on a 60-line probe) |
+| "the chat is very confusing", wants markdown and copy | The chat had a second, smaller markdown parser that split fenced blocks at the first blank line, dropped a list when one item was indented, and only saw one-line headings | Deleted (78 lines); bubbles use the file viewer's renderer, long-press copies or shares, bare URLs become chips (three helpers that existed with no callers) |
+| "a false alert I am unable to clear" | Dismissal was `@State` private to MonitorView; the bell badge and the "Needs you" rows were recomputed from the unfiltered array every poll, and answering on the machine posts no calmer event | The store owns the set; every snapshot is built from `visibleEvents` (`check-event-dismissal.sh`) |
+| voice "restarts from where I started, all the previous context gone" | The recognizer's final lands ~350 ms after Stop, when the sheet had stopped mirroring; Resume then rebased the accumulator onto the stale editor text | The sheet takes the transcriber's text at `readyForReview`; the transcriber also ends a segment on an audio interruption or engine reconfiguration instead of showing "Listening…" over a dead engine |
+| watch: "the keyboard is directly not working, not even able to move around" | The terminal screen is a sheet and the Reply chip asked for a second sheet over it, which watchOS ignores; and the screen had no dismiss control, opening scrolled to the tail so swipe-down hit the output | Reply is a push of the same form; a Done button; a ctrl/alt letter grid on the options page (meshd already accepted 49 chords, the wrist could reach two) |
+| the Choose card | It printed the options and not the question the agent asked one line above them | `AgentMenu.prompt`, shown on both clients (`check-menu-prompt.swift`, four verbatim captures) |
+
+Also this round: the **Hundred** app is on the phone (its App Group is not registered on the
+dev account and `xcodebuild` cannot create one from the CLI — "No Accounts" — so it was built
+without the entitlement; the app falls back to Application Support and works, the widget has no
+shared data until Xcode is signed in once), and `docs/agents/UI-MAP.md` is a screen-level index
+of both clients written by a codex delegate and spot-checked here.
+
+Still blocked, unchanged: fx + Jev answer `customer_verification_required` until a card is on
+the Vercel AI Gateway team, so the battle testing used shell and Claude sessions.
+
