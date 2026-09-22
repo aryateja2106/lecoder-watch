@@ -56,6 +56,31 @@ fi
 if grep -q '<h2>No accounts</h2>' "$ROOT/web/privacy.html"; then
   bad "web/privacy.html still has <h2>No accounts</h2>"
 fi
+if grep -q '^No account\.' "$ROOT/README.md"; then
+  bad 'README.md still opens with "No account."'
+fi
+
+# Privacy, the homepage, the README, and the roadmap name one account boundary.
+for pair in \
+  "web/privacy.html:sealed blobs" \
+  "web/privacy.html:different database" \
+  "web/index.html:sealed blobs" \
+  "web/index.html:different database" \
+  "web/index.html:talks to the machine directly" \
+  "README.md:sealed blobs" \
+  "README.md:different database" \
+  "README.md:talks straight to" \
+  "ROADMAP.md:sealed blobs" \
+  "ROADMAP.md:different database" \
+  "ROADMAP.md:cloud copy of the mesh is still out of scope"
+do
+  file="${pair%%:*}"
+  phrase="${pair#*:}"
+  grep -F -q "$phrase" "$ROOT/$file" || bad "$file does not say: $phrase"
+done
+if grep -q '^\- \*\*An account system\.\*\*' "$ROOT/ROADMAP.md"; then
+  bad "ROADMAP.md still lists an account system as the non-goal"
+fi
 
 SETUP="Account setup is not finished on this deploy"
 for page in sign-up sign-in forgot reset home; do
