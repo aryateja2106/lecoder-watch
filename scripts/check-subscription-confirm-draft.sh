@@ -601,7 +601,7 @@ scan_absent "$MESHD_STATE" "$DRAFT1" "$DRAFT2" \
   "needle:sk-secret" "needle:llm.example"
 
 echo "3. the same allowed ask with confirm true runs the command"
-python3 - "$TMP/meta/case3.req" "$TMP/work" "$MODEL_URL" "$ASK" "$COMMAND" << 'PY'
+python3 - "$TMP/meta/case3.req" "$TMP/work" "$MODEL_URL" "margin-token-only" "$COMMAND" << 'PY'
 import json, sys
 body = {
     "q": "Source note",
@@ -677,7 +677,7 @@ echo "6. later query of the saved reply does not run a second command"
 python3 - "$TMP/meta/case6.req" "$TMP/work" "$MODEL_URL" << 'PY'
 import json, sys
 body = {
-    "q": "margin stays",
+    "q": "margin-token-only",
     "cwd": sys.argv[2],
     "model": sys.argv[3],
     "file": "held-later.txt",
@@ -746,7 +746,7 @@ echo "7. the same later query with confirm true runs the second command"
 python3 - "$TMP/meta/case7.req" "$TMP/work" "$MODEL_URL" << 'PY'
 import json, sys
 body = {
-    "q": "margin stays",
+    "q": "margin-token-only",
     "cwd": sys.argv[2],
     "model": sys.argv[3],
     "file": "held-later-true.txt",
