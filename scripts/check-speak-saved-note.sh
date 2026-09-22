@@ -4,12 +4,12 @@
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SELF="$ROOT/scripts/$(basename "$0")"
 cd "$ROOT/install/payload/meshd"
 command -v bun >/dev/null 2>&1 || { echo "FAIL: bun is required"; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "FAIL: python3 is required"; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "FAIL: curl is required"; exit 1; }
 
-SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 python3 - "$SELF" <<'PY'
 import sys
 text = open(sys.argv[1], encoding="utf-8").read()
