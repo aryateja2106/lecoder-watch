@@ -205,7 +205,7 @@ function refusesRemote(value: string): boolean {
   return isRemote(text) || text.startsWith("//") || text.includes("://");
 }
 
-async function readCapped(stream: ReadableStream<Uint8Array>, max: number): Promise<string> {
+async function readCapped(stream: ReadableStream<Uint8Array<ArrayBuffer>>, max: number): Promise<string> {
   const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -247,9 +247,10 @@ async function runStt(bin: string, audioPath: string): Promise<string | null> {
   }
   const killer = setTimeout(() => { try { proc.kill(); } catch { /* already gone */ } }, STT_MS);
   const stdout = proc.stdout;
-  const textPromise = stdout
-    ? readCapped(stdout, MAX_BODY).catch(() => "")
-    : Promise.resolve("");
+  // "pipe" is a stream. A file descriptor is not text, so it is not a transcript.
+  const textPromise = typeof stdout === "number"
+    ? Promise.resolve("")
+    : readCapped(stdout, MAX_BODY).catch(() => "");
   const code = await proc.exited.catch(() => 1);
   clearTimeout(killer);
   const text = (await textPromise).replace(/\u0000/g, "").trim();
