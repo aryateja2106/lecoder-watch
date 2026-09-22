@@ -1,7 +1,8 @@
 #!/bin/sh
 # Spare daemon: a local PDF becomes a note, GET /knowledge/:id returns the
-# body, one draft file is written, and a second command does not run unless
-# the caller passes confirm. The model is recorded as a hostname class.
+# body, the caller's model URL writes draft.txt, and a second command does
+# not run unless the caller passes confirm. The model stub listens on
+# 127.0.0.1 and is never port 8899. The model is recorded as a hostname class.
 # This script starts the daemon and stops it. It does not kill a foreign
 # listener on 8898.
 set -eu
@@ -15,10 +16,26 @@ command -v bun >/dev/null 2>&1 || { echo "FAIL: bun is required"; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "FAIL: python3 is required"; exit 1; }
 command -v curl >/dev/null 2>&1 || { echo "FAIL: curl is required"; exit 1; }
 
-if grep -E -n 'supabase|fetch\(|ai-gateway' "$ROOT/install/payload/meshd/agent-note.ts"; then
-  echo "FAIL: agent-note.ts reaches the network"
+if grep -E -n 'supabase|ai-gateway' "$ROOT/install/payload/meshd/agent-note.ts"; then
+  echo "FAIL: agent-note.ts names supabase or the AI gateway"
   exit 1
 fi
+
+# Classify a subscription URL in process. This does not open a socket.
+bun -e '
+import { modelClassOf, completionsEndpoint } from "./install/payload/meshd/agent-note.ts";
+function fail(msg) { console.error(msg); process.exit(1); }
+const sub = "https://models.example/v1?access=paid-marker";
+if (modelClassOf(sub) !== "user-subscription") fail("FAIL: subscription class");
+if (completionsEndpoint(sub) !== "https://models.example/v1/chat/completions") fail("FAIL: subscription endpoint");
+if (completionsEndpoint("user-subscription") !== null) fail("FAIL: class label has an endpoint");
+if (completionsEndpoint("local") !== null) fail("FAIL: class label has an endpoint");
+if (completionsEndpoint("ftp://127.0.0.1/v1") !== null) fail("FAIL: non-http url has an endpoint");
+const keyed = "http://user:not-a-key@127.0.0.1:9/v1?access=not-a-key";
+if (modelClassOf(keyed) !== "local") fail("FAIL: local class");
+if (completionsEndpoint(keyed) !== "http://127.0.0.1:9/v1/chat/completions") fail("FAIL: key stayed on the endpoint");
+' || { echo "FAIL: model classification"; exit 1; }
+echo "check-agent-note: subscription url is classified without a request"
 
 TH="$(mktemp -d)"
 STATE="$TH/state"
@@ -28,6 +45,20 @@ LOG="$TH/meshd.log"
 PORT=8898
 TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
 SRV=
+STUB=
+
+stop_stub() {
+  [ -n "${STUB:-}" ] || return 0
+  kill "$STUB" 2>/dev/null || true
+  n=0
+  while kill -0 "$STUB" 2>/dev/null && [ "$n" -lt 20 ]; do
+    sleep 0.1
+    n=$((n + 1))
+  done
+  kill -KILL "$STUB" 2>/dev/null || true
+  wait "$STUB" 2>/dev/null || true
+  STUB=
+}
 
 stop_srv() {
   [ -n "${SRV:-}" ] || return 0
@@ -45,6 +76,7 @@ stop_srv() {
 cleanup() {
   ec=$?
   stop_srv
+  stop_stub
   rm -rf "$TH"
   exit "$ec"
 }
@@ -99,6 +131,59 @@ PY
 fi
 
 mkdir -p "$WORK"
+python3 - "$TH/stub.port" "$TH/stub.body" "$TH/stub.path" "$TH/stub.headers" <<'PY' &
+import os, sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+port_file, body_file, path_file, header_file = sys.argv[1:5]
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", "0") or "0")
+        raw = self.rfile.read(n) if n else b""
+        with open(body_file, "ab") as fh:
+            fh.write(raw + b"\n")
+        with open(path_file, "a") as fh:
+            fh.write(self.path + "\n")
+        with open(header_file, "a") as fh:
+            fh.write(str(self.headers))
+            fh.write("\n")
+        reply = (
+            b'{"choices":[{"message":{"role":"assistant","content":"Draft from the local model.\\n"}}]}'
+        )
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(reply)))
+        self.end_headers()
+        self.wfile.write(reply)
+
+    def log_message(self, fmt, *args):
+        return
+
+server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+tmp_port = port_file + ".tmp"
+with open(tmp_port, "w") as fh:
+    fh.write(str(server.server_address[1]))
+    fh.write("\n")
+os.rename(tmp_port, port_file)
+server.serve_forever()
+PY
+STUB=$!
+i=0
+while [ ! -s "$TH/stub.port" ] && [ "$i" -lt 50 ]; do
+  kill -0 "$STUB" 2>/dev/null || { echo "FAIL: model stub exited"; exit 1; }
+  sleep 0.1
+  i=$((i + 1))
+done
+STUB_PORT="$(tr -d '[:space:]' < "$TH/stub.port")"
+if [ -z "$STUB_PORT" ] || [ "$STUB_PORT" = "8899" ] || [ "$STUB_PORT" = "8898" ]; then
+  echo "FAIL: model stub port is not a spare 127.0.0.1 port"
+  exit 1
+fi
+echo "check-local-model-draft: model stub is on 127.0.0.1:${STUB_PORT}"
+
 MESHD_PORT=$PORT \
 MESHD_HOST=127.0.0.1 \
 MESHD_TOKEN="$TOKEN" \
@@ -181,83 +266,133 @@ if "The body stays on this machine" in raw:
 PY
 echo "check-agent-note: list route is titles only"
 
-NOTE_ID="$ID" WORK="$WORK" python3 - "$TH/job-req.json" <<'PY'
+NOTE_ID="$ID" WORK="$WORK" python3 - "$TH/refuse-req.json" <<'PY'
 import json, os, sys
 open(sys.argv[1], "w").write(json.dumps({
     "id": os.environ["NOTE_ID"],
     "cwd": os.environ["WORK"],
-    "model": "http://127.0.0.1:11434/v1?access=not-a-key",
+    "model": "ftp://127.0.0.1/v1",
+    "command": "touch " + os.environ["WORK"] + "/refused-ran",
+    "confirm": True,
+}))
+PY
+code="$(curl --connect-timeout 1 --max-time 5 -sS -o "$TH/refuse.json" -w '%{http_code}' \
+  -H "authorization: Bearer ${TOKEN}" \
+  -H 'content-type: application/json' \
+  --data @"$TH/refuse-req.json" \
+  "http://127.0.0.1:$PORT/agent-note" || true)"
+[ "$code" = "400" ] || { echo "FAIL: non-http model -> ${code}"; exit 1; }
+python3 - "$TH/refuse.json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+if data.get("error") != "model url not allowed":
+    raise SystemExit("FAIL: non-http model was not refused before a fetch")
+PY
+[ ! -e "$WORK/refused-ran" ] || { echo "FAIL: command ran for a refused model"; exit 1; }
+[ ! -e "$TH/stub.body" ] || { echo "FAIL: refused model called the stub"; exit 1; }
+echo "check-local-model-draft: refused url was not fetched"
+
+NOTE_ID="$ID" WORK="$WORK" STUB_PORT="$STUB_PORT" python3 - "$TH/job-req.json" <<'PY'
+import json, os, sys
+open(sys.argv[1], "w").write(json.dumps({
+    "id": os.environ["NOTE_ID"],
+    "cwd": os.environ["WORK"],
+    "model": "http://user:not-a-key@127.0.0.1:%s/v1?access=not-a-key" % os.environ["STUB_PORT"],
     "command": "touch " + os.environ["WORK"] + "/second-ran",
     "confirm": False,
 }))
 PY
-code="$(curl --connect-timeout 1 --max-time 5 -sS -o "$TH/job.json" -w '%{http_code}' \
+code="$(curl --connect-timeout 1 --max-time 12 -sS -o "$TH/job.json" -w '%{http_code}' \
   -H "authorization: Bearer ${TOKEN}" \
   -H 'content-type: application/json' \
   --data @"$TH/job-req.json" \
   "http://127.0.0.1:$PORT/agent-note" || true)"
-[ "$code" = "200" ] || { echo "FAIL: POST /agent-note -> ${code}"; cat "$TH/job.json"; echo; cat "$LOG"; exit 1; }
-python3 - "$TH/job.json" <<'PY'
-import json, sys
+[ "$code" = "200" ] || { echo "FAIL: POST /agent-note -> ${code}"; exit 1; }
+python3 - "$TH/job.json" "$WORK/draft.txt" "$TH/stub.body" "$TH/stub.path" "$TH/stub.headers" <<'PY'
+import json, os, stat, sys
 raw = open(sys.argv[1]).read()
 data = json.loads(raw)
 if data.get("modelClass") != "local":
     raise SystemExit("FAIL: modelClass is %r" % (data.get("modelClass"),))
 if data.get("commandRan") is not False or data.get("held") is not True:
-    raise SystemExit("FAIL: second command was not held: %r" % (data,))
+    raise SystemExit("FAIL: second command was not held")
 if data.get("draft") != "draft.txt":
     raise SystemExit("FAIL: draft name is %r" % (data.get("draft"),))
-for needle in ("127.0.0.1", "11434", "not-a-key", "http", "supabase"):
+for needle in ("127.0.0.1", "not-a-key", "http", "supabase", "chat/completions"):
     if needle in raw:
         raise SystemExit("FAIL: transcript contains %s" % needle)
+draft = open(sys.argv[2]).read()
+if draft != "Draft from the local model.\n":
+    raise SystemExit("FAIL: draft.txt is not the stub reply")
+mode = stat.S_IMODE(os.stat(sys.argv[2]).st_mode)
+if mode != 0o600:
+    raise SystemExit("FAIL: draft mode is %o" % mode)
+bodies = [ln for ln in open(sys.argv[3], "rb").read().splitlines() if ln]
+if len(bodies) != 1:
+    raise SystemExit("FAIL: stub request count is %d" % len(bodies))
+payload = json.loads(bodies[0])
+if payload.get("model") != "local":
+    raise SystemExit("FAIL: stub saw a model name that is not a class")
+messages = json.dumps(payload.get("messages"))
+if "The body stays on this machine" not in messages:
+    raise SystemExit("FAIL: stub did not receive the note text")
+for needle in ("not-a-key", "127.0.0.1", "http", "supabase"):
+    if needle in messages:
+        raise SystemExit("FAIL: stub body contains %s" % needle)
+paths = [ln.strip() for ln in open(sys.argv[4]).read().splitlines() if ln.strip()]
+if paths != ["/v1/chat/completions"]:
+    raise SystemExit("FAIL: stub path is not /v1/chat/completions")
+headers = open(sys.argv[5]).read().lower()
+if "authorization" in headers or "not-a-key" in headers or "bearer" in headers:
+    raise SystemExit("FAIL: stub saw a key or authorization header")
 PY
-[ -f "$WORK/draft.txt" ] || { echo "FAIL: draft file was not written"; exit 1; }
-grep -q 'The body stays on this machine' "$WORK/draft.txt" || { echo "FAIL: draft is not the note"; exit 1; }
 [ ! -e "$WORK/second-ran" ] || { echo "FAIL: second command ran without confirm"; exit 1; }
-drafts=0
-for f in "$WORK"/*; do
-  [ -e "$f" ] || continue
-  drafts=$((drafts + 1))
-  [ "$(basename "$f")" = "draft.txt" ] || { echo "FAIL: extra file $(basename "$f")"; exit 1; }
-done
-[ "$drafts" -eq 1 ] || { echo "FAIL: expected one draft file, found $drafts"; exit 1; }
-echo "check-agent-note: draft file exists"
-echo "check-agent-note: second command without confirm did not run"
+echo "check-local-model-draft: draft.txt is the stub reply"
+echo "check-local-model-draft: stub received the note text"
+echo "check-local-model-draft: command without confirm did not run"
 
-NOTE_ID="$ID" WORK="$WORK" python3 - "$TH/confirm-req.json" <<'PY'
+NOTE_ID="$ID" WORK="$WORK" STUB_PORT="$STUB_PORT" python3 - "$TH/confirm-req.json" <<'PY'
 import json, os, sys
 open(sys.argv[1], "w").write(json.dumps({
     "id": os.environ["NOTE_ID"],
     "cwd": os.environ["WORK"],
-    "model": "https://models.example/v1?access=paid-marker",
+    "model": "http://127.0.0.1:%s/v1?access=paid-marker" % os.environ["STUB_PORT"],
     "command": "touch " + os.environ["WORK"] + "/confirmed-ran",
     "confirm": True,
 }))
 PY
-code="$(curl --connect-timeout 1 --max-time 5 -sS -o "$TH/confirm.json" -w '%{http_code}' \
+code="$(curl --connect-timeout 1 --max-time 12 -sS -o "$TH/confirm.json" -w '%{http_code}' \
   -H "authorization: Bearer ${TOKEN}" \
   -H 'content-type: application/json' \
   --data @"$TH/confirm-req.json" \
   "http://127.0.0.1:$PORT/agent-note" || true)"
-[ "$code" = "200" ] || { echo "FAIL: confirmed POST /agent-note -> ${code}"; cat "$TH/confirm.json"; echo; exit 1; }
-python3 - "$TH/confirm.json" <<'PY'
+[ "$code" = "200" ] || { echo "FAIL: confirmed POST /agent-note -> ${code}"; exit 1; }
+python3 - "$TH/confirm.json" "$WORK/draft.txt" "$TH/stub.body" "$TH/stub.path" "$TH/stub.headers" <<'PY'
 import json, sys
 raw = open(sys.argv[1]).read()
 data = json.loads(raw)
-if data.get("modelClass") != "user-subscription":
+if data.get("modelClass") != "local":
     raise SystemExit("FAIL: modelClass is %r" % (data.get("modelClass"),))
 if data.get("commandRan") is not True or data.get("held") is not False:
-    raise SystemExit("FAIL: confirmed command did not run: %r" % (data,))
-for needle in ("models.example", "paid-marker", "https", "supabase"):
+    raise SystemExit("FAIL: confirmed command did not run")
+for needle in ("paid-marker", "http", "supabase", "127.0.0.1"):
     if needle in raw:
         raise SystemExit("FAIL: transcript contains %s" % needle)
+if open(sys.argv[2]).read() != "Draft from the local model.\n":
+    raise SystemExit("FAIL: confirmed draft is not the stub reply")
+paths = [ln.strip() for ln in open(sys.argv[4]).read().splitlines() if ln.strip()]
+if paths != ["/v1/chat/completions", "/v1/chat/completions"]:
+    raise SystemExit("FAIL: stub was not called only at chat completions")
+seen = open(sys.argv[3]).read() + open(sys.argv[5]).read()
+if "paid-marker" in seen or "not-a-key" in seen or "supabase" in seen.lower():
+    raise SystemExit("FAIL: stub saw a key")
 PY
 [ -f "$WORK/confirmed-ran" ] || { echo "FAIL: confirmed command did not run"; exit 1; }
 [ ! -e "$WORK/second-ran" ] || { echo "FAIL: unconfirmed command ran later"; exit 1; }
 echo "check-agent-note: confirmed command ran"
 
-if grep -q 'supabase.co' "$LOG"; then
-  echo "FAIL: daemon log mentions supabase.co"
+if grep -E -q 'supabase\.co|ai-gateway|not-a-key|paid-marker' "$LOG"; then
+  echo "FAIL: daemon log records a url or a key"
   exit 1
 fi
 
@@ -411,4 +546,5 @@ if bad:
 PY
 fi
 echo "check-agent-note: no supabase.co call"
+echo "check-local-model-draft: no supabase.co call"
 echo "check-agent-note: OK"
