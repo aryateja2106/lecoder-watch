@@ -593,14 +593,29 @@ code="$(curl --connect-timeout 1 --max-time 5 -sS -o "$TH/list2.json" -w '%{http
   -H "authorization: Bearer ${TOKEN}" \
   "http://127.0.0.1:$PORT/knowledge" || true)"
 [ "$code" = "200" ] || { echo "FAIL: list after ask -> ${code}"; exit 1; }
-python3 - "$TH/list2.json" "$TH/note.id" <<'PY'
+python3 - "$TH/list2.json" "$TH/note.id" "$TITLE" "$ASK" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
 notes = data.get("notes")
-if not isinstance(notes, list) or len(notes) != 1 or set(notes[0].keys()) != {"id", "title"}:
+orig, title, ask = sys.argv[2], sys.argv[3], sys.argv[4]
+if not isinstance(notes, list) or len(notes) != 2:
     raise SystemExit("FAIL: list after ask is %r" % (data,))
-if notes[0].get("id") != open(sys.argv[2]).read():
-    raise SystemExit("FAIL: list id changed")
+found = False
+reply = None
+for note in notes:
+    if set(note.keys()) != {"id", "title"}:
+        raise SystemExit("FAIL: list note keys are %r" % (sorted(note.keys()),))
+    if note.get("id") == orig:
+        found = True
+        if note.get("title") != title:
+            raise SystemExit("FAIL: original title changed")
+    else:
+        reply = note
+if not found or reply is None or reply.get("title") != ask:
+    raise SystemExit("FAIL: list after ask is %r" % (data,))
+raw = open(sys.argv[1]).read()
+if "#!/bin/sh" in raw or "touch" in raw:
+    raise SystemExit("FAIL: list includes the reply")
 PY
 hits_ok
 [ ! -d "$HOME_DIR/.mesh" ] || { echo "FAIL: daemon wrote under its home directory"; exit 1; }

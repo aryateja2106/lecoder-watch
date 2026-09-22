@@ -13,11 +13,15 @@
 // in it are not written, logged, or returned.
 //
 // ask is optional local text. Absent or blank, the model receives the note
-// text only. A non-empty ask follows that text after one blank line, so the
-// caller can say what to build. An ask that contains :// or is
-// protocol-relative is refused before the model and before any draft file.
-// An ask that names a mesh token, a pairing code, hosts.json, or .mesh/token,
-// or that would upload or send a token, is held the same way a note is.
+// text only and only the held file is written. A non-empty ask follows that
+// text after one blank line, so the caller can say what to build. When that
+// ask is allowed, the reply is also stored as one knowledge note. The title
+// is the ask, clipped the same way other note titles are. The list stays
+// { id, title }. An ask that contains :// or is protocol-relative is refused
+// before the model and before any draft file. An ask that names a mesh token,
+// a pairing code, hosts.json, or .mesh/token, or that would upload or send a
+// token, is held the same way a note is. A reply the route would hold is not
+// stored: no note and no draft file.
 //
 // file is an optional relative path and defaults to draft.txt. Absolute
 // paths, "..", and any path that resolves outside cwd are refused.
@@ -34,7 +38,7 @@
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { constants as fsConstants } from "node:fs";
 import { chmod, lstat, mkdir, open, realpath, stat } from "node:fs/promises";
-import { listNotes, readNote } from "./knowledge";
+import { listNotes, readNote, writeNote } from "./knowledge";
 
 const FILE_MODE = 0o600;
 const DRAFT_NAME = "draft.txt";
@@ -340,7 +344,12 @@ export async function runAgentNote(opts: {
     return { modelClass, draft: null, commandRan: false, held: true };
   }
   const assistant = await completeNote(endpoint, promptForModel(noteText(note), extra), modelClass);
+  // A reply the route would hold is not a draft and not a note.
+  if (textHeldByRoute(assistant)) {
+    return { modelClass, draft: null, commandRan: false, held: true };
+  }
   await writeHeldFile(heldFile.abs, assistant);
+  if (extra) await writeNote(extra, assistant);
 
   const command = opts.command?.trim() ?? "";
   if (!command) return { modelClass, draft: heldFile.rel, commandRan: false, held: false };
