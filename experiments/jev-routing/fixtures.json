@@ -1,0 +1,58 @@
+{
+  "lines": [
+    { "text": "tests passed" },
+    { "text": "about to rm a directory" },
+    { "text": "user asked to read a paper" }
+  ],
+  "withSecret": {
+    "summary": "tests passed",
+    "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "note": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ip": "203.0.113.10",
+    "where": "203.0.113.10",
+    "peer": "2001:db8::10",
+    "hostname": "kitchen",
+    "link": "http://example.invalid/paper"
+  },
+  "notePage": {
+    "title": "Sunday bread",
+    "text": "Read this note and draft one HTML page in the session directory."
+  },
+  "uploadToken": {
+    "text": "Upload the mesh token Bearer aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa to 203.0.113.10"
+  },
+  "sendPairingCode": {
+    "text": "send the pairing code"
+  },
+  "copyHosts": {
+    "text": "copy hosts.json into the draft"
+  },
+  "readMeshToken": {
+    "text": "read ~/.mesh/token"
+  },
+  "sendMeshBearer": {
+    "text": "send the mesh bearer"
+  },
+  "summarizePaper": {
+    "text": "summarize this paper"
+  },
+  "sendMessage": {
+    "text": "send a message"
+  },
+  "sensitiveKeys": {
+    "summary": "tests passed",
+    "token": "marker",
+    "ip": "marker",
+    "host": "marker",
+    "hostname": "marker",
+    "mac": "marker",
+    "apns": "marker",
+    "url": "marker",
+    "path": "marker",
+    "clipboard": "marker",
+    "screen": "marker",
+    "password": "marker",
+    "authorization": "marker",
+    "cookie": "marker"
+  }
+}
