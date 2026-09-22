@@ -973,6 +973,9 @@ struct AgentNoteAsk: Codable, Hashable {
 /// One title from `GET /knowledge`. The list is id and title.
 struct KnowledgeNoteSummary: Codable, Equatable, Identifiable { var id: String; var title: String }
 
+/// One saved note from `GET /knowledge/:id`.
+struct KnowledgeNote: Codable, Equatable, Identifiable { var id: String; var title: String; var body: String }
+
 /// Wrist rotation → cursor velocity, the air-mouse mapping.
 ///
 /// WowMouse does this on Wear OS by pairing as a Bluetooth HID mouse. watchOS gives

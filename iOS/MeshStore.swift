@@ -35,6 +35,7 @@ final class MeshStore: ObservableObject {
     @Published var currentKnowledgeNote = ""
     /// Titles from the reachable machine. Empty until they load.
     @Published var knowledgeNotes: [KnowledgeNoteSummary] = []
+    @Published var loadedKnowledgeNote: KnowledgeNote?
     /// The last ask's draft, or a short status when the daemon held it.
     @Published var knowledgeAskLine: String?
     @Published var polling = false
@@ -710,6 +711,27 @@ final class MeshStore: ObservableObject {
                 knowledgeNotes = try await c.listKnowledgeNotes()
             } catch {
                 knowledgeNotes = []
+            }
+        }
+    }
+
+    /// Load one saved note by id. Fills `loadedKnowledgeNote` when the title still matches.
+    func loadKnowledgeNote(host: String, id: String, editingTitle: String) {
+        let named = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let machine = machineMatching(host, in: machines),
+              let snap = snapshot?.machines.first(where: { $0.host == machine.host }),
+              snap.reachable, snap.authError == nil else {
+            return
+        }
+        let c = client(for: machine)
+        Task {
+            do {
+                let note = try await c.readKnowledgeNote(id: id)
+                if note.title == named {
+                    loadedKnowledgeNote = note
+                }
+            } catch {
+                fail("load note failed")
             }
         }
     }
