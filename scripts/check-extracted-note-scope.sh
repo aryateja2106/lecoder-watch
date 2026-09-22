@@ -198,10 +198,12 @@ PY
 }
 
 # Model stub on loopback. The configured host stays llm.example.
-python3 - "$TH/stub.port" "$STUB_BODIES" "$TH/stub.reply" >"$TH/stub.err" 2>&1 <<'PY' &
-import json, os, sys
-port_path, body_dir, reply_path = sys.argv[1:4]
-os.setsid()
+cat >"$TH/stub.py" <<'PY'
+import json, os
+base = os.path.dirname(os.path.abspath(__file__))
+port_path = os.path.join(base, "stub.port")
+body_dir = os.path.join(base, "stub-bodies")
+reply_path = os.path.join(base, "stub.reply")
 reply = json.dumps({"choices": [{"message": {"content": "A reader for the margin."}}]}).encode()
 open(reply_path, "wb").write(reply)
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -232,14 +234,15 @@ with open(port_path, "w", encoding="utf-8") as fh:
     fh.flush()
 server.serve_forever()
 PY
+python3 -c 'import os,sys; os.setsid(); os.execvp("python3", ["python3", sys.argv[1]])' "$TH/stub.py" >"$TH/stub.err" 2>&1 &
 STUB=$!
 i=0
-while [ ! -s "$TH/stub.port" ] && [ "$i" -lt 50 ]; do
+while [ ! -s "$TH/stub.port" ] && [ "$i" -lt 100 ]; do
   kill -0 "$STUB" 2>/dev/null || { echo "FAIL: model stub exited"; cat "$TH/stub.err" 2>/dev/null || true; exit 1; }
   sleep 0.1
   i=$((i + 1))
 done
-[ -s "$TH/stub.port" ] || { echo "FAIL: model stub port never appeared"; exit 1; }
+[ -s "$TH/stub.port" ] || { echo "FAIL: model stub port never appeared"; cat "$TH/stub.err" 2>/dev/null || true; exit 1; }
 STUB_PORT="$(tr -d '[:space:]' < "$TH/stub.port")"
 case "$STUB_PORT" in
   ''|*[!0-9]*) echo "FAIL: model stub port is not numeric"; exit 1 ;;
