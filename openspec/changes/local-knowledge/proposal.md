@@ -5,6 +5,7 @@ A spoken knowledge base is a note the person can ask for later, not a second cop
 ## What Changes
 
 - Add a contract other agents can execute for the spoken knowledge base and the held app draft, without a second implementation of work that already exists on draft pull requests.
+- Name the in-place note replace and the replaced-note draft as finished. `POST /knowledge/:id` replaces that note's body in the same file. After that replace, the agent-note path drafts the new body. Do not rebuild either slice.
 - State that notes live under `MESHD_STATE` (otherwise `~/.mesh`), in a mode-700 knowledge directory. Knowledge bodies never go to Supabase or to any other cloud store.
 - State that speech-out uses a local `MESH_TTS` binary the user already has, and speech-in uses a local `MESH_STT` binary. A remote URL does not run. Do not start a second speech-in path.
 - State that Jev chooses a route and does not write the reply. A live gateway call is out of this change. A draft file is not executed. A further command waits for confirm.
@@ -16,8 +17,8 @@ No product code lands here. The finished drafts stay the implementation.
 
 ### New Capabilities
 
-- `spoken-knowledge`: Local PDF notes under `MESHD_STATE`, optional local TTS and STT binaries, and the held app draft that stops for confirm. Knowledge bodies stay on the machine.
-- `local-knowledge-gates`: The finished draft tips, the ban on rebuilding them, the `server.ts` registration rule, the ban on keys and gateway calls, and the rule that agents cannot prove a physical microphone or speaker.
+- `spoken-knowledge`: Local PDF notes under `MESHD_STATE`, an in-place body replace, optional local TTS and STT binaries, the held app draft that stops for confirm, and the agent-note draft of a replaced body. Knowledge bodies stay on the machine. Nothing from the note is stored in Supabase.
+- `local-knowledge-gates`: The finished draft tips, including the note update and the replaced-note draft, the ban on rebuilding them, the `server.ts` registration rule, the ban on keys and gateway calls, and the rule that agents cannot prove a physical microphone or speaker.
 
 ### Modified Capabilities
 
@@ -25,18 +26,18 @@ No product code lands here. The finished drafts stay the implementation.
 
 ## Non-goals
 
-- Rebuilding local PDF notes (pull request 139), spoken-out via a local `MESH_TTS` binary (pull request 145), the note-to-held-file draft (pull request 154, tip `cba3ac7`), the route-gated draft (pull request 160, tip `4c8a73a`), or spoken-in via a local `MESH_STT` binary (pull request 162, tip `4e14cab`). Those drafts are the implementation. Re-check each pull request tip before touching the same files, and do not open a second copy.
-- Editing `install/payload/meshd/server.ts` in this pull request. A later agent checks whether knowledge routes are already registered. If they are, that agent says so and forbids a second route. If they are not, one later task may register them only when no other agent holds `server.ts`.
+- Rebuilding local PDF notes (pull request 139), spoken-out via a local `MESH_TTS` binary (pull request 145), the note-to-held-file draft (pull request 154, tip `cba3ac7`), the route-gated draft (pull request 160, tip `4c8a73a`), spoken-in via a local `MESH_STT` binary (pull request 162, tip `4e14cab`), the in-place note replace (pull request 174, tip `426d66d7`), or the replaced-note draft (pull request 176, tip `ff4d633c`). Those drafts are the implementation. Re-check each pull request tip before touching the same files, and do not open a second copy.
+- Editing `install/payload/meshd/server.ts` in this pull request. On `origin/main`, `/knowledge` is unregistered. The knowledge branch already registers it once. A later agent checks the tree being edited. If `/knowledge` is already registered, that agent says so and does not add a second `/knowledge` route. If it is not, one later task may register the existing handler only when no other agent holds `server.ts`. Pull request 174 and pull request 176 did not edit `server.ts`.
 - Calling the Vercel AI Gateway, including `POST https://ai-gateway.vercel.sh/v1/evaluate`. Jev chooses a route. It does not write the reply.
 - Committing an API key, a JWT, or a database URL. Knowledge bodies never go to Supabase.
 - Starting a second speech-in path beside pull request 162. A remote URL does not run.
 - Merging the local-brain harness. That proposal stays a spike. Do not replace `meshd`.
 - Editing `Shared/Models.swift`, `Shared/MeshClient.swift`, `project.yml`, or `pair.ts`.
-- Physical proof that a microphone or speaker works. Agents cannot do that.
+- Physical proof that a microphone or speaker works. Agents cannot do that. A spoken note is a local binary transcript or a local TTS exit code.
 
 ## Impact
 
 - This change adds only `openspec/changes/local-knowledge/`.
-- Finished drafts stay where they are: local PDF notes on pull request 139 (`cursor/local-knowledge-e469`, tip `9d2827b`), spoken-out on pull request 145 (`cursor/spoken-note-e469`, tip `ea86b77`), note to a held file on pull request 154 (`cursor/note-to-app-e469`, tip `cba3ac7`), route-gated draft on pull request 160 (`cursor/note-route-draft-e469`, tip `4c8a73a`), and spoken-in on pull request 162 (`cursor/spoken-note-in-e469`, tip `4e14cab`). Do not start another copy of any of them.
-- On `origin/main` at the tip this change branched from, knowledge routes are not registered in `server.ts`. Pull request 139 already registers `/knowledge` on its tip. A later agent re-checks before any second registration.
+- Finished drafts stay where they are: local PDF notes on pull request 139 (`cursor/local-knowledge-e469`, tip `9d2827b`), spoken-out on pull request 145 (`cursor/spoken-note-e469`, tip `ea86b77`), note to a held file on pull request 154 (`cursor/note-to-app-e469`, tip `cba3ac7`), route-gated draft on pull request 160 (`cursor/note-route-draft-e469`, tip `4c8a73a`), spoken-in on pull request 162 (`cursor/spoken-note-in-e469`, tip `4e14cab`), the in-place note replace on pull request 174 (`cursor/knowledge-note-update-e469`, tip `426d66d7`), and the replaced-note draft on pull request 176 (`cursor/updated-note-draft-e469`, tip `ff4d633c`). Do not start another copy of any of them.
+- On `origin/main`, `/knowledge` is unregistered. The knowledge branch already registers it once. Do not add a second `/knowledge` route. Notes stay on the machine. Nothing from the note is stored in Supabase.
 - Account tables, the heartbeat project, and pairing stay untouched. The company does not host the coding model. Jev only picks a route.
