@@ -282,6 +282,12 @@ struct MeshClient {
         return listed.notes
     }
 
+    /// One saved note. `GET /knowledge/:id` returns `{ id, title, body }`.
+    func readKnowledgeNote(id: String) async throws -> KnowledgeNote {
+        let data = try await request("/knowledge/\(Self.pathSegment(id))", method: "GET")
+        return try JSONDecoder().decode(KnowledgeNote.self, from: data)
+    }
+
     /// Save one typed note. `POST /knowledge` with `{ title, body }` returns `{ id, title }`.
     func createKnowledgeNote(title: String, body: String) async throws -> KnowledgeNoteSummary {
         let payload: [String: Any] = ["title": title, "body": body]

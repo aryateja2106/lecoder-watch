@@ -21,6 +21,7 @@ final class WatchMeshStore: ObservableObject {
     /// The knowledge note this wrist is asking. Empty until the user names one.
     @Published var currentKnowledgeNote = ""
     @Published var knowledgeNotes: [KnowledgeNoteSummary] = []
+    @Published var loadedKnowledgeNote: KnowledgeNote?
     /// The last ask's draft, or a short status when the daemon held it.
     @Published var knowledgeAskLine: String?
     @Published var phoneReachable = false
@@ -947,6 +948,22 @@ final class WatchMeshStore: ObservableObject {
         Task {
             do { knowledgeNotes = try await c.listKnowledgeNotes() }
             catch { knowledgeNotes = [] }
+        }
+    }
+
+    /// Load one saved note by id. Fills `loadedKnowledgeNote` when the title still matches.
+    func loadKnowledgeNote(host: String, id: String, editingTitle: String) {
+        let named = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard directReachable(host), let c = client(for: host) else { return }
+        Task {
+            do {
+                let note = try await c.readKnowledgeNote(id: id)
+                if note.title == named {
+                    loadedKnowledgeNote = note
+                }
+            } catch {
+                lastError = "load note failed"
+            }
         }
     }
 

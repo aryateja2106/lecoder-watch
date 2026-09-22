@@ -451,6 +451,7 @@ struct KnowledgeNoteAskView: View {
                 ForEach(store.knowledgeNotes) { summary in
                     Button(summary.title) {
                         note = summary.title
+                        store.loadKnowledgeNote(host: host, id: summary.id, editingTitle: summary.title)
                     }
                 }
             }
@@ -484,6 +485,10 @@ struct KnowledgeNoteAskView: View {
         }
         .onChange(of: note) { _, value in
             store.currentKnowledgeNote = value
+        }
+        .onChange(of: store.loadedKnowledgeNote) { _, loaded in
+            guard let loaded, loaded.title == namedNote else { return }
+            noteBody = loaded.body
         }
         .confirmationDialog("Ask this note?", isPresented: $confirming, titleVisibility: .visible) {
             Button("Ask") {
