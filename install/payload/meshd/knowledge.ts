@@ -2,7 +2,7 @@
 // becomes one file under the daemon state directory. Nothing in this module
 // opens a socket: no Supabase client, no model call, no download.
 //
-//   POST /knowledge      { path, speak? } | { audio } | { pdf, title? }
+//   POST /knowledge      { path, speak? } | { audio } | { pdf, title?, speak? }
 //   POST /knowledge/:id  { body } | { audio, speak? }       -> { id, title, body, spoken? }
 //   GET  /knowledge                                     -> { notes: [{ id, title }] }
 //   GET  /knowledge?q=text                              -> { id, title } for a title or body match
@@ -15,7 +15,14 @@
 // note is written and is not fetched. A nonzero exit or empty stdout writes
 // nothing. The title is the optional title, otherwise the file basename
 // without its extension. The list stays { id, title } and does not include
-// the absolute path.
+// the absolute path. speak is optional. When it is not true the response
+// stays { id, title } and MESH_TTS does not start. When it is true, a remote
+// MESH_TTS, a value containing ://, or a protocol-relative value returns
+// { error: "tts must be a local binary" } before MESH_PDF runs and before a
+// note is written. Otherwise the note is stored, then the title and body are
+// spoken with the same exit-0 rule as a replaced note. spoken is true only
+// when that local process exits 0. A missing or failing TTS binary still
+// stores the note and returns spoken false. The list stays { id, title }.
 //
 // q is local text, matched without case. A remote URL, a scheme, a
 // protocol-relative value, or any string containing :// is refused and is
@@ -336,8 +343,13 @@ function localPdfTitle(given: unknown, filePath: string): string {
 }
 
 // MESH_PDF is a local executable the user already has. A remote value is not
-// downloaded. The note is written only after stdout is non-empty.
-async function ingestLocalPdf(pdf: unknown, title: unknown): Promise<Response> {
+// downloaded. The note is written only after stdout is non-empty. A remote
+// MESH_TTS is refused before that executable runs, and only when speak is true.
+async function ingestLocalPdf(pdf: unknown, title: unknown, speak = false): Promise<Response> {
+  if (speak) {
+    const ttsBin = (process.env.MESH_TTS ?? "").trim();
+    if (ttsBin && refusesRemote(ttsBin)) return json({ error: "tts must be a local binary" }, 400);
+  }
   if (typeof pdf !== "string" || !pdf.trim()) return json({ error: "pdf required" }, 400);
   const raw = pdf.trim();
   if (refusesRemote(raw)) return json({ error: "pdf must be a local file" }, 400);
@@ -369,7 +381,9 @@ async function ingestLocalPdf(pdf: unknown, title: unknown): Promise<Response> {
   await writeFile(file, `${JSON.stringify(note)}\n`, { mode: FILE_MODE });
   await chmod(file, FILE_MODE);
   await chmod(dir, DIR_MODE);
-  return json({ id, title: noteTitle }, 201);
+  if (!speak) return json({ id, title: noteTitle }, 201);
+  const spoken = await speakReplaced(`${noteTitle}\n${body}`.trim());
+  return json({ id, title: noteTitle, spoken }, 201);
 }
 
 async function ingestSpoken(audio: string): Promise<Response> {
@@ -524,7 +538,7 @@ async function ingest(req: Request): Promise<Response> {
     title?: unknown;
   } | null;
   if (body && typeof body.audio === "string" && body.audio.trim()) return ingestSpoken(body.audio);
-  if (body && "pdf" in body) return ingestLocalPdf(body.pdf, body.title);
+  if (body && "pdf" in body) return ingestLocalPdf(body.pdf, body.title, body.speak === true);
   if (!body || typeof body.path !== "string" || !body.path.trim()) return json({ error: "path required" }, 400);
   if (isRemote(body.path)) return json({ error: "path must be a local file" }, 400);
   const filePath = resolve(body.path);
