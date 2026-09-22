@@ -214,14 +214,14 @@ through `LiveActivityController.swift`.
 | Machine detail | Setup state, power, daemon version, per-service status, diagnose, wake | Fix what `/doctor` says is wrong | `/doctor`, `/health`, `DaemonCapabilities` gaps |
 | Pair machine — `PairMachineView.swift`, `PairingScanner.swift` | Turn a code or a QR into a paired fleet | Scan / enter code | `/pair/claim` (returns the token **and every host in `hosts.json`**) |
 | Manual bridge | Add a host by address when there is no code | Save | user input |
-| Monitor tab | Usage and limits per provider at the top (**0.6**), then events; dismiss one or clear all | Read | `/usage`, `/events`, `Shared/LimitHelpers.swift` |
+| Monitor — the bell in every tab's top bar (**0.6**; it left the tab bar so Apps could have the slot) | Usage and limits per provider at the top, then events newest first; a row opens its session, a read-only row says the agent ran outside a LeSearch session; dismiss one or clear all | Read / open | `/usage`, `/events`, `Shared/LimitHelpers.swift` |
 | Sessions and new session | List sessions per machine; start one with a chosen CLI, working directory and task; resume a previous conversation (**0.6**). The agent list comes from `/doctor`'s `agents`. | *New session* | `/agents`, `/agents/new`, `/doctor` |
 | Session peek | Recent output of one session; the attention row when it is waiting | Answer / type | `sessionsNeedingAttention` |
 | Agent chat — `AgentChatView.swift` | A conversation with a running agent: bubbles, decision cards, tool-result cards, artifacts, thinking disclosure, quick-command pills (**0.6**) | Send / decide | `/chat`, `Shared/RiskClassifier.swift` for the decision cards |
 | Terminal tab — `TerminalView.swift` | A live terminal over the bridge; the fallback block when the bridge is unavailable | Type | bridge `:7820` (token cookie, **0.6**) |
 | Remote tab — `RemoteScreenView.swift` | Screen, trackpad gestures, zoom to a region that arrives sharp | Tap / drag / zoom | `/screen.jpg`, `screenRegion`, `Shared/ScreenZoom.swift` |
 | Files — `FileBrowserView.swift` | Browse and open files on a machine | Open | `/files` |
-| Apps library — `AppsLibraryView.swift` | Every app an agent built, across every paired machine, grouped by name, newest first; "Less Search. More Agents." as the header line | Open (web) / Install (native, wireless or via the machine) | `/built-apps` on each machine; the Machines tab's grid button |
+| Apps tab — `AppsLibraryView.swift` | Every app an agent built, across every paired machine, grouped by name, newest first; "Less Search. More Agents." as the header line. Its own tab (**0.6**) | Open (web) / Install (native, wireless or via the machine) | `/built-apps` on each machine |
 | Exposed secrets — `ExposedSecretsScreen.swift` | **0.6** What the daemon redacted, by kind and fingerprint; mark rotated | Mark rotated | `/exposures` |
 | Mesh Apps | Apps published or added on a machine; install one on this phone, with or without a cable | Install | `/apps` |
 | Voice — `VoiceInput.swift`, `VoiceTranscriber.swift` | One sheet: live editable transcript, Stop/Resume, Send; recordings kept (last five) with *Transcribe again* (**0.6**) | Send | Speech framework, `Shared/VoiceSegments.swift` |
@@ -282,7 +282,8 @@ TypeScript by `check-mesh-push.sh`), `AlertGating.swift` (which events buzz),
 `SessionCard.swift` (the status vocabulary), `SessionActivity.swift`,
 `LimitHelpers.swift`, `RiskClassifier.swift` (mirrored in the daemon's `risk.ts`),
 `ScreenZoom.swift`, `SecureStore.swift`, `DaemonCapabilities.swift`, `APNsEnvironment.swift`,
-`VoiceSegments.swift`, `WatchGlance.swift`.
+`VoiceSegments.swift`, `WatchGlance.swift`, `PowerActions.swift` (the one power list both apps
+read: lock, sleep display, sleep, screen saver, screenshot to clipboard, restart, shut down).
 
 **Relay contract (watch → phone → meshd).** Commands the watch sends without a reply handler
 land in `PhoneConnectivity.session(_:didReceiveMessage:)` (added 2026-09-22; before it they

@@ -69,7 +69,14 @@ struct TerminalTab: View {
                                                 .font(.caption).foregroundStyle(.secondary)
                                         }
                                         Spacer()
-                                        if agent.attached {
+                                        if agent.status == "waiting" {
+                                            Label("needs you", systemImage: "hand.raised.fill")
+                                                .font(.caption)
+                                                .foregroundStyle(.orange)
+                                        } else if agent.status == "error" {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundStyle(.red)
+                                        } else if agent.attached {
                                             Image(systemName: "dot.radiowaves.left.and.right")
                                                 .foregroundStyle(.green)
                                         }
@@ -138,6 +145,7 @@ struct TerminalTab: View {
             }
             .navigationTitle("Terminal")
             .toolbar {
+                MonitorBell()
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -579,6 +587,9 @@ private struct SessionPeekScreen: View {
     /// When the user last drove this session (key, text, paste). The poll loop reads
     /// it to decide between the 500ms interactive cadence and the 2s ambient one.
     @State private var lastInteraction = Date.distantPast
+    @State private var terminalFollowsBottom = true
+    @State private var magnifyStartSize: Double?
+    @AppStorage("terminalFontSize") private var terminalFontSize: Double = 12
 
     // MARK: - Hand-off (meshd 0.6+, capability "handoff")
 
@@ -614,7 +625,7 @@ private struct SessionPeekScreen: View {
     private var visibleLines: [String] {
         // Keep interior blank lines so TUI output (tables, code, agent panes) stays
         // vertically aligned; only trim empty lines at the top/bottom of the window.
-        var lines = Array(output.suffix(32))
+        var lines = output
         while let first = lines.first, first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.removeFirst() }
         while let last = lines.last, last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.removeLast() }
         return lines
@@ -623,12 +634,6 @@ private struct SessionPeekScreen: View {
     private var activePane: Pane? {
         guard let selectedPane else { return panes.first(where: { $0.active }) }
         return panes.first { $0.paneId == selectedPane }
-    }
-
-    private var state: SessionState { sessionState(lines: output, attached: session.attached) }
-
-    private var sessionKind: String {
-        session.kindLabel
     }
 
     private var agentDisplayName: String {
@@ -642,15 +647,6 @@ private struct SessionPeekScreen: View {
             return LimitHelpers.isBlocked(sessionLimit)
         }
         return false
-    }
-
-    private func stateColor(_ s: SessionState) -> Color {
-        switch s {
-        case .waiting: return .orange
-        case .running: return .blue
-        case .error:   return .red
-        case .idle, .unknown: return .secondary
-        }
     }
 
     var body: some View {
@@ -676,20 +672,38 @@ private struct SessionPeekScreen: View {
                             }
                         }
                     },
+                    onSendPaste: { text in
+                        Task { await send(text: text, key: "enter", paste: true) }
+                    },
                     onSendKey: { key in Task { await send(key: key) } }
                 )
                 .disabled(handoffInFlight)
             } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        headerCard
-                        paneCard
-                        outputCard
-                        controlsCard
-                        presetsCard
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 18) {
+                            terminalHeaderRow
+                            // The header card that used to carry these went; the sentence that
+                            // says "what you see is stale, and why" must not go with it.
+                            if !visibleLines.isEmpty, let stale = staleOutputLine {
+                                Label(stale.text, systemImage: stale.symbol)
+                                    .font(.caption)
+                                    .foregroundStyle(stale.quiet ? Color.secondary : Color.orange)
+                            }
+                            outputCard
+                            controlsCard
+                            presetsCard
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 14)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 14)
+                    .defaultScrollAnchor(.bottom)
+                    .onAppear { proxy.scrollTo("terminal-output-tail", anchor: .bottom) }
+                    .onChange(of: visibleLines) { _, _ in
+                        if terminalFollowsBottom {
+                            withAnimation { proxy.scrollTo("terminal-output-tail", anchor: .bottom) }
+                        }
+                    }
                 }
                 .background(Color(.systemGroupedBackground))
             }
@@ -763,108 +777,38 @@ private struct SessionPeekScreen: View {
         }
     }
 
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                Image(systemName: session.attached ? "dot.radiowaves.left.and.right" : "terminal.fill")
-                    .foregroundStyle(session.attached ? .green : .accentColor)
-                    .font(.title2)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(session.displayName)
-                        .font(.title2.bold())
-                        .lineLimit(1)
-                    Text("\(terminalShortName(machine.host)) · \(session.agentType ?? "shell") · \(sessionKind)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            HStack {
-                StatPill(label: "CPU", value: session.cpuPct.map { String(format: "%.0f%%", $0) } ?? "—")
-                StatPill(label: "Mem", value: session.memLabel ?? "—")
-                StatPill(label: "State", value: state.label, tone: stateColor(state))
-            }
-            switch peekFailure {
-            case .unreachable:
-                Label(lastUpdated == nil
-                      ? "\(machine.host) isn't answering — nothing has loaded yet"
-                      : "\(machine.host) stopped answering · showing the last output",
-                      systemImage: "wifi.exclamationmark")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            case .sessionGone:
-                Label(lastUpdated == nil
-                      ? "This session has ended — \(machine.host) is answering, the pane is gone"
-                      : "This session has ended · showing its last output",
-                      systemImage: "moon.zzz")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            case .tokenRejected:
-                Label("\(machine.host) rejected the token — pair again from Machines",
-                      systemImage: "key.slash")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            case .none:
-                EmptyView()
-            }
-            if peekFailure == .none, let lastUpdated {
-                Text("updated \(lastUpdated.formatted(date: .omitted, time: .shortened))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if continueBlocked,
-               let providerId = LimitHelpers.providerId(for: session.agentType),
-               let limit = store.snapshot?.usage?.providers
-                .first(where: { $0.id.lowercased() == providerId })?
-                .limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }),
-               let countdown = LimitHelpers.resetCountdown(from: limit.resetsAtISO) {
-                Label("Session limit · \(countdown)", systemImage: "flame.fill")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
+    /// What the output card is showing when the session is not answering: stale, and why.
+    private var staleOutputLine: (text: String, symbol: String, quiet: Bool)? {
+        switch peekFailure {
+        case .unreachable: return ("\(machine.host) stopped answering · showing the last output", "wifi.exclamationmark", false)
+        case .sessionGone: return ("This session has ended · showing its last output", "moon.zzz", true)
+        case .tokenRejected: return ("\(machine.host) rejected the token — pair again from Machines", "key.slash", false)
+        case .none: return nil
         }
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    private var paneCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label(session.isCmux ? "Surface" : session.isHerdr ? "herdr pane" : "Pane", systemImage: "rectangle.split.2x1")
-                    .font(.headline)
-                Spacer()
-                // Only when there is a choice to describe: with one pane, "0.0 2.1.250"
-                // in the corner is a riddle, not information — the path below already
-                // says everything a single pane has to say.
-                if panes.count > 1 {
-                    Text(activePane?.label ?? "session")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if panes.isEmpty {
-                Text("No pane list yet.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                if let path = activePane?.currentPath, !path.isEmpty {
-                    Label(path, systemImage: "folder")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .textSelection(.enabled)
-                }
-                if panes.count > 1 {
-                    FlowButtons(items: panes.map(\.label)) { label in
-                        guard let pane = panes.first(where: { $0.label == label }) else { return }
-                        selectedPane = pane.paneId
-                        Task { await refresh() }
+    private var terminalHeaderRow: some View {
+        HStack(spacing: 8) {
+            Text("\(session.displayName) · \(session.agentType ?? "shell")")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if panes.count > 1 {
+                Picker("Pane", selection: $selectedPane) {
+                    ForEach(panes) { pane in
+                        Text(pane.label).tag(Optional(pane.paneId))
                     }
                 }
+                .labelsHidden()
+                .fixedSize()
+                .onChange(of: selectedPane) { _, _ in Task { await refresh() } }
             }
+            Button("A−") { terminalFontSize = max(9, terminalFontSize - 1) }
+            Button("A+") { terminalFontSize = min(22, terminalFontSize + 1) }
         }
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(.horizontal, 4)
     }
 
     private var outputCard: some View {
@@ -900,7 +844,7 @@ private struct SessionPeekScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Text(visibleLines.joined(separator: "\n"))
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.system(size: min(22, max(9, terminalFontSize)), design: .monospaced))
                         .lineSpacing(2)
                         .textSelection(.enabled)
                         // Accept the proposed width, wrap, grow down. Without this an
@@ -912,10 +856,23 @@ private struct SessionPeekScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                Color.clear
+                    .frame(height: 1)
+                    .id("terminal-output-tail")
+                    .onScrollVisibilityChange { terminalFollowsBottom = $0 }
             }
             .padding(12)
             .background(Color.black, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .foregroundStyle(.white)
+            .gesture(
+                MagnifyGesture()
+                    .onChanged { value in
+                        let start = magnifyStartSize ?? terminalFontSize
+                        if magnifyStartSize == nil { magnifyStartSize = start }
+                        terminalFontSize = min(22, max(9, start * Double(value.magnification)))
+                    }
+                    .onEnded { _ in magnifyStartSize = nil }
+            )
             if !links.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -1189,10 +1146,10 @@ private struct SessionPeekScreen: View {
     /// A refused keystroke has to say so. `try?` here meant the daemon could answer
     /// "pane not found" and the screen would look exactly like a delivered key — the
     /// half of the dead-terminal report that no daemon fix could have reached.
-    private func send(text: String? = nil, key: String? = nil) async {
+    private func send(text: String? = nil, key: String? = nil, paste: Bool = false) async {
         lastInteraction = Date()
         do {
-            try await client.send(agent: session.name, text: text, key: key, pane: selectedPane)
+            try await client.send(agent: session.name, text: text, key: key, pane: selectedPane, paste: paste)
             inputRefusal = nil
         } catch let error as MeshClient.MeshError {
             inputRefusal = error.reason ?? "the machine refused the input"
@@ -1235,19 +1192,8 @@ private struct SessionPeekScreen: View {
     /// the wire on a daemon that advertised "paste"; older ones get today's typed-keys
     /// behavior from the same call, so there is nothing to branch on here.
     private func pasteIntoPane() async {
-        guard let text = UIPasteboard.general.string, !text.isEmpty else { return }
-        lastInteraction = Date()
-        // Same contract as send(): a refused paste must say why, not look delivered.
-        do {
-            try await client.send(agent: session.name, text: text, pane: selectedPane, paste: true)
-            inputRefusal = nil
-        } catch let error as MeshClient.MeshError {
-            inputRefusal = error.reason ?? "the machine refused the paste"
-        } catch {
-            inputRefusal = "the machine could not be reached"
-        }
-        try? await Task.sleep(for: .milliseconds(350))
-        await refresh()
+        guard let text = phoneClipboardText() else { return }
+        await send(text: text, paste: true)
     }
 
     private func newPane() async {
@@ -1266,8 +1212,11 @@ private struct SessionPeekScreen: View {
     }
 }
 
-private func terminalShortName(_ host: String) -> String {
-    host.replacingOccurrences(of: "arya-", with: "").replacingOccurrences(of: "agents", with: "")
+/// One clipboard boundary for both the transcript composer and raw terminal controls.
+/// Empty clipboard strings are never useful input and should not enable a send path.
+func phoneClipboardText() -> String? {
+    guard let text = UIPasteboard.general.string, !text.isEmpty else { return nil }
+    return text
 }
 
 private struct FlowButtons: View {
@@ -1314,13 +1263,24 @@ private struct BridgeTerminalScreen: View {
     /// backgrounded long enough for the terminal's socket to die is exactly the
     /// stuck terminal the owner saw.
     @State private var lastLoadAt = Date()
+    @AppStorage("terminalFontSize") private var terminalFontSize: Double = 12
+
+    private var terminalURL: URL? {
+        guard let url = machine.terminalURL(session: session, pane: selectedPane),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        var items = components.queryItems ?? []
+        items.removeAll { $0.name == "fontSize" }
+        items.append(URLQueryItem(name: "fontSize", value: String(Int(min(22, max(9, terminalFontSize)).rounded()))))
+        components.queryItems = items
+        return components.url
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             if panes.count > 1 {
                 paneSwitcher
             }
-            if let url = machine.terminalURL(session: session, pane: selectedPane) {
+            if let url = terminalURL {
                 ZStack {
                     if cookieReady {
                         BridgeWebView(url: url, reloadToken: reloadToken, phase: $phase)

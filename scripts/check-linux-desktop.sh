@@ -19,6 +19,8 @@ grep -q 'screenshot: \["/usr/sbin/screencapture", "-c"' "$M" || { echo "FAIL: Ma
 grep -q 'stdout: "ignore", stderr: "ignore" });' "$L" || { echo "FAIL: xclip write still pipes stdout"; exit 1; }
 grep -q '"-resize", `${width}x`' "$L" || { echo "FAIL: Linux /screen.jpg ignores width"; exit 1; }
 grep -q 'origin.toLowerCase() !== `${new URL(req.url).protocol}//${host}`' "$S" || { echo "FAIL: same-origin browser POSTs still cross-site"; exit 1; }
+# Sessions must outlive the daemon: the unit's cgroup kill took every tmux session with a restart.
+grep -q '^KillMode=process' "$ROOT/install/install.sh" || { echo "FAIL: systemd unit lacks KillMode=process (sessions die on upgrade)"; exit 1; }
 [ "${MESH_FLEET_LIVE:-}" = "1" ] || { echo "check-linux-desktop: ok (structural; MESH_FLEET_LIVE=1 for the live half)"; exit 0; }
 
 HOST="${MESH_REMOTE_HOST:-pi}"
@@ -30,8 +32,7 @@ d = json.load(open(os.path.expanduser("~/.mesh/hosts.json")))
 rows = d["hosts"] if isinstance(d, dict) else d
 h = rows[host] if isinstance(rows, dict) else next(x for x in rows if x.get("name") == host)
 open(hdr, "w").write(f"authorization: Bearer {h['token']}\n")
-a = h.get("addresses") or h.get("hosts") or [h.get("host") or h.get("address")]
-open(addr, "w").write(f"http://{a[0]}:{h.get('port', 8899)}")
+open(addr, "w").write(f"http://{h['ip']}:{h.get('port', 8899)}")
 PY
 chmod 600 "$TMP/hdr"; BASE="$(cat "$TMP/addr")"
 api() { curl -s -m 20 -H @"$TMP/hdr" "$@"; }

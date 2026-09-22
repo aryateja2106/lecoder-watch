@@ -577,15 +577,21 @@ async function pairQR(text: string): Promise<string> {
 }
 
 async function cmdPair(flags: Record<string, string>, cfg: Config) {
-  // Minted over loopback so no token is needed here — that is the whole point.
-  const port = Number(flags.port) || Number(process.env.MESHD_PORT) || 8899;
+  // `-H other` asks THAT machine for a code and hands back its address. Its daemon only
+  // mints over loopback (pair.ts: a code is a token in disguise, so the machine itself
+  // must be in the loop) — so this either works against a daemon that trusts this Mac's
+  // bearer for it, or says exactly where to run `mesh pair` instead of silently minting
+  // a code for the wrong machine, which is what -H used to do.
+  const remote = hostOf(flags) ? resolveHost(hostOf(flags), cfg) : undefined;
+  const port = remote?.port ?? (Number(flags.port) || Number(process.env.MESHD_PORT) || 8899);
   let r: any;
   try {
-    r = await api({ name: "local", ip: "127.0.0.1", port, token: localToken() }, "GET", "/pair/new");
+    r = await api(remote ?? { name: "local", ip: "127.0.0.1", port, token: localToken() }, "GET", "/pair/new");
   } catch (e: any) {
-    die(`meshd is not answering on 127.0.0.1:${port} — is it running?  (${String(e?.message ?? e)})`);
+    if (remote && /403/.test(String(e?.message ?? e))) die(`${remote.name} mints pairing codes only on itself — run \`mesh pair\` on ${remote.name} (or scan the QR from \`mesh desktop\` there).`);
+    die(`meshd is not answering on ${remote ? `${remote.name} (${remote.ip}:${port})` : `127.0.0.1:${port}`} — is it running?  (${String(e?.message ?? e)})`);
   }
-  const address = flags.address || reachableAddress();
+  const address = flags.address || remote?.ip || reachableAddress();
   // meshwatch://, not mesh:// — `meshwatch` is the only scheme the iOS app registers
   // (project.yml CFBundleURLSchemes), so a mesh:// QR scanned into iOS opens nothing.
   const url = `meshwatch://pair?h=${encodeURIComponent(address)}&p=${port}&c=${r.code}`;

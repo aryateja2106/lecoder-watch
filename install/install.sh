@@ -227,6 +227,11 @@ $su_env
 ExecStart=$su_bun run $su_entry
 Restart=always
 RestartSec=3
+# The tmux server meshd starts lives in this unit's cgroup. With the default
+# control-group kill, every daemon restart or upgrade took every agent session
+# on the machine with it (measured 2026-09-22: a Pi upgrade emptied "mesh ls").
+# Only meshd itself is signalled; sessions outlive the daemon, as they do on the Mac.
+KillMode=process
 
 [Install]
 WantedBy=default.target

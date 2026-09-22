@@ -2,6 +2,12 @@ import Foundation
 import Combine
 import WatchKit
 
+// The daemon labels unknown agent commands by basename, so anything not a plain shell/runtime can understand "continue".
+func isCodingAgent(_ agentType: String?) -> Bool {
+    guard let agentType else { return false }
+    return !["shell", "node", "python", "bun", "sh", "zsh", "bash", "fish"].contains(agentType.lowercased())
+}
+
 /// Watch brain. Two private paths to the mesh:
 ///  1. DIRECT — talk to each machine's meshd over the tailnet. Works in the
 ///     simulator and whenever the watch can reach the host. Fast (1.5s output).
@@ -456,9 +462,11 @@ final class WatchMeshStore: ObservableObject {
     /// same reason `sessionsNeedingAttention` does it — the daemon's name for a box
     /// is not always the name this app stored.
     func latestEvent(host: String, session: String) -> AgentEvent? {
-        events.last { event in
+        // The daemon's own hostname too ("arya-pi" for the machine this app calls "pi").
+        let reported = snaps.first { $0.host == host }?.stats?.host
+        return events.last { event in
             guard let eventHost = event.host, event.session == session else { return false }
-            return hostNamesMatch(eventHost, host)
+            return hostNamesMatch(eventHost, host) || reported.map { hostNamesMatch(eventHost, $0) } == true
         }
     }
 

@@ -8,21 +8,28 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @EnvironmentObject var store: MeshStore
     #if DEBUG
-    @State private var tab = ProcessInfo.processInfo.arguments.contains("-uiRemote") ? Tab.remote : Tab.machines
+    @State private var tab = ProcessInfo.processInfo.arguments.contains("-uiRemote") ? AppTab.remote : AppTab.machines
     #else
-    @State private var tab = Tab.machines
+    @State private var tab = AppTab.machines
     #endif
 
-    enum Tab: Hashable { case machines, terminal, remote, monitor, settings }
+    enum AppTab: Hashable { case machines, terminal, remote, apps, settings }
 
     var body: some View {
+        // Five places a thumb goes, and no more. Monitor left the bar: alerts and usage
+        // are the one thing wanted from EVERY tab, so they live behind the bell in each
+        // tab's top bar (`MonitorBell`) with the waiting count on it. Apps took the slot —
+        // the library of what agents built is a destination, not a toolbar afterthought.
         TabView(selection: $tab) {
-            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }.tag(Tab.machines)
-            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }.tag(Tab.terminal)
-            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }.tag(Tab.remote)
-            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }.tag(Tab.monitor)
-            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }.tag(Tab.settings)
+            Tab("Machines", systemImage: "server.rack", value: .machines) { MachinesTab() }
+            Tab("Terminal", systemImage: "terminal", value: .terminal) { TerminalTab() }
+            Tab("Remote", systemImage: "display", value: .remote) { RemoteControlTab() }
+            Tab("Apps", systemImage: "square.grid.2x2", value: .apps) { AppsTab() }
+            Tab("Settings", systemImage: "gearshape", value: .settings) { SettingsTab() }
         }
+        // The bar tucks away while reading a long transcript or output and comes back on
+        // the first upward scroll — the content is what the screen is for.
+        .tabBarMinimizeBehavior(.onScrollDown)
         // meshwatch://session/<host>/<name> — from the live card, and anywhere else we
         // want to land someone on the session rather than on the app in general.
         .onOpenURL { url in
@@ -44,7 +51,48 @@ struct ContentView: View {
     }
 }
 
-private struct MonitorTab: View {
+/// The bell in every tab's top bar: alerts, usage and the event log, one tap from
+/// anywhere. The count is what is waiting on you right now (agents stopped at a
+/// prompt), not the unread history — a number that goes to zero when you have acted.
+struct MonitorBell: View {
+    @EnvironmentObject var store: MeshStore
+
+    private var waiting: Int {
+        store.snapshot.map { sessionsNeedingAttention(from: $0).count } ?? 0
+    }
+
+    var body: some View {
+        NavigationLink {
+            MonitorView()
+        } label: {
+            Image(systemName: waiting > 0 ? "bell.badge.fill" : "bell")
+                .symbolRenderingMode(waiting > 0 ? .multicolor : .monochrome)
+                .accessibilityLabel(waiting > 0 ? "\(waiting) waiting on you" : "Monitor")
+        }
+    }
+}
+
+/// The Apps tab: the fleet-wide library, at the bottom of the screen where a thumb
+/// finds it. (`AppsLibraryView` is the same screen the Machines toolbar used to hide.)
+private struct AppsTab: View {
+    @EnvironmentObject var store: MeshStore
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if store.machines.isEmpty {
+                    ContentUnavailableView("No machines yet", systemImage: "square.grid.2x2",
+                                           description: Text("Pair a machine on the Machines tab. Every app an agent builds there shows up here."))
+                } else {
+                    AppsLibraryView()
+                }
+            }
+            .toolbar { MonitorBell() }
+        }
+    }
+}
+
+struct MonitorView: View {
     @EnvironmentObject var store: MeshStore
     @ObservedObject private var notifications = NotificationManager.shared
     /// IDs the owner swiped away, client-side only — the daemon keeps its own event
@@ -54,8 +102,10 @@ private struct MonitorTab: View {
         UserDefaults.standard.stringArray(forKey: "mesh.dismissedEventIDs.v1") ?? []
     @State private var confirmingClearAll = false
 
+    /// Newest first by the event's own clock, not by arrival: hosts are polled in turn,
+    /// so a machine paired later lands its whole backlog on top of fresher rows.
     private var visibleEvents: [AgentEvent] {
-        store.events.reversed().filter { !dismissedEventIDs.contains($0.id) }
+        store.events.filter { !dismissedEventIDs.contains($0.id) }.sorted { $0.createdISO > $1.createdISO }
     }
 
     private func dismiss(_ event: AgentEvent) {
@@ -76,8 +126,17 @@ private struct MonitorTab: View {
         UserDefaults.standard.set(dismissedEventIDs, forKey: "mesh.dismissedEventIDs.v1")
     }
 
+    /// The agent row an event belongs to, if this phone can address it — id first, then
+    /// name, the same rule the "Needs you" rows use. Nil for a Claude that ran outside a
+    /// LeSearch session: its hooks still post, but there is no pane to answer into.
+    private func session(for event: AgentEvent) -> MeshStore.SessionTarget? {
+        guard let host = event.host, let name = event.session,
+              let machine = snapshotMachineMatching(host, in: store.snapshot?.machines ?? []),
+              let agent = matchingAgent(for: event, session: name, in: machine) else { return nil }
+        return MeshStore.SessionTarget(host: machine.host, session: agent.name)
+    }
+
     var body: some View {
-        NavigationStack {
             List {
                 if notifications.authorizationDenied || store.lastError != nil {
                     Section {
@@ -118,6 +177,7 @@ private struct MonitorTab: View {
                             .foregroundStyle(.secondary)
                     }
                     ForEach(visibleEvents) { event in
+                        let target = session(for: event)
                         VStack(alignment: .leading, spacing: 5) {
                             HStack {
                                 Text(event.title).font(.headline)
@@ -125,6 +185,9 @@ private struct MonitorTab: View {
                                 Text(eventTime(event.createdISO))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
+                                if target != nil {
+                                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                                }
                             }
                             if let body = event.body, !body.isEmpty {
                                 // Hooks post transcript PATHS as event bodies, and a
@@ -139,8 +202,20 @@ private struct MonitorTab: View {
                             Text([event.host, event.source, event.session].compactMap { $0 }.joined(separator: " · "))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
+                            if event.replyable == false && target == nil {
+                                // The case that read as "Approve does nothing": a Claude started in
+                                // a plain terminal, not in a LeSearch session. Its hooks reach us;
+                                // no pane of ours can answer it. Say so instead of offering a button.
+                                Text("Ran outside a LeSearch session — read-only. Start agents with New session to answer them from here.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
                         }
                         .padding(.vertical, 3)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if let target { store.deepLinkSession = target }
+                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) { dismiss(event) } label: {
                                 Label("Dismiss", systemImage: "trash")
@@ -164,7 +239,6 @@ private struct MonitorTab: View {
             } message: {
                 Text("This only hides them on this phone. The daemon keeps its own copy.")
             }
-        }
     }
 }
 
@@ -251,9 +325,7 @@ private struct MachinesTab: View {
             }
             .navigationTitle("Machines")
             .toolbar {
-                // The library of every app an agent built, across every machine.
-                NavigationLink { AppsLibraryView() } label: { Label("Apps", systemImage: "square.grid.2x2") }
-                    .disabled(store.machines.isEmpty)
+                MonitorBell()
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: store.polling ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                 }
@@ -340,17 +412,40 @@ private struct MachineDetailView: View {
         store.events.last { event in
             guard event.session == session else { return false }
             guard let eventHost = event.host, !eventHost.isEmpty else { return true }
-            return hostNamesMatch(eventHost, host)
+            return hostNamesMatch(eventHost, host) || snapshot?.stats.map { hostNamesMatch(eventHost, $0.host) } == true
         }
+    }
+
+    /// Diagnostics are the long tail of this screen — worth having, not worth leading with.
+    /// They open on their own only while something in them is red.
+    @State private var showDiagnostics = false
+
+    private var diagnosticsHaveAProblem: Bool {
+        guard let m = snapshot else { return false }
+        return m.isStale || m.authError != nil || m.bridgeReachable == false || hasCap(m, "events") == false
     }
 
     var body: some View {
         List {
             if let m = snapshot {
+                if m.reachable, let machine = config {
+                    // The three things a person opens a machine for. The setup report and the
+                    // service rows used to sit above these — seven green ticks before the
+                    // first session, which is not what "tap the machine" means to anyone.
+                    Section {
+                        NavigationLink { RemoteScreenView(machine: machine) } label: {
+                            Label("Screen & control", systemImage: "display")
+                        }
+                        NavigationLink { FileBrowserView(machine: machine) } label: {
+                            Label("Files", systemImage: "folder")
+                        }
+                    }
+                }
                 if m.reachable {
-                    if let machine = store.machines.first(where: { $0.host == m.host }) {
+                    if let machine = config {
                         MachineSetupSection(machine: machine)
                     }
+                    Section(isExpanded: $showDiagnostics) {
                     ServiceStatusRow(label: "meshd", ok: !m.isStale, detail: m.statusLabel)
                     ServiceStatusRow(label: "auth", ok: m.authError == nil, detail: m.authError ?? "active")
                     if m.authError != nil {
@@ -400,6 +495,9 @@ private struct MachineDetailView: View {
                     } else {
                         StatRow(label: "Stats", value: "not available")
                     }
+                    } header: {
+                        Text("Diagnostics")
+                    }
                     if let machine = store.machines.first(where: { $0.host == m.host }) {
                         MachinePowerSection(machine: machine, snapshot: m)
                     }
@@ -421,6 +519,7 @@ private struct MachineDetailView: View {
                     // the subnet — was cached while the machine was still up.
                     WakeRow(host: m.host)
                 }
+                Section(m.agents.isEmpty ? "No sessions" : "Sessions") {
                 ForEach(m.agents) { a in
                     HStack {
                         Image(systemName: "terminal")
@@ -437,6 +536,9 @@ private struct MachineDetailView: View {
                             Text(sessionCost(a)).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { store.deepLinkSession = MeshStore.SessionTarget(host: m.host, session: a.name) }
+                }
                 }
                 // The installer keeps the machine's existing token, so neither of these
                 // needs one on the command line — and printing a live bearer token into
@@ -496,8 +598,10 @@ private struct MachineDetailView: View {
                 Text("Pairing the same machine replaces its saved token in place. Removing only forgets it on this phone — and it stays forgotten until you pair it again.")
             }
         }
+        .listStyle(.sidebar)
         .navigationTitle(machineShortName(host))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { if diagnosticsHaveAProblem { showDiagnostics = true } }
         .refreshable { await store.refresh() }
         .sheet(isPresented: $repairing) {
             PairMachineView(prefill: config.map {
@@ -554,68 +658,36 @@ private struct MachinePowerSection: View {
     let snapshot: MachineSnapshot
 
     @State private var pending: PowerAction?
-    @State private var running: String?
+    @State private var running: PowerAction?
     @State private var failure: String?
-
-    /// One row. `action` is meshd's own vocabulary for `POST /system`, not ours, so
-    /// the string that reaches the daemon is the string written here.
-    private struct PowerAction: Identifiable, Equatable {
-        var id: String { action }
-        var action: String
-        var label: String
-        var symbol: String
-        /// Nil for the reversible ones. Present means it confirms first.
-        var confirm: (title: String, verb: String, consequence: String)?
-
-        static func == (lhs: PowerAction, rhs: PowerAction) -> Bool { lhs.action == rhs.action }
-    }
 
     /// meshd 0.5.0 added shutdown and restart. Offering them against an older daemon
     /// would be a button that 400s, so they appear only where "power" is advertised.
     private var canPowerOff: Bool { snapshot.capabilities?.contains("power") ?? false }
 
-    /// Reversible from the machine's own keyboard, so no dialog: asking "are you sure?"
-    /// about locking a screen is how people learn to dismiss the dialog that matters.
-    private let reversible: [PowerAction] = [
-        PowerAction(action: "lock", label: "Lock", symbol: "lock.fill", confirm: nil),
-        PowerAction(action: "displaysleep", label: "Sleep display", symbol: "display", confirm: nil),
-        PowerAction(action: "sleep", label: "Sleep", symbol: "moon.fill", confirm: nil),
-    ]
-
-    private var irreversible: [PowerAction] {
-        let name = machineShortName(machine.host)
-        return [
-            PowerAction(action: "restart", label: "Restart…", symbol: "arrow.clockwise.circle",
-                        confirm: (title: "Restart \(name)?",
-                                  verb: "Restart",
-                                  consequence: "Every session on it stops. Anything unsaved there is lost, and agents mid-task will not come back on their own.")),
-            PowerAction(action: "shutdown", label: "Shut Down…", symbol: "power",
-                        confirm: (title: "Shut down \(name)?",
-                                  verb: "Shut Down",
-                                  consequence: "Every session stops and the machine goes dark. After that only its own power button, or a wake packet from a machine on the same network, brings it back.")),
-        ]
-    }
-
     var body: some View {
+        // The list itself lives in Shared/PowerActions.swift — the watch reads the same
+        // one, which is the only way the two screens stop disagreeing about what a
+        // machine can be told to do.
         Section("Power") {
-            ForEach(reversible) { item in
+            ForEach(PowerAction.reversible) { item in
                 Button {
                     run(item)
                 } label: {
-                    Label(running == item.action ? "\(item.label)…" : item.label, systemImage: item.symbol)
+                    Label(running == item ? "\(item.label)…" : item.label, systemImage: item.symbol)
                 }
                 .disabled(running != nil)
             }
             if canPowerOff {
-                ForEach(irreversible) { item in
+                ForEach(PowerAction.irreversible) { item in
                     Button(role: .destructive) {
                         pending = item
                     } label: {
-                        Label(running == item.action ? "\(item.label)…" : item.label, systemImage: item.symbol)
+                        Label(running == item ? "\(item.label)…" : item.label, systemImage: item.symbol)
                     }
                     .disabled(running != nil)
                 }
-                Text("The daemon starts at login. After a restart nothing answers from the phone until someone logs in at the Mac (or auto-login is on).")
+                Text("The daemon starts at login. After a restart nothing answers from the phone until someone logs in at the machine (or auto-login is on).")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } else {
@@ -634,24 +706,24 @@ private struct MachinePowerSection: View {
                     .foregroundStyle(.red)
             }
         }
-        .confirmationDialog(pending?.confirm?.title ?? "",
+        .confirmationDialog(pending?.consequence(machineName: machineShortName(machine.host))?.title ?? "",
                             isPresented: Binding(get: { pending != nil },
                                                  set: { if !$0 { pending = nil } }),
                             titleVisibility: .visible,
                             presenting: pending) { item in
-            Button(item.confirm?.verb ?? item.label, role: .destructive) { run(item) }
+            Button(item.consequence(machineName: machineShortName(machine.host))?.verb ?? item.label, role: .destructive) { run(item) }
             Button("Cancel", role: .cancel) { pending = nil }
         } message: { item in
-            Text(item.confirm?.consequence ?? "")
+            Text(item.consequence(machineName: machineShortName(machine.host))?.consequence ?? "")
         }
     }
 
     private func run(_ item: PowerAction) {
         pending = nil
-        running = item.action
+        running = item
         failure = nil
         Task { @MainActor in
-            failure = await store.systemAction(item.action, on: machine)
+            failure = await store.systemAction(item.rawValue, on: machine)
             running = nil
         }
     }
@@ -772,9 +844,11 @@ private struct MachineSetupSection: View {
         return report.orderedChecks.contains { !$0.check.ok && DoctorReport.isRemotelyFixable($0.name) }
     }
     private var isMac: Bool { report?.platform == "darwin" }
+    /// Open by default only while a check is red; a machine that passes shows one line.
+    @State private var expanded = false
 
     var body: some View {
-        Section("Setup & permissions") {
+        Section(isExpanded: $expanded) {
             if let report {
                 ForEach(report.orderedChecks, id: \.name) { item in
                     VStack(alignment: .leading, spacing: 2) {
@@ -801,8 +875,25 @@ private struct MachineSetupSection: View {
             } else if let error {
                 Text(error).font(.caption).foregroundStyle(.secondary)
             }
+        } header: {
+            summary
         }
-        .task { await run(fix: false) }
+        .task {
+            await run(fix: false)
+            if let report, report.orderedChecks.contains(where: { !$0.check.ok }) { expanded = true }
+        }
+    }
+
+    /// "Setup · all 7 pass" or "Setup · 2 need you" — the whole report in one line, so the
+    /// seven green rows only unfold for someone who wants them.
+    private var summary: some View {
+        let failing = report?.orderedChecks.filter { !$0.check.ok }.count ?? 0
+        let total = report?.orderedChecks.count ?? 0
+        return HStack(spacing: 6) {
+            Image(systemName: failing == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(failing == 0 ? Color.green : Color.orange)
+            Text(report == nil ? "Setup" : failing == 0 ? "Setup · all \(total) pass" : "Setup · \(failing) need\(failing == 1 ? "s" : "") you")
+        }
     }
 
     private func run(fix: Bool) async {
@@ -1351,7 +1442,10 @@ private struct SettingsTab: View {
                 }
             }
             .navigationTitle("Settings")
-            .toolbar { Button("Save") { store.save(); Task { await store.refresh() } } }
+            .toolbar {
+                MonitorBell()
+                Button("Save") { store.save(); Task { await store.refresh() } }
+            }
             .sheet(isPresented: $pairing) { PairMachineView().environmentObject(store) }
             // TabView keeps every tab mounted, so switching away from Settings never
             // tore this view down — with no @FocusState, nothing told a focused
@@ -1518,7 +1612,9 @@ private struct RemoteControlTab: View {
                             }
                             .disabled(snap(for: machine)?.reachable != true)
                         }
-                        if let snap = snap(for: machine) {
+                        // A green "machine online / input ready" pair under every machine was
+                        // two rows of nothing; the rows only appear when one of them is the problem.
+                        if let snap = snap(for: machine), !snap.reachable || snap.capabilities?.contains("input") != true {
                             ServiceStatusRow(label: "machine", ok: snap.reachable, detail: snap.statusLabel)
                             ServiceStatusRow(label: "input", ok: snap.capabilities?.contains("input"),
                                              detail: (snap.capabilities?.contains("input") ?? false) ? "ready" : "needs meshd 0.2.2")
@@ -1535,6 +1631,7 @@ private struct RemoteControlTab: View {
                 }
             }
             .navigationTitle("Remote")
+            .toolbar { MonitorBell() }
             .overlay {
                 if machines.isEmpty {
                     ContentUnavailableView("No machines", systemImage: "display",

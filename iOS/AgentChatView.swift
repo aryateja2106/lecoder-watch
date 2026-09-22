@@ -121,6 +121,7 @@ struct AgentChatView: View {
     let chatSource: String
     let rawLines: [String]
     let onSendText: (String) -> Void
+    let onSendPaste: (String) -> Void
     /// Named keys only (`"ctrl-c"`, `"enter"`, `"escape"`, …) — the same vocabulary
     /// `client.send(key:)` and `AgentNotification.command(for:typed:)` use. A raw
     /// control byte in a text field is not how this app tells a session to stop.
@@ -165,6 +166,11 @@ struct AgentChatView: View {
     /// fallback (or no chat capability yet) shows the same terminal block the
     /// Terminal tab does.
     private var showStructured: Bool { !messages.isEmpty && chatSource != "output" }
+
+    private var showsAgentKeys: Bool {
+        guard let type = session.agentType?.lowercased() else { return false }
+        return !["shell", "node", "python"].contains(type)
+    }
 
     /// The newest event this app holds for this session, matched the same tolerant
     /// way `WatchMeshStore.latestEvent` does — the daemon's name for a host is not
@@ -460,71 +466,106 @@ struct AgentChatView: View {
     }
 
     private var inputBar: some View {
-        HStack(spacing: 10) {
-            TextField("Ask or command \(agentKind.rawValue)…", text: $inputText.shellSafe)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.tertiarySystemFill))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .submitLabel(.send)
-                .focused($inputFocused)
-                .onSubmit { submit() }
+        VStack(spacing: 0) {
+            if showsAgentKeys {
+                agentKeyStrip
+            }
+            HStack(spacing: 10) {
+                TextField("Ask or command \(agentKind.rawValue)…", text: $inputText.shellSafe, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...6)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.tertiarySystemFill))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .focused($inputFocused)
 
-            if inputText.isEmpty {
-                // No bare "Y" button any more: it typed a literal y into whatever the
-                // session's own prompt actually wanted (Enter, or 1/2/3) — the
-                // approval card is the one Allow/Deny surface. Stop stays, two-step:
-                // every tap here sends Ctrl-C into a session that might already be
-                // working again, so a reader has to mean it.
                 Button {
-                    showingVoiceInput = true
+                    if let text = phoneClipboardText() { inputText += text }
                 } label: {
-                    Image(systemName: "mic.fill")
-                        .font(.subheadline)
-                        .frame(width: 34, height: 34)
-                        .background(agentKind.brandColor.opacity(0.15))
-                        .foregroundStyle(agentKind.brandColor)
-                        .clipShape(Circle())
+                    Image(systemName: "doc.on.clipboard")
                 }
+                .disabled(!UIPasteboard.general.hasStrings)
 
-                if confirmingStop {
-                    Button(action: confirmStop) {
-                        Text("Send Ctrl-C?")
-                            .font(.caption.bold())
-                            .padding(.horizontal, 10)
-                            .frame(height: 34)
-                            .background(Color.red.opacity(0.15))
-                            .foregroundStyle(.red)
-                            .clipShape(Capsule())
-                    }
-                } else {
-                    Button(action: armStopConfirm) {
-                        Image(systemName: "stop.fill")
+                if inputText.isEmpty {
+                    // No bare "Y" button any more: it typed a literal y into whatever the
+                    // session's own prompt actually wanted (Enter, or 1/2/3) — the
+                    // approval card is the one Allow/Deny surface. Stop stays, two-step:
+                    // every tap here sends Ctrl-C into a session that might already be
+                    // working again, so a reader has to mean it.
+                    Button {
+                        showingVoiceInput = true
+                    } label: {
+                        Image(systemName: "mic.fill")
                             .font(.subheadline)
                             .frame(width: 34, height: 34)
-                            .background(Color.red.opacity(0.15))
-                            .foregroundStyle(.red)
+                            .background(agentKind.brandColor.opacity(0.15))
+                            .foregroundStyle(agentKind.brandColor)
                             .clipShape(Circle())
                     }
-                }
-            } else {
-                Button { submit() } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(agentKind.brandColor)
+
+                    if confirmingStop {
+                        Button(action: confirmStop) {
+                            Text("Send Ctrl-C?")
+                                .font(.caption.bold())
+                                .padding(.horizontal, 10)
+                                .frame(height: 34)
+                                .background(Color.red.opacity(0.15))
+                                .foregroundStyle(.red)
+                                .clipShape(Capsule())
+                        }
+                    } else {
+                        Button(action: armStopConfirm) {
+                            Image(systemName: "stop.fill")
+                                .font(.subheadline)
+                                .frame(width: 34, height: 34)
+                                .background(Color.red.opacity(0.15))
+                                .foregroundStyle(.red)
+                                .clipShape(Circle())
+                        }
+                    }
+                } else {
+                    Button { submit() } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(agentKind.brandColor)
+                    }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
         .background(Color(.secondarySystemGroupedBackground))
+    }
+
+    private var agentKeyStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Button("Esc") { onSendKey("escape") }
+                Button("⇧Tab") { onSendKey("shift-tab") }
+                    .accessibilityHint("mode")
+                Button("↑") { onSendKey("up") }
+                Button("↓") { onSendKey("down") }
+                Button("Tab") { onSendKey("tab") }
+                Button("⏎ newline") { onSendKey("shift-enter") }
+                Button("Ctrl‑C", role: .destructive) { onSendKey("ctrl-c") }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .font(.caption.monospaced())
     }
 
     private func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        onSendText(trimmed + "\n")
+        if trimmed.contains("\n") {
+            onSendPaste(trimmed)
+        } else {
+            onSendText(trimmed + "\n")
+        }
         inputText = ""
     }
 }

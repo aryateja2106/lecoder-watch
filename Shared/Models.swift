@@ -166,6 +166,12 @@ func parsePairingLink(_ url: URL) -> PairingLink? {
 /// stay the same rules, so both defer to `hostNamesMatch`.
 func snapshotMachineMatching(_ name: String, in machines: [MachineSnapshot]) -> MachineSnapshot? {
     machines.first { $0.host == name }
+        // The daemon's own hostname, as its /stats reports it. A phone that adopted the
+        // fleet from another machine's hosts.json knows the Pi as "pi" while every event
+        // it posts says "arya-pi" — no prefix rule bridges that, and the id-first agent
+        // match below never ran because this returned nil first. Measured 2026-09-22:
+        // a permission prompt on the Pi, the event on the phone, and no "Needs you" row.
+        ?? machines.first { $0.stats.map { hostNamesMatch($0.host, name) } == true }
         ?? machines.first { hostNamesMatch($0.host, name) }
 }
 

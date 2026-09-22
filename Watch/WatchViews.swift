@@ -163,7 +163,9 @@ struct MachinesListView: View {
                             }
                             // Resume the pinned session straight from the glance once the
                             // limit clears — the wrist action a mirrored notification tap can't do.
-                            if let pin = store.pinnedLimitSessions.first(where: { $0.providerId.lowercased() == row.providerId.lowercased() }) {
+                            if let pin = store.pinnedLimitSessions.first(where: { $0.providerId.lowercased() == row.providerId.lowercased() }),
+                               let pinnedAgent = store.snaps.first(where: { $0.host == pin.host })?.agents.first(where: { $0.name == pin.sessionName }),
+                               isCodingAgent(pinnedAgent.agentType) {
                                 Spacer()
                                 // `.mini` drew a ~24pt tall control, well under the 44pt
                                 // Apple asks for and roughly a fingertip's width short of
@@ -900,7 +902,7 @@ struct AgentLiveView: View {
     @State private var showReply = false
     @State private var showMore = false
     @State private var confirmInterrupt = false
-    @State private var fontSize: CGFloat = 13
+    @AppStorage("watchTerminalFontSize") private var fontSize: Double = 13
     @State private var selectedPane: String?
     /// Whether new output should yank the view to the bottom. False the moment the
     /// reader scrolls up, true again when they land back on the last line — see
@@ -935,7 +937,7 @@ struct AgentLiveView: View {
     }
 
     private var previewLines: [String] {
-        Array(terminalLines.suffix(8))
+        Array(terminalLines.suffix(max(6, Int(120 / fontSize))))
     }
 
     private var statusText: String {
@@ -1065,12 +1067,17 @@ struct AgentLiveView: View {
             }
 
             Section("Actions") {
-                Button { store.send(text: "continue\n") } label: {
-                    Label("Continue", systemImage: "play.fill")
-                        .frame(minHeight: WatchTouch.minHeight)
+                if isCodingAgent(currentAgent?.agentType) {
+                    Button { store.send(text: "continue\n") } label: {
+                        Label("Continue", systemImage: "play.fill")
+                            .frame(minHeight: WatchTouch.minHeight)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(continueBlocked)
+                    Text("Types \"continue\" into \(currentAgent?.agentType ?? agent)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(continueBlocked)
                 Button { store.send(key: "enter") } label: {
                     Label("Enter", systemImage: "return")
                         .frame(minHeight: WatchTouch.minHeight)
@@ -1127,10 +1134,19 @@ struct AgentLiveView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Text(previewLines.joined(separator: "\n"))
-                        .font(.system(size: fontSize, design: .monospaced))
-                        .lineLimit(10)
+                        .font(.system(size: CGFloat(fontSize), design: .monospaced))
                         .focusable(false)
                 }
+                HStack(spacing: 6) {
+                    Text("Text size").font(.caption2).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("A−") { step(-1) }
+                        .accessibilityLabel("Smaller text")
+                    Button("A+") { step(1) }
+                        .accessibilityLabel("Larger text")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
                 Button { showMore = true } label: {
                     Label("Open terminal", systemImage: "terminal")
                 }
@@ -1241,7 +1257,7 @@ struct AgentLiveView: View {
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(terminalLines.isEmpty ? "waiting for output…" : terminalLines.joined(separator: "\n"))
-                        .font(.system(size: fontSize, design: .monospaced))
+                        .font(.system(size: CGFloat(fontSize), design: .monospaced))
                         .foregroundStyle(terminalLines.isEmpty ? .secondary : .primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("Terminal output, \(terminalLines.count) lines")
@@ -1275,7 +1291,7 @@ struct AgentLiveView: View {
             ScrollView([.horizontal, .vertical]) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(terminalLines.isEmpty ? "waiting for output…" : terminalLines.joined(separator: "\n"))
-                        .font(.system(size: fontSize, design: .monospaced))
+                        .font(.system(size: CGFloat(fontSize), design: .monospaced))
                         .foregroundStyle(terminalLines.isEmpty ? .secondary : .primary)
                         // The whole point of Raw: never re-flow, however far right it runs.
                         .fixedSize(horizontal: true, vertical: true)
@@ -1362,8 +1378,8 @@ struct AgentLiveView: View {
         List {
             Section("Text size") {
                 HStack(spacing: 8) {
-                    keyChip("Smaller text", "textformat.size.smaller") { fontSize = max(9, fontSize - 1) }
-                    keyChip("Larger text", "textformat.size.larger") { fontSize = min(24, fontSize + 1) }
+                    keyChip("Smaller text", "textformat.size.smaller") { step(-1) }
+                    keyChip("Larger text", "textformat.size.larger") { step(1) }
                     Spacer()
                     Text("\(Int(fontSize))pt")
                         .font(.caption2.monospacedDigit())
@@ -1390,6 +1406,10 @@ struct AgentLiveView: View {
         }
         .navigationTitle("Terminal")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func step(_ delta: Double) {
+        fontSize = min(24, max(9, fontSize + delta))
     }
 
     @ViewBuilder

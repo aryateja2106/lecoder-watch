@@ -12,6 +12,7 @@
 | `check-all.sh` | Run every self-check in this repo |
 | `check-apns-env.swift` | Getting this wrong does not degrade push, it deletes it: a TestFlight token sent to the sandbox gateway comes… |
 | `check-app-icons.sh` | App icon audit: catches the specific things that make App Store Connect reject a build — a missing 1024x1024… |
+| `check-approve-path.sh` | the phone's Approve reaches the agent: /agents rows carry the agent's own sessionId (the id-first match in… |
 | `check-apps-ota.sh` | Wireless (OTA) install self-check: `mesh apps add --app` on a device build packages a valid .ipa… |
 | `check-apps-serve.sh` | apps.ts self-check: a registered web app is served token-free at /a/<slug>-<key>/ with the right content… |
 | `check-brain.sh` | every machine has a local model that answers with a tool call, and meshd knows it |
@@ -43,6 +44,7 @@
 | `check-launchable.swift` | scripts/check-launchable.swift — verify DoctorReport.launchable logic |
 | `check-limit-helpers.swift` | Run: swiftc Shared/Models.swift Shared/LimitHelpers.swift scripts/check-limit-helpers.swift -o /tmp/clh &&… |
 | `check-links.sh` | the front door still opens. |
+| `check-linux-desktop.sh` | a Linux machine is a full Remote peer: running apps listed and activatable (xprop/xdotool), clipboard writes… |
 | `check-live-card.swift` | The live card is the one thing on the Lock Screen and the watch Smart Stack, so picking the wrong session is… |
 | `check-machine-dedupe.swift` | Run via `sh scripts/check-all.sh`, which compiles every check-*.swift against the full Shared/ dependency set… |
 | `check-mesh-apps.sh` | `mesh apps` is what both app-building skills end on: publish a PWA, register a native build, install it |

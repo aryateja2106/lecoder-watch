@@ -15,17 +15,17 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | area | files | lines | what it is |
 |---|---|---|---|
 | `Shared/` | 14 | ~3,400 | Wire types and pure logic both apps compile; the self-checks link against these |
-| `iOS/` | 19 | ~9,900 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
+| `iOS/` | 19 | ~10,000 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
 | `Watch/` | 7 | ~4,500 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |
 | `install/payload/meshd/` | 23 | ~6,700 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
 | `install/payload/bin/` | 9 | ~3,400 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
-| `install/payload/rmux-bridge/` | 4 | ~900 | Second daemon on :7820 serving the phone's xterm.js terminal |
+| `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 3 | ~1,700 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 102 | ~10,000 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `scripts/` | 104 | ~10,200 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
@@ -39,7 +39,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `DaemonCapabilities.swift` | S | what this app asks of meshd, and what a user loses when the daemon on their machine is older than the app on their wrist | check-daemon-gaps |
 | `LimitHelpers.swift` | S | pure formatting of an agent's usage-limit status (available / near / hit) for the phone and the watch | check-limit-helpers, check-usage-alert-identity |
 | `MeshClient.swift` | L | Talks to a single machine's `meshd` over Tailscale *[serialized — every endpoint call]* | check-agent-identity-transport, check-inspect-crop, check-watch-terminal-wiring |
-| `Models.swift` | XL | every wire type the phone, the watch and meshd agree on (Agent, AgentEvent, Machine, WatchCommand…) plus the pure logic derived from them, above all… *[serialized — every wire type incl. WatchCommand]* | check-brand, check-inspect-crop, check-limit-helpers, check-mesh-push, check-session-state, check-usage-alert-identity, check-watch-terminal-wiring |
+| `Models.swift` | XL | every wire type the phone, the watch and meshd agree on (Agent, AgentEvent, Machine, WatchCommand…) plus the pure logic derived from them, above all… *[serialized — every wire type incl. WatchCommand]* | check-approve-path, check-brand, check-inspect-crop, check-limit-helpers, check-mesh-push, check-session-state, check-usage-alert-identity, check-watch-terminal-wiring |
 | `RiskClassifier.swift` | S | How much damage a one-tap answer could do | check-inspect-crop, check-usage-alert-identity |
 | `ScreenZoom.swift` | S | Geometry for a zoomable remote screen with a pointer drawn on it | check-inspect-crop |
 | `SecureStore.swift` | S | Keychain storage for anything that grants access to a user's machines | — |
@@ -80,7 +80,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `RemoteView.swift` | XL | Drive the Mac from the wrist: screen preview + trackpad + crown scroll + keys | check-drag-lock-release, check-inspect-crop, check-mesh-input, check-watch-terminal-wiring |
 | `WatchLink.swift` | S | Thin WCSession wrapper for the watch | check-relay-receiver, check-watch-terminal-wiring |
 | `WatchLinks.swift` | S | Finding the link an agent just printed, so the wrist can push it to the Mac | — |
-| `WatchMeshStore.swift` | L | Watch brain. Two private paths to the mesh: 1. DIRECT — talk to each machine's meshd over the tailnet. Works in the simulator and whenever the watch can reach… | check-inspect-crop, check-watch-scrollback, check-watch-terminal-wiring |
+| `WatchMeshStore.swift` | L | The daemon labels unknown agent commands by basename, so anything not a plain shell/runtime can understand "continue" | check-inspect-crop, check-watch-scrollback, check-watch-terminal-wiring |
 | `WatchNotifications.swift` | S | The watch half of "answer a blocked agent from the notification" | check-watch-terminal-wiring |
 | `WatchViews.swift` | XL | every watch screen: machines list, attention rows, the crown-scrollable terminal with its key bar, events, screen peek, dictation | check-harness-picker, check-watch-scrollback, check-watch-terminal-wiring |
 
@@ -123,15 +123,15 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `files.ts` | S | File browsing for meshd — the part of "remote desktop" that works on a headless box | — |
 | `handoff.ts` | M | move a task between agents, and pick a conversation back up | check-handoff |
 | `herdr.ts` | M | the third multiplexer, alongside rmux and cmux | check-herdr-sessions |
-| `input-linux.ts` | M | Linux input backend — same wire contract as the Mac helper, delivered with stock desktop tools instead of a compiled helper: pointer/keys/text/scroll ->… | check-daemon-050, check-fleet, check-remote-screen-gestures |
-| `input.ts` | M | Mac remote control for meshd — cursor, keyboard, scroll, clipboard, volume | check-daemon-050, check-fleet, check-inspect-crop, check-mesh-chords, check-mesh-input, check-watch-terminal-wiring |
+| `input-linux.ts` | M | Linux input backend — same wire contract as the Mac helper, delivered with stock desktop tools instead of a compiled helper: pointer/keys/text/scroll ->… | check-daemon-050, check-fleet, check-linux-desktop, check-remote-screen-gestures |
+| `input.ts` | M | Mac remote control for meshd — cursor, keyboard, scroll, clipboard, volume | check-daemon-050, check-fleet, check-inspect-crop, check-linux-desktop, check-mesh-chords, check-mesh-input, check-watch-terminal-wiring |
 | `kb.ts` | S | meshd KB — durable, searchable shared memory for agents (bun:sqlite + FTS5) | — |
 | `loopback-trust.ts` | S | when meshd may skip the bearer token for a loopback peer | check-pair-auth |
 | `pair.ts` | S | bring a phone onto the mesh without typing a 64-character token *[serialized — pairing and tokens]* | check-mesh-pair, check-pairing |
 | `push.ts` | M | APNs push — meshd notifies the phone directly (no cloud relay, local-first) | check-alert-gating, check-mesh-push |
 | `qr.ts` | L | a QR encoder with no dependencies, because the payload ships as plain .ts files that bun runs in place: an npm package here would mean an install step on every… | check-pair-qr |
 | `redact.ts` | M | every string that leaves this Mac for a phone, a watch, Apple's push servers or the events file passes through redact() first | check-redact |
-| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-apps-ota, check-apps-serve, check-brain, check-brand, check-cross-host-cp, check-daemon-050, check-daemon-gaps, check-fleet, check-harness-picker, check-host-guard, check-install-idempotent, check-kb-federation, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-package-mesh-install, check-pair-auth, check-paste-epipe, check-product-spec, check-roundtrip, check-watch-terminal-wiring, check-wol |
+| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-approve-path, check-apps-ota, check-apps-serve, check-brain, check-brand, check-cross-host-cp, check-daemon-050, check-daemon-gaps, check-fleet, check-harness-picker, check-host-guard, check-install-idempotent, check-kb-federation, check-linux-desktop, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-package-mesh-install, check-pair-auth, check-paste-epipe, check-product-spec, check-roundtrip, check-watch-terminal-wiring, check-wol |
 | `telemetry.ts` | S | one anonymized heartbeat a day, and nothing else, ever | — |
 | `wol.ts` | S | Wake-on-LAN, so "power that machine back on" works from the wrist | — |
 
@@ -163,7 +163,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | file | size | purpose | checks |
 |---|---|---|---|
 | `hooks/agent-wrapper-examples.sh` | S | Run interactive agents through MeshWatch event wrappers | — |
-| `install.sh` | L | Mesh installer — one command to install or uninstall the mesh stack (meshd, rmux-bridge, agent hook tools) on any macOS or Linux machine | check-brand, check-daemon-gaps, check-install-idempotent, check-mesh-onboarding, check-package-mesh-install, check-tmux-restart, check-token-rotate |
+| `install.sh` | L | Mesh installer — one command to install or uninstall the mesh stack (meshd, rmux-bridge, agent hook tools) on any macOS or Linux machine | check-brand, check-daemon-gaps, check-install-idempotent, check-linux-desktop, check-mesh-onboarding, check-package-mesh-install, check-tmux-restart, check-token-rotate |
 | `payload/share/skills/native-app-builder/scripts/make-appicon.sh` | S | an app icon in one command, so no generated app ships iconless | — |
 
 ## `web/`

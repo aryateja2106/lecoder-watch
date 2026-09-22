@@ -57,9 +57,9 @@
 
       .toolbar {
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
         gap: 8px;
-        align-items: center;
+        align-items: stretch;
         min-width: 0;
       }
 
@@ -72,6 +72,19 @@
         border-radius: 12px;
         background: rgba(24, 34, 49, 0.86);
         backdrop-filter: blur(10px);
+      }
+
+      .group.primary {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+      }
+
+      .group.primary button {
+        flex: 0 0 auto;
+      }
+
+      .group.more[hidden] {
+        display: none;
       }
 
       button {
@@ -149,36 +162,32 @@
           gap: 8px;
         }
 
-        .group {
-          width: 100%;
-        }
-
-        button {
-          flex: 1 0 auto;
-        }
-
       }
     </style>
   </head>
   <body>
     <div class="toolbar">
-      <div class="group" id="modifiers">
-        <button type="button" data-mod="ctrl">Ctrl</button>
-        <button type="button" data-mod="shift">Shift</button>
-        <button type="button" data-mod="alt">Alt</button>
-      </div>
-      <div class="group">
+      <div class="group primary">
+        <button type="button" data-keyboard>⌨</button>
         <button type="button" data-send="\u001b">Esc</button>
         <button type="button" data-send="\t">Tab</button>
+        <button type="button" data-send="\u001b[Z">⇧Tab</button>
         <button type="button" data-send="\u001b[A">↑</button>
         <button type="button" data-send="\u001b[B">↓</button>
         <button type="button" data-send="\u001b[D">←</button>
         <button type="button" data-send="\u001b[C">→</button>
+        <button type="button" data-mod="ctrl">Ctrl</button>
+        <button type="button" data-font="-1">A−</button>
+        <button type="button" data-font="1">A+</button>
+        <button type="button" data-more>⋯</button>
       </div>
-      <div class="group">
+      <div class="group more" id="more" hidden>
+        <button type="button" data-mod="shift">Shift</button>
+        <button type="button" data-mod="alt">Alt</button>
         <button type="button" data-action="new-pane">+ pane</button>
         <button type="button" data-action="split-h">split h</button>
         <button type="button" data-action="split-v">split v</button>
+        <button type="button" data-send="\u0003">Ctrl-C</button>
       </div>
       <div class="status" id="status">connecting</div>
     </div>
@@ -192,11 +201,14 @@
       const statusEl = document.getElementById("status");
       const terminalEl = document.getElementById("terminal");
       const textDecoder = new TextDecoder();
+      const requestedFontSize = Number(params.get("fontSize"));
+      const storedFontSize = Number(localStorage.getItem("fontSize"));
+      const initialFontSize = Math.min(22, Math.max(9, requestedFontSize || storedFontSize || 12));
       const term = new window.Terminal({
         cursorBlink: true,
         scrollback: 10000,
         allowTransparency: true,
-        fontSize: 12,
+        fontSize: initialFontSize,
         fontFamily:
           'ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
         theme: {
@@ -295,6 +307,26 @@
         });
       }
 
+      let keyboardWasFocused = false;
+      // A toolbar tap moves DOM focus to its button before click fires. Remember the
+      // textarea's state on pointer-down so controls preserve an open keyboard without
+      // summoning one the user deliberately dismissed.
+      document.querySelectorAll("button").forEach((button) => {
+        button.addEventListener("pointerdown", () => {
+          keyboardWasFocused = document.activeElement === term.textarea;
+        });
+      });
+
+      function restoreKeyboardFocus() {
+        if (keyboardWasFocused) term.focus();
+      }
+
+      function setFontSize(size) {
+        term.options.fontSize = Math.min(22, Math.max(9, Math.round(size)));
+        localStorage.setItem("fontSize", String(term.options.fontSize));
+        scheduleFit(0);
+      }
+
       document.querySelectorAll("[data-mod]").forEach((button) => {
         button.addEventListener("click", () => {
           const key = button.getAttribute("data-mod");
@@ -303,7 +335,7 @@
           }
           modifiers[key] = !modifiers[key];
           syncModifiers();
-          term.focus();
+          restoreKeyboardFocus();
         });
       });
 
@@ -316,7 +348,7 @@
       document.querySelectorAll("[data-send]").forEach((button) => {
         button.addEventListener("click", () => {
           sendInput(decodeKey(button.getAttribute("data-send") || ""));
-          term.focus();
+          restoreKeyboardFocus();
         });
       });
 
@@ -330,9 +362,51 @@
           } else if (action === "split-v") {
             sendJson({ type: "split", dir: "v" });
           }
-          term.focus();
+          restoreKeyboardFocus();
         });
       });
+
+      document.querySelectorAll("[data-font]").forEach((button) => {
+        button.addEventListener("click", () => {
+          setFontSize(term.options.fontSize + Number(button.getAttribute("data-font")));
+          restoreKeyboardFocus();
+        });
+      });
+
+      document.querySelector("[data-keyboard]").addEventListener("click", () => {
+        if (keyboardWasFocused) {
+          term.textarea.blur();
+        } else {
+          term.focus();
+        }
+      });
+
+      document.querySelector("[data-more]").addEventListener("click", () => {
+        document.getElementById("more").toggleAttribute("hidden");
+        scheduleFit(0);
+        restoreKeyboardFocus();
+      });
+
+      let pinchDistance = 0;
+      let pinchFontSize = initialFontSize;
+      terminalEl.addEventListener("touchstart", (event) => {
+        if (event.touches.length !== 2) return;
+        pinchDistance = Math.hypot(
+          event.touches[0].clientX - event.touches[1].clientX,
+          event.touches[0].clientY - event.touches[1].clientY,
+        );
+        pinchFontSize = term.options.fontSize;
+      }, { passive: true });
+      terminalEl.addEventListener("touchmove", (event) => {
+        if (event.touches.length !== 2 || !pinchDistance) return;
+        event.preventDefault();
+        const distance = Math.hypot(
+          event.touches[0].clientX - event.touches[1].clientX,
+          event.touches[0].clientY - event.touches[1].clientY,
+        );
+        setFontSize(pinchFontSize * distance / pinchDistance);
+      }, { passive: false });
+      terminalEl.addEventListener("touchend", () => { pinchDistance = 0; }, { passive: true });
 
       term.onData((data) => {
         sendInput(applyModifiers(data));
@@ -341,7 +415,6 @@
       ws.addEventListener("open", () => {
         setStatus("connected", "var(--accent)");
         scheduleFit();
-        term.focus();
       });
 
       ws.addEventListener("close", (event) => {
