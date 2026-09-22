@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forgot password — LeSearch Mesh</title>
+<meta name="description" content="Email a password reset link for a LeSearch Mesh website account. Resetting a password does not read or write devices.">
+<link rel="icon" href="/appicon.png">
+<meta name="theme-color" content="#191919">
+<link rel="stylesheet" href="/account/account.css">
+</head>
+<body data-account="forgot">
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="/"><img src="/logo.svg" alt=""> LeSearch Mesh</a>
+    <div class="spacer"></div>
+    <a class="link" href="/">← Back</a>
+  </div>
+</header>
+<main class="wrap">
+  <h1>Forgot password</h1>
+  <p class="lede">We email a link that opens this site’s reset page. Resetting a password does not read or write devices or the mailbox. The account is still only your identity.</p>
+  <p id="setup" class="setup" role="status">Account setup is not finished on this deploy</p>
+  <form id="form" method="post" action="/account/forgot">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" required>
+    <button class="btn btn-primary" type="submit">Send reset email</button>
+  </form>
+  <p id="status" class="status" role="status"></p>
+  <p class="switch"><a href="/account/sign-in">Back to sign in</a></p>
+</main>
+<script src="/account/config.js"></script>
+<script src="/account/account.js"></script>
+</body>
+</html>
