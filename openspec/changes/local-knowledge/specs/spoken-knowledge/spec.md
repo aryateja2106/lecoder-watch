@@ -592,7 +592,7 @@ The new commit on pull request 202 SHALL add only `scripts/check-spoken-note-ask
 
 ### Requirement: An allowed ask saves the model reply
 
-An allowed local ask SHALL save the model reply as one knowledge note. The title SHALL be the ask, clipped to 200 characters, and the held file SHALL still be written. A missing or whitespace ask MUST add no note. A pairing-code ask, or a reply the route would hold, MUST write neither the file nor a draft. `server.ts` was not edited. This behavior is pull request 203. The files are `install/payload/meshd/agent-note.ts`, `install/payload/meshd/knowledge.ts`, `scripts/check-note-reply-save.sh`, and `scripts/check-spoken-note-ask.sh`. The coordinator re-ran `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, `sh scripts/check-note-ask.sh`, and `sh scripts/check-pdf-note-speak.sh` on `127.0.0.1:8898` at `92d776c` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `92d776c` (check run `35749935885`). Apps (Xcode) is still running on that run. An agent MUST NOT claim both jobs are green on `92d776c`. Daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`). Daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`). Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). This does not prove a speaker or that a paper was read.
+An allowed local ask SHALL save the model reply as one knowledge note. The title SHALL be the ask, clipped to 200 characters, and the held file SHALL still be written. A missing or whitespace ask MUST add no note. A pairing-code ask, or a reply the route would hold, MUST write neither the file nor a draft. `server.ts` was not edited. This behavior is pull request 203. The files are `install/payload/meshd/agent-note.ts`, `install/payload/meshd/knowledge.ts`, `scripts/check-note-reply-save.sh`, and `scripts/check-spoken-note-ask.sh`. The coordinator re-ran `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, `sh scripts/check-note-ask.sh`, and `sh scripts/check-pdf-note-speak.sh` on `127.0.0.1:8898` at `92d776c` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`). Daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`). Daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`). Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). This does not prove a speaker or that a paper was read.
 
 #### Scenario: An allowed ask saves one note and the held file
 
@@ -610,11 +610,10 @@ An allowed local ask SHALL save the model reply as one knowledge note. The title
 - **WHEN** the ask is a pairing code, or the reply is one the route would hold
 - **THEN** the daemon writes neither the file nor a draft
 
-#### Scenario: Daemon-only CI on the note reply save is not both jobs green
+#### Scenario: Green CI on the note reply save is not a speaker or a paper
 
 - **WHEN** `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, `sh scripts/check-note-ask.sh`, and `sh scripts/check-pdf-note-speak.sh` pass on `127.0.0.1:8898` at `92d776c`
-- **THEN** the agent records that all four checks exited 0 and that daemon CI is green on `92d776c` (check run `35749935885`) while apps (Xcode) is still running
-- **AND** the agent does not claim both jobs are green on `92d776c`
+- **THEN** the agent records that all four checks exited 0 and that daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`).
 - **AND** the agent records that daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`).
 - **AND** the agent records that daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`).
 - **AND** the agent records that daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`).
@@ -622,7 +621,7 @@ An allowed local ask SHALL save the model reply as one knowledge note. The title
 
 ### Requirement: A saved reply can be drafted alone
 
-Pull request 204 SHALL add only `scripts/check-reply-note-draft.sh`. A later local query that matches only the saved reply SHALL draft that reply to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A query that matches the original note and the reply MUST return 409 and MUST write nothing. A pairing-code ask MUST save no note, and a query for that ask MUST NOT draft. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-reply-note-draft.sh`, `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, and `sh scripts/check-note-ask.sh` on `127.0.0.1:8898` at `4d6ddbb` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `4d6ddbb` (check run `35750995976`). Apps (Xcode) is still running on that run. Do not claim both jobs are green on `4d6ddbb`. An agent MUST NOT claim both jobs are green on `4d6ddbb` and MUST NOT claim CI on `fb0aab8`. Daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`). Daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`). Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). Apps (Xcode) is still running on `92d776c`. Do not claim both jobs are green on `92d776c`. This does not prove a speaker or that a paper was read.
+Pull request 204 SHALL add only `scripts/check-reply-note-draft.sh`. A later local query that matches only the saved reply SHALL draft that reply to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A query that matches the original note and the reply MUST return 409 and MUST write nothing. A pairing-code ask MUST save no note, and a query for that ask MUST NOT draft. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-reply-note-draft.sh`, `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, and `sh scripts/check-note-ask.sh` on `127.0.0.1:8898` at `4d6ddbb` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `4d6ddbb` (check run `35750995976`). Apps (Xcode) is still running on that run. Do not claim both jobs are green on `4d6ddbb`. An agent MUST NOT claim both jobs are green on `4d6ddbb` and MUST NOT claim CI on `fb0aab8`. Daemon CI is green on handoff tip `97278aa` (check run `35751643074`). Apps (Xcode) is still running on that run. Do not claim both jobs are green on `97278aa`. An agent MUST NOT claim both jobs are green on `97278aa`. Daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`). Daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`). Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). Daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`). This does not prove a speaker or that a paper was read.
 
 #### Scenario: One matching reply drafts one file
 
@@ -646,6 +645,8 @@ Pull request 204 SHALL add only `scripts/check-reply-note-draft.sh`. A later loc
 - **THEN** the agent records that all four checks exited 0 and that daemon CI is green on `4d6ddbb` (check run `35750995976`) while apps (Xcode) is still running
 - **AND** the agent does not claim both jobs are green on `4d6ddbb`
 - **AND** the agent does not claim CI on `fb0aab8`
+- **AND** the agent records that daemon CI is green on handoff tip `97278aa` (check run `35751643074`) while apps (Xcode) is still running
+- **AND** the agent does not claim both jobs are green on `97278aa`
 - **AND** the agent records that daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`), on `b4ce6ac` (check run `35748224297`), and on `ae83b95` (check run `35747085140`)
-- **AND** the agent records that apps (Xcode) is still running on `92d776c` and does not claim both jobs are green on `92d776c`
+- **AND** the agent records that Daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`).
 - **AND** the agent does not claim a speaker or that a paper was read
