@@ -977,6 +977,33 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Save a typed knowledge note. Nothing is posted until the user confirms.
+    func saveKnowledgeNote(host: String, title: String, body: String, confirmed: Bool) {
+        guard confirmed else { return }
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let b = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, !b.isEmpty else {
+            lastError = "Name the note and write it first"
+            return
+        }
+        guard directReachable(host), let c = client(for: host) else {
+            lastError = "Save needs a direct link to this Mac"
+            return
+        }
+        lastError = nil
+        Task {
+            do {
+                let saved = try await c.createKnowledgeNote(title: t, body: b)
+                currentKnowledgeNote = saved.title
+                loadKnowledgeNotes(host: host)
+                WKInterfaceDevice.current().play(.success)
+            } catch {
+                lastError = "save failed"
+                WKInterfaceDevice.current().play(.failure)
+            }
+        }
+    }
+
     private static func knowledgeAskLine(_ reply: AgentNoteAsk) -> String {
         if reply.held { return "Held" }
         if let draft = reply.draft, !draft.isEmpty {
