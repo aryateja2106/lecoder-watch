@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, and a spoken replace drafts that new body to `held-note.txt`. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, and a spoken replace drafts that new body to `held-note.txt`. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187 and pull request 189 do not prove a microphone or a speaker.
 
 ## ADDED Requirements
 
@@ -100,7 +100,7 @@ Jev SHALL choose a dispatch route. Jev MUST NOT write the assistant reply, the s
 
 ### Requirement: POST /knowledge/:id replaces that note's body in the same file
 
-When a note already exists, `POST /knowledge/:id` SHALL replace that note's body in the same file under the knowledge directory. The list SHALL stay `{ id, title }` for each note. A missing id SHALL create nothing. A remote URL SHALL NOT write. Notes stay on the machine. Nothing from the note is stored in Supabase. This behavior is pull request 174. An agent MUST NOT add a second replace path, and MUST NOT add a second `/knowledge` route. On `origin/main`, `/knowledge` is unregistered. The knowledge branch already registers it once.
+When a note already exists, `POST /knowledge/:id` SHALL replace that note's body in the same file under the knowledge directory. The list SHALL stay `{ id, title }` for each note. A missing id SHALL create nothing. A remote URL SHALL NOT write. Notes stay on the machine. Nothing from the note is stored in Supabase. This behavior is pull request 174. An agent MUST NOT add a second replace path, and MUST NOT add a second `/knowledge` route. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once.
 
 #### Scenario: The same file receives the new body
 
@@ -205,7 +205,7 @@ After a note body has been replaced, a body that asks to send a pairing code or 
 
 ### Requirement: A spoken replace drafts the new body to held-note.txt
 
-After a local `MESH_STT` transcript replaces one note, the agent-note path SHALL draft that new body to `held-note.txt`. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code transcript and a hosts.json transcript SHALL stay on hold, and the loopback model MUST NOT be called for either. The body "summarize this paper" SHALL draft the new body. A missing id MUST NOT call the model. A remote audio path MUST NOT write. The check runs with the gateway key unset. This behavior is pull request 187, which adds only `scripts/check-spoken-note-draft.sh`. An agent MUST NOT rebuild that check and MUST NOT add a second `/knowledge` route. A spoken note is that local binary transcript. An agent MUST NOT claim a microphone was proven.
+After a local `MESH_STT` transcript replaces one note, the agent-note path SHALL draft that new body to `held-note.txt`. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code transcript and a hosts.json transcript SHALL stay on hold, and the loopback model MUST NOT be called for either. The body "summarize this paper" SHALL draft the new body. A missing id MUST NOT call the model. A remote audio path MUST NOT write. The check runs with the gateway key unset. This behavior is pull request 187, which adds only `scripts/check-spoken-note-draft.sh`. Daemon CI and Xcode CI are both green on `0baf377`. An agent MUST NOT rebuild that check and MUST NOT add a second `/knowledge` route. A spoken note is that local binary transcript. An agent MUST NOT claim a microphone or a speaker was proven.
 
 #### Scenario: The new transcript is drafted to held-note.txt
 
@@ -244,8 +244,50 @@ After a local `MESH_STT` transcript replaces one note, the agent-note path SHALL
 - **THEN** the daemon does not write a note
 - **AND** the model is not called
 
-#### Scenario: The spoken-note draft does not prove a microphone
+#### Scenario: The spoken-note draft does not prove a microphone or a speaker
 
 - **WHEN** `sh scripts/check-spoken-note-draft.sh` passes on `127.0.0.1:8898` with the gateway key unset
-- **THEN** the agent records that local `MESH_STT` transcript and that spare-daemon check
-- **AND** the agent does not claim a microphone was proven
+- **THEN** the agent records that local `MESH_STT` transcript, that spare-daemon check, and that daemon CI and Xcode CI are both green on `0baf377`
+- **AND** the agent does not claim a microphone or a speaker was proven
+
+### Requirement: A replaced note is spoken with a local MESH_TTS binary
+
+After a local `MESH_STT` transcript replaces one note, `POST /knowledge/:id` SHALL accept `speak`. When `speak` is true, the title plus the new transcript SHALL be handed to a local `MESH_TTS` binary. `spoken` SHALL be true only when that binary is a local file and the process exits 0. When `speak` is false, or the TTS binary is missing, the transcript SHALL be stored and `spoken` SHALL stay false. A remote URL, a scheme, or a protocol-relative path for the audio or for `MESH_TTS` MUST return before `MESH_STT` and before any write. An empty transcript SHALL keep the old body and MUST NOT speak. A missing id SHALL create nothing. The title SHALL stay. The list SHALL stay `{ id, title }`. `server.ts` still calls `handleKnowledge` once. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. This behavior is pull request 189. A spoken note is that local TTS exit code. An agent MUST NOT claim a microphone or a speaker was proven.
+
+#### Scenario: A local TTS binary speaks the new transcript
+
+- **WHEN** a client posts `{ audio, speak: true }` to `/knowledge/:id` for a note that is already on disk, `MESH_STT` prints a transcript and exits 0, and `MESH_TTS` names a local file that exits 0
+- **THEN** that TTS binary receives the title plus the new transcript
+- **AND** the response reports spoken as true
+- **AND** the title is unchanged
+
+#### Scenario: Speak is false
+
+- **WHEN** a client posts `{ audio, speak: false }` and `MESH_STT` prints a transcript and exits 0
+- **THEN** the note body is that transcript
+- **AND** spoken stays false
+- **AND** no TTS process is started
+
+#### Scenario: A missing TTS binary stores the transcript
+
+- **WHEN** `speak` is true and `MESH_TTS` does not name a local file
+- **THEN** the new transcript is stored
+- **AND** spoken stays false
+
+#### Scenario: A remote TTS path does not write
+
+- **WHEN** `speak` is true and `MESH_TTS` is a remote URL, a scheme, or a protocol-relative path
+- **THEN** the daemon returns before `MESH_STT` and before any write
+- **AND** the existing note body stays as it was
+
+#### Scenario: An empty transcript does not speak
+
+- **WHEN** `MESH_STT` exits 0 and prints no transcript
+- **THEN** the existing note body stays as it was
+- **AND** no TTS process is started
+
+#### Scenario: The speak does not prove a microphone or a speaker
+
+- **WHEN** `sh scripts/check-spoken-replace-speak.sh` passes on `127.0.0.1:8898`
+- **THEN** the agent records that local TTS exit code and that daemon CI and Xcode CI are both green on `611f321` (check run `35714316679`)
+- **AND** the agent does not claim a microphone or a speaker was proven
