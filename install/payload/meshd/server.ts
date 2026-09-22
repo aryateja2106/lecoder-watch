@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 import { handleKnowledge } from "./knowledge";
+import { handleAgentNote } from "./agent-note";
 import { handleInput } from "./input";
 import { handleFiles } from "./files";
 import { handlePush, pushAlert, passesPushGate, notePushDecision, pushLiveActivity } from "./push";
@@ -1036,6 +1037,9 @@ Bun.serve({
       // A local PDF becomes one note on disk. See knowledge.ts.
       const knowledge = await handleKnowledge(req, url);
       if (knowledge) return knowledge;
+      // Read one note, write one draft, and hold any further command. See agent-note.ts.
+      const noted = await handleAgentNote(req, url);
+      if (noted) return noted;
       // APNs device registration + status + test — see push.ts.
       const pushed = await handlePush(req, url);
       if (pushed) return pushed;
