@@ -27,6 +27,7 @@ Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.s
 | M7 FileViewer + platform-shape ADR (9e16793) | DONE | check-product-spec, fast gate | REPORT.md rendered on the sim off the Pi |
 | M8 third pass (e16610b → 98fda4d): keyboard layouts + launcher + app search + display chips, stats charts, limit→hand-off, Report a problem, Live Activity fix, Hundred app via mesh, device build OTA, **0.8.0**, upgrade --src fix | DONE — fleet on 0.8.0 | check-feedback-redact.swift; fast gate GREEN; **full gate RED at 758a6d1, failing check not yet named** (interrupted) — see /tmp/handoff-lesearch-ai-2026-09-22.md | next session: name it, fix, gate GREEN |
 | M9 Moshi parity phase 1 (6511d50 → ): parity map, SwiftTerm native terminal, `/agents/:s/pty` + PtyClient stream, key bar lock/d-pad, themes, native = Terminal mode, bridge screens deleted; red check from M8 named + fixed (check-phone-input-and-wake, FeedbackView shellSafe) | DONE on the sim; fleet daemons not yet redeployed with `pty` | check-native-terminal-keys.sh, check-pty-route.sh; fast gate GREEN | full gate: see run record 2026-09-22T110000Z-moshi-parity-phase1 |
+| P1 publish (03fe081 → ): `check-published.sh` finish line + Stop hook, Supabase feedback table/bucket/RLS + auth config in git, Report a problem → LeSearch AI + optional account, worker → deduped `from-users` issues (launchd), getting-started + product map + design system + rendered page, landing 0.8.0 deployed to lesearch.ai, clean-device install check, first-run lock fix | IN PROGRESS | check-published.sh (MESH_PUBLISHED=1), check-feedback-cloud, check-feedback-pipeline, check-web-docs, check-clean-install | row 50cb992c → https://github.com/LeSearch-AI/mesh/issues/1; fresh sim 8DDE6724 installed + launched 0.8.0; PUBLISHED.md is the ledger; TestFlight upload + SMTP + repo consolidation are in BLOCKED.md |
 | S12 ship | DONE — fleet on the branch build (Mac backup ~/.mesh/backups/meshd-0.6.0-1790020360); draft PR https://github.com/aryateja2106/lecoder-watch/pull/133; files sent (Telegram unavailable — no token vars on this Mac) | | |
 
 ## Log
@@ -38,3 +39,9 @@ Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.s
 - 00:35 IST Codex running S8 (kb + skill). S10 brief written (pair auth), dispatch after S8 lands (serialized files).
 - 01:2x IST S8, S10 landed; Mac live daemon upgraded from the branch; fleet all on the branch build (28 caps). Note: my side-port smoke used :8901 which is the cmux bridge's port — no harm (bind failed), use 893x next time. check-overnight.sh running.
 - 02:1x IST gates.sh full: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none` (first run RED only on a stale codemap). Draft PR opened. Night closed.
+- 16:5x IST Publish run. The M8 full gate's red was three checks, not one: `check-codemap` (stale
+  SYMBOLS.md), `check-phone-input-and-wake` (a TextField without `.shellSafe`) and, in a fresh
+  worktree, `check-sim-fleet` (no Mac build yet). The smoke's `testATextFieldCanAppear` was red on a
+  simulator with no machines — Settings' only always-present TextField sat below Alerts; Quick send
+  moved above it. Two sessions share this Mac: simulator work is now handed over explicitly, because
+  `check-ios-smoke` always picks the newest iPhone simulator and kills whatever else is driving it.
