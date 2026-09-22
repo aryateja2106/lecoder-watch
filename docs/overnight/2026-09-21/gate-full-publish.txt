@@ -223,5 +223,3 @@ gate-build: OK — iOS, watchOS and macOS targets all build
 ---------------------------------------------
 [32mGATES GREEN (4 passed)[0m
 FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none
-
-[exited with code 0]
