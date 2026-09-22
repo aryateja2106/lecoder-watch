@@ -586,7 +586,10 @@ async function agentOutputRaw(name: string, lines: number, pane?: string, join =
   if (!has.trim().endsWith("0")) return null;
   const target = pane ? shq(pane) : shq(name);
   const joinFlag = join && (await muxSupportsJoin()) ? " -J" : "";
-  const out = await sh(`${MUX} capture-pane -p${ansi ? " -e" : ""}${joinFlag} -t ${target} 2>/dev/null`);
+  // `ansi` also asks for history: the phone's terminal repaints from this on daemons
+  // without the pty stream, and with only the visible screen it could never scroll back.
+  const scrollback = ansi ? ` -S -${Math.min(5000, Math.max(0, lines))}` : "";
+  const out = await sh(`${MUX} capture-pane -p${ansi ? " -e" : ""}${joinFlag}${scrollback} -t ${target} 2>/dev/null`);
   let arr = out.replace(/\n+$/, "").split("\n");
   if (plain) arr = arr.map(plainLine);
   if (!ansi) return { name, lines: arr.slice(-lines) };

@@ -116,11 +116,17 @@ private struct HTMLView: UIViewRepresentable {
 }
 
 /// A whole Markdown file, block by block — headings, paragraphs, nested lists, fenced code,
-/// quotes, rules — on Foundation's inline parser (bold, italic, code, links). The chat
-/// view's `MarkdownBlocks` handles an agent's short replies; a README needs headings and
-/// nesting it does not. Tables stay as their source in a code block.
+/// quotes, rules — on Foundation's inline parser (bold, italic, code, links). Tables stay as
+/// their source in a code block.
+///
+/// The chat view renders an agent's replies with this too (`compact`, which only tames the
+/// heading sizes): its own smaller parser tore a fenced block apart at the first blank line,
+/// dropped a list the moment one item was indented, and only saw a heading when the block
+/// was exactly one line — so `##` and ``` showed up as literal characters in the bubble.
 struct MarkdownDocument: View {
     let source: String
+    /// Inside a chat bubble a `.title2` heading shouts. Everything else is identical.
+    var compact = false
 
     private enum Block {
         case heading(Int, String), paragraph(String), code(String), quote(String), item(Int, String, ordered: Bool), rule
@@ -132,7 +138,9 @@ struct MarkdownDocument: View {
                 switch block {
                 case .heading(let level, let text):
                     inline(text)
-                        .font(level == 1 ? .title2.bold() : level == 2 ? .title3.bold() : .headline)
+                        .font(compact
+                              ? (level == 1 ? .headline : level == 2 ? .subheadline.bold() : .subheadline)
+                              : (level == 1 ? .title2.bold() : level == 2 ? .title3.bold() : .headline))
                         .padding(.top, level <= 2 ? 6 : 2)
                 case .paragraph(let text):
                     inline(text).font(.body)
@@ -165,8 +173,15 @@ struct MarkdownDocument: View {
     private func inline(_ s: String) -> Text {
         var options = AttributedString.MarkdownParsingOptions()
         options.interpretedSyntax = .inlineOnlyPreservingWhitespace
-        if let attributed = try? AttributedString(markdown: s, options: options) { return Text(attributed) }
-        return Text(s)
+        guard var attributed = try? AttributedString(markdown: s, options: options) else { return Text(s) }
+        // A link in this text was written by an agent, not by us. Foundation makes any
+        // scheme tappable — file://, a custom app scheme — so only http(s) survives, the
+        // same rule `detectedLinks` applies to bare URLs.
+        for run in attributed.runs where run.link != nil {
+            let scheme = run.link?.scheme?.lowercased()
+            if scheme != "http" && scheme != "https" { attributed[run.range].link = nil }
+        }
+        return Text(attributed)
     }
 
     private var blocks: [Block] {

@@ -32,6 +32,9 @@ struct NativeTerminalScreen: View {
     @State private var alt: Modifier = .off
     @State private var showDpad = false
     @State private var holdOpenedDpad = false
+    /// While selecting, the emulator stops reporting taps to the program, which is the only
+    /// way its own double-tap-word / drag-extend selection can run.
+    @State private var selecting = false
     @AppStorage("terminalTheme") private var themeName: String = TerminalTheme.moshi.name
     @State private var keyboardShown = false
     @State private var showingVoice = false
@@ -50,20 +53,29 @@ struct NativeTerminalScreen: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Streaming: the pane is sized to the phone, nothing to scroll. Polling: the
-            // pane keeps its own width (a detached tmux session is 80 columns) and the
-            // phone scrolls sideways rather than wrapping every TUI line into a riddle.
+            // SwiftTerm's TerminalView IS a UIScrollView: it owns the vertical pan and that
+            // is how scrollback is reached. Wrapping it in a SwiftUI ScrollView gave the
+            // outer one the pan and the terminal would not scroll at all on a real phone —
+            // so the wrapper exists only on the polling path, where a detached 80-column
+            // pane really is wider than the screen. Streaming sizes the pane to the phone,
+            // so there is nothing to wrap.
             let cell = TerminalController.cellWidth(fontSize: fontSize)
-            let width = pty != nil ? geo.size.width : max(geo.size.width, CGFloat(paneSize.cols) * cell + 8)
-            ScrollView(.horizontal, showsIndicators: false) {
+            let paneWidth = max(geo.size.width, CGFloat(paneSize.cols) * cell + 8)
+            if pty == nil, paneWidth > geo.size.width {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    SwiftTermView(controller: terminal, fontSize: fontSize, theme: theme)
+                        .frame(width: paneWidth, height: geo.size.height)
+                }
+                .defaultScrollAnchor(.leading)
+            } else {
                 SwiftTermView(controller: terminal, fontSize: fontSize, theme: theme)
-                    .frame(width: width, height: geo.size.height)
+                    .frame(width: geo.size.width, height: geo.size.height)
             }
-            .defaultScrollAnchor(.leading)
-            .scrollDisabled(width <= geo.size.width)
         }
         .background(theme.background)
-        .gesture(
+        // simultaneous, not exclusive: an exclusive gesture here swallowed the terminal's
+        // own pan, long-press selection and taps.
+        .simultaneousGesture(
             MagnifyGesture()
                 .onChanged { value in
                     let start = magnifyStart ?? fontSize
@@ -201,8 +213,22 @@ struct NativeTerminalScreen: View {
             barIcon("arrow.right", "Right") { press([0x1b, 0x5b, 0x43], key: "right") }
             barIcon("return", "Enter") { press([0x0d], key: "enter") }
             barIcon("delete.left", "Backspace") { press([0x7f], key: "backspace") }
-            barIcon("arrow.up.to.line", "Page up") { press([0x1b, 0x5b, 0x35, 0x7e], key: "page-up") }
-            barIcon("arrow.down.to.line", "Page down") { press([0x1b, 0x5b, 0x36, 0x7e], key: "page-down") }
+            // Scrollback, not keys: these move the emulator's own view, which is what a
+            // TUI in the alternate screen (Claude Code, vim) leaves you with — there the
+            // pane has no scrollback of its own to page through.
+            barIcon("chevron.up.2", "Scroll back") { terminal.pageUp() }
+            barIcon("chevron.down.2", "Scroll forward") { terminal.pageDown() }
+            barIcon("arrow.down.to.line", "Jump to the newest output") { terminal.scrollToBottom() }
+            barIcon(selecting ? "checkmark.rectangle" : "selection.pin.in.out",
+                    selecting ? "Stop selecting" : "Select text") {
+                selecting.toggle()
+                terminal.setSelecting(selecting)
+            }
+            if selecting {
+                barIcon("doc.on.doc", "Copy the selection") {
+                    if let text = terminal.copySelection() { refusal = "Copied \(text.count) characters" }
+                }
+            }
         }
         .padding(.horizontal, 10).padding(.top, 8)
         .frame(maxWidth: .infinity)
@@ -297,6 +323,14 @@ struct NativeTerminalScreen: View {
     /// first letter. Polling: TerminalKeyRouter turns them into the daemon's `/send`
     /// vocabulary (pure, checked by scripts/check-native-terminal-keys.sh).
     private func route(_ bytes: [UInt8]) async {
+        // `CSI <` is a mouse report the emulator generated (a wheel tick, a click in a TUI),
+        // not a keystroke: it must reach the pty byte-for-byte, with no modifier folding and
+        // no /send vocabulary. Ahead of TerminalKeyRouter on purpose.
+        if bytes.count > 3, bytes[0] == 0x1b, bytes[1] == 0x5b, bytes[2] == 0x3c {
+            lastInteraction = Date()
+            pty?.send(bytes)
+            return
+        }
         if let pty {
             lastInteraction = Date()
             pty.send(TerminalKeyRouter.applyModifiers(bytes, ctrl: ctrl.on, alt: alt.on))
@@ -387,6 +421,30 @@ final class TerminalController: ObservableObject {
     /// Streaming transport: pane bytes straight into the emulator.
     func feed(_ data: Data) { view?.feed(byteArray: ArraySlice([UInt8](data))) }
 
+    /// A screenful of scrollback. SwiftTerm's own pageUp/pageDown already know the one
+    /// distinction that matters: in the alternate screen (Claude Code, vim, anything
+    /// full-screen) there is no local scrollback, so they send PgUp/PgDn to the program
+    /// instead of moving a viewport that cannot move.
+    /// Selection mode: taps stop going to the program so SwiftTerm's own selection can run.
+    func setSelecting(_ on: Bool) {
+        view?.allowMouseReporting = !on
+        if !on { view?.selectNone() }
+    }
+
+    func copySelection() -> String? {
+        guard let text = view?.getSelection(), !text.isEmpty else { return nil }
+        UIPasteboard.general.string = text
+        view?.selectNone()
+        return text
+    }
+
+    func pageUp() { view?.pageUp() }
+    func pageDown() { view?.pageDown() }
+    /// Back to the newest output. `scroll(toPosition:)` takes 0…1 over the scrollback, so
+    /// 1 is the end whichever buffer is on screen — and the alternate screen has nowhere
+    /// else to be anyway.
+    func scrollToBottom() { view?.scroll(toPosition: 1) }
+
     /// The emulator's current grid, for the attach size.
     var size: (cols: Int, rows: Int) {
         guard let t = view?.getTerminal() else { return (80, 24) }
@@ -419,6 +477,15 @@ struct SwiftTermView: UIViewRepresentable {
         // stack a second row of Esc/Ctrl/Tab on top of it whenever the keyboard is up.
         view.inputAccessoryView = nil
         view.terminalDelegate = context.coordinator
+        // Scrolling a terminal is two different things and SwiftTerm only does one of them.
+        // Its UIScrollView scrolls local scrollback — but `tmux attach` puts us on the
+        // ALTERNATE buffer, where there is none (canScroll is false by definition), so a
+        // drag had nothing to move and the terminal read as frozen. What a real terminal
+        // does there is send wheel events to the program, which is what this pan does.
+        let wheel = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.wheelPan(_:)))
+        wheel.maximumNumberOfTouches = 1
+        wheel.delegate = context.coordinator
+        view.addGestureRecognizer(wheel)
         controller.view = view
         return view
     }
@@ -442,9 +509,39 @@ struct SwiftTermView: UIViewRepresentable {
         view.backgroundColor = UIColor(hex: theme.bg)
     }
 
-    final class Coordinator: NSObject, TerminalViewDelegate {
+    final class Coordinator: NSObject, TerminalViewDelegate, UIGestureRecognizerDelegate {
         let controller: TerminalController
         var themeName = ""
+
+        /// Never take a gesture away from SwiftTerm's own chain (tap, double tap, long-press
+        /// selection, and the scroll view itself).
+        func gestureRecognizer(_ g: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
+        /// One finger, one wheel tick per row travelled. Local scrollback wins when there is
+        /// any; a live selection wins always.
+        @objc func wheelPan(_ g: UIPanGestureRecognizer) {
+            guard let view = controller.view, !view.canScroll, !view.hasActiveSelection else { return }
+            let terminal = view.getTerminal()
+            let rows = max(1, terminal.rows)
+            let cell = max(1, view.getOptimalFrameSize().height / CGFloat(rows))
+            let dy = g.translation(in: view).y
+            let lines = Int(dy / cell)
+            guard lines != 0 else { return }
+            g.setTranslation(CGPoint(x: 0, y: dy - CGFloat(lines) * cell), in: view)
+            let up = lines > 0
+            if terminal.mouseMode != .off {
+                // tmux with `mouse on`, and every TUI that asks for mouse reporting, takes
+                // buttons 64/65 as wheel up/down and scrolls itself.
+                let flags = terminal.encodeButton(button: up ? 4 : 5, release: false, shift: false, meta: false, control: false)
+                let row = min(rows - 1, max(0, Int(g.location(in: view).y / cell)))
+                for _ in 0..<abs(lines) { terminal.sendEvent(buttonFlags: flags, x: 0, y: row) }
+            } else {
+                // No mouse reporting: arrow keys are what a wheel means to a shell's history.
+                let key: [UInt8] = up ? [0x1b, 0x5b, 0x41] : [0x1b, 0x5b, 0x42]
+                for _ in 0..<abs(lines) { controller.onBytes?(key) }
+            }
+        }
         init(controller: TerminalController) { self.controller = controller }
         func send(source: SwiftTerm.TerminalView, data: ArraySlice<UInt8>) {
             let bytes = Array(data)

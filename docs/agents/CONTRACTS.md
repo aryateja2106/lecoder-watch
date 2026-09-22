@@ -8,18 +8,18 @@
 
 | method | path | auth | where |
 |---|---|---|---|
-| GET | `/a/*` | none | server.ts:1308 |
-| ANY | `/agents` | token | server.ts:1377 |
-| DELETE | `/agents/:x` | token | server.ts:1450 |
-| GET | `/agents/:x/chat` | token | server.ts:1420 |
+| GET | `/a/*` | none | server.ts:1311 |
+| ANY | `/agents` | token | server.ts:1380 |
+| DELETE | `/agents/:x` | token | server.ts:1453 |
+| GET | `/agents/:x/chat` | token | server.ts:1423 |
 | POST | `/agents/:x/handoff` | token | handoff.ts:287 |
-| GET | `/agents/:x/output` | token | server.ts:1427 |
-| GET | `/agents/:x/panes` | token | server.ts:1407 |
-| POST | `/agents/:x/panes` | token | server.ts:1411 |
-| DELETE | `/agents/:x/panes/:x` | token | server.ts:1445 |
+| GET | `/agents/:x/output` | token | server.ts:1430 |
+| GET | `/agents/:x/panes` | token | server.ts:1410 |
+| POST | `/agents/:x/panes` | token | server.ts:1414 |
+| DELETE | `/agents/:x/panes/:x` | token | server.ts:1448 |
 | GET | `/agents/:x/resumable` | token | handoff.ts:281 |
-| POST | `/agents/:x/send` | token | server.ts:1439 |
-| POST | `/agents/new` | token | server.ts:1454 |
+| POST | `/agents/:x/send` | token | server.ts:1442 |
+| POST | `/agents/new` | token | server.ts:1457 |
 | GET | `/apps` | token | input.ts:530 |
 | POST | `/apps` | token | input.ts:534 |
 | GET | `/built-apps` | token | apps.ts:281 |
@@ -31,8 +31,8 @@
 | GET | `/displays` | token | input.ts:501 |
 | GET | `/doctor` | token | doctor.ts:123 |
 | POST | `/doctor/fix` | token | doctor.ts:124 |
-| GET | `/events` | token | server.ts:1379 |
-| POST | `/events` | token | server.ts:1380 |
+| GET | `/events` | token | server.ts:1382 |
+| POST | `/events` | token | server.ts:1383 |
 | GET | `/exposures` | token | redact.ts:264 |
 | POST | `/exposures/:x` | token | redact.ts:274 |
 | POST | `/exposures/record` | token | redact.ts:265 |
@@ -42,13 +42,13 @@
 | POST | `/fs/move` | token | files.ts:175 |
 | GET | `/fs/read` | token | files.ts:116 |
 | POST | `/fs/write` | token | files.ts:121 |
-| ANY | `/health` | none | server.ts:1296 |
+| ANY | `/health` | none | server.ts:1299 |
 | GET | `/input` | token | input.ts:474 |
 | POST | `/input` | token | input.ts:477 |
-| POST | `/kb` | token | server.ts:1388 |
-| PUT | `/kb` | token | server.ts:1388 |
-| GET | `/kb/:x/:x` | token | server.ts:1402 |
-| GET | `/kb/search` | token | server.ts:1392 |
+| POST | `/kb` | token | server.ts:1391 |
+| PUT | `/kb` | token | server.ts:1391 |
+| GET | `/kb/:x/:x` | token | server.ts:1405 |
+| GET | `/kb/search` | token | server.ts:1395 |
 | POST | `/la/token` | token | push.ts:458 |
 | POST | `/open` | token | input.ts:519 |
 | POST | `/pair/claim` | none | pair.ts:109 |
@@ -58,13 +58,13 @@
 | POST | `/push/test` | token | push.ts:494 |
 | GET | `/resumable` | token | handoff.ts:275 |
 | GET | `/screen.jpg` | token | input.ts:507 |
-| ANY | `/stats` | token | server.ts:1375 |
+| ANY | `/stats` | token | server.ts:1378 |
 | POST | `/system` | token | input.ts:557 |
-| ANY | `/tailnet` | token | server.ts:1376 |
-| ANY | `/usage` | token | server.ts:1378 |
+| ANY | `/tailnet` | token | server.ts:1379 |
+| ANY | `/usage` | token | server.ts:1381 |
 | GET | `/volume` | token | input.ts:562 |
 | POST | `/volume` | token | input.ts:562 |
-| POST | `/wake` | token | server.ts:1365 |
+| POST | `/wake` | token | server.ts:1368 |
 
 ### `meshd/cmux-bridge.ts` (its own listener)
 
@@ -119,7 +119,7 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `handoff` | MeshClient.swift:593, MeshClient.swift:602, MeshClient.swift:614 | no |
 | `brain` | — (nothing gates it) | no |
 | `captureAnsi` | MeshClient.swift:277 | no |
-| `pty` | NativeTerminalScreen.swift:134 | no |
+| `pty` | NativeTerminalScreen.swift:146 | no |
 
 ## Watch → phone relay commands
 

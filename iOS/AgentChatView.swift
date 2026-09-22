@@ -725,100 +725,63 @@ private struct ChatBubble: View {
     let text: String
     let isUser: Bool
     let tint: Color
+    @State private var opening: LinkTarget?
+
+    /// Bare URLs an agent printed. Markdown only makes `[text](url)` tappable, and what an
+    /// agent actually prints is a naked https://… — the one thing you want off this screen.
+    private var links: [URL] { isUser ? [] : detectedLinks(in: [text]) }
 
     var body: some View {
         HStack {
             if isUser { Spacer() }
-            MarkdownBlocks(text: text)
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
+                Group {
+                    // The user's own prose was typed, not authored as markdown: rendering it
+                    // as markdown would eat their line breaks.
+                    if isUser {
+                        Text(text)
+                    } else {
+                        MarkdownDocument(source: text, compact: true)
+                    }
+                }
                 .font(.subheadline)
                 .foregroundStyle(isUser ? .white : .primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(isUser ? tint : Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-            if !isUser { Spacer() }
-        }
-    }
-}
-
-// MARK: - Minimal markdown (no third-party dependency)
-
-/// Splits `text` into blocks on blank lines: a fenced ``` block renders monospace,
-/// a run of lines each starting with "- "/"* "/"N. " renders as bullets, a lone
-/// "#"-prefixed line renders as a bold headline, and everything else goes through
-/// `AttributedString(markdown:)` so **bold**, `code`, *italic* and links render.
-struct MarkdownBlocks: View {
-    let text: String
-
-    private enum Block { case code(String), bullets([String]), headline(String), paragraph(String) }
-
-    private var blocks: [Block] {
-        text.components(separatedBy: "\n\n").compactMap { raw -> Block? in
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
-            if trimmed.hasPrefix("```") {
-                var lines = trimmed.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-                lines.removeFirst()
-                if lines.last?.trimmingCharacters(in: .whitespaces).hasPrefix("```") == true { lines.removeLast() }
-                return .code(lines.joined(separator: "\n"))
-            }
-            let lines = trimmed.split(separator: "\n").map(String.init)
-            if !lines.isEmpty, lines.allSatisfy(isBullet) {
-                return .bullets(lines.map(bulletBody))
-            }
-            if lines.count == 1, lines[0].hasPrefix("#") {
-                return .headline(String(lines[0].drop { $0 == "#" || $0 == " " }))
-            }
-            return .paragraph(trimmed)
-        }
-    }
-
-    private func isBullet(_ line: String) -> Bool {
-        line.hasPrefix("- ") || line.hasPrefix("* ")
-            || line.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil
-    }
-
-    private func bulletBody(_ line: String) -> String {
-        guard let r = line.range(of: #"^(-|\*|\d+\.)\s"#, options: .regularExpression) else { return line }
-        return String(line[r.upperBound...])
-    }
-
-    private func inline(_ s: String) -> Text {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        guard let attributed = try? AttributedString(markdown: s, options: options) else { return Text(s) }
-        return Text(attributed)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .code(let code):
-                    Text(code)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.primary)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.tertiarySystemFill))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                case .bullets(let items):
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                            HStack(alignment: .top, spacing: 6) {
-                                Text("•")
-                                inline(item)
+                .textSelection(.enabled)
+                if !links.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(links, id: \.absoluteString) { url in
+                                Button { opening = LinkTarget(url: url) } label: {
+                                    Label(url.host ?? url.absoluteString, systemImage: "safari")
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .contextMenu {
+                                    Button {
+                                        UIPasteboard.general.string = url.absoluteString
+                                    } label: { Label("Copy link", systemImage: "link") }
+                                }
                             }
                         }
                     }
-                case .headline(let head):
-                    inline(head).bold()
-                case .paragraph(let para):
-                    inline(para)
                 }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(isUser ? tint : Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .contextMenu {
+                Button { UIPasteboard.general.string = text } label: { Label("Copy", systemImage: "doc.on.doc") }
+                ShareLink(item: text) { Label("Share", systemImage: "square.and.arrow.up") }
+            }
+            if !isUser { Spacer() }
         }
+        .sheet(item: $opening) { target in SafariView(url: target.url) }
     }
 }
+
 
 private struct ThinkingDisclosure: View {
     let text: String
