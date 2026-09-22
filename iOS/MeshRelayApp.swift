@@ -69,9 +69,11 @@ struct MeshRelayApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if lock.isLocked {
+                if lock.isLocked && !store.machines.isEmpty {
                     // Nothing polls and nothing draws machine state until the device
-                    // owner has proved they are present.
+                    // owner has proved they are present. A phone with no machine paired
+                    // holds no token to protect, so the first screen a new user sees is
+                    // the app, not a lock (found on a fresh simulator, 2026-09-22).
                     LockScreen()
                 } else {
                     ContentView()

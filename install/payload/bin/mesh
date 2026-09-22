@@ -1943,9 +1943,12 @@ function cmdAppsInstall(pos: string[], flags: Record<string, string>, bools: Set
   if (!existsSync(meta.app)) appsErr(`app bundle no longer at ${meta.app}`);
 
   if (bools.has("sim")) {
-    const r = Bun.spawnSync(["xcrun", "simctl", "install", "booted", meta.app], { stdout: "pipe", stderr: "pipe" });
+    // --device names a simulator udid here (several are usually booted on a Mac that runs
+    // checks); without it simctl's own "booted" alias picks one.
+    const target = flags.device || "booted";
+    const r = Bun.spawnSync(["xcrun", "simctl", "install", target, meta.app], { stdout: "pipe", stderr: "pipe" });
     if (!r.success) appsErr(`simctl install failed: ${r.stderr.toString().trim().split("\n").pop()}`);
-    appsOk(`install ${slug}`, { slug, target: "sim" });
+    appsOk(`install ${slug}`, { slug, target: "sim", udid: target });
   }
 
   const udid = flags.device || firstPairedIphoneUdid();

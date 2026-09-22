@@ -57,18 +57,34 @@ final class FeedbackSendTests: XCTestCase {
             _ = app.navigationBars["Report a problem"].waitForExistence(timeout: 3)
         }
         XCTAssertTrue(app.navigationBars["Report a problem"].exists, "Report a problem did not open")
-        // The multi-line note first: once the keyboard is up for the single-line Title
-        // field, a tap on the vertical TextField below it does not always move focus.
-        let body = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "placeholderValue == %@", "What were you doing, and what did you expect?")).firstMatch
-        XCTAssertTrue(body.waitForExistence(timeout: 5), "no note field on Report a problem")
-        body.tap(); sleep(1)
-        if !(body.value(forKey: "hasKeyboardFocus") as? Bool ?? false) { body.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap(); sleep(1) }
-        body.typeText("Sent by UITests/FeedbackSendTests on a simulator as the end-to-end proof for PUBLISHED.md.")
+        // Title first (single-line), then the multi-line note. Typing goes through
+        // app.typeText — to the first responder — because typeText on the vertical
+        // TextField element itself reported success while the field stayed empty
+        // (iOS 27 simulator, SwiftUI TextField(axis: .vertical)).
         let title = app.textFields["Title"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        title.tap(); sleep(1)
-        title.typeText("Publish proof \(stamp): report sent from the app")
+        // Tap until the field itself reports focus: right after the screen pushes, the
+        // first tap sometimes lands before the form is interactive.
+        for _ in 0..<5 where !(title.value(forKey: "hasKeyboardFocus") as? Bool ?? false) {
+            title.tap(); sleep(1)
+        }
+        XCTAssertTrue(title.value(forKey: "hasKeyboardFocus") as? Bool ?? false, "Title field never took focus")
+        app.typeText("Publish proof \(stamp): report sent from the app")
+        // Do not assert on `title.value`: a focused SwiftUI TextField reports its
+        // placeholder there on this runtime. The proof that the text landed is the row
+        // Supabase holds afterwards, whose title carries this stamp.
+        // The note is optional in the product, so nothing here asserts on it. Typing goes
+        // through app.typeText (to the first responder): on the iOS 27 simulator a SwiftUI
+        // TextField(axis: .vertical) reports its placeholder as `value` and typeText sent
+        // to the element itself can miss, while typing to the first responder lands — the
+        // text reached Supabase in the run that produced issues/1.
+        let body = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "placeholderValue == %@", "What were you doing, and what did you expect?")).firstMatch
+        if body.waitForExistence(timeout: 5) {
+            body.tap(); sleep(1)
+            app.typeText("Sent by UITests/FeedbackSendTests on a simulator as the end-to-end proof for PUBLISHED.md.")
+            sleep(1)
+        }
         let send = app.buttons["Send to LeSearch AI"]
         XCTAssertTrue(send.waitForExistence(timeout: 5))
         if !send.isHittable { app.swipeUp() }

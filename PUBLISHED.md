@@ -1,0 +1,101 @@
+# PUBLISHED — LeSearch AI 0.8.0
+
+The ledger `scripts/check-published.sh` reads. Every line here is evidence that was
+produced by running something, not by describing it. Written 2026-09-22 from the publish
+run recorded in [docs/factory/runs/2026-09-22T093000Z-publish.md](docs/factory/runs/2026-09-22T093000Z-publish.md).
+
+Gate: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none`
+Gate SHA: pending
+Gate log: docs/overnight/2026-09-21/gate-full-publish.txt
+PR: #133 OPEN (draft) — https://github.com/aryateja2106/lecoder-watch/pull/133
+Landing: https://lesearch.ai
+Installer: https://lesearch.ai/install.sh
+Clean-device install: fresh simulator 8DDE6724-086C-489F-8345-ABEBE220242F (iPhone 17 Pro, iOS 27.0, created for the run and deleted after) — `mesh apps install --sim --device` — OK: installed LeSearch AI 0.8.0 and it launched (scripts/check-clean-install.sh, output quoted below)
+Supabase project: zmisjteztezaqfflwbgf
+Signup user: 6411d66d-77bc-4837-b911-10979a49947f (created in-app on 2026-09-22 through Settings → Account → Create account, confirmed; a second, API-level signup dd844c8e-e1b8-4e63-a579-6c5b04844dd2 proved the same path before the UI existed)
+Feedback row: 50cb992c-a357-4a2f-b533-dd700f1d2469 (written by the published build 0.8.0 (3) from Settings → Report a problem; a second row b99adb11-3c36-49ad-8fec-9776cc6b4d21 proved the dedupe path)
+Feedback issue: https://github.com/LeSearch-AI/mesh/issues/1
+Feedback worker: launchd job `ai.lesearch.feedback-worker` on this Mac — `scripts/feedback-worker.plist` runs `bun scripts/feedback-to-issues.ts` every 600 s, logging to `~/.mesh/logs/feedback-worker.log`. It holds the Supabase service key (from the gitignored `supabase/.env`) and files through `gh`. Moving it to a Supabase edge function needs an issues-only token — see BLOCKED.md.
+Fresh-eyes issues: pending
+Blockers: BLOCKED.md
+
+## What "published" means here
+
+1. Every self-check green and the full factory gate GREEN, quoted verbatim above.
+2. The tree clean and pushed, PR #133's body carrying the third-pass table.
+3. https://lesearch.ai serving the 0.8.0 landing, `/install.sh` resolving to the daemon's
+   own release, and a device that had never seen the app installing and launching it.
+4. Supabase live: a fresh signup works end to end, and the published app writes a real
+   feedback row.
+5. That row becomes a deduped GitHub issue labeled `from-users`.
+6. Docs a stranger can walk, with real screenshots.
+7. A fresh-eyes review by an agent with no repository context, filed as issues.
+8. This file.
+9. `docs/overnight/2026-09-21/STATE.md` carrying the M8 row and a refreshed handoff.
+
+## Publish proof
+
+**The landing page.** `web/` deploys to the `lesearch-website` Vercel project;
+`vercel deploy --prod` on 2026-09-22 produced deployment `dpl_Eq7j7R5Ugipgcsp4739hBfnbgaTS`,
+aliased to https://lesearch.ai. Live: the hero says *Version 0.8.0*, `/install.sh`
+307s to `LeSearch-AI/mesh-install/releases/latest/download/install.sh`, `/getting-started`
+and `/privacy` answer 200, `/beta` 307s to the TestFlight link. The previous production
+deployment (`lesearch-website-94wasg6jk`, 188 days old) is the rollback target.
+
+**Clean-device install.** `MESH_CLEAN_INSTALL_LIVE=1 sh scripts/check-clean-install.sh`
+creates a simulator that has never seen the app, proves the bundle is absent, installs
+with the user's own command and launches it:
+
+```
+check-clean-install: OK — fresh simulator 8DDE6724-086C-489F-8345-ABEBE220242F
+(clean-install-1790074031, iPhone 17 Pro) had never seen com.lecoder.meshwatch;
+mesh apps install --sim --device installed LeSearch AI 0.8.0 and it launched (pid 28263)
+```
+
+Its first screen is `docs/product/shots/clean-install-first-launch.png`. That capture is
+also what found the first-run bug fixed in this run: a fresh install opened on *"LeSearch
+AI is locked"* because the biometric gate ran before any machine was paired. The phone
+app itself still reaches users through TestFlight — that upload is Arya's (BLOCKED.md).
+
+**Supabase.** Project `zmisjteztezaqfflwbgf` (org LeSearch AI), schema in
+`supabase/migrations/` and pushed with `supabase db push`. Probes:
+`GET /rest/v1/feedback` with no key → 401; with the app's anon key → 401 (insert-only);
+an anon insert carrying `user_id` → 401; a plain anon insert → 201; the private
+`feedback-attachments` bucket accepts a `<uuid>.png` and refuses to serve it back (400).
+Auth: a fresh signup returns a session and signs in (`/auth/v1/signup` then
+`token?grant_type=password`), e-mail confirmations off until SMTP exists (BLOCKED.md).
+
+**The feedback loop, end to end.** From the published build on a simulator: Settings →
+Account → Create account, then Report a problem → *Send to LeSearch AI*, which showed
+`Sent. Reference 50cb992c.` The row arrived with `app_version 0.8.0`, `app_build 3`,
+`device arm64`, `os iOS 27.0`, `user_id` set. `bun scripts/feedback-to-issues.ts` filed it
+as **https://github.com/LeSearch-AI/mesh/issues/1** — labeled `from-users` + `bug`, citing
+the row id, with the reporter shown as *contact on file (hash 46579747325b)* and never as
+the address. Ten minutes later the launchd job picked up the second report by itself and
+deduped it onto the same issue as a comment (`issue_status: duplicate`), which is the
+pipeline running unattended, not a one-off invocation.
+
+## Fresh-eyes review
+
+_Pending._
+
+## Outstanding human blockers
+
+Carried from [BLOCKED.md](BLOCKED.md), which holds the detail; nothing below was faked or
+waited on, and the queue continued past each one.
+
+- Real iPhone: install 0.8.0 OTA and exercise it
+- Re-pair the real phone and watch to `pi`
+- Vercel AI Gateway card + rotate `AI_GATEWAY_API_KEY`
+- CloudKit container decision for the Hundred app's friend sync
+- Attended VNC credential flow on the live Mac (stage only)
+- Custom SMTP for Supabase Auth (then turn e-mail confirmations back on)
+- Issues-only GitHub token as a Supabase secret (move the worker to an edge function)
+- Repo consolidation under LeSearch-AI — confirm the archive list and the transfer
+- TestFlight 0.8.0 upload (the only way a stranger gets the phone app)
+
+## Housekeeping
+
+The Tailscale share used to serve the installer overnight
+(`tailscale serve --https=8890` → a python http.server on 127.0.0.1:8897 in `install/dist`)
+— state recorded below when the run closes.

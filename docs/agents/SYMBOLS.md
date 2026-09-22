@@ -135,7 +135,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | cmdTokenRotate | function | install/payload/bin/mesh:1296 |
 | cmdTokenRotateLocal | function | install/payload/bin/mesh:1142 |
 | cmdTokenRotateRemote | function | install/payload/bin/mesh:1245 |
-| cmdUninstall | function | install/payload/bin/mesh:2033 |
+| cmdUninstall | function | install/payload/bin/mesh:2036 |
 | cmdUpgrade | function | install/payload/bin/mesh:1042 |
 | cmdUpgradeLocal | function | install/payload/bin/mesh:934 |
 | cmdUpgradeRemote | function | install/payload/bin/mesh:1009 |
@@ -194,7 +194,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | ExposureList | struct | Shared/Models.swift:1157 |
 | ExposureRow | struct | iOS/ExposedSecretsScreen.swift:107 |
 | ExposureStatus | type | install/payload/meshd/redact.ts:28 |
-| externalFootprint | function | install/payload/bin/mesh:1968 |
+| externalFootprint | function | install/payload/bin/mesh:1971 |
 | FeedbackBundle | enum | iOS/FeedbackView.swift:255 |
 | FeedbackReport | struct | iOS/LeSearchCloud.swift:12 |
 | FeedbackView | struct | iOS/FeedbackView.swift:16 |
@@ -249,7 +249,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | hasCap | func | iOS/ContentView.swift:1092 |
 | hasSpoofableForwardHeaders | function | install/payload/meshd/loopback-trust.ts:16 |
 | HealthInfo | struct | Shared/Models.swift:283 |
-| help | function | install/payload/bin/mesh:2327 |
+| help | function | install/payload/bin/mesh:2330 |
 | HERDR_KEYS | export | install/payload/meshd/herdr.ts:265 |
 | HERDR_PREFIX | export | install/payload/meshd/herdr.ts:16 |
 | herdrAgentType | function | install/payload/meshd/herdr.ts:141 |
@@ -357,7 +357,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | machineSummary | func | iOS/ContentView.swift:1078 |
 | MachineThumbnail | struct | iOS/ContentView.swift:1800 |
 | magicPacket | function | install/payload/meshd/wol.ts:24 |
-| main | function | install/payload/bin/mesh:2334 |
+| main | function | install/payload/bin/mesh:2337 |
 | MarkdownBlocks | struct | iOS/AgentChatView.swift:750 |
 | MarkdownDocument | struct | iOS/FileViewer.swift:122 |
 | matchingAgent | func | Shared/Models.swift:728 |
@@ -469,7 +469,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | QRCaptureView | struct | iOS/PairingScanner.swift:53 |
 | qrMatrix | function | install/payload/meshd/qr.ts:379 |
 | randomHex | function | install/payload/bin/mesh:1641 |
-| rcFilesWithMeshLines | function | install/payload/bin/mesh:1983 |
+| rcFilesWithMeshLines | function | install/payload/bin/mesh:1986 |
 | ReachabilityAlertGate | struct | Shared/AlertGating.swift:9 |
 | reachableAddress | function | install/payload/bin/mesh:537 |
 | readAllAppMeta | function | install/payload/bin/mesh:1789 |
@@ -558,10 +558,10 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | statusColor | func | Watch/WatchViews.swift:479 |
 | StepRow | struct | iOS/PairMachineView.swift:257 |
 | StopReason | type | install/payload/meshd/codex-state.ts:19 |
-| stopService | function | install/payload/bin/mesh:2019 |
+| stopService | function | install/payload/bin/mesh:2022 |
 | StoreError | struct | iOS/MeshStore.swift:10 |
 | String | extension | iOS/ShellSafeText.swift:20 |
-| stripRcLines | function | install/payload/bin/mesh:1998 |
+| stripRcLines | function | install/payload/bin/mesh:2001 |
 | SuggestionChip | struct | iOS/AgentChatView.swift:1165 |
 | swapInMeshd | function | install/payload/bin/mesh:769 |
 | SwiftTermView | struct | iOS/NativeTerminalScreen.swift:406 |
