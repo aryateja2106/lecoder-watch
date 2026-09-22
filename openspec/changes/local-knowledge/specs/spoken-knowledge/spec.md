@@ -793,3 +793,28 @@ Pull request 208 SHALL add only `scripts/check-note-omits-model-url.sh`. `agent-
 - **AND** the agent records that Apps (Xcode) failed on `48f1970` (check run `35757430003`). Self-checks failed because `scripts/check-model-class.sh` read `/proc`, which macOS does not have, and port 8898 stayed in use. Daemon CI stayed green. Do not claim both jobs are green on `48f1970`. The fix is not on that tip.
 - **AND** the agent does not claim both jobs are green on `48f1970`
 - **AND** the agent does not claim a speaker or that a paper was read
+
+### Requirement: A subscription note can be drafted
+
+Pull request 209 SHALL add only `scripts/check-subscription-note.sh`. That script MUST NOT read `/proc`. On exit it SHALL signal the daemon process group and the stub. An allowed ask to `http://llm.example:<stub>/v1` SHALL return `modelClass` `user-subscription`, the stub URL SHALL have no userinfo, and the note body SHALL be the model reply only. `agent-note.ts`, `knowledge.ts`, and `server.ts` were not edited. The coordinator re-ran `sh scripts/check-subscription-note.sh` and `sh scripts/check-note-omits-model-url.sh` on `127.0.0.1:8898` at `9c0f8cf` and both exited 0. After the subscription check, port 8898 was free. The gateway key was unset. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. An agent MUST NOT claim both jobs are green on `9c0f8cf`. Daemon CI is green on `9c0f8cf` (check run `35759702609`). Apps (Xcode) is still running on that run. Do not claim both jobs are green on `9c0f8cf`. This branch does not contain the model-class port fix at `5f6d6b0`. Do not claim that Xcode passes. This does not prove a speaker or that a paper was read.
+
+#### Scenario: A subscription ask stores the reply only
+
+- **WHEN** an allowed ask uses `http://llm.example:<stub>/v1`
+- **THEN** `modelClass` is `user-subscription`
+- **AND** the stub URL has no userinfo
+- **AND** the note body is the model reply only
+
+#### Scenario: The subscription check leaves port 8898 free
+
+- **WHEN** `sh scripts/check-subscription-note.sh` exits 0 on `127.0.0.1:8898`
+- **THEN** port 8898 is free
+
+#### Scenario: Daemon-only CI on the subscription note is not both jobs green
+
+- **WHEN** `sh scripts/check-subscription-note.sh` and `sh scripts/check-note-omits-model-url.sh` pass on `127.0.0.1:8898` at `9c0f8cf`
+- **THEN** the agent records that both checks exited 0 and that daemon CI is green on `9c0f8cf` (check run `35759702609`) while apps (Xcode) is still running
+- **AND** the agent does not claim both jobs are green on `9c0f8cf`
+- **AND** the agent does not claim that Xcode passes, because this branch does not contain the model-class port fix at `5f6d6b0`
+- **AND** the agent keeps the port proofs on `5f6d6b0` and `890a704`
+- **AND** the agent does not claim a speaker or that a paper was read
