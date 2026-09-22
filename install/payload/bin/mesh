@@ -1020,7 +1020,12 @@ async function cmdUpgradeRemote(flags: Record<string, string>, cfg: Config) {
   try { before = (await api(h, "GET", "/health"))?.meshdVersion ?? ""; }
   catch { say(`note: ${h.name} is not answering /health yet — starting the installer anyway`); }
 
-  await api(h, "POST", "/agents/new", { name, cmd: `sh -c 'curl -fsSL ${base}/install.sh | sh -s -- --upgrade'` });
+  // The tarball URL travels too: an install.sh fetched from a plain file server has no
+  // baked-in source and answers "no payload found" — the session then ends, the daemon
+  // stays on its old version, and this command reports "still <old> after 3 minutes"
+  // with nothing left to peek at. Measured on the Pi, 2026-09-22.
+  const tgz = /\.(tgz|tar\.gz)$/.test(src) ? src : `${base}/mesh-install.tgz`;
+  await api(h, "POST", "/agents/new", { name, cmd: `sh -c 'curl -fsSL ${base}/install.sh | sh -s -- --upgrade --src ${tgz}'` });
   say(`started ${name} on ${h.name} — installing from ${base}/install.sh`);
   say(`waiting up to 3 minutes for ${h.name} to report a new meshd version…`);
 
