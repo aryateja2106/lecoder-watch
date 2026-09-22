@@ -44,7 +44,7 @@ function json(data: any, status = 200) {
 }
 
 /// The coding-agent CLIs a session can be started with, in the order the phone lists them.
-export const AGENT_CLIS = ["claude", "codex", "cursor-agent", "agy", "hermes", "openclaw", "omp", "pi", "gemini", "aider"] as const;
+export const AGENT_CLIS = ["claude", "codex", "cursor-agent", "agy", "hermes", "openclaw", "omp", "pi", "gemini", "aider", "fx"] as const;
 export function installedAgents(): Array<{ name: string; path: string }> {
   const out: Array<{ name: string; path: string }> = [];
   for (const name of AGENT_CLIS) {

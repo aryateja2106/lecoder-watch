@@ -1712,12 +1712,18 @@ private struct ControlWebView: UIViewRepresentable {
         web.scrollView.maximumZoomScale = 6
         web.scrollView.bouncesZoom = true
         web.load(request())
+        context.coordinator.requestedURL = url
         context.coordinator.lastReloadToken = reloadToken
         return web
     }
 
     func updateUIView(_ web: WKWebView, context: Context) {
-        if web.url != url || context.coordinator.lastReloadToken != reloadToken {
+        // Compare against what WE asked for, never `web.url`: that is nil until a load
+        // commits, and SwiftUI calls this on every store poll, so the old test reloaded
+        // the page every 8 s before it could finish — the console was a white screen and
+        // WebKit's log was one long "cancel". Measured 2026-09-22 on the simulator.
+        if context.coordinator.requestedURL != url || context.coordinator.lastReloadToken != reloadToken {
+            context.coordinator.requestedURL = url
             context.coordinator.lastReloadToken = reloadToken
             web.load(request())
         }
@@ -1737,6 +1743,7 @@ private struct ControlWebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         var lastReloadToken: UUID?
+        var requestedURL: URL?
         var allowedOrigin: String?
 
         func webView(_ webView: WKWebView,
