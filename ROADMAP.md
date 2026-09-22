@@ -10,10 +10,13 @@ sequence is the commitment.
 all happen there. The watch, phone and menu bar apps are *clients* of the same daemon
 API, and anything else (a TUI, other platforms) can be too.
 
-**Local-first, forever.** No relay, no account, and nothing of yours leaves your
-machines. The daemon may send one anonymized heartbeat a day — version, platform,
+**Local-first, forever.** The phone talks to the machine directly. There is no relay
+in the data path. An optional website account is identity — email, username, device
+labels, public keys, and sealed blobs — in a different database from the heartbeat.
+The daemon may send one anonymized heartbeat a day — version, platform,
 coarse numeric counters, a random install id, nothing else — and
 `MESHD_TELEMETRY=off` silences even that (see the Telemetry section of the README).
+A cloud copy of the mesh is out of scope.
 Anything on this roadmap that would require our server in the *data* path gets
 redesigned until it doesn't.
 
@@ -85,4 +88,5 @@ more features adds nothing a person can touch, and no feedback can come back.
   is the design, not a limitation to fix.
 - **VNC.** `meshd` already provides the screen and input surface over bearer-authed
   HTTP; setup will never ask you to enable Screen Sharing.
-- **An account system.** Pairing is a code your own machine printed. That stays.
+- **A cloud copy of the mesh.** Identity on the site is in progress. A cloud copy of the mesh is still out of scope.
+  Pairing stays a code your own machine printed, and the phone still talks to the machine directly.

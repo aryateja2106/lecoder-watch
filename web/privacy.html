@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy — LeSearch Mesh</title>
-<meta name="description" content="What LeSearch Mesh collects (nothing), where your data goes (your own machines), the daemon's optional heartbeat, and the one place alerts touch Apple's servers.">
+<meta name="description" content="Where LeSearch Mesh data goes (your own machines), what an optional website account stores, the daemon's optional heartbeat, and the one place alerts touch Apple's servers.">
 <link rel="icon" href="/appicon.png">
 <meta name="theme-color" content="#191919">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -82,15 +82,16 @@ footer a:hover{color:var(--ink)}
 
 <main class="wrap">
   <h1>Privacy</h1>
-  <div class="updated">Last updated 25 August 2026</div>
+  <div class="updated">Last updated 22 September 2026</div>
 
   <div class="tldr">
     <div class="badge">Data Not Collected</div><br>
-    <strong>The apps collect nothing and send nothing to us.</strong> LeSearch Mesh has no
-    accounts, no analytics and no servers of ours in the data path. Your phone and watch
-    talk straight to machines you own, over a network you already control. The two
-    exceptions worth knowing about — the daemon's optional heartbeat and push
-    notifications passing through Apple — are each explained in full below.
+    <strong>The apps collect nothing and send nothing to us.</strong> Your phone and watch
+    talk straight to machines you own, over a network you already control. There is no
+    analytics and no server of ours in the data path. An optional website account is
+    identity only, in a different database from the daemon's heartbeat. The heartbeat
+    and push notifications passing through Apple are each explained in full below,
+    with what an account stores.
   </div>
 
   <h2>Who this is</h2>
@@ -164,12 +165,14 @@ footer a:hover{color:var(--ink)}
 
   <h2>What an account is</h2>
   <p>
-    A website account is optional. It is a username, an email, and a password
-    so you can sign in on this site. It is not a copy of your machines: mesh
-    tokens, tailnet addresses, and host lists stay on the devices you paired.
-    Installing the daemon and pairing a phone with the eight-character code
-    work with no account. Signing in here does not move that material onto a
-    second device.
+    A website account is optional. It is identity: an email, a username,
+    device labels, device public keys, and sealed blobs.
+    It is a different database from the heartbeat, and the heartbeat stays
+    unlinked to the account. It is not a cloud copy of your mesh. Mesh tokens, tailnet
+    addresses, and host lists stay on the devices you paired, and your phone
+    still talks to the machine directly. Installing the daemon and pairing a
+    phone with the eight-character code work with no account. Signing in
+    here does not move that material onto a second device.
   </p>
 
   <h2>What Apple collects on its own</h2>

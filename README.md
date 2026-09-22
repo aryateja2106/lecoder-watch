@@ -6,8 +6,10 @@ Your AI coding agent stops to ask a question. Your wrist buzzes. You read what i
 answer it, and it carries on — the laptop never opened. When you do need the machine
 itself, there is a real terminal session and a real trackpad on your phone and watch.
 
-No account. No cloud relay. No server of ours in the path. The phone talks straight to a
-small daemon on a machine you own.
+An optional website account is identity: an email, a username, device labels, public
+keys, and sealed blobs, in a different database from the heartbeat. No cloud relay.
+No server of ours in the path. The phone talks straight to a small daemon on a
+machine you own. A cloud copy of the mesh is out of scope.
 
 > **Status: early.** It runs a small fleet daily and is on TestFlight. The install is one
 > command, and so is the uninstall. Read [what is honest about it](#what-is-and-is-not-true-yet)
@@ -169,11 +171,16 @@ does not emit. Run it against a real daemon before believing it.
 ## Telemetry
 
 The daemon sends one anonymized heartbeat per day: its version, its platform, its
-uptime in hours, coarse feature counters (how many hook events landed this week, by
+uptime in whole hours, coarse feature counters (how many hook events landed this week, by
 level, as numbers), and a random install id generated once on first send. That is the
 whole list — no commands, no keystrokes, no terminal or screen content, no hostnames,
 no paths, and nothing that identifies you. The apps never send anything at all; their
 App Store label is "Data Not Collected" and stays that way.
+
+An optional website account is a different database from this heartbeat. It stores
+an email, a username, device labels, device public keys, and sealed blobs. The
+heartbeat stays unlinked to the account. The phone still talks to the machine
+directly, and a cloud copy of the mesh is out of scope.
 
 Turn it off with `MESHD_TELEMETRY=off` in the daemon's environment (set it when you
 run the installer and it is carried into the service). The daemon works identically
