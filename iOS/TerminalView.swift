@@ -642,6 +642,14 @@ private struct SessionPeekScreen: View {
         AgentCLIKind.detect(from: session.name, agentType: session.agentType).rawValue
     }
 
+    /// "Resets in 2h 44m" for the blocking session limit, or nil.
+    private var limitResetCountdown: String? {
+        guard let providerId = LimitHelpers.providerId(for: session.agentType),
+              let provider = store.snapshot?.usage?.providers.first(where: { $0.id.lowercased() == providerId }),
+              let limit = provider.limits.first(where: { LimitHelpers.isSessionLimit(label: $0.label) }) else { return nil }
+        return LimitHelpers.resetCountdown(from: limit.resetsAtISO)
+    }
+
     private var continueBlocked: Bool {
         guard let providerId = LimitHelpers.providerId(for: session.agentType),
               let provider = store.snapshot?.usage?.providers.first(where: { $0.id.lowercased() == providerId }) else { return false }
@@ -706,13 +714,24 @@ private struct SessionPeekScreen: View {
             }
         }
         .safeAreaInset(edge: .top) {
-            if let handoffResultMessage {
-                Text(handoffResultMessage)
-                    .font(.caption)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                    .background(.thinMaterial)
+            VStack(spacing: 0) {
+                if let handoffResultMessage {
+                    Text(handoffResultMessage)
+                        .font(.caption)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(.thinMaterial)
+                }
+                // The agent hit its session limit mid-task and another agent on this
+                // machine has room: offer the hand-off here, where the task is, instead of
+                // leaving a stuck session and a countdown. Same daemon route as the ⋯ menu —
+                // HANDOFF.md is written, the new agent is told to read it.
+                if continueBlocked, !handoffTargets.isEmpty, !handoffInFlight, handoffResultMessage == nil {
+                    LimitHandoffBanner(agent: agentDisplayName, resetIn: limitResetCountdown, targets: handoffTargets) { target in
+                        confirmingHandoffTo = target
+                    }
+                }
             }
         }
         .navigationTitle(session.displayName)
@@ -1530,5 +1549,44 @@ private struct StatPill: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+
+/// "Claude's session limit is reached — continue this task with…" and one button per agent
+/// installed on the machine. Shown only while the limit blocks and a target exists.
+private struct LimitHandoffBanner: View {
+    let agent: String
+    let resetIn: String?
+    let targets: [String]
+    let onPick: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text("\(agent) hit its session limit\(resetIn.map { " · resets in \($0)" } ?? ""). Continue this task with another agent?")
+                    .font(.footnote)
+            } icon: {
+                Image(systemName: "flame.fill").foregroundStyle(.red)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(targets, id: \.self) { target in
+                        Button {
+                            onPick(target)
+                        } label: {
+                            Label(target, systemImage: "arrow.triangle.swap").font(.caption.bold())
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red.opacity(0.08))
+        .overlay(alignment: .bottom) { Divider() }
     }
 }

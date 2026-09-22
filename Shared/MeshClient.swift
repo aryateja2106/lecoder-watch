@@ -339,6 +339,12 @@ struct MeshClient {
         return try JSONDecoder().decode(FsFile.self, from: data)
     }
 
+    /// Write a small text file on the machine (parents created; never over an existing file).
+    func fsWrite(path: String, text: String) async throws {
+        let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+        _ = try await request("/fs/write?path=\(encoded)&mkdirs=1", method: "POST", body: Data(text.utf8))
+    }
+
     /// Create a directory (recursively, like `mkdir -p`) on the machine.
     func fsMkdir(path: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["path": path])

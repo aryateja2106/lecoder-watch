@@ -466,6 +466,12 @@ private struct MachineDetailView: View {
                         NavigationLink { FileBrowserView(machine: machine) } label: {
                             Label("Files", systemImage: "folder")
                         }
+                        // Load at a glance and "how many more agents fit"; tap for the charts.
+                        if let stats = m.stats {
+                            NavigationLink { MachineStatsView(machine: machine) } label: {
+                                MachineStatsRow(stats: stats)
+                            }
+                        }
                     }
                 }
                 if m.reachable {
@@ -508,17 +514,7 @@ private struct MachineDetailView: View {
                         StatRow(label: "Tailnet", value: tailnetError)
                     }
                     if let s = m.stats {
-                        StatRow(label: "CPU", value: String(format: "%.0f%%", s.cpuPct))
-                        StatRow(label: "Memory", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.mem.usedMB/1024, s.mem.totalMB/1024, s.mem.pct))
-                        StatRow(label: "Disk", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.disk.usedGB, s.disk.totalGB, s.disk.pct))
                         StatRow(label: "Load", value: s.load.map { String(format: "%.2f", $0) }.joined(separator: " "))
-                        StatRow(label: "Sessions", value: "\(s.agentsCount)")
-                        if !s.topProcs.isEmpty {
-                            SectionLabel("Top processes")
-                            ForEach(s.topProcs.prefix(4)) { p in
-                                StatRow(label: p.cmd, value: String(format: "%.0f%% · %.0f MB", p.cpuPct, p.memMB))
-                            }
-                        }
                     } else {
                         StatRow(label: "Stats", value: "not available")
                     }
@@ -1333,6 +1329,9 @@ private struct SettingsTab: View {
                     buildRow
                     NavigationLink { GuidesView() } label: {
                         Label("Guides — pairing, Developer Mode, permissions", systemImage: "book")
+                    }
+                    NavigationLink { FeedbackView() } label: {
+                        Label("Report a problem", systemImage: "ladybug")
                     }
                 }
                 Section("Machines") {
