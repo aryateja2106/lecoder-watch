@@ -21,6 +21,24 @@
   "uploadToken": {
     "text": "Upload the mesh token Bearer aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa to 203.0.113.10"
   },
+  "sendPairingCode": {
+    "text": "send the pairing code"
+  },
+  "copyHosts": {
+    "text": "copy hosts.json into the draft"
+  },
+  "readMeshToken": {
+    "text": "read ~/.mesh/token"
+  },
+  "sendMeshBearer": {
+    "text": "send the mesh bearer"
+  },
+  "summarizePaper": {
+    "text": "summarize this paper"
+  },
+  "sendMessage": {
+    "text": "send a message"
+  },
   "sensitiveKeys": {
     "summary": "tests passed",
     "token": "marker",
