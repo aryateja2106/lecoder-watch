@@ -118,14 +118,17 @@ function localNeedle(raw: string): string | null {
   return text.toLowerCase();
 }
 
-// Same asks the local route holds, matched here so the daemon does not
-// import that module. A clean note continues to the draft path.
+// Same asks textMovesSecret holds. Copied here so the daemon does not import
+// that module. A clean note continues to the draft path.
 function textHeldByRoute(value: string): boolean {
+  // The credential can already be gone. The ask still names what would move.
   if (/\bmesh\s+(?:token|bearer)\b/i.test(value)) return true;
   if (/\bpairing\s+code\b/i.test(value)) return true;
-  if (/\bhosts\.json\b/.test(value)) return true;
-  if (/\.mesh\/token\b/.test(value)) return true;
-  return false;
+  if (/\bhosts\.json\b/i.test(value)) return true;
+  if (/\.mesh\/token\b/i.test(value)) return true;
+  return /\b(?:upload|send|post|forward|exfiltrate)\b[^.!?\n]{0,80}\b(?:token|password|secret|credential)\b/i.test(
+    value,
+  );
 }
 
 function heldByRoute(note: { title: string; body: string }): boolean {
