@@ -2,13 +2,18 @@
 // becomes one file under the daemon state directory. Nothing in this module
 // opens a socket: no Supabase client, no model call, no download.
 //
-//   POST /knowledge      { path, speak? }  -> { id, title, spoken }
+//   POST /knowledge      { path, speak? } | { audio }  -> { id, title, spoken }
 //   GET  /knowledge                        -> { notes: [{ id, title }] }
 //   GET  /knowledge/:id                    -> { id, title, body }
 //
 // speak is optional. When it is true and MESH_TTS names a binary the user
 // already has, that binary receives the note text on stdin. The note is
 // written either way.
+//
+// audio is optional. When it names a local file and MESH_STT names a local
+// binary, that binary is the only process started. Its stdout is the note
+// body. A scheme:// value or any other remote URL is not started. A missing
+// binary, a nonzero exit, or a transcript that is empty writes no note.
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -20,6 +25,7 @@ const MAX_PDF_BYTES = 20 * 1024 * 1024;
 const MAX_TITLE = 200;
 const MAX_BODY = 100_000;
 const SPEAK_MS = 8_000;
+const STT_MS = 8_000;
 
 export function knowledgeDir(): string {
   const root = (process.env.MESHD_STATE ?? "").trim() || join(homedir(), ".mesh");
@@ -191,6 +197,100 @@ function isRemote(path: string): boolean {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(path.trim());
 }
 
+// scheme:// and a protocol-relative URL are not local files. A path that
+// merely contains :// is treated the same way so a remote address cannot be
+// handed to the transcriber.
+function refusesRemote(value: string): boolean {
+  const text = value.trim();
+  return isRemote(text) || text.startsWith("//") || text.includes("://");
+}
+
+async function readCapped(stream: ReadableStream<Uint8Array<ArrayBuffer>>, max: number): Promise<string> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      const value = next.value;
+      if (!value?.length || total >= max) continue;
+      const room = max - total;
+      const take = value.byteLength > room ? value.subarray(0, room) : value;
+      chunks.push(take);
+      total += take.byteLength;
+    }
+  } finally {
+    try { reader.releaseLock(); } catch { /* already released */ }
+  }
+  const buf = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buf.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(buf);
+}
+
+// Spawn only the local binary the caller named. A stuck transcriber is killed
+// and its text is dropped: a killed run did not finish, so it is not a note.
+async function runStt(bin: string, audioPath: string): Promise<string | null> {
+  let proc: ReturnType<typeof Bun.spawn>;
+  try {
+    proc = Bun.spawn([bin, audioPath], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+  } catch {
+    return null;
+  }
+  const killer = setTimeout(() => { try { proc.kill(); } catch { /* already gone */ } }, STT_MS);
+  const stdout = proc.stdout;
+  // "pipe" is a stream. A file descriptor is not text, so it is not a transcript.
+  const textPromise = typeof stdout === "number"
+    ? Promise.resolve("")
+    : readCapped(stdout, MAX_BODY).catch(() => "");
+  const code = await proc.exited.catch(() => 1);
+  clearTimeout(killer);
+  const text = (await textPromise).replace(/\u0000/g, "").trim();
+  if (code !== 0) return null;
+  return text ? clip(text, MAX_BODY) : null;
+}
+
+async function ingestSpoken(audio: string): Promise<Response> {
+  if (refusesRemote(audio)) return json({ error: "audio must be a local file" }, 400);
+  const audioPath = resolve(audio.trim());
+  const info = await stat(audioPath).catch(() => null);
+  if (!info) return json({ error: "not found" }, 404);
+  if (!info.isFile()) return json({ error: "not a file" }, 400);
+  if (info.size > MAX_PDF_BYTES) return json({ error: "audio too large" }, 400);
+  const bin = (process.env.MESH_STT ?? "").trim();
+  if (!bin || refusesRemote(bin)) return json({ error: "stt must be a local binary" }, 400);
+  const binPath = resolve(bin);
+  const binInfo = await stat(binPath).catch(() => null);
+  if (!binInfo?.isFile()) return json({ error: "stt unavailable" }, 400);
+  const transcript = await runStt(binPath, audioPath);
+  if (transcript === null) return json({ error: "stt failed" }, 400);
+  const line = transcript.split("\n").map((part) => part.trim()).find(Boolean) ?? "";
+  const title = clip(line.replace(/\s+/g, " "), MAX_TITLE) || basename(audioPath) || "note";
+  const id = crypto.randomUUID();
+  const dir = knowledgeDir();
+  await ensureDir(dir);
+  const file = join(dir, `${id}.json`);
+  const note = {
+    id,
+    title,
+    body: transcript,
+    source: basename(audioPath),
+    created: new Date().toISOString(),
+  };
+  await writeFile(file, `${JSON.stringify(note)}\n`, { mode: FILE_MODE });
+  await chmod(file, FILE_MODE);
+  await chmod(dir, DIR_MODE);
+  return json({ id, title, spoken: false }, 201);
+}
+
 async function maybeSpeak(text: string, speak: boolean): Promise<boolean> {
   if (!speak) return false;
   const bin = (process.env.MESH_TTS ?? "").trim();
@@ -207,7 +307,8 @@ async function maybeSpeak(text: string, speak: boolean): Promise<boolean> {
 }
 
 async function ingest(req: Request): Promise<Response> {
-  const body = (await req.json().catch(() => null)) as { path?: unknown; speak?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { path?: unknown; speak?: unknown; audio?: unknown } | null;
+  if (body && typeof body.audio === "string" && body.audio.trim()) return ingestSpoken(body.audio);
   if (!body || typeof body.path !== "string" || !body.path.trim()) return json({ error: "path required" }, 400);
   if (isRemote(body.path)) return json({ error: "path must be a local file" }, 400);
   const filePath = resolve(body.path);
