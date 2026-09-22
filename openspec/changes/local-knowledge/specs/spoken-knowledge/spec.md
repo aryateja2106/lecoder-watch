@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, and a spoken replace with `speak: true` drafts that new transcript to a held file. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, and pull request 193 do not prove a microphone or a speaker. Pull request 192 (tip `6faf3f3`) already named pull request 189.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, a spoken replace with `speak: true` drafts that new transcript to a held file, and `GET /knowledge?q=` matches a title or a body and returns only `{ id, title }`. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, pull request 193, and pull request 195 do not prove a microphone or a speaker. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
 
 ## ADDED Requirements
 
@@ -294,7 +294,7 @@ After a local `MESH_STT` transcript replaces one note, `POST /knowledge/:id` SHA
 
 ### Requirement: A spoken replace with speak true drafts the new transcript to a held file
 
-After `speak: true` with local `MESH_STT` and local `MESH_TTS` returns `spoken` true, the agent-note path SHALL draft that new transcript to a held file. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code transcript and a hosts.json transcript SHALL stay on hold. The body "summarize this paper" SHALL still draft. A missing id and a remote audio or TTS path MUST NOT write and MUST NOT call the model. There SHALL be no `liveGatewayCall`. The check runs with the gateway key unset. This behavior is pull request 193, which adds only `scripts/check-spoken-replace-draft.sh`. Daemon CI is green on `37d417aa`. An agent MUST NOT rebuild that check, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once. A spoken note is that local binary transcript or that local TTS exit code. An agent MUST NOT claim a microphone or a speaker was proven. Pull request 192 (tip `6faf3f3`) already named pull request 189.
+After `speak: true` with local `MESH_STT` and local `MESH_TTS` returns `spoken` true, the agent-note path SHALL draft that new transcript to a held file. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code transcript and a hosts.json transcript SHALL stay on hold. The body "summarize this paper" SHALL still draft. A missing id and a remote audio or TTS path MUST NOT write and MUST NOT call the model. There SHALL be no `liveGatewayCall`. The check runs with the gateway key unset. This behavior is pull request 193, which adds only `scripts/check-spoken-replace-draft.sh`. Daemon CI is green on `37d417aa`. An agent MUST NOT rebuild that check, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once. A spoken note is that local binary transcript or that local TTS exit code. An agent MUST NOT claim a microphone or a speaker was proven. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
 
 #### Scenario: Speak true drafts the new transcript
 
@@ -344,3 +344,56 @@ After `speak: true` with local `MESH_STT` and local `MESH_TTS` returns `spoken` 
 - **WHEN** `sh scripts/check-spoken-replace-draft.sh` passes on `127.0.0.1:8898` with the gateway key unset
 - **THEN** the agent records that local STT transcript, that local TTS exit code, and that daemon CI is green on `37d417aa`
 - **AND** the agent does not claim a microphone or a speaker was proven
+
+### Requirement: GET /knowledge?q= matches a title or a body and returns only id and title
+
+`GET /knowledge?q=` SHALL match the title or the body, without case, and SHALL return only `{ id, title }` for each note. A missing or empty `q` SHALL return every note as `{ id, title }`. A query with no match SHALL return `{ notes: [] }`. A remote URL, a scheme, a protocol-relative value, or any string containing `://` MUST be answered with 400 and MUST NOT be opened. A pairing-code match and a hosts.json match MUST NOT return those bodies. `POST /agent-note` SHALL still draft only the matching paper note to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A command without confirm MUST NOT run. `server.ts` was not edited. `handleKnowledge` is still one call. The check runs with the gateway key unset. This behavior is pull request 195. Daemon CI is green on `1238daa`. Apps (Xcode) is still pending on that tip (check run `35736830546`). An agent MUST NOT claim both jobs are green, MUST NOT rebuild this search, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once. This does not prove a microphone or a speaker. Pull request 194 (tip `cfe2b17`) already named pull request 193.
+
+#### Scenario: A query matches the title or the body
+
+- **WHEN** a client requests `GET /knowledge?q=` with text that appears in a note title or in a note body, in any case
+- **THEN** the matching notes are returned
+- **AND** each note is only `{ id, title }`
+
+#### Scenario: A missing or empty query lists every note
+
+- **WHEN** a client requests `GET /knowledge` with `q` missing or empty
+- **THEN** every note is returned
+- **AND** each note is only `{ id, title }`
+
+#### Scenario: No match is an empty list
+
+- **WHEN** a client requests `GET /knowledge?q=` with text that is in no title and no body
+- **THEN** the response is `{ notes: [] }`
+
+#### Scenario: A remote query is refused
+
+- **WHEN** `q` is a remote URL, a scheme, a protocol-relative value, or any string containing `://`
+- **THEN** the daemon answers 400
+- **AND** that value is not opened
+
+#### Scenario: A pairing-code match does not return that body
+
+- **WHEN** `q` matches a note whose body is a pairing code
+- **THEN** the response includes that note as `{ id, title }`
+- **AND** the pairing-code body is not in the response
+
+#### Scenario: A hosts.json match does not return that body
+
+- **WHEN** `q` matches a note whose body names hosts.json
+- **THEN** the response includes that note as `{ id, title }`
+- **AND** the hosts.json body is not in the response
+
+#### Scenario: The agent-note path drafts only the matching paper note
+
+- **WHEN** a client posts `/agent-note` for the note that matches the paper and not the pairing code or hosts.json
+- **THEN** the draft is one relative file
+- **AND** that file is mode 600 and is not executed
+- **AND** a command without confirm does not run
+
+#### Scenario: The search does not prove a microphone or a speaker
+
+- **WHEN** `sh scripts/check-local-note-search.sh` passes on `127.0.0.1:8898` at `1238daa` with the gateway key unset
+- **THEN** the agent records that spare-daemon check, that daemon CI is green on `1238daa`, and that apps (Xcode) is still pending on check run `35736830546`
+- **AND** the agent does not claim a microphone or a speaker was proven
+- **AND** the agent does not claim both CI jobs are green

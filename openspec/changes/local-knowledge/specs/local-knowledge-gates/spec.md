@@ -1,18 +1,18 @@
 ## Purpose
 
-Gates that keep this change to handoff specs, name the finished draft tips, and stop a later agent from rebuilding speech, notes, holds, spoken replaces, the spoken-note draft, the spoken replace speak, or the spoken replace draft.
+Gates that keep this change to handoff specs, name the finished draft tips, and stop a later agent from rebuilding speech, notes, holds, spoken replaces, the spoken-note draft, the spoken replace speak, the spoken replace draft, or the local note search.
 
 ## ADDED Requirements
 
 ### Requirement: Finished drafts are not new work
 
-An agent MUST treat local PDF notes, spoken-out via a local `MESH_TTS` binary, the note-to-held-file draft, the route-gated draft, spoken-in via a local `MESH_STT` binary, the in-place note replace, the replaced-note draft, the replaced-note hold, the spoken note replace, the spoken-note draft, the spoken replace speak, and the spoken replace draft as already drafted. Pull request 139 is the local PDF notes (tip `9d2827b` on `cursor/local-knowledge-e469` when verified). Pull request 145 is spoken-out (tip `ea86b77` on `cursor/spoken-note-e469`). Pull request 154 is the note to a held file (tip `cba3ac7` on `cursor/note-to-app-e469`). Pull request 160 is the route-gated draft (tip `4c8a73a` on `cursor/note-route-draft-e469`); Jev chooses a route and does not write the reply, and there is no live gateway call in that draft. Pull request 162 is spoken-in (tip `4e14cab` on `cursor/spoken-note-in-e469`); a remote URL does not run, and a second speech-in path MUST NOT be started. Pull request 174 is the in-place note replace (tip `426d66d7ae016a67b66b809a7cb4a10aaa300460` on `cursor/knowledge-note-update-e469`). Pull request 176 is the replaced-note draft (tip `ff4d633cf15c69776a314c79a4c243d39bf5cd31` on `cursor/updated-note-draft-e469`). Pull request 182 is the replaced-note hold (tip `56d8ae73883ac3276e7be01f16a949a016bb1253` on `cursor/updated-note-hold-e469`). Pull request 183 is the spoken note replace (tip `52ce62929a7c7e3c660943767311ac3c32d36ca8` on `cursor/spoken-note-replace-e469`). `server.ts` still calls `handleKnowledge` once on that tip. Pull request 187 is the spoken-note draft (tip `0baf37761f4dc6f42af017fb52513de3fb927e39` on `cursor/spoken-note-draft-e469`). It adds only `scripts/check-spoken-note-draft.sh`. Daemon CI and Xcode CI are both green on that tip. Pull request 189 is the spoken replace speak (tip `611f32131b3609580fb888916a263920b4452dc3` on `cursor/spoken-replace-speak-e469`). It speaks a replaced note with a local TTS binary. Daemon CI and Xcode CI are both green on that tip (check run `35714316679`). Pull request 192 (tip `6faf3f30d32e7d866853f3090e552b3e465ec571`) already named pull request 189. Pull request 193 is the spoken replace draft (tip `37d417aa7b4f1ca8833136bb029f5b64aae611e0` on `cursor/spoken-replace-draft-e469`). It adds only `scripts/check-spoken-replace-draft.sh`. Daemon CI is green on that tip. Neither pull request 187, pull request 189, nor pull request 193 proves a microphone or a speaker. A second `/knowledge` route MUST NOT be added.
+An agent MUST treat local PDF notes, spoken-out via a local `MESH_TTS` binary, the note-to-held-file draft, the route-gated draft, spoken-in via a local `MESH_STT` binary, the in-place note replace, the replaced-note draft, the replaced-note hold, the spoken note replace, the spoken-note draft, the spoken replace speak, the spoken replace draft, and the local note search as already drafted. Pull request 139 is the local PDF notes (tip `9d2827b` on `cursor/local-knowledge-e469` when verified). Pull request 145 is spoken-out (tip `ea86b77` on `cursor/spoken-note-e469`). Pull request 154 is the note to a held file (tip `cba3ac7` on `cursor/note-to-app-e469`). Pull request 160 is the route-gated draft (tip `4c8a73a` on `cursor/note-route-draft-e469`); Jev chooses a route and does not write the reply, and there is no live gateway call in that draft. Pull request 162 is spoken-in (tip `4e14cab` on `cursor/spoken-note-in-e469`); a remote URL does not run, and a second speech-in path MUST NOT be started. Pull request 174 is the in-place note replace (tip `426d66d7ae016a67b66b809a7cb4a10aaa300460` on `cursor/knowledge-note-update-e469`). Pull request 176 is the replaced-note draft (tip `ff4d633cf15c69776a314c79a4c243d39bf5cd31` on `cursor/updated-note-draft-e469`). Pull request 182 is the replaced-note hold (tip `56d8ae73883ac3276e7be01f16a949a016bb1253` on `cursor/updated-note-hold-e469`). Pull request 183 is the spoken note replace (tip `52ce62929a7c7e3c660943767311ac3c32d36ca8` on `cursor/spoken-note-replace-e469`). `server.ts` still calls `handleKnowledge` once on that tip. Pull request 187 is the spoken-note draft (tip `0baf37761f4dc6f42af017fb52513de3fb927e39` on `cursor/spoken-note-draft-e469`). It adds only `scripts/check-spoken-note-draft.sh`. Daemon CI and Xcode CI are both green on that tip. Pull request 189 is the spoken replace speak (tip `611f32131b3609580fb888916a263920b4452dc3` on `cursor/spoken-replace-speak-e469`). It speaks a replaced note with a local TTS binary. Daemon CI and Xcode CI are both green on that tip (check run `35714316679`). Pull request 192 (tip `6faf3f30d32e7d866853f3090e552b3e465ec571`) already named pull request 189. Pull request 193 is the spoken replace draft (tip `37d417aa7b4f1ca8833136bb029f5b64aae611e0` on `cursor/spoken-replace-draft-e469`). It adds only `scripts/check-spoken-replace-draft.sh`. Daemon CI is green on that tip. Pull request 194 (tip `cfe2b179f78938764e3b5d6949d81981b34c50ef`) already named pull request 193. Pull request 195 is the local note search (tip `1238daabce256e6d46c1fd7dd24680cf810d34f6` on `cursor/local-note-search-e469`, base `cursor/spoken-replace-draft-e469`). `GET /knowledge?q=` matches the title or the body, case-insensitive, and returns only `{ id, title }`. A missing or empty `q` returns every note as `{ id, title }`. A remote URL, a scheme, a protocol-relative value, or any string containing `://` is 400 and is not opened. A pairing-code match and a hosts.json match do not return those bodies. `POST /agent-note` still drafts only the matching paper note to one relative file, mode 600, not executed. A command without confirm does not run. `server.ts` was not edited. `handleKnowledge` is still one call. Daemon CI is green on `1238daa`. Apps (Xcode) is still pending on check run `35736830546`. Neither pull request 187, pull request 189, pull request 193, nor pull request 195 proves a microphone or a speaker. A second `/knowledge` route MUST NOT be added.
 
 The agent MUST re-check each pull request tip with `gh` before editing any of those files, and MUST NOT open a second implementation from this change.
 
 #### Scenario: The named tip is still the draft
 
-- **WHEN** an agent re-checks pull request 139, 145, 154, 160, 162, 174, 176, 182, 183, 187, 189, or 193 and the tip still matches the design
+- **WHEN** an agent re-checks pull request 139, 145, 154, 160, 162, 174, 176, 182, 183, 187, 189, 193, or 195 and the tip still matches the design
 - **THEN** the agent leaves that pull request as the implementation
 - **AND** this change gains no product file for that slice
 
@@ -34,13 +34,13 @@ An agent executing this change MUST NOT edit `Shared/Models.swift`, `Shared/Mesh
 
 #### Scenario: An executing agent starts a product edit
 
-- **WHEN** an agent begins to add a knowledge module, an in-place note replace, a replaced-note draft, a replaced-note hold, a spoken note replace, a spoken-note draft, a spoken replace speak, a spoken replace draft, a TTS path, an STT path, a held-file check, a route-gated draft, or a daemon route while executing this change
+- **WHEN** an agent begins to add a knowledge module, an in-place note replace, a replaced-note draft, a replaced-note hold, a spoken note replace, a spoken-note draft, a spoken replace speak, a spoken replace draft, a local note search, a TTS path, an STT path, a held-file check, a route-gated draft, or a daemon route while executing this change
 - **THEN** the agent stops that edit
-- **AND** the finished slice stays on its existing pull request: notes on 139, spoken-out on 145, held file on 154, route-gated draft on 160, spoken-in on 162, in-place replace on 174, replaced-note draft on 176, replaced-note hold on 182, spoken note replace on 183, spoken-note draft on 187, spoken replace speak on 189, spoken replace draft on 193
+- **AND** the finished slice stays on its existing pull request: notes on 139, spoken-out on 145, held file on 154, route-gated draft on 160, spoken-in on 162, in-place replace on 174, replaced-note draft on 176, replaced-note hold on 182, spoken note replace on 183, spoken-note draft on 187, spoken replace speak on 189, spoken replace draft on 193, local note search on 195
 
 ### Requirement: server.ts registration is a later, single edit
 
-This pull request MUST NOT edit `install/payload/meshd/server.ts`. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once. A later agent MUST NOT add a second `/knowledge` route. Pull request 174 and pull request 176 did not edit `server.ts`. Pull request 182 and pull request 183 did not edit `server.ts`. On the spoken-replace tip, `server.ts` still calls `handleKnowledge` once. Pull request 187 did not edit `server.ts`. It adds only `scripts/check-spoken-note-draft.sh`. Pull request 189 did not edit `server.ts`. On that tip, `server.ts` still calls `handleKnowledge` once. Pull request 193 did not edit `server.ts`. It adds only `scripts/check-spoken-replace-draft.sh`.
+This pull request MUST NOT edit `install/payload/meshd/server.ts`. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once. A later agent MUST NOT add a second `/knowledge` route. Pull request 174 and pull request 176 did not edit `server.ts`. Pull request 182 and pull request 183 did not edit `server.ts`. On the spoken-replace tip, `server.ts` still calls `handleKnowledge` once. Pull request 187 did not edit `server.ts`. It adds only `scripts/check-spoken-note-draft.sh`. Pull request 189 did not edit `server.ts`. On that tip, `server.ts` still calls `handleKnowledge` once. Pull request 193 did not edit `server.ts`. It adds only `scripts/check-spoken-replace-draft.sh`. Pull request 195 did not edit `server.ts`. On that tip, `handleKnowledge` is still one call. The files are `install/payload/meshd/knowledge.ts` and `scripts/check-local-note-search.sh`.
 
 A later agent MUST check whether knowledge routes are already registered in the tree being edited. If they are, that agent MUST say so and MUST NOT add a second `/knowledge` route. If they are not, one later task MAY register the existing handler only when no other agent holds `server.ts`.
 
@@ -210,7 +210,7 @@ Pull request 189 (`cursor/spoken-replace-speak-e469`, tip `611f32131b3609580fb88
 
 ### Requirement: The spoken replace draft is already proven
 
-Pull request 193 (`cursor/spoken-replace-draft-e469`, tip `37d417aa7b4f1ca8833136bb029f5b64aae611e0`, verified with `gh` on 2026-09-22) SHALL remain the spoken replace draft. That pull request adds only `scripts/check-spoken-replace-draft.sh`. `speak: true` with local `MESH_STT` and local `MESH_TTS` SHALL return `spoken` true and SHALL draft that new transcript to a held file. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code transcript and a hosts.json transcript SHALL stay on hold. The body "summarize this paper" SHALL still draft. A missing id and a remote audio or TTS path MUST NOT write and MUST NOT call the model. There SHALL be no `liveGatewayCall`. `server.ts` was not edited. On that tip, `server.ts` still calls `handleKnowledge` once. Daemon CI is green on `37d417aa`. This does not prove a microphone or a speaker. An agent MUST NOT rebuild this check, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. Pull request 174 stays the in-place note replace at `426d66d`. Pull request 176 stays the replaced-note draft at `ff4d633`. Pull request 182 stays the replaced-note hold at `56d8ae7`. Pull request 183 stays the spoken note replace at `52ce629`. Pull request 187 stays the spoken-note draft at `0baf377`. Pull request 189 stays the spoken replace speak at `611f321`. Pull request 192 (tip `6faf3f3`) already named pull request 189.
+Pull request 193 (`cursor/spoken-replace-draft-e469`, tip `37d417aa7b4f1ca8833136bb029f5b64aae611e0`, verified with `gh` on 2026-09-22) SHALL remain the spoken replace draft. That pull request adds only `scripts/check-spoken-replace-draft.sh`. `speak: true` with local `MESH_STT` and local `MESH_TTS` SHALL return `spoken` true and SHALL draft that new transcript to a held file. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code transcript and a hosts.json transcript SHALL stay on hold. The body "summarize this paper" SHALL still draft. A missing id and a remote audio or TTS path MUST NOT write and MUST NOT call the model. There SHALL be no `liveGatewayCall`. `server.ts` was not edited. On that tip, `server.ts` still calls `handleKnowledge` once. Daemon CI is green on `37d417aa`. This does not prove a microphone or a speaker. An agent MUST NOT rebuild this check, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. Pull request 174 stays the in-place note replace at `426d66d`. Pull request 176 stays the replaced-note draft at `ff4d633`. Pull request 182 stays the replaced-note hold at `56d8ae7`. Pull request 183 stays the spoken note replace at `52ce629`. Pull request 187 stays the spoken-note draft at `0baf377`. Pull request 189 stays the spoken replace speak at `611f321`. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
 
 #### Scenario: The spoken replace draft tip still matches
 
@@ -252,4 +252,50 @@ Pull request 193 (`cursor/spoken-replace-draft-e469`, tip `37d417aa7b4f1ca883313
 
 - **WHEN** an agent is about to claim that pull request 193 proved a microphone or a speaker
 - **THEN** the agent records the local STT transcript, the local TTS exit code, and that daemon CI is green on `37d417aa`
+- **AND** the agent says that this does not prove a microphone or a speaker
+
+### Requirement: The local note search is already proven
+
+Pull request 195 (`cursor/local-note-search-e469`, tip `1238daabce256e6d46c1fd7dd24680cf810d34f6`, base `cursor/spoken-replace-draft-e469`, verified with `gh` on 2026-09-22) SHALL remain the local note search. `GET /knowledge?q=` SHALL match the title or the body, without case, and SHALL return only `{ id, title }` for each note. A missing or empty `q` SHALL return every note as `{ id, title }`. A remote URL, a scheme, a protocol-relative value, or any string containing `://` MUST be answered with 400 and MUST NOT be opened. A pairing-code match and a hosts.json match MUST NOT return those bodies. `POST /agent-note` SHALL still draft only the matching paper note to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A command without confirm MUST NOT run. `server.ts` was not edited. On that tip, `handleKnowledge` is still one call. The coordinator re-ran `sh scripts/check-local-note-search.sh` on `127.0.0.1:8898` at `1238daa` and it exited 0. The gateway key was unset. Daemon CI is green on `1238daa` (check run `35736830546`). Apps (Xcode) is still pending on that same run. This does not prove a microphone or a speaker. An agent MUST NOT claim both jobs are green, MUST NOT rebuild this search, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once. Pull request 174 stays the in-place note replace at `426d66d`. Pull request 176 stays the replaced-note draft at `ff4d633`. Pull request 182 stays the replaced-note hold at `56d8ae7`. Pull request 183 stays the spoken note replace at `52ce629`. Pull request 187 stays the spoken-note draft at `0baf377`. Pull request 189 stays the spoken replace speak at `611f321`. Pull request 193 stays the spoken replace draft at `37d417aa`. Pull request 194 (tip `cfe2b17`) already named pull request 193.
+
+#### Scenario: The local note search tip still matches
+
+- **WHEN** an agent re-checks pull request 195 and the tip is `1238daabce256e6d46c1fd7dd24680cf810d34f6`
+- **THEN** the agent leaves that pull request as the local note search
+- **AND** this change gains no second search and no second `/knowledge` route
+
+#### Scenario: A query matches the title or the body
+
+- **WHEN** `q` appears in a note title or in a note body, in any case
+- **THEN** the matching notes are returned
+- **AND** each note is only `{ id, title }`
+
+#### Scenario: A missing or empty query lists every note
+
+- **WHEN** `q` is missing or empty
+- **THEN** every note is returned as `{ id, title }`
+
+#### Scenario: A remote query is refused
+
+- **WHEN** `q` is a remote URL, a scheme, a protocol-relative value, or any string containing `://`
+- **THEN** the daemon answers 400
+- **AND** that value is not opened
+
+#### Scenario: A pairing-code or hosts.json match does not return that body
+
+- **WHEN** `q` matches a pairing-code note or a hosts.json note
+- **THEN** the response includes that note as `{ id, title }`
+- **AND** that body is not in the response
+
+#### Scenario: The agent-note path drafts only the matching paper note
+
+- **WHEN** a client posts `/agent-note` after that search
+- **THEN** only the matching paper note is drafted to one relative file
+- **AND** that file is mode 600 and is not executed
+- **AND** a command without confirm does not run
+
+#### Scenario: An agent treats the local note search as a microphone, a speaker, or green CI
+
+- **WHEN** an agent is about to claim that pull request 195 proved a microphone or a speaker, or that both CI jobs are green
+- **THEN** the agent records the spare-daemon check on `127.0.0.1:8898` at `1238daa` (exit 0, gateway key unset), that daemon CI is green, and that apps (Xcode) is still pending on check run `35736830546`
 - **AND** the agent says that this does not prove a microphone or a speaker
