@@ -2,7 +2,7 @@
 // Gateway question types: choice, score, and boolean.
 // The check does not call liveGatewayCall.
 
-import { filter } from "./filter.ts";
+import { filter, textCarriesSecret } from "./filter.ts";
 
 export type DispatchRoute = "hold-for-review" | "allow-local-tool";
 
@@ -73,8 +73,25 @@ function resolveEvaluation(evaluation: EvaluateResult): EvaluateResult {
   return evaluation;
 }
 
+function textMovesSecret(value: string): boolean {
+  if (/\bmesh\s+token\b/i.test(value)) return true;
+  return /\b(?:upload|send|post|forward|exfiltrate)\b[^.!?\n]{0,80}\b(?:token|password|secret|credential)\b/i.test(
+    value,
+  );
+}
+
+function movesMachineSecret(value: unknown): boolean {
+  if (typeof value === "string") return textMovesSecret(value) || textCarriesSecret(value);
+  if (Array.isArray(value)) return value.some((item) => movesMachineSecret(item));
+  if (isRecord(value)) return Object.values(value).some((item) => movesMachineSecret(item));
+  return false;
+}
+
 export function route(state: unknown, evaluation: EvaluateResult): DispatchRoute {
   if (state === null || typeof state !== "object") return "hold-for-review";
+  // Filtering can remove the secret and still leave the ask. That ask must
+  // not become an allowed tool call.
+  if (movesMachineSecret(state)) return "hold-for-review";
   const decision = resolveEvaluation(evaluation);
   const score = decision.score;
   const confidence = decision.confidence;

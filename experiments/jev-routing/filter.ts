@@ -82,6 +82,32 @@ function looksLikeHttpUrl(value: string): boolean {
   return /https?:\/\/\S+/i.test(value);
 }
 
+const EMBEDDED_IPV4 =
+  /(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)/;
+
+function textHasEmbeddedSecret(value: string): boolean {
+  if (/bearer\s+\S{8,}/i.test(value)) return true;
+  if (/[a-f0-9]{32,}/i.test(value)) return true;
+  if (/[A-Za-z0-9+/_-]{32,}={0,2}/.test(value)) return true;
+  return EMBEDDED_IPV4.test(value);
+}
+
+export function textCarriesSecret(value: string): boolean {
+  const trimmed = value.trim();
+  if (IPV4.test(trimmed) || looksLikeIpv6(trimmed) || looksLikeHttpUrl(value) || looksLikeBearer(trimmed)) {
+    return true;
+  }
+  return textHasEmbeddedSecret(value);
+}
+
+function redactEmbedded(value: string): string {
+  return value
+    .replace(/bearer\s+\S{8,}/gi, "")
+    .replace(/[a-f0-9]{32,}/gi, "")
+    .replace(/[A-Za-z0-9+/_-]{32,}={0,2}/g, "")
+    .replace(new RegExp(EMBEDDED_IPV4.source, "g"), "");
+}
+
 function isImagePayload(value: string): boolean {
   const trimmed = value.trim();
   if (/^data:image\//i.test(trimmed)) return true;
@@ -121,10 +147,11 @@ function sanitizeString(value: string): unknown {
   if (Buffer.byteLength(value, "utf8") > MAX_BYTES) throw new Error("refused: value over 4 KB");
   if (isImagePayload(value)) throw new Error("refused: image payload");
   const trimmed = value.trim();
-  if (IPV4.test(trimmed) || looksLikeIpv6(trimmed) || looksLikeHttpUrl(value) || looksLikeBearer(value)) {
-    return DROPPED;
-  }
-  return value;
+  if (looksLikeIpv6(trimmed) || looksLikeHttpUrl(value) || looksLikeBearer(trimmed)) return DROPPED;
+  if (!textCarriesSecret(value)) return value;
+  const redacted = redactEmbedded(value);
+  if (redacted.trim() === "" || textCarriesSecret(redacted)) return DROPPED;
+  return redacted;
 }
 
 function sanitize(value: unknown): unknown {
