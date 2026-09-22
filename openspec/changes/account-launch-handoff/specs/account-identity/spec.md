@@ -72,6 +72,34 @@ The local confirmation message, the sign-up response, and the confirmation redir
 - **THEN** the ciphertext comes from the database
 - **AND** it is not taken from the confirmation message
 
+### Requirement: The recovery message omits sealed material
+
+After a confirmed local user exists, the recovery email, the recovery response, and the redirect SHALL omit mailbox ciphertext, the device public key, and a mesh-token sentinel. The private key MUST NOT be stored. The reset page SHALL submit `new-password`. The new password SHALL sign in. The old password MUST NOT. The owner reads the ciphertext from the database. A second signed-in user MUST NOT select the first user's profile, device, or mailbox. Pull request 188 (https://github.com/aryateja2106/lecoder-watch/pull/188) is that proof. It adds only `experiments/local-auth/prove-recovery-mail.sh`. `account.js` and `001_identity.sql` were not edited. Identity SQL sha256 stays `cd47695328f67abb077b62e48b670ed7cf78d6f4a916348958229d1862445253`. The stack run is on the draft. Do not rebuild it. This proof is not the hosted Supabase project.
+
+#### Scenario: Recovery surfaces are rendered
+
+- **WHEN** local auth sends the recovery message, returns the recovery response, and redirects for reset after a confirmed user exists with mailbox and device rows present
+- **THEN** those three surfaces omit mailbox ciphertext, the device public key, and a mesh-token sentinel
+- **AND** the private key is not stored
+
+#### Scenario: The reset page sets the new password
+
+- **WHEN** the person completes the reset page
+- **THEN** the form submits `new-password`
+- **AND** the new password signs in
+- **AND** the old password does not sign in
+
+#### Scenario: Another user tries to select the first user's rows after recovery
+
+- **WHEN** a second signed-in user attempts to select the first user's profile, device, or mailbox
+- **THEN** that selection is refused
+
+#### Scenario: The owner reads the mailbox after recovery
+
+- **WHEN** the owner reads the mailbox ciphertext
+- **THEN** the ciphertext comes from the database
+- **AND** it is not taken from the recovery message
+
 ### Requirement: Install and pairing work logged out
 
 Installing the daemon and pairing a phone with the 8-character code SHALL work when nobody is signed in. An account MUST NOT be required to install. Until a later native change lands, signing in on the website SHALL NOT move a mesh token, a tailnet address, or a host list onto a second device.
