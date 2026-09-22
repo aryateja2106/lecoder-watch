@@ -23,10 +23,19 @@
 // token, is held the same way a note is. A reply the route would hold is not
 // stored: no note and no draft file.
 //
+// cwd and model may be omitted. An omitted cwd is a drafts directory under
+// the same state root knowledgeDir() already uses, created mode 700, and the
+// held file is written there. An omitted model is MESH_MODEL, and only when
+// modelClassOf is local and completionsEndpoint returns a URL. An empty
+// MESH_MODEL, or one that is not a local endpoint, is refused before a model
+// call and before any note or draft is written. A model or cwd the request
+// already includes is unchanged, including a user-subscription URL the caller
+// sent on purpose.
+//
 // file is an optional relative path and defaults to draft.txt. Absolute
 // paths, "..", and any path that resolves outside cwd are refused.
 //
-//   POST /agent-note  { id?, q?, cwd, model, file?, command?, confirm?, ask? }
+//   POST /agent-note  { id?, q?, cwd?, model?, file?, command?, confirm?, ask? }
 //        -> { modelClass, draft, commandRan, held }
 //
 // id alone is the note, as before. When id is absent, q selects one note
@@ -35,10 +44,10 @@
 // code, hosts.json, a mesh token, or .mesh/token is held before any model
 // call. No match is 404. Several matches are 409 and are not guessed. An
 // empty q is 400.
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { constants as fsConstants } from "node:fs";
 import { chmod, lstat, mkdir, open, realpath, stat } from "node:fs/promises";
-import { listNotes, readNote, writeNote } from "./knowledge";
+import { knowledgeDir, listNotes, readNote, writeNote } from "./knowledge";
 
 const FILE_MODE = 0o600;
 const DRAFT_NAME = "draft.txt";
@@ -310,6 +319,23 @@ async function writeHeldFile(abs: string, text: string): Promise<void> {
   await chmod(abs, FILE_MODE);
 }
 
+// Held drafts for a caller that did not name a directory. Sibling of the
+// knowledge directory, so it stays under the same state root.
+async function ensureStateDrafts(): Promise<string> {
+  const dir = join(dirname(knowledgeDir()), "drafts");
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await chmod(dir, 0o700);
+  return dir;
+}
+
+// MESH_MODEL is used only when the caller omitted model. A local endpoint is
+// the only value filled in. Anything else is refused by the handler.
+function localModelDefault(): string | null {
+  const raw = (process.env.MESH_MODEL ?? "").trim();
+  if (!raw || modelClassOf(raw) !== "local" || !completionsEndpoint(raw)) return null;
+  return raw;
+}
+
 export async function runAgentNote(opts: {
   id: string;
   cwd: string;
@@ -381,10 +407,25 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
     confirm?: unknown;
     ask?: unknown;
   } | null;
-  if (!body || typeof body.cwd !== "string" || !body.cwd.trim()) {
-    return json({ error: "id and cwd required" }, 400);
+  if (!body) return json({ error: "id and cwd required" }, 400);
+  const cwdOmitted = body.cwd === undefined;
+  let cwd = "";
+  if (!cwdOmitted) {
+    if (typeof body.cwd !== "string" || !body.cwd.trim()) {
+      return json({ error: "id and cwd required" }, 400);
+    }
+    cwd = body.cwd;
   }
-  if (typeof body.model !== "string") return json({ error: "model required" }, 400);
+  let model = "";
+  if (body.model === undefined) {
+    const fallback = localModelDefault();
+    if (!fallback) return json({ error: "model must be local" }, 400);
+    model = fallback;
+  } else if (typeof body.model !== "string") {
+    return json({ error: "model required" }, 400);
+  } else {
+    model = body.model;
+  }
   if (body.file !== undefined && typeof body.file !== "string") return json({ error: "file must stay inside cwd" }, 400);
   let ask = "";
   if (body.ask !== undefined && body.ask !== null) {
@@ -394,8 +435,8 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
   // A remote ask never reaches the model and never creates a draft file.
   if (ask && askIsRemote(ask)) return json({ error: "ask must be local text" }, 400);
   if (ask && textHeldByRoute(ask)) {
-    if (!body.model.trim()) return json({ error: "model required" }, 400);
-    return json({ modelClass: modelClassOf(body.model), draft: null, commandRan: false, held: true });
+    if (!model.trim()) return json({ error: "model required" }, 400);
+    return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true });
   }
   const givenId = typeof body.id === "string" ? body.id.trim() : "";
   let id = givenId;
@@ -411,15 +452,19 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
     const note = await readNote(id);
     if (!note) return json({ error: "note not found" }, 404);
     if (heldByRoute(note)) {
-      if (!body.model.trim()) return json({ error: "model required" }, 400);
-      return json({ modelClass: modelClassOf(body.model), draft: null, commandRan: false, held: true });
+      if (!model.trim()) return json({ error: "model required" }, 400);
+      return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true });
     }
+  }
+  if (cwdOmitted) {
+    if (!model.trim()) return json({ error: "model required" }, 400);
+    cwd = await ensureStateDrafts();
   }
   try {
     const result = await runAgentNote({
       id,
-      cwd: body.cwd,
-      model: body.model,
+      cwd,
+      model,
       file: typeof body.file === "string" ? body.file : undefined,
       command: typeof body.command === "string" ? body.command : undefined,
       confirm: body.confirm === true,
