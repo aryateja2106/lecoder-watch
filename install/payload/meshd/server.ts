@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
+import { handleKnowledge } from "./knowledge";
 import { handleInput } from "./input";
 import { handleFiles } from "./files";
 import { handlePush, pushAlert, passesPushGate, notePushDecision, pushLiveActivity } from "./push";
@@ -1032,6 +1033,9 @@ Bun.serve({
       if (remote) return remote;
       const files = await handleFiles(req, url);
       if (files) return files;
+      // A local PDF becomes one note on disk. See knowledge.ts.
+      const knowledge = await handleKnowledge(req, url);
+      if (knowledge) return knowledge;
       // APNs device registration + status + test — see push.ts.
       const pushed = await handlePush(req, url);
       if (pushed) return pushed;
