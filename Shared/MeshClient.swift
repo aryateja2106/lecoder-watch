@@ -305,6 +305,14 @@ struct MeshClient {
         return try JSONDecoder().decode(KnowledgeNoteSummary.self, from: response)
     }
 
+    /// Speak one saved note. `POST /knowledge/:id` with `{ speak: true }` returns `{ id, title, spoken }`.
+    func speakKnowledgeNote(id: String) async throws -> KnowledgeNoteSpeak {
+        let payload: [String: Any] = ["speak": true]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        let response = try await request("/knowledge/\(Self.pathSegment(id))", method: "POST", body: data)
+        return try JSONDecoder().decode(KnowledgeNoteSpeak.self, from: response)
+    }
+
     /// Create a new rmux session (optionally launching a command, e.g. "claude" / "codex").
     ///
     /// `cols`/`rows` (meshd 0.5.0+) set the new PTY's size, so a session created

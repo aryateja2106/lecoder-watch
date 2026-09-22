@@ -432,6 +432,7 @@ struct KnowledgeNoteAskView: View {
     @State private var ask = ""
     @State private var confirming = false
     @State private var confirmingSave = false
+    @State private var confirmingSpeak = false
     @State private var search = ""
 
     private var namedNote: String {
@@ -472,6 +473,8 @@ struct KnowledgeNoteAskView: View {
                     .autocorrectionDisabled()
                 Button("Save") { confirmingSave = true }
                     .disabled(namedNote.isEmpty || written.isEmpty)
+                Button("Speak") { confirmingSpeak = true }
+                    .disabled(namedNote.isEmpty || store.loadedKnowledgeNote?.title != namedNote)
             }
             Section("Ask") {
                 TextField("Question", text: $ask, axis: .vertical)
@@ -509,6 +512,14 @@ struct KnowledgeNoteAskView: View {
         .confirmationDialog("Save this note?", isPresented: $confirmingSave, titleVisibility: .visible) {
             Button("Save") {
                 store.saveKnowledgeNote(host: host, title: note, body: noteBody, confirmed: true)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(namedNote)
+        }
+        .confirmationDialog("Speak this note?", isPresented: $confirmingSpeak, titleVisibility: .visible) {
+            Button("Speak") {
+                store.speakKnowledgeNote(host: host, title: note, confirmed: true)
             }
             Button("Cancel", role: .cancel) { }
         } message: {

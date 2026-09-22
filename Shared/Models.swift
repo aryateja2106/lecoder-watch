@@ -976,6 +976,9 @@ struct KnowledgeNoteSummary: Codable, Equatable, Identifiable { var id: String; 
 /// One saved note from `GET /knowledge/:id`.
 struct KnowledgeNote: Codable, Equatable, Identifiable { var id: String; var title: String; var body: String }
 
+/// Speak one saved note. `POST /knowledge/:id` with `{ speak: true }` returns this shape.
+struct KnowledgeNoteSpeak: Codable, Equatable { var id: String; var title: String; var spoken: Bool }
+
 /// Wrist rotation → cursor velocity, the air-mouse mapping.
 ///
 /// WowMouse does this on Wear OS by pairing as a Bluetooth HID mouse. watchOS gives
