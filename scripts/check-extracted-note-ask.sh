@@ -40,7 +40,18 @@ stop_srv() {
 }
 
 stop_stub() {
-  stop_group "${STUB:-}"
+  pid=${STUB:-}
+  [ -n "$pid" ] || return 0
+  kill -TERM "-${pid}" 2>/dev/null || true
+  kill "$pid" 2>/dev/null || true
+  n=0
+  while kill -0 "$pid" 2>/dev/null && [ "$n" -lt 30 ]; do
+    sleep 0.1
+    n=$((n + 1))
+  done
+  kill -KILL "-${pid}" 2>/dev/null || true
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
   STUB=
 }
 
@@ -203,12 +214,10 @@ PY
 }
 
 # Model stub on loopback. The configured host stays llm.example.
-cat >"$TH/stub.py" <<'PY'
+python3 - "$TH/stub.port" "$STUB_BODIES" "$TH/stub.reply" 2>"$TH/stub.err" <<'PY' &
+import sys; sys.stderr.write("stub-start\n"); sys.stderr.flush()
 import json, os
-base = os.path.dirname(os.path.abspath(__file__))
-port_path = os.path.join(base, "stub.port")
-body_dir = os.path.join(base, "stub-bodies")
-reply_path = os.path.join(base, "stub.reply")
+port_path, body_dir, reply_path = sys.argv[1:4]
 reply = json.dumps({"choices": [{"message": {"content": "A reader for the margin."}}]}).encode()
 open(reply_path, "wb").write(reply)
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -239,10 +248,9 @@ with open(port_path, "w", encoding="utf-8") as fh:
     fh.flush()
 server.serve_forever()
 PY
-python3 -c 'import os,sys; os.setsid(); os.execvp("python3", ["python3", sys.argv[1]])' "$TH/stub.py" >"$TH/stub.err" 2>&1 &
 STUB=$!
 i=0
-while [ ! -s "$TH/stub.port" ] && [ "$i" -lt 100 ]; do
+while [ ! -s "$TH/stub.port" ] && [ "$i" -lt 150 ]; do
   kill -0 "$STUB" 2>/dev/null || { echo "FAIL: model stub exited"; cat "$TH/stub.err" 2>/dev/null || true; exit 1; }
   sleep 0.1
   i=$((i + 1))
