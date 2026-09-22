@@ -1,6 +1,8 @@
 /* Website account. Identity only: username, email, password.
-   A missing or empty config.js shows the setup message and returns
-   before fetch, so this file does not call the network.
+   A filled config.js is used as-is. When that config is missing or its
+   url or anon key is empty, the page asks /api/account-config. If that
+   request fails or is not ready, the setup message shows and this file
+   returns before any Supabase call.
    Password reset reads the recovery session from the URL hash and
    writes a new password. It does not read or write devices or a mailbox.
    Deleting an account removes that identity. It does not rotate mesh
@@ -20,8 +22,10 @@
     if (el) el.hidden = true;
   }
 
-  function meshAccountConfig() {
-    var c = window.MESH_ACCOUNT;
+  var deployedConfig = null;
+  var deployedConfigLoad = null;
+
+  function readAccountConfig(c) {
     if (!c || typeof c.url !== "string" || typeof c.anonKey !== "string") return null;
     var url = c.url.trim().replace(/\/+$/, "");
     var key = c.anonKey.trim();
@@ -30,33 +34,67 @@
     return { url: url, anonKey: key };
   }
 
-  function meshAccountCall(path, opts) {
-    var cfg = meshAccountConfig();
-    if (!cfg) {
-      meshAccountShowSetup();
-      return Promise.resolve(null);
-    }
-    opts = opts || {};
-    var headers = {
-      apikey: cfg.anonKey,
-      Authorization: "Bearer " + cfg.anonKey,
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    };
-    if (opts.token) headers.Authorization = "Bearer " + opts.token;
-    if (opts.prefer) headers.Prefer = opts.prefer;
-    return fetch(cfg.url + path, {
-      method: opts.method || "POST",
-      headers: headers,
+  function meshAccountConfig() {
+    return readAccountConfig(window.MESH_ACCOUNT) || deployedConfig;
+  }
+
+  function loadAccountConfig() {
+    var existing = meshAccountConfig();
+    if (existing) return Promise.resolve(existing);
+    if (deployedConfigLoad) return deployedConfigLoad;
+    deployedConfigLoad = fetch("/api/account-config", {
+      method: "GET",
       credentials: "omit",
-      body: Object.prototype.hasOwnProperty.call(opts, "body") ? JSON.stringify(opts.body) : undefined
+      cache: "no-store",
+      headers: { Accept: "application/json" }
     }).then(function (res) {
       return res.text().then(function (text) {
         var data = null;
         if (text) {
-          try { data = JSON.parse(text); } catch (e) { data = { message: text }; }
+          try { data = JSON.parse(text); } catch (e) { data = null; }
         }
-        return { ok: res.ok, status: res.status, data: data };
+        if (!res.ok || !data || data.ready !== true) return null;
+        var cfg = readAccountConfig(data);
+        if (!cfg) return null;
+        deployedConfig = cfg;
+        return cfg;
+      }, function () {
+        return null;
+      });
+    }, function () {
+      return null;
+    });
+    return deployedConfigLoad;
+  }
+
+  function meshAccountCall(path, opts) {
+    return loadAccountConfig().then(function (cfg) {
+      if (!cfg) {
+        meshAccountShowSetup();
+        return Promise.resolve(null);
+      }
+      opts = opts || {};
+      var headers = {
+        apikey: cfg.anonKey,
+        Authorization: "Bearer " + cfg.anonKey,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      };
+      if (opts.token) headers.Authorization = "Bearer " + opts.token;
+      if (opts.prefer) headers.Prefer = opts.prefer;
+      return fetch(cfg.url + path, {
+        method: opts.method || "POST",
+        headers: headers,
+        credentials: "omit",
+        body: Object.prototype.hasOwnProperty.call(opts, "body") ? JSON.stringify(opts.body) : undefined
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          var data = null;
+          if (text) {
+            try { data = JSON.parse(text); } catch (e) { data = { message: text }; }
+          }
+          return { ok: res.ok, status: res.status, data: data };
+        });
       });
     });
   }
@@ -302,48 +340,49 @@
   }
 
   function deleteAccount() {
-    var cfg = meshAccountConfig();
-    if (!cfg) {
-      meshAccountShowSetup();
-      return Promise.resolve(null);
-    }
-    var session = loadSession();
-    if (!session) {
-      setStatus("Sign in before deleting an account.", "error");
-      return Promise.resolve(null);
-    }
-    if (!window.confirm("Delete this website account? Machines stay paired until token rotation is run locally.")) {
-      return Promise.resolve(null);
-    }
-    var button = document.getElementById("delete-account");
-    if (button) button.disabled = true;
-    setStatus("Deleting the account…");
-    return fetch("/api/delete-account", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        Accept: "application/json",
-        Authorization: "Bearer " + session.token
+    return loadAccountConfig().then(function (cfg) {
+      if (!cfg) {
+        meshAccountShowSetup();
+        return Promise.resolve(null);
       }
-    }).then(function (res) {
-      return res.text().then(function (text) {
-        if (res.status === 401) {
+      var session = loadSession();
+      if (!session) {
+        setStatus("Sign in before deleting an account.", "error");
+        return Promise.resolve(null);
+      }
+      if (!window.confirm("Delete this website account? Machines stay paired until token rotation is run locally.")) {
+        return Promise.resolve(null);
+      }
+      var button = document.getElementById("delete-account");
+      if (button) button.disabled = true;
+      setStatus("Deleting the account…");
+      return fetch("/api/delete-account", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer " + session.token
+        }
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          if (res.status === 401) {
+            clearSession();
+            setStatus("Sign in again before deleting an account.", "error");
+            if (button) button.disabled = false;
+            return;
+          }
+          if (!res.ok) {
+            setStatus("The account could not be deleted.", "error");
+            if (button) button.disabled = false;
+            return;
+          }
           clearSession();
-          setStatus("Sign in again before deleting an account.", "error");
-          if (button) button.disabled = false;
-          return;
-        }
-        if (!res.ok) {
-          setStatus("The account could not be deleted.", "error");
-          if (button) button.disabled = false;
-          return;
-        }
-        clearSession();
-        setStatus("Account deleted. The next sign-in fails. Machines were not changed.", "ok");
+          setStatus("Account deleted. The next sign-in fails. Machines were not changed.", "ok");
+        });
+      }, function () {
+        setStatus("The account could not be deleted.", "error");
+        if (button) button.disabled = false;
       });
-    }, function () {
-      setStatus("The account could not be deleted.", "error");
-      if (button) button.disabled = false;
     });
   }
 
@@ -355,7 +394,8 @@
     setStatus("Password updated. Sign in with the new one. This did not change anything on your machines.", "ok");
   }
 
-  if (page === "home") {
+  function paintSignedIn() {
+    if (page !== "home") return;
     var signedIn = loadSession();
     if (meshAccountConfig() && signedIn) {
       var who = signedIn.username ? "Signed in as " + signedIn.username + "." : "Signed in.";
@@ -363,6 +403,18 @@
     } else if (meshAccountConfig()) {
       setStatus("Sign in before deleting an account.", "error");
     }
+  }
+
+  loadAccountConfig().then(function (cfg) {
+    if (!cfg) {
+      meshAccountShowSetup();
+      return;
+    }
+    meshAccountHideSetup();
+    paintSignedIn();
+  });
+
+  if (page === "home") {
     var del = document.getElementById("delete-account");
     if (del) del.addEventListener("click", function () { deleteAccount(); });
   }
@@ -372,9 +424,15 @@
   if (page === "reset") form._recovery = recoveryFromUrl();
   form.addEventListener("submit", function (ev) {
     ev.preventDefault();
-    if (page === "sign-up") signUp(form);
-    else if (page === "sign-in") signIn(form);
-    else if (page === "forgot") forgot(form);
-    else if (page === "reset") resetPassword(form);
+    loadAccountConfig().then(function (cfg) {
+      if (!cfg) {
+        meshAccountShowSetup();
+        return;
+      }
+      if (page === "sign-up") signUp(form);
+      else if (page === "sign-in") signIn(form);
+      else if (page === "forgot") forgot(form);
+      else if (page === "reset") resetPassword(form);
+    });
   });
 })();
