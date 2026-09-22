@@ -25,7 +25,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 4 | ~1,300 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 118 | ~11,400 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `scripts/` | 119 | ~11,500 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
@@ -76,7 +76,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `PairMachineView.swift` | M | Onboarding. Two fields, because everything else is derivable: the machine's address and a code it prints. The code buys the real token over `/pair/claim`, and… | — |
 | `PairingScanner.swift` | S | Camera-based reader for a `meshwatch://pair` QR, opened from inside the pairing sheet | — |
 | `PhoneConnectivity.swift` | S | Phone side of the relay: receives commands from the watch, forwards the latest mesh snapshot to the watch via WatchConnectivity (option A — the watch never… | check-relay-receiver, check-watch-scrollback |
-| `RemoteScreenView.swift` | XL | the phone's Remote tab: live screen, trackpad gestures, chords and the key bar, driving meshd /screen.jpg and /input | check-inspect-crop, check-mesh-chords, check-remote-screen-gestures |
+| `RemoteScreenView.swift` | XL | the phone's Remote tab: live screen, trackpad gestures, chords and the key bar, driving meshd /screen.jpg and /input | check-inspect-crop, check-mesh-chords, check-remote-screen-gestures, check-trackpad-drag |
 | `ShellSafeText.swift` | S | Undo iOS smart punctuation on text that is going to reach a shell | — |
 | `TerminalView.swift` | L | the Terminal tab: session list, the session screen (chat or the native terminal), New Session sheet, and the built-apps screen | check-harness-picker, check-native-terminal-keys, check-phone-input-and-wake, check-watch-terminal-wiring |
 | `VoiceInput.swift` | S | the one voice-input sheet. | — |

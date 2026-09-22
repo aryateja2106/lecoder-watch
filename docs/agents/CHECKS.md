@@ -99,6 +99,7 @@
 | `check-tmux-restart.sh` | the daemon can be restarted more than once |
 | `check-token-rotate.sh` | End-to-end proof of `mesh token rotate` against a throwaway MESH_HOME |
 | `check-trackpad-clicks.swift` | Full-pad trackpad: single tap = left click, second tap inside the window = right click |
+| `check-trackpad-drag.sh` | The remote screen's trackpad turned every pointer move into a drag on a real phone, and no simulator run… |
 | `check-usage-alert-identity.sh` | The usage-alert dedup key must be exactly as fine-grained as the banner the user reads |
 | `check-voice-accumulate.sh` | VoiceSegments self-check: pure accumulation logic for streaming speech recognition (pause mid-sentence,… |
 | `check-watch-scrollback.swift` | Two properties of the watch terminal that cannot be checked by running it — a view is needed for that — but… |
