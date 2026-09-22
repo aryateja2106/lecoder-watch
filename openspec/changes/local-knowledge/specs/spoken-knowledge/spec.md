@@ -347,7 +347,7 @@ After `speak: true` with local `MESH_STT` and local `MESH_TTS` returns `spoken` 
 
 ### Requirement: GET /knowledge?q= matches a title or a body and returns only id and title
 
-`GET /knowledge?q=` SHALL match the title or the body, without case, and SHALL return only `{ id, title }` for each note. A missing or empty `q` SHALL return every note as `{ id, title }`. A query with no match SHALL return `{ notes: [] }`. A remote URL, a scheme, a protocol-relative value, or any string containing `://` MUST be answered with 400 and MUST NOT be opened. A pairing-code match and a hosts.json match MUST NOT return those bodies. `POST /agent-note` SHALL still draft only the matching paper note to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A command without confirm MUST NOT run. `server.ts` was not edited. `handleKnowledge` is still one call. The check runs with the gateway key unset. This behavior is pull request 195. Daemon CI is green on `1238daa`. Apps (Xcode) is still pending on that tip (check run `35736830546`). An agent MUST NOT claim both jobs are green, MUST NOT rebuild this search, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once. This does not prove a microphone or a speaker. Pull request 194 (tip `cfe2b17`) already named pull request 193.
+`GET /knowledge?q=` SHALL match the title or the body, without case, and SHALL return only `{ id, title }` for each note. A missing or empty `q` SHALL return every note as `{ id, title }`. A query with no match SHALL return `{ notes: [] }`. A remote URL, a scheme, a protocol-relative value, or any string containing `://` MUST be answered with 400 and MUST NOT be opened. A pairing-code match and a hosts.json match MUST NOT return those bodies. `POST /agent-note` SHALL still draft only the matching paper note to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A command without confirm MUST NOT run. `server.ts` was not edited. `handleKnowledge` is still one call. The check runs with the gateway key unset. This behavior is pull request 195. Daemon CI and Xcode CI are both green on `1238daa` (check run `35736830546`). An agent MUST NOT rebuild this search, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once. This does not prove a microphone or a speaker. Pull request 194 (tip `cfe2b17`) already named pull request 193.
 
 #### Scenario: A query matches the title or the body
 
@@ -394,6 +394,5 @@ After `speak: true` with local `MESH_STT` and local `MESH_TTS` returns `spoken` 
 #### Scenario: The search does not prove a microphone or a speaker
 
 - **WHEN** `sh scripts/check-local-note-search.sh` passes on `127.0.0.1:8898` at `1238daa` with the gateway key unset
-- **THEN** the agent records that spare-daemon check, that daemon CI is green on `1238daa`, and that apps (Xcode) is still pending on check run `35736830546`
+- **THEN** the agent records that spare-daemon check and that daemon CI and Xcode CI are both green on `1238daa` (check run `35736830546`)
 - **AND** the agent does not claim a microphone or a speaker was proven
-- **AND** the agent does not claim both CI jobs are green
