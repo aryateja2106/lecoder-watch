@@ -34,7 +34,7 @@ import { stat, mkdir, readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   linuxInjectEvents, linuxInputStatus, linuxClipboard, linuxVolume, linuxSystemAction,
-  linuxCaptureScreen, linuxScreenStatus, linuxListApps, linuxActivateApp,
+  linuxCaptureScreen, linuxScreenStatus, linuxListApps, linuxActivateApp, linuxOpenTerminal, linuxOpenLauncher,
 } from "./input-linux";
 
 const IS_MAC = process.platform === "darwin";
@@ -533,6 +533,24 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
   }
   if (path === "/apps" && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as any;
+    // Two verbs a phone reaches for before any app name: a terminal, and the machine's own
+    // launcher (Spotlight / Raycast on a Mac, rofi / ulauncher / whatever MESH_LAUNCHER says
+    // on Linux) — so a person's existing launcher habit works from the phone unchanged.
+    if (body?.terminal === true) {
+      const result = IS_MAC ? await activateApp("Terminal") : await linuxOpenTerminal();
+      return json(result, result.ok ? 200 : 400);
+    }
+    if (body?.launcher === true) {
+      if (IS_MAC) {
+        // MESH_LAUNCHER names the chord (cmd+space by default; "option+space" for Raycast).
+        const chord = (process.env.MESH_LAUNCHER || "cmd+space").split("+").map((s) => s.trim()).filter(Boolean);
+        const key = chord.pop() ?? "space";
+        const result = await injectEvents([{ t: "key", key, mods: chord }]);
+        return json(result, result.ok ? 200 : 400);
+      }
+      const result = await linuxOpenLauncher();
+      return json(result, result.ok ? 200 : 400);
+    }
     const result = await activateApp(String(body?.activate ?? ""));
     return json(result, result.ok ? 200 : 400);
   }

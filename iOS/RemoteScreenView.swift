@@ -97,7 +97,7 @@ final class RemoteScreenModel: ObservableObject {
 
     private static let staleAfter: TimeInterval = 8
 
-    private var client: MeshClient { MeshClient(machine: machine, capabilities: capabilities) }
+    var client: MeshClient { MeshClient(machine: machine, capabilities: capabilities) }
     private var pump: Task<Void, Never>?
     private var clock: Task<Void, Never>?
     private var flush: Task<Void, Never>?
@@ -544,6 +544,36 @@ final class RemoteScreenModel: ObservableObject {
         mods.removeAll()
     }
 
+    // MARK: Apps and launchers
+
+    /// The verbs a thumb reaches for before any app name. Each says what happened: a
+    /// launcher that is not installed is an answer, not a silent no-op.
+    func openTerminal() {
+        Task {
+            do { try await client.openTerminal(); flash("Terminal opened on \(machine.host)") }
+            catch let e as MeshClient.MeshError { flash(e.reason ?? "Couldn't open a terminal") }
+            catch { flash("Couldn't reach \(machine.host)") }
+        }
+    }
+
+    func openLauncher() {
+        Task {
+            do { try await client.openLauncher(); flash(isMac ? "Launcher" : "Launcher on \(machine.host)") }
+            catch let e as MeshClient.MeshError { flash(e.reason ?? "No launcher on \(machine.host)") }
+            catch { flash("Couldn't reach \(machine.host)") }
+        }
+    }
+
+    func launch(_ name: String) {
+        Task {
+            do { try await client.activateApp(name); flash(name) }
+            catch let e as MeshClient.MeshError { flash(e.reason ?? "Couldn't open \(name)") }
+            catch { flash("Couldn't reach \(machine.host)") }
+        }
+    }
+
+    var isMac: Bool { (platform ?? "darwin").hasPrefix("darwin") }
+
     // MARK: Clipboard and view
 
     func recenterPointer() {
@@ -763,6 +793,7 @@ struct TrackpadSurface: UIViewRepresentable {
 struct RemoteScreenView: View {
     @StateObject private var remote: RemoteScreenModel
     @State private var keyboardUp = false
+    @State private var launching = false
     /// Every overlay gone, leaving the picture. Tapping the picture brings them back —
     /// which is why this mode does not click: it is the "just show me the Mac" mode.
     @State private var chromeHidden = false
@@ -791,6 +822,13 @@ struct RemoteScreenView: View {
         .overlay(alignment: .bottomTrailing) {
             if !chromeHidden && !keyboardUp { floatingControls.padding(12) }
         }
+        // Two monitors are two pictures, not one wide one: the daemon captures one display
+        // per frame, and a side-by-side composite would halve what a phone can read. The
+        // chips switch; the pointer, the zoom and the keyboard all follow the chosen one.
+        .overlay(alignment: .top) {
+            if !chromeHidden, remote.displays.count > 1 { displayChips.padding(.top, 8) }
+        }
+        .sheet(isPresented: $launching) { LaunchSheet(remote: remote) }
         // Sits above the system keyboard (the safe area moves with it): modifiers, escapes
         // and arrows — the keys a phone keyboard does not have.
         .safeAreaInset(edge: .bottom) {
@@ -1004,15 +1042,21 @@ struct RemoteScreenView: View {
             }
             .disabled(remote.inputBlocked)
             .accessibilityLabel("Keyboard")
+            // Find and open anything on the machine — the phone's own Spotlight.
+            Button { launching = true } label: {
+                Image(systemName: "magnifyingglass").frame(width: 40, height: 40)
+            }
+            .disabled(remote.inputBlocked)
+            .accessibilityLabel("Open an app")
+            // The one ⋯ on this screen: the pointer's own actions here, everything about the
+            // machine (clipboard, windows, displays) under the title bar's.
             Menu {
                 Button { remote.click("right") } label: { Label("Right click", systemImage: "cursorarrow.click.badge.clock") }
                 Button { remote.click("middle") } label: { Label("Middle click", systemImage: "cursorarrow.click.2") }
+                Divider()
                 Button { remote.recenterPointer() } label: { Label("Recenter pointer", systemImage: "scope") }
                 Button { remote.resetZoom() } label: { Label("Fit to screen", systemImage: "arrow.down.right.and.arrow.up.left") }
-                Button {
-                    chromeHidden = true
-                    remote.flash("Tap the screen to bring the controls back")
-                } label: { Label("Hide controls", systemImage: "arrow.up.left.and.arrow.down.right") }
+                Button { remote.openTerminal() } label: { Label("Open a terminal", systemImage: "terminal") }
             } label: {
                 Image(systemName: "ellipsis").frame(width: 40, height: 40)
             }
@@ -1023,9 +1067,32 @@ struct RemoteScreenView: View {
         .glassEffect(.regular, in: .capsule)
     }
 
+    private var displayChips: some View {
+        HStack(spacing: 4) {
+            ForEach(remote.displays) { d in
+                Button {
+                    remote.activeDisplay = d.index
+                } label: {
+                    Text(d.main == true ? "Main" : "Display \(d.index)")
+                        .font(.caption.weight(remote.activeDisplay == d.index ? .bold : .regular))
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+                .background(remote.activeDisplay == d.index ? Color.accentColor.opacity(0.35) : Color.clear, in: Capsule())
+            }
+        }
+        .padding(3)
+        .glassEffect(.regular, in: .capsule)
+    }
+
     // MARK: Keyboard
 
-    private static let modifiers = [("⇧", "shift"), ("⌃", "ctrl"), ("⌥", "option"), ("⌘", "cmd")]
+    /// The modifier row is the machine's, not the phone's: a Mac has ⌘ ⌥ ⌃ ⇧, a Linux
+    /// desktop has Ctrl Alt Super ⇧ — same wire names, so a saved chord means the same
+    /// thing on both, but the caps a person reads match the keyboard in front of the machine.
+    private static let macModifiers = [("⇧", "shift"), ("⌃", "ctrl"), ("⌥", "option"), ("⌘", "cmd")]
+    private static let linuxModifiers = [("⇧", "shift"), ("Ctrl", "ctrl"), ("Alt", "option"), ("Super", "meta")]
+    private var modifiers: [(String, String)] { remote.isMac ? Self.macModifiers : Self.linuxModifiers }
     // "space" is here because this bar is the only way to reach the OS input path — the
     // text field types *into* whatever has focus, so ⌥Space (Raycast) and ⌘Space were
     // literally unsendable from the phone without it. Both hosts know the name: keycode
@@ -1062,12 +1129,18 @@ struct RemoteScreenView: View {
         HStack(spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(Self.modifiers, id: \.1) { label, key in
+                    // A held modifier is a filled key, not a tinted one: the state has to
+                    // read at a glance while the other hand finds the letter.
+                    ForEach(modifiers, id: \.1) { label, key in
+                        let held = remote.mods.contains(key)
                         Button(label) { remote.toggleMod(key) }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.borderedProminent)
                             .controlSize(.small)
-                            .tint(remote.mods.contains(key) ? .orange : .primary)
-                            .fontWeight(remote.mods.contains(key) ? .bold : .regular)
+                            .tint(held ? Color.orange : Color(.tertiarySystemFill))
+                            .foregroundStyle(held ? Color.white : Color.primary)
+                            .fontWeight(held ? .bold : .regular)
+                            .accessibilityLabel(Self.spokenModifiers[key] ?? key)
+                            .accessibilityValue(held ? "held" : "")
                     }
                     Divider().frame(height: 18)
                     ForEach(Self.specials, id: \.1) { label, key in
@@ -1075,15 +1148,25 @@ struct RemoteScreenView: View {
                             .buttonStyle(.bordered).controlSize(.small).tint(.primary)
                     }
                     Divider().frame(height: 18)
+                    // The machine's launcher and a terminal, one tap each; then the chords.
                     // send(), not pressKey(): a chord carries its own modifiers and must
                     // not consume the sticky ones the user is part-way through setting.
+                    Button { remote.openLauncher() } label: { Image(systemName: "sparkle.magnifyingglass") }
+                        .buttonStyle(.bordered).controlSize(.small).tint(.primary)
+                        .accessibilityLabel("Launcher")
+                    Button { remote.openTerminal() } label: { Image(systemName: "terminal") }
+                        .buttonStyle(.bordered).controlSize(.small).tint(.primary)
+                        .accessibilityLabel("Open a terminal")
                     Menu {
                         ForEach(Self.chords, id: \.0) { label, key, mods in
-                            Button(label) { remote.send([.key(key, mods)]) }
-                                .accessibilityLabel(Self.spoken(key, mods))
+                            Button(label) {
+                                remote.send([.key(key, mods)])
+                                remote.flash("\(label) sent")
+                            }
+                            .accessibilityLabel(Self.spoken(key, mods))
                         }
                     } label: {
-                        Text("chords").font(.caption)
+                        Text(remote.isMac ? "⌘…" : "Ctrl…").font(.caption)
                     }
                     .buttonStyle(.bordered).controlSize(.small).tint(.primary)
                 }
@@ -1107,13 +1190,6 @@ struct RemoteScreenView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button { remote.recenterPointer() } label: {
-                    Label("Recenter pointer", systemImage: "scope")
-                }
-                Button { remote.resetZoom() } label: {
-                    Label("Fit to screen", systemImage: "arrow.down.right.and.arrow.up.left")
-                }
-                .disabled(remote.zoom == 1)
                 Button {
                     chromeHidden = true
                     remote.flash("Tap the screen to bring the controls back")
@@ -1274,5 +1350,70 @@ final class KeyCaptureView: UIView, UIKeyInput {
             if let name { onKey?(name); handled = true }
         }
         if !handled { super.pressesBegan(presses, with: event) }
+    }
+}
+
+
+// MARK: - Launch sheet
+
+/// The phone's Spotlight for a machine: search what is running and what is installed,
+/// tap to bring it forward or start it. Reads `/apps` once per open — a machine has a few
+/// dozen apps, and a search field over a list is faster than any grid.
+private struct LaunchSheet: View {
+    @ObservedObject var remote: RemoteScreenModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var apps: AppList?
+    @State private var query = ""
+    @State private var failure: String?
+
+    private var running: [MacApp] {
+        (apps?.running ?? []).filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
+    }
+    private var installed: [String] {
+        let runningNames = Set((apps?.running ?? []).map(\.name))
+        return (apps?.installed ?? []).filter { !runningNames.contains($0) && (query.isEmpty || $0.localizedCaseInsensitiveContains(query)) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button { remote.openTerminal(); dismiss() } label: { Label("Terminal", systemImage: "terminal") }
+                    Button { remote.openLauncher(); dismiss() } label: {
+                        Label(remote.isMac ? "Spotlight / Raycast" : "The machine's launcher", systemImage: "sparkle.magnifyingglass")
+                    }
+                }
+                if !running.isEmpty {
+                    Section("Running") {
+                        ForEach(running, id: \.name) { app in
+                            Button { remote.launch(app.name); dismiss() } label: {
+                                HStack {
+                                    Text(app.name)
+                                    Spacer()
+                                    if app.front == true { Text("front").font(.caption2).foregroundStyle(.secondary) }
+                                }
+                            }
+                        }
+                    }
+                }
+                if !installed.isEmpty {
+                    Section("Installed") {
+                        ForEach(installed.prefix(80), id: \.self) { name in
+                            Button { remote.launch(name); dismiss() } label: { Text(name) }
+                        }
+                    }
+                }
+                if let failure { Text(failure).font(.caption).foregroundStyle(.secondary) }
+            }
+            .searchable(text: $query, prompt: "Find an app on \(remote.machine.host)")
+            .navigationTitle("Open")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Done") { dismiss() } }
+            .task {
+                do { apps = try await remote.client.apps() }
+                catch { failure = "Couldn't list apps on \(remote.machine.host)." }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }

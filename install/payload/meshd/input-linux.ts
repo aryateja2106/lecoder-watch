@@ -8,7 +8,7 @@
 // Wayland box actually joins the mesh. Windows/displays stay unsupported here; apps are
 // the X client list (xprop), activated with xdotool.
 import { existsSync } from "node:fs";
-import { readFile, unlink } from "node:fs/promises";
+import { readFile, readdir, unlink } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -312,7 +312,64 @@ export async function linuxListApps() {
     if (title && seen.get(cls)) seen.get(cls)!.name = `${cls} — ${title}`.slice(0, 80);
   }
   const running = [...seen.values()];
-  return { ok: true, front: running.find((a) => a.front)?.bundleID, running, installed: [] as string[] };
+  return { ok: true, front: running.find((a) => a.front)?.bundleID, running, installed: await installedDesktopApps() };
+}
+
+/// Names of the apps a launcher would offer: every .desktop entry with a Name= and an Exec=
+/// that is not NoDisplay. Read once per request — it is a few hundred small files.
+const DESKTOP_DIRS = [
+  "/usr/share/applications", "/usr/local/share/applications", "/var/lib/snapd/desktop/applications",
+  `${process.env.HOME ?? ""}/.local/share/applications`, `${process.env.HOME ?? ""}/.local/share/flatpak/exports/share/applications`,
+];
+async function desktopEntries(): Promise<Array<{ id: string; name: string; exec: string }>> {
+  const out: Array<{ id: string; name: string; exec: string }> = [];
+  for (const dir of DESKTOP_DIRS) {
+    const files = await readdir(dir).catch(() => [] as string[]);
+    for (const f of files) {
+      if (!f.endsWith(".desktop")) continue;
+      const text = await readFile(join(dir, f), "utf8").catch(() => "");
+      const main = text.split("\n[")[0];   // the [Desktop Entry] group only
+      if (/^NoDisplay=true/m.test(main) || /^Type=(?!Application)/m.test(main)) continue;
+      const name = main.match(/^Name=(.+)$/m)?.[1]?.trim();
+      const exec = main.match(/^Exec=(.+)$/m)?.[1]?.replace(/%[a-zA-Z%]/g, "").trim();
+      if (name && exec) out.push({ id: f.replace(/\.desktop$/, ""), name, exec });
+    }
+  }
+  return out;
+}
+async function installedDesktopApps(): Promise<string[]> {
+  const names = new Set((await desktopEntries()).map((e) => e.name));
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+/// Start a program the desktop way — detached from the daemon, on the display, with the
+/// user's session environment — so it outlives this request and shows up on screen.
+async function launchDetached(command: string): Promise<boolean> {
+  try {
+    Bun.spawn(["/bin/sh", "-c", `nohup ${command} >/dev/null 2>&1 &`], { env: ENV, stdout: "ignore", stderr: "ignore", stdin: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/// A terminal window, whichever one this desktop has. "Open a terminal fast" from the
+/// phone is the one launch worth its own verb.
+export async function linuxOpenTerminal() {
+  for (const t of ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "alacritty", "kitty", "xterm"]) {
+    if (await has(t)) return (await launchDetached(t)) ? { ok: true, launched: t } : { ok: false, error: `could not start ${t}` };
+  }
+  return { ok: false, error: "no terminal emulator found" };
+}
+
+/// The machine's own launcher (Spotlight's role): MESH_LAUNCHER in ~/.mesh/meshd.env wins
+/// (`rofi -show drun`, `ulauncher-toggle`, `albert toggle`…), else the first one installed.
+export async function linuxOpenLauncher() {
+  const configured = process.env.MESH_LAUNCHER?.trim();
+  if (configured) return (await launchDetached(configured)) ? { ok: true, launched: configured } : { ok: false, error: `could not start ${configured}` };
+  const known: Array<[string, string]> = [["rofi", "rofi -show drun"], ["ulauncher-toggle", "ulauncher-toggle"], ["albert", "albert toggle"], ["wofi", "wofi --show drun"], ["dmenu_run", "dmenu_run"]];
+  for (const [bin, cmd] of known) if (await has(bin)) return (await launchDetached(cmd)) ? { ok: true, launched: bin } : { ok: false, error: `could not start ${bin}` };
+  return { ok: false, error: "no launcher installed — apt install rofi, or set MESH_LAUNCHER in ~/.mesh/meshd.env" };
 }
 
 /// Bring a running app's window to the front by class (what linuxListApps reports as
@@ -326,7 +383,15 @@ export async function linuxActivateApp(name: string) {
     found = (await run(["xdotool", "search", "--onlyvisible", by, query])).out.trim().split("\n")[0];
     if (found) break;
   }
-  if (!found) return { ok: false, error: `no window for ${query}` };
+  if (!found) {
+    // Not running: launch it from its .desktop entry (by Name or id), the way a launcher would.
+    const q = query.toLowerCase();
+    const entry = (await desktopEntries()).find((e) => e.name.toLowerCase() === q || e.id.toLowerCase() === q)
+      ?? (await desktopEntries()).find((e) => e.name.toLowerCase().startsWith(q));
+    if (!entry) return { ok: false, error: `no window or app named ${query}` };
+    const cmd = (await has("gtk-launch")) ? `gtk-launch ${entry.id}` : entry.exec;
+    return (await launchDetached(cmd)) ? { ok: true, launched: entry.name } : { ok: false, error: `could not start ${entry.name}` };
+  }
   const r = await run(["xdotool", "windowactivate", "--sync", found]);
   return r.code === 0 ? { ok: true, activated: query } : { ok: false, error: r.stderr.trim() || "could not activate" };
 }

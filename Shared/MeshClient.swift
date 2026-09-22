@@ -424,6 +424,19 @@ struct MeshClient {
         _ = try await request("/apps", method: "POST", body: body)
     }
 
+    /// Open a terminal window on the machine (Terminal.app, or the desktop's emulator).
+    func openTerminal() async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["terminal": true])
+        _ = try await request("/apps", method: "POST", body: body)
+    }
+
+    /// Open the machine's own launcher — Spotlight/Raycast on a Mac, rofi/ulauncher/… on
+    /// Linux (MESH_LAUNCHER in ~/.mesh/meshd.env picks it).
+    func openLauncher() async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["launcher": true])
+        _ = try await request("/apps", method: "POST", body: body)
+    }
+
     // MARK: - Chat (meshd 0.6+, capability "chat")
 
     /// Structured transcript for a session, replacing client-side regex over

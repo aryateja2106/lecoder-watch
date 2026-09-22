@@ -59,11 +59,11 @@
 | GET | `/resumable` | token | handoff.ts:275 |
 | GET | `/screen.jpg` | token | input.ts:507 |
 | ANY | `/stats` | token | server.ts:1356 |
-| POST | `/system` | token | input.ts:539 |
+| POST | `/system` | token | input.ts:557 |
 | ANY | `/tailnet` | token | server.ts:1357 |
 | ANY | `/usage` | token | server.ts:1359 |
-| GET | `/volume` | token | input.ts:544 |
-| POST | `/volume` | token | input.ts:544 |
+| GET | `/volume` | token | input.ts:562 |
+| POST | `/volume` | token | input.ts:562 |
 | POST | `/wake` | token | server.ts:1346 |
 
 ### `meshd/cmux-bridge.ts` (its own listener)
@@ -107,16 +107,16 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `doctor` | — (nothing gates it) | no |
 | `wake` | MeshStore.swift:892 | no |
 | `screenRegion` | MeshClient.swift:219, RemoteView.swift:323, RemoteScreenView.swift:110 | yes |
-| `openUrl` | MeshClient.swift:533 | yes |
-| `power` | MeshClient.swift:516, ContentView.swift:693 | yes |
-| `laPush` | MeshClient.swift:551 | yes |
+| `openUrl` | MeshClient.swift:546 | yes |
+| `power` | MeshClient.swift:529, ContentView.swift:693 | yes |
+| `laPush` | MeshClient.swift:564 | yes |
 | `sessionStatus` | — (nothing gates it) | yes |
 | `paste` | MeshClient.swift:300, RemoteScreenView.swift:111 | yes |
 | `captureJoin` | MeshClient.swift:280, WatchMeshStore.swift:552 | yes |
 | `redact` | ExposedSecretsScreen.swift:43, ExposedSecretsScreen.swift:84 | no |
 | `chat` | TerminalView.swift:1125 | no |
 | `apps` | TerminalView.swift:120 | no |
-| `handoff` | MeshClient.swift:572, MeshClient.swift:581, MeshClient.swift:593 | no |
+| `handoff` | MeshClient.swift:585, MeshClient.swift:594, MeshClient.swift:606 | no |
 | `brain` | — (nothing gates it) | no |
 
 ## Watch → phone relay commands
