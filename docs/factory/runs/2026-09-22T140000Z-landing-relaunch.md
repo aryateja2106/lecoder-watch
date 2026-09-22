@@ -84,6 +84,25 @@ recorded, and the commands are in the commit message.
 - The preview pane's screenshots do not always composite a playing video; check
   `readyState`/`paused` in the console rather than believing a black rectangle.
 
+## Higgsfield, and why nothing it made is on the page
+
+Arya asked for the official skill pack to be used and there are 593 credits on the Pro
+workspace. All eight `higgsfield-*` skills are already installed at the repo's current
+version (0.12.0) in `~/.agents/skills`, which every CLI on this machine symlinks, so
+there was nothing to vendor — the pack is live, and `higgsfield workspace set` selected
+the Private workspace.
+
+Two `hero_banner` cards were generated from the real watch and terminal screenshots
+(`hf_20260922_163004_fb142080…png`, `hf_20260922_163005_c4f326c5…png`). Both are
+beautiful and **neither is shippable**: the model re-renders the screens, so the phone
+shows a generic green `neofetch`/`htop` terminal and the watch shows a "Trackpad /
+Connected" control that does not exist in our app. A launch card is read as a product
+shot; publishing one would be showing a product we do not have. The OG image stays the
+real watch capture.
+
+Where generated imagery does fit later: environment and lighting only, with our real
+screens composited in afterwards — or brand work that never depicts the UI.
+
 ## Gate
 
 ```
