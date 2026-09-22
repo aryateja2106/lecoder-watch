@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, a spoken replace with `speak: true` drafts that new transcript to a held file, `GET /knowledge?q=` matches a title or a body and returns only `{ id, title }`, a local `q` on `POST /agent-note` selects one note when `id` is absent, `POST /knowledge` accepts `{ pdf, title? }` whose body is stdout from a local `MESH_PDF` executable, a stub `MESH_PDF` sentence that includes "summarize this paper" becomes one note that a query with no id drafts to one relative file, and `POST /knowledge` accepts `{ pdf, title?, speak? }` where `spoken: true` requires a local `MESH_TTS` that exits 0, `POST /agent-note` accepts an optional local `ask` that the model receives after the note and a blank line, and a stub `MESH_PDF` sentence spoken by a local `MESH_TTS` can then be asked, an allowed ask saves the model reply as one knowledge note, and a later local query that matches only that saved reply drafts it to one relative file. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, pull request 193, pull request 195, pull request 197, pull request 198, pull request 199, and pull request 200 do not prove a microphone or a speaker. Pull request 200 does not prove a speaker played audio. Pull request 201 and pull request 202 do not prove a microphone or a speaker. Pull request 202 does not prove a speaker played audio or that a paper was read. Pull request 203 does not prove a speaker or that a paper was read. Pull request 204 does not prove a speaker or that a paper was read. Pull request 198 and pull request 199 also do not prove that a paper was read. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, a spoken replace with `speak: true` drafts that new transcript to a held file, `GET /knowledge?q=` matches a title or a body and returns only `{ id, title }`, a local `q` on `POST /agent-note` selects one note when `id` is absent, `POST /knowledge` accepts `{ pdf, title? }` whose body is stdout from a local `MESH_PDF` executable, a stub `MESH_PDF` sentence that includes "summarize this paper" becomes one note that a query with no id drafts to one relative file, and `POST /knowledge` accepts `{ pdf, title?, speak? }` where `spoken: true` requires a local `MESH_TTS` that exits 0, `POST /agent-note` accepts an optional local `ask` that the model receives after the note and a blank line, and a stub `MESH_PDF` sentence spoken by a local `MESH_TTS` can then be asked, an allowed ask saves the model reply as one knowledge note, a later local query that matches only that saved reply drafts it to one relative file, and a later ask of that saved reply sends the reply, a blank line, and the ask. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, pull request 193, pull request 195, pull request 197, pull request 198, pull request 199, and pull request 200 do not prove a microphone or a speaker. Pull request 200 does not prove a speaker played audio. Pull request 201 and pull request 202 do not prove a microphone or a speaker. Pull request 202 does not prove a speaker played audio or that a paper was read. Pull request 203 does not prove a speaker or that a paper was read. Pull request 204 does not prove a speaker or that a paper was read. Pull request 205 does not prove a speaker or that a paper was read. Pull request 198 and pull request 199 also do not prove that a paper was read. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
 
 ## ADDED Requirements
 
@@ -592,7 +592,7 @@ The new commit on pull request 202 SHALL add only `scripts/check-spoken-note-ask
 
 ### Requirement: An allowed ask saves the model reply
 
-An allowed local ask SHALL save the model reply as one knowledge note. The title SHALL be the ask, clipped to 200 characters, and the held file SHALL still be written. A missing or whitespace ask MUST add no note. A pairing-code ask, or a reply the route would hold, MUST write neither the file nor a draft. `server.ts` was not edited. This behavior is pull request 203. The files are `install/payload/meshd/agent-note.ts`, `install/payload/meshd/knowledge.ts`, `scripts/check-note-reply-save.sh`, and `scripts/check-spoken-note-ask.sh`. The coordinator re-ran `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, `sh scripts/check-note-ask.sh`, and `sh scripts/check-pdf-note-speak.sh` on `127.0.0.1:8898` at `92d776c` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`). Daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`). Daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`). Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). This does not prove a speaker or that a paper was read.
+An allowed local ask SHALL save the model reply as one knowledge note. The title SHALL be the ask, clipped to 200 characters, and the held file SHALL still be written. A missing or whitespace ask MUST add no note. A pairing-code ask, or a reply the route would hold, MUST write neither the file nor a draft. `server.ts` was not edited. This behavior is pull request 203. The files are `install/payload/meshd/agent-note.ts`, `install/payload/meshd/knowledge.ts`, `scripts/check-note-reply-save.sh`, and `scripts/check-spoken-note-ask.sh`. The coordinator re-ran `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, `sh scripts/check-note-ask.sh`, and `sh scripts/check-pdf-note-speak.sh` on `127.0.0.1:8898` at `92d776c` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`). Daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`). Daemon CI and Xcode CI are both green on handoff tip `3ad2a7d` (check run `35752461256`). Daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`). Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). This does not prove a speaker or that a paper was read.
 
 #### Scenario: An allowed ask saves one note and the held file
 
@@ -621,7 +621,7 @@ An allowed local ask SHALL save the model reply as one knowledge note. The title
 
 ### Requirement: A saved reply can be drafted alone
 
-Pull request 204 SHALL add only `scripts/check-reply-note-draft.sh`. A later local query that matches only the saved reply SHALL draft that reply to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A query that matches the original note and the reply MUST return 409 and MUST write nothing. A pairing-code ask MUST save no note, and a query for that ask MUST NOT draft. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-reply-note-draft.sh`, `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, and `sh scripts/check-note-ask.sh` on `127.0.0.1:8898` at `4d6ddbb` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `4d6ddbb` (check run `35750995976`). Apps (Xcode) is still running on that run. Do not claim both jobs are green on `4d6ddbb`. An agent MUST NOT claim both jobs are green on `4d6ddbb` and MUST NOT claim CI on `fb0aab8`. Daemon CI is green on handoff tip `97278aa` (check run `35751643074`). Apps (Xcode) is still running on that run. Do not claim both jobs are green on `97278aa`. An agent MUST NOT claim both jobs are green on `97278aa`. Daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`). Daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`). Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). Daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`). This does not prove a speaker or that a paper was read.
+Pull request 204 SHALL add only `scripts/check-reply-note-draft.sh`. A later local query that matches only the saved reply SHALL draft that reply to one relative file. That file SHALL be mode 600 and SHALL NOT be executed. A query that matches the original note and the reply MUST return 409 and MUST write nothing. A pairing-code ask MUST save no note, and a query for that ask MUST NOT draft. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-reply-note-draft.sh`, `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, and `sh scripts/check-note-ask.sh` on `127.0.0.1:8898` at `4d6ddbb` and all exited 0. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI and Xcode CI are both green on `4d6ddbb` (check run `35750995976`). An agent MUST NOT claim CI on `fb0aab8`. An agent MUST NOT claim both jobs are green on `97278aa`. Daemon CI is green on handoff tip `97278aa` (check run `35751643074`). Apps (Xcode) was cancelled on that run. Do not claim both jobs are green on `97278aa`. An agent MUST NOT claim both jobs are green on `97278aa`. Daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`). Daemon CI and Xcode CI are both green on handoff tip `3ad2a7d` (check run `35752461256`). Daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`). Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). Daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`). This does not prove a speaker or that a paper was read.
 
 #### Scenario: One matching reply drafts one file
 
@@ -639,14 +639,53 @@ Pull request 204 SHALL add only `scripts/check-reply-note-draft.sh`. A later loc
 - **THEN** the daemon saves no note
 - **AND** a query for that ask does not draft
 
-#### Scenario: Daemon-only CI on the reply note draft is not both jobs green
+#### Scenario: Green CI on the reply note draft is not a speaker or a paper
 
 - **WHEN** `sh scripts/check-reply-note-draft.sh`, `sh scripts/check-note-reply-save.sh`, `sh scripts/check-spoken-note-ask.sh`, and `sh scripts/check-note-ask.sh` pass on `127.0.0.1:8898` at `4d6ddbb`
-- **THEN** the agent records that all four checks exited 0 and that daemon CI is green on `4d6ddbb` (check run `35750995976`) while apps (Xcode) is still running
-- **AND** the agent does not claim both jobs are green on `4d6ddbb`
+- **THEN** the agent records that all four checks exited 0 and that Daemon CI and Xcode CI are both green on `4d6ddbb` (check run `35750995976`).
+- **AND** the agent records that Daemon CI and Xcode CI are both green on handoff tip `3ad2a7d` (check run `35752461256`).
+- **AND** the agent records that Daemon CI is green on handoff tip `97278aa` (check run `35751643074`). Apps (Xcode) was cancelled on that run. Do not claim both jobs are green on `97278aa`.
 - **AND** the agent does not claim CI on `fb0aab8`
-- **AND** the agent records that daemon CI is green on handoff tip `97278aa` (check run `35751643074`) while apps (Xcode) is still running
-- **AND** the agent does not claim both jobs are green on `97278aa`
-- **AND** the agent records that daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`), on `b4ce6ac` (check run `35748224297`), and on `ae83b95` (check run `35747085140`)
-- **AND** the agent records that Daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`).
+- **AND** the agent records that daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`), on `b4ce6ac` (check run `35748224297`), on `ae83b95` (check run `35747085140`), and on `92d776c` (check run `35749935885`)
+- **AND** the agent does not claim a speaker or that a paper was read
+
+### Requirement: A saved reply can be asked
+
+Pull request 205 SHALL add only `scripts/check-saved-reply-ask.sh`. An allowed ask SHALL save one reply note. A later `POST /agent-note` with no id, a `q` that matches only that reply, and a new local ask SHALL send the saved reply, a blank line, and the ask. That call SHALL write one relative file, mode 600, not executed, and SHALL save the new reply as another note. A pairing-code second ask MUST write nothing. A second ask containing `://` MUST return 400 and MUST write nothing. A `q` that matches the original note and the saved reply MUST return 409 and MUST write nothing. The list SHALL stay `{ id, title }`. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-saved-reply-ask.sh`, `sh scripts/check-reply-note-draft.sh`, and `sh scripts/check-note-ask.sh` on `127.0.0.1:8898` at `294d252` and all exited 0. The gateway key was unset. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `294d252` (check run `35753000381`). Apps (Xcode) is still running on that run. Do not claim both jobs are green on `294d252`. An agent MUST NOT claim both jobs are green on `294d252`. Daemon CI and Xcode CI are both green on `4d6ddbb` (check run `35750995976`). Daemon CI and Xcode CI are both green on handoff tip `3ad2a7d` (check run `35752461256`). Daemon CI and Xcode CI are both green on handoff tip `8fce18d` (check run `35749871537`). Daemon CI and Xcode CI are both green on `b4ce6ac` (check run `35748224297`). Daemon CI and Xcode CI are both green on `ae83b95` (check run `35747085140`). Daemon CI and Xcode CI are both green on `92d776c` (check run `35749935885`). Daemon CI is green on handoff tip `97278aa` (check run `35751643074`). Apps (Xcode) was cancelled on that run. Do not claim both jobs are green on `97278aa`. This does not prove a speaker or that a paper was read.
+
+#### Scenario: A later ask sends the saved reply
+
+- **WHEN** `POST /agent-note` has no id, a `q` that matches only the saved reply, and a new local ask
+- **THEN** the model receives the saved reply, a blank line, and the ask
+- **AND** the draft is one relative file, mode 600, and is not executed
+- **AND** the new reply is saved as another note
+
+#### Scenario: A pairing-code second ask writes nothing
+
+- **WHEN** the second ask is a pairing code
+- **THEN** the daemon writes nothing
+
+#### Scenario: A second ask containing a scheme is 400
+
+- **WHEN** the second ask contains `://`
+- **THEN** the daemon returns 400 and writes nothing
+
+#### Scenario: A query that matches the note and the reply is 409
+
+- **WHEN** `q` matches the original note and the saved reply
+- **THEN** the daemon returns 409 and writes nothing
+
+#### Scenario: The list stays id and title
+
+- **WHEN** the daemon lists notes after the saved reply ask
+- **THEN** each note is `{ id, title }`
+
+#### Scenario: Daemon-only CI on the saved reply ask is not both jobs green
+
+- **WHEN** `sh scripts/check-saved-reply-ask.sh`, `sh scripts/check-reply-note-draft.sh`, and `sh scripts/check-note-ask.sh` pass on `127.0.0.1:8898` at `294d252`
+- **THEN** the agent records that all three checks exited 0 and that daemon CI is green on `294d252` (check run `35753000381`) while apps (Xcode) is still running
+- **AND** the agent does not claim both jobs are green on `294d252`
+- **AND** the agent records that Daemon CI and Xcode CI are both green on `4d6ddbb` (check run `35750995976`).
+- **AND** the agent records that Daemon CI and Xcode CI are both green on handoff tip `3ad2a7d` (check run `35752461256`).
+- **AND** the agent records that Daemon CI is green on handoff tip `97278aa` (check run `35751643074`). Apps (Xcode) was cancelled on that run. Do not claim both jobs are green on `97278aa`.
 - **AND** the agent does not claim a speaker or that a paper was read
