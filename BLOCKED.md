@@ -51,3 +51,15 @@ layout, recorded in PUBLISHED.md; nothing below was done unattended:
    `aryateja2106/lecoder-mconnect` (the old CLI the lesearch.ai waitlist page linked).
 3. Keep: `LeSearch-AI/mesh-install`, `LeSearch-AI/.github`.
 Reply with the list you approve and the archives get applied in one pass.
+
+## TestFlight 0.8.0 upload (the only way a stranger gets the phone app)
+`sh scripts/release-testflight-asc.sh --dry-run` runs clean on this tree (0.8.0, build
+202609221043) but stops on purpose: App Store Connect still holds the stray **1.0**
+pre-release, so shipping 0.8.0 is a version downgrade — testers on 1.0 must delete and
+reinstall, which wipes their Keychain and every pairing. The publish plan (T20, owner
+human) already names the decision and the hatch:
+`MESH_ALLOW_VERSION_DOWNGRADE=1 sh scripts/release-testflight-asc.sh --external`
+(then Beta App Review for the public link `lesearch.ai/beta`). The upload can also hang
+on a Keychain dialog for `asc` (memory: shell-slowness-and-asc-keychain) — keep the Mac
+unlocked. Until then the public link serves the 2026-08-27 build; the landing and
+getting-started say "TestFlight" and are correct the moment this lands.
