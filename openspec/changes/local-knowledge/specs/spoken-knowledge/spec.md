@@ -724,3 +724,40 @@ Pull request 206 SHALL add only `scripts/check-second-reply-draft.sh`. `agent-no
 - **AND** the agent records that daemon CI and Xcode CI are both green on handoff tip `3ad2a7d` (check run `35752461256`)
 - **AND** the agent records that daemon CI is green on handoff tip `97278aa` (check run `35751643074`). Apps (Xcode) was cancelled on that run. Do not claim both jobs are green on `97278aa`.
 - **AND** the agent does not claim a speaker or that a paper was read
+
+### Requirement: A model class can be drafted
+
+Pull request 207 SHALL add only `scripts/check-model-class.sh`. `agent-note.ts` was not edited. An allowed ask with a loopback model SHALL return `modelClass` `local`, SHALL write one relative file, mode 600, not executed, and the JSON MUST NOT contain `sk-secret`. A pairing-code ask with `https://llm.example/v1` SHALL return `modelClass` `user-subscription`, `held` true, and `draft` null, and the stub hit count MUST NOT increase. An allowed ask with `http://user:sk-secret@127.0.0.1:<stub>/v1` SHALL return `modelClass` `local`. The stub URL MUST have no userinfo. The stub body and the JSON MUST NOT contain `sk-secret`. The knowledge list SHALL stay `{ id, title }`. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-model-class.sh` and `sh scripts/check-second-reply-draft.sh` on `127.0.0.1:8898` at `48f1970` and both exited 0. The gateway key was unset. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. An agent MUST NOT claim both jobs are green on `48f1970`. Daemon CI is green on `48f1970` (check run `35757430003`). Apps (Xcode) is still running on that run. Do not claim both jobs are green on `48f1970`. Daemon CI and Xcode CI are both green on `0de3ba9` (check run `35754767900`). This does not prove a speaker or that a paper was read.
+
+#### Scenario: A loopback model is local
+
+- **WHEN** an allowed ask uses a loopback model
+- **THEN** the response `modelClass` is `local`
+- **AND** the draft is one relative file, mode 600, and is not executed
+- **AND** the JSON has no `sk-secret`
+
+#### Scenario: A pairing-code ask on a remote model is held
+
+- **WHEN** the ask is a pairing code and the model is `https://llm.example/v1`
+- **THEN** `modelClass` is `user-subscription`, `held` is true, and `draft` is null
+- **AND** the stub hit count does not increase
+
+#### Scenario: Userinfo is stripped from a loopback model
+
+- **WHEN** an allowed ask uses `http://user:sk-secret@127.0.0.1:<stub>/v1`
+- **THEN** `modelClass` is `local`
+- **AND** the stub URL has no userinfo
+- **AND** the stub body and the JSON do not contain `sk-secret`
+
+#### Scenario: The list stays id and title
+
+- **WHEN** the daemon lists notes after the model class draft
+- **THEN** each note is `{ id, title }`
+
+#### Scenario: Daemon-only CI on the model class draft is not both jobs green
+
+- **WHEN** `sh scripts/check-model-class.sh` and `sh scripts/check-second-reply-draft.sh` pass on `127.0.0.1:8898` at `48f1970`
+- **THEN** the agent records that both checks exited 0 and that daemon CI is green on `48f1970` (check run `35757430003`) while apps (Xcode) is still running
+- **AND** the agent does not claim both jobs are green on `48f1970`
+- **AND** the agent records that daemon CI and Xcode CI are both green on `0de3ba9` (check run `35754767900`)
+- **AND** the agent does not claim a speaker or that a paper was read
