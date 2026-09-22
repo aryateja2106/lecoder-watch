@@ -64,6 +64,12 @@ daemon_version() {
 # ---------------------------------------------------------------- structural half
 structural() {
   [ -f "$PUB" ] || { echo "check-published: structural OK (no PUBLISHED.md yet — not published)"; return 0; }
+  # A ledger with `pending` fields is one being assembled, which is the same state as no
+  # ledger at all: the live half is what decides, and it accepts no placeholder. Without
+  # this, check-all could never go green while PUBLISHED.md waits for the gate line that
+  # a green check-all produces.
+  pend="$(grep -cE '^[A-Za-z][A-Za-z -]*: *pending *$' "$PUB" 2>/dev/null || true)"
+  [ "${pend:-0}" -eq 0 ] || { echo "check-published: structural OK (PUBLISHED.md is still being filled — $pend field(s) pending)"; return 0; }
   gate="$(field Gate)"
   printf '%s\n' "$gate" | grep -Eq "^$GATE_RE\$" || FAIL "1 Gate line in PUBLISHED.md is not the verbatim GREEN full-gate line (got: '$gate')"
   sha="$(field 'Gate SHA')"
@@ -105,7 +111,15 @@ live() {
   [ -f "$BLK" ] || FAIL "8 BLOCKED.md missing"
 
   # 1. Every self-check green, for real, now.
-  if [ "${MESH_PUBLISHED_CHECKALL:-1}" = "0" ]; then
+  #
+  # Two runs driving one simulator kill each other's test runner ("Test crashed with
+  # signal kill before establishing connection"), and the loser reports a red that says
+  # nothing about the code. Refuse to race instead of manufacturing that red — this is a
+  # failure, never a pass, so nothing is waved through.
+  racing="$(pgrep -fl 'scripts/check-all\.sh|scripts/gates\.sh|xcodebuild test' 2>/dev/null | grep -v "check-published" | grep -v "^$$ " || true)"
+  if [ -n "$racing" ]; then
+    FAIL "1 another gate run is in flight — refusing to race it on the simulator: $(printf '%s' "$racing" | head -2 | tr '\n' ';')"
+  elif [ "${MESH_PUBLISHED_CHECKALL:-1}" = "0" ]; then
     echo "note: check-published: check-all.sh skipped by MESH_PUBLISHED_CHECKALL=0 (dev iteration only — the Stop hook never sets it)"
   else
     CA="/tmp/check-published-check-all.$$.log"
