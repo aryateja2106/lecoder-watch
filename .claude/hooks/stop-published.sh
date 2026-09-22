@@ -21,6 +21,22 @@ STATE="$STATE_DIR/check-published-stop.json"
 LIMIT=25
 mkdir -p "$STATE_DIR"
 
+# Never start a check-all while one is already running: both drive the same simulator and
+# kill each other's test runner, so the collision gets blamed on the code. Block the stop
+# with the honest reason instead — a run in flight is not a pass.
+RACING="$(pgrep -fl 'scripts/check-all\.sh|scripts/gates\.sh|scripts/release-mesh-install\.sh|xcodebuild test' 2>/dev/null | grep -v stop-published || true)"
+if [ -n "$RACING" ]; then
+  REASON="A gate run is already in flight, so check-published was not started (it would race it on the simulator). Wait for that run, then stop again:
+$(printf '%s' "$RACING" | head -3)"
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg r "$REASON" '{decision:"block", reason:$r}'
+  else
+    printf '%s\n' "$REASON" >&2
+    exit 2
+  fi
+  exit 0
+fi
+
 # Run the finish line. Its stdout is the evidence either way.
 OUT="$(MESH_PUBLISHED=1 sh "$ROOT/scripts/check-published.sh" 2>&1)"
 RC=$?
