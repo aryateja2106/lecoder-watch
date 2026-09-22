@@ -20,14 +20,13 @@
 //
 // id alone is the note, as before. When id is absent, q selects one note
 // with the same local-text refusal as knowledge search and the listNotes
-// needle. One match continues this draft path. The existing route holds a
-// pairing-code or hosts.json note before any model call. No match is 404.
-// Several matches are 409 and are not guessed. An empty q is 400.
+// needle. One match continues this draft path. A note that names a pairing
+// code, hosts.json, a mesh token, or .mesh/token is held before any model
+// call. No match is 404. Several matches are 409 and are not guessed. An
+// empty q is 400.
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { constants as fsConstants } from "node:fs";
 import { chmod, lstat, mkdir, open, realpath, stat } from "node:fs/promises";
-import { filter } from "../../../experiments/jev-routing/filter.ts";
-import { route } from "../../../experiments/jev-routing/route.ts";
 import { listNotes, readNote } from "./knowledge";
 
 const FILE_MODE = 0o600;
@@ -119,20 +118,18 @@ function localNeedle(raw: string): string | null {
   return text.toLowerCase();
 }
 
-// The route already holds a note that would move a pairing code or
-// hosts.json. A clean note is allowed through to the draft path.
-function heldByRoute(note: { id: string; title: string; body: string }): boolean {
-  try {
-    return route(filter(note), {
-      surface: "terminal-text",
-      choice: "allow-local-tool",
-      score: 0.2,
-      boolean: true,
-      confidence: 0.6,
-    }) !== "allow-local-tool";
-  } catch {
-    return true;
-  }
+// Same asks the local route holds, matched here so the daemon does not
+// import that module. A clean note continues to the draft path.
+function textHeldByRoute(value: string): boolean {
+  if (/\bmesh\s+(?:token|bearer)\b/i.test(value)) return true;
+  if (/\bpairing\s+code\b/i.test(value)) return true;
+  if (/\bhosts\.json\b/.test(value)) return true;
+  if (/\.mesh\/token\b/.test(value)) return true;
+  return false;
+}
+
+function heldByRoute(note: { title: string; body: string }): boolean {
+  return textHeldByRoute(note.title) || textHeldByRoute(note.body);
 }
 
 function noteText(note: { title: string; body: string }): string {
