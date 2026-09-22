@@ -67,3 +67,43 @@ task inside a mesh session, posted Started/Completed events (the notify path), a
 ## Screens
 
 `shots/`: `iphone-machines-paired.png` (fleet adopted via the pairing deep link), `iphone-home-lesearch-ai.png`, `ipad.jpg` (compat mode), `watch*.png`, `mac-menubar.png`, `jetson-screen.jpg`, `pi-screen.jpg`.
+
+---
+
+# Morning 2026-09-22 — usability pass (Arya's review of the night)
+
+*Same branch, commits 76fb865 → 6a288d3. Fleet redeployed from the worktree (mac / pi / jetson all 0.6.0, 28 caps). Live run: `check-morning-run2.txt` beside this file.*
+
+## Verified fixed (each measured before and after on the fleet + simulators)
+
+| Complaint | Root cause | Fix | Proof |
+|---|---|---|---|
+| "I tapped Approve and Claude never got it" / "never saw Allow/Reject" | Three things. (1) `/agents` rows never carried the agent's `sessionId`, and the phone matches an event to a row by id FIRST and never by name when the event has one — so no row ever owned a Claude Code event and the *Needs you* card could not appear. (2) The phone adopted the Pi as `pi` from the Mac's hosts.json while its daemon says `arya-pi`; `hostNamesMatch` has no rule for that, so the machine lookup returned nil before the id match ran. (3) A key aimed at a pane the mux could not resolve vanished into discarded stderr and answered `ok:true`. | daemon stamps `sessionId` on rows; `snapshotMachineMatching` also matches the hostname `/stats` reports; pane sends retried on the session, real failures reported | `check-approve-path.sh`, `check-attention-hostname.swift`; live: prompt on the Pi → *Needs you* row + bell badge → Continue → `/tmp/approve-test-3.txt` written |
+| Monitor full of "Claude stopped" nobody asked for | claude-mem's observer session posts a Stop per turn of every real session | dropped at ingest (cwd under `/.claude-mem/`) | `check-approve-path.sh` |
+| Watch "Continue" typed `continue` into bash | sent unconditionally | only for coding-agent sessions, with "Types 'continue' into Claude" under it | build + code review (watch-sim tap-through was unreliable this morning — see below) |
+| Power lists disagree phone vs watch; Linux lacked sleep / screensaver | two hand-written lists | one `Shared/PowerActions.swift`; Linux gains `sleep`, `screensaver`, `screenshot`; Mac gains `screenshot` (PNG to clipboard, for handing to an agent) | `check-linux-desktop.sh` live on pi + jetson |
+| Linux: no app list; clipboard write hung 15 s | apps were macOS-only; xclip's forked child held the daemon's pipe | `/apps` from the X client list (xprop), activate via xdotool; clipboard 30–50 ms | `check-linux-desktop.sh` live |
+| Web console dead | browsers stamp `Origin` on same-origin POSTs → every click 401'd; AND the phone reloaded the page on every store poll (`web.url` is nil until commit) | same-origin recognised; compare against the requested URL | console streams frames and posts clicks from the phone (Pi verified) |
+| Terminal: scroll to the bottom for everything, no font size, key bar noise, keyboard pops up | read-only card stack with no scroll anchor; xterm `fontSize:12` hard-coded, `term.focus()` after every bar tap | output first + `.defaultScrollAnchor(.bottom)` + follows unless you scrolled up; A−/A+ and pinch (persisted, shared with the xterm page); keyboard toggle; rare keys under ⋯ | built, on the sim |
+| No multi-line, no paste, no Shift+Tab / Shift+Enter | single-line composer; daemon key list lacked them | multi-line composer (Return = newline), paste button, one bracketed paste + Enter; daemon `shift-tab` (BTab) and `shift-enter` (M-Enter = ESC CR, verified inside Claude Code on the Pi) | `check-approve-path.sh`; `mesh key pi-claude shift-tab -H pi` cycled the mode live |
+| Apps as a toolbar afterthought; Monitor in the tab bar | — | Machines · Terminal · Remote · **Apps** · Settings; Monitor = bell on every tab with the waiting count; bar minimises on scroll | on the sim |
+| Machine page leads with seven green ticks | — | Screen & control + Files first, sessions tappable, Setup = one line that opens only when red, Diagnostics collapsed | on the sim |
+| Which device is an app for? Is it installed? | no data | daemon reads the bundle (UIDeviceFamily / SupportedPlatforms / embedded Watch app) → iPhone/iPad/Watch/Mac/Vision glyphs; an app with a URL scheme gets **Open**, and iOS refusing the open is the honest "not installed here" | Apps tab on the sim |
+| Education | — | Guides (pairing, Developer Mode on iPhone and Watch, signing team, Mac permissions, Linux desktop, overnight agents) from Settings and the empty states | on the sim |
+| **Sessions vanished after an upgrade** (found this morning) | systemd's cgroup kill took the tmux server with the daemon | `KillMode=process` in the unit; applied live on both boxes | Pi: 1 session before upgrade, 1 after |
+| `mesh pair -H pi` minted a code for the Mac | `-H` ignored | says where to run `mesh pair` (the daemon only mints on itself, by design) | CLI |
+
+## Honest answers to the questions
+
+- **Can I watch a video on the Mac from my watch?** No, and not close. Measured: the daemon produces a frame in ~135 ms on the Mac (`screencapture` + `sips`), ~170 ms on the Jetson → a hard ceiling of ~7 fps before the network; the phone polls sequentially every 350 ms (~2.5 fps), the watch every 2 s (0.5 fps), JPEG, no audio. Video needs a different pipeline: ScreenCaptureKit → H.264 (VideoToolbox) → HLS from the daemon → AVPlayer on the watch. That is a real slice (1–2 days), not a tweak; nothing of it exists yet. What DID improve: Linux frames now honour `width` (78 KB → 2 KB at 400 px), so the watch decodes 30× less.
+- **fx + Jev.** `fx` 0.0.10 is installed on the Mac and listed in the harness catalogue (it appears in New Session once the doctor sees it on a machine's PATH). `AI_GATEWAY_API_KEY` is in `~/.config/secrets.env` (the key was pasted in chat — rotate it when convenient). Two blockers on your side: the gateway answers `customer_verification_required` until a card is on the Vercel team (unlocks the free credits), and **Jev is an `evaluation` model, not a chat model** — `fx` cannot drive it as its agent brain, and `typesafe-ai/jev` is absent from `fx models`. Jev's place in this product is the daemon's decisions: "is this event actionable?", "how risky is this command?" (`RiskClassifier`), "which tool does this wrist phrase mean?" (`intent/`), meeting transcript → task list. None of that is wired yet.
+- **Transcripts → tasks → Google Tasks / Reminders.** Not built. The shape: `mesh kb put` the transcript, a Jev pass (Choice per segment: task / decision / question / noise; Noul: is it for me) and an `EventKit` reminder write from the phone. Post-launch.
+- **Quick-action sounds on the Mac with nothing visible.** The watch's Quick grid sends chords (⌘Space, ⌃↑, F11, ⌘⌥Esc…) through `/input` and the helper has no reply channel — an unbound chord makes the frontmost app beep. Not changed; tested nothing on your live Mac, as asked.
+
+## Needs your hands
+
+1. **Re-pair the phone (and the watch) to `pi`** — its token was rotated again this morning because a `cat` of the unit file printed it into this session's log. `mesh pair` on the Pi, scan.
+2. Vercel: add a card to the AI Gateway team if you want fx/Jev to answer at all.
+3. Rotate the gateway key you pasted in chat (`vck_…`), then update `AI_GATEWAY_API_KEY` in `~/.config/secrets.env`.
+4. Watch: this morning's tap-through on the watch simulator was unreliable (taps landing late or on the wrong row); the Session-screen Continue gate and the new System list are built and reviewed, not tapped. A real wrist check takes a minute.
+5. The rest of the night's TODO above still stands (TestFlight, skill promotion, `/pair/new` default, CI wiring, installer share cleanup).

@@ -18,6 +18,10 @@ Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.s
 | S9 brains | DONE (86ae97e, 1cc9681): /brain ported; ollama qwen3:4b on jetson (12 s tool call), qwen3:1.7b on pi (23-40 s); edge0-8b on Mac :8001 tool call 3.8 s via our patch; Needle 26/28 tool, 0.7 s, 34 MB; ADR written | check-brain.sh, check-intent.sh | OK |
 | S10 bearer on /pair/new | DONE opt-in (95d6406): loopback-trust.ts + MESHD_TRUST_LOOPBACK=0 covers /pair/new; default kept because check-token-rotate.sh mints tokenless (test edit = human) | check-pair-auth.sh | OK; token-rotate/pair/csrf/host-guard/auth/daemon-050 OK |
 | S11 suite + gates full + ADR | DONE — check-overnight.sh: every live check green (run-1 log beside this file; the two loop FAILs were the first-keystroke drop, fixed in 4a17d9d, 4/4 after); `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none` | check-overnight.sh | GREEN |
+| M1 morning: Jetson claude login (snapd reinstall → Chromium), Pi Claude loop, Apps library (647235a) | DONE | check-fleet.sh live | mac/pi/jetson input+screen ok |
+| M2 approve path + Linux desktop (76fb865) | DONE — deployed to mac/pi/jetson | check-approve-path.sh, check-linux-desktop.sh (live pi+jetson) | ok; Needs-you → Continue → file written on the Pi |
+| M3 usability (2395c0e): tabs, bell, machine page, terminal, composer, watch Continue gate, shared power list, KillMode=process, mesh pair -H | DONE | check-attention-hostname.swift + fast gate | GREEN; Pi session survived an upgrade |
+| M4 apps facts + Guides (9add399), console reload fix + fx (6a288d3) | DONE | check-product-spec, check-codemap, fast gate | GREEN |
 | S12 ship | DONE — fleet on the branch build (Mac backup ~/.mesh/backups/meshd-0.6.0-1790020360); draft PR https://github.com/aryateja2106/lecoder-watch/pull/133; files sent (Telegram unavailable — no token vars on this Mac) | | |
 
 ## Log

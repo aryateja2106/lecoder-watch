@@ -831,6 +831,31 @@ function syncHooks(payload: string): { updated: string[]; unchanged: number } {
   return { updated, unchanged };
 }
 
+/// The bridge's terminal page (rmux-bridge/public/index.html and its vendor files) is
+/// served from disk per request, so copying it is the whole upgrade — the bridge
+/// process keeps running. Left out until 2026-09-22, so `mesh upgrade` shipped a new
+/// terminal page to every Linux box (install.sh copies everything) and never to the Mac.
+function syncBridgePage(payload: string): { updated: string[]; unchanged: number } {
+  const from = join(payload, "rmux-bridge", "public"), to = join(MESH_HOME, "rmux-bridge", "public");
+  const updated: string[] = [];
+  let unchanged = 0;
+  if (!existsSync(from) || !existsSync(join(MESH_HOME, "rmux-bridge"))) return { updated, unchanged };
+  const walk = (dir: string, rel: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const a = join(dir, e.name), r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { walk(a, r); continue; }
+      if (!e.isFile()) continue;
+      const b = join(to, r);
+      if (existsSync(b) && Buffer.compare(readFileSync(a), readFileSync(b)) === 0) { unchanged++; continue; }
+      mkdirSync(join(to, rel), { recursive: true });
+      copyFileSync(a, b);
+      updated.push(r);
+    }
+  };
+  walk(from, "");
+  return { updated, unchanged };
+}
+
 const shq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
 /**
@@ -943,8 +968,10 @@ async function cmdUpgradeLocal(flags: Record<string, string>, bools: Set<string>
     backup = swapInMeshd(payload, oldDisk, epoch);
     const bin = syncBin(payload);
     const hooks = syncHooks(payload);
+    const page = syncBridgePage(payload);
     say(`  installed meshd ${newVersion}  (bin: ${bin.updated.length ? bin.updated.join(", ") : "no changes"}${bin.unchanged ? `, ${bin.unchanged} unchanged` : ""})`);
     if (hooks.updated.length) say(`  hooks: ${hooks.updated.join(", ")}`);
+    if (page.updated.length) say(`  terminal page: ${page.updated.join(", ")}`);
 
     if (noRestart) {
       say(`  --no-restart: ${MESH_HOME}/meshd is ${newVersion}, the running daemon is still ${oldRunning || "whatever it was"}`);
