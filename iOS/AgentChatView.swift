@@ -233,7 +233,19 @@ struct AgentChatView: View {
                                     .id(message.id)
                             }
                         } else {
-                            TerminalFallbackBlock(lines: rawLines).id("fallback")
+                            // Say why this is a terminal and not a conversation: the daemon
+                            // either has no transcript for this session or is too old to
+                            // produce one, and a silent switch reads as the Chat tab being
+                            // broken.
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label(messages.isEmpty
+                                      ? "No conversation to show yet — this is the session's screen."
+                                      : "This agent has no structured transcript, so this is its screen.",
+                                      systemImage: "terminal")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TerminalFallbackBlock(lines: rawLines).id("fallback")
+                            }
                         }
                         if let menu {
                             MenuCard(menu: menu, risk: decisionRisk,
@@ -242,6 +254,13 @@ struct AgentChatView: View {
                                          else { onSendKeys(menu.keys(toPick: k)) }
                                          hasResponded = true
                                          respondedEventId = latestEvent?.id
+                                         // Same feedback as Allow/Deny: without it a tap
+                                         // did nothing visible and invited a second one.
+                                         showSentLine = true
+                                         Task {
+                                             try? await Task.sleep(for: .seconds(5))
+                                             showSentLine = false
+                                         }
                                      },
                                      onEscape: { onSendKey("escape") })
                             .padding(.top, 14)
@@ -400,6 +419,16 @@ struct AgentChatView: View {
 
     // MARK: - Row rendering
 
+    /// The name of the tool call this result belongs to: the nearest `tool` row above it.
+    private func precedingToolName(for message: ChatMessage) -> String? {
+        guard message.role == "result", message.tool?.name == nil,
+              let index = messages.firstIndex(where: { $0.id == message.id }) else { return nil }
+        for earlier in messages[..<index].reversed() where earlier.role == "tool" {
+            return earlier.tool?.name
+        }
+        return nil
+    }
+
     @ViewBuilder
     private func messageRow(_ message: ChatMessage) -> some View {
         switch message.role {
@@ -408,7 +437,9 @@ struct AgentChatView: View {
                 ThinkingDisclosure(text: message.text, tint: agentKind.brandColor)
             }
         case "tool", "result":
-            ToolResultCard(message: message)
+            // A result row carries no tool name of its own, so four calls in a turn used to
+            // be four cards all saying "Result". Name it after the call it answers.
+            ToolResultCard(message: message, calledTool: precedingToolName(for: message))
         case "system":
             TerminalFallbackBlock(lines: [message.text])
         default:   // "user", "assistant", and anything future the daemon adds
@@ -834,6 +865,8 @@ private struct ThinkingDisclosure: View {
 /// full JSON blobs eating the screen before anyone had read a word of the reply.
 private struct ToolResultCard: View {
     let message: ChatMessage
+    /// The tool whose call this row answers, when the row itself does not say.
+    var calledTool: String? = nil
     @State private var expanded = false
 
     private var dotColor: Color {
@@ -845,7 +878,9 @@ private struct ToolResultCard: View {
     }
 
     private var titleText: String {
-        message.tool?.name ?? (message.role == "result" ? "Result" : "Tool")
+        message.tool?.name
+            ?? calledTool.map { message.role == "result" ? "\($0) · result" : $0 }
+            ?? (message.role == "result" ? "Result" : "Tool")
     }
 
     private var fullDetail: String {
