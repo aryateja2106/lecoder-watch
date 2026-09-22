@@ -1176,6 +1176,8 @@ struct MeshApp: Codable, Hashable, Identifiable {
     /// The app's own URL scheme when it declares one: the phone can launch it, and a
     /// successful launch is the only proof iOS gives that the app is installed here.
     var scheme: String?
+    /// Icon URL on the machine's token-free app folder, when the bundle had one.
+    var icon: String?
     var updated: String
 }
 
@@ -1575,4 +1577,121 @@ private func isShellPrompt(_ line: String) -> Bool {
     if "$%#>".contains(last) { return true }                       // bash / zsh / root / generic
     if line.hasSuffix("❯") || line.hasSuffix("→") { return true }  // starship / pure / zsh themes
     return false
+}
+
+// MARK: - Menus an agent is waiting on
+
+// Recognises a menu an agent's TUI is waiting on (Claude Code's numbered permission list,
+// its trust prompt, a y/N question) in the pane's last lines, and says which keys pick each
+// option. Hook events tell the phone THAT an agent is waiting; they never say what the
+// choices are, and the trust-folder prompt fires no hook at all. The choices are on screen,
+// in the text the daemon already ships. Parsing them here is what turns "Enter or Esc" into
+// the buttons a thumb needs — and every agent that prints a `❯`-marked list gets them.
+
+struct AgentMenu: Equatable {
+    struct Option: Equatable, Identifiable {
+        var id: Int { index }
+        /// 1-based position in the list — the number Claude Code prints, or the row.
+        let index: Int
+        let label: String
+    }
+
+    let options: [Option]
+    /// 1-based index of the option carrying the `❯` marker (what Enter would take).
+    let highlighted: Int
+    /// The line under the list, when the TUI printed one ("Enter to confirm · Esc to cancel").
+    let footer: String?
+    /// True for `[y/N]`-style questions: the answer is a typed letter, not a cursor move.
+    let typed: Bool
+
+    /// Keys, in order, that pick option `k` — cursor moves relative to the highlighted row,
+    /// then Enter. For a typed prompt the caller sends the letter as text instead.
+    func keys(toPick k: Int) -> [String] {
+        guard !typed, options.contains(where: { $0.index == k }) else { return [] }
+        let delta = k - highlighted
+        let moves = Array(repeating: delta > 0 ? "down" : "up", count: abs(delta))
+        return moves + ["enter"]
+    }
+
+    /// The typed answer for a y/N prompt ("y" / "n"), nil for cursor menus.
+    func text(toPick k: Int) -> String? {
+        guard typed, let option = options.first(where: { $0.index == k }) else { return nil }
+        return option.label.lowercased().hasPrefix("y") ? "y" : "n"
+    }
+
+    // Claude Code: `❯ 1. Yes` / `  2. Yes, and always allow …` / `  4. No`
+    // `›` is what Codex's TUI is expected to print; the class is one place on purpose.
+    private static let numbered = try! NSRegularExpression(pattern: #"^\s*(❯|›|>)?\s*(\d{1,2})\.\s+(\S.*)$"#)
+    // Trust prompt and other unnumbered lists: `❯ No, exit` / `  Yes, I trust this folder`
+    private static let marked = try! NSRegularExpression(pattern: #"^\s*(❯|›|>)\s+(\S.*)$"#)
+    private static let yesNo = try! NSRegularExpression(pattern: #"\((y/n|Y/n|y/N)\)\s*:?\s*$|\[(y/n|Y/n|y/N)\]\s*:?\s*$"#, options: [.caseInsensitive])
+    // Claude Code's footers, plus pi's `enter select • esc cancel`. See docs/agents/harnesses.md §D.
+    private static let footerWords = ["Enter to confirm", "Esc to cancel", "Tab to amend", "to cycle", "esc cancel", "enter select"]
+
+    /// The menu in the tail of `lines`, or nil when the screen shows no open question.
+    /// Only the last ~25 lines are read: an old menu further up was answered long ago.
+    static func parse(lines: [String]) -> AgentMenu? {
+        let tail = Array(lines.suffix(25)).map { $0.replacingOccurrences(of: "\u{1B}[[0-9;]*m", with: "", options: .regularExpression) }
+        // 1. Numbered list: contiguous `n.` rows counting up from 1, one of them marked.
+        var rows: [(index: Int, label: String, marked: Bool, line: Int)] = []
+        for (i, line) in tail.enumerated() {
+            if let m = numbered.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+               let n = Int(line[Range(m.range(at: 2), in: line)!]) {
+                let marked = m.range(at: 1).location != NSNotFound
+                let label = String(line[Range(m.range(at: 3), in: line)!]).trimmingCharacters(in: .whitespaces)
+                if let last = rows.last, n != last.index + 1 || i != last.line + 1 { rows.removeAll() }
+                if rows.isEmpty && n != 1 { continue }
+                rows.append((n, label, marked, i))
+            }
+        }
+        if rows.count >= 2, let marked = rows.first(where: { $0.marked }) {
+            let footer = footerLine(in: tail, after: rows.last!.line)
+            return AgentMenu(options: rows.map { Option(index: $0.index, label: $0.label) },
+                             highlighted: marked.index, footer: footer, typed: false)
+        }
+        // 2. A `❯` row with unnumbered siblings at the same indent (the trust prompt).
+        if let markedAt = tail.lastIndex(where: { marked.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil }) {
+            let markedLine = tail[markedAt]
+            let indent = markedLine.prefix { $0 == " " }.count
+            func sibling(_ s: String) -> String? {
+                let body = s.trimmingCharacters(in: .whitespaces)
+                guard !body.isEmpty, !isFooter(body), !body.allSatisfy({ "─-═".contains($0) }) else { return nil }
+                let ind = s.prefix { $0 == " " }.count
+                // A sibling sits where the marker's text starts (marker + space = 2 columns).
+                guard ind == indent + 2 || ind == indent else { return nil }
+                return body.hasPrefix("❯") || body.hasPrefix("›") || body.hasPrefix(">") ? nil : body
+            }
+            var block: [(label: String, marked: Bool)] = []
+            var i = markedAt - 1
+            while i >= 0, let s = sibling(tail[i]) { block.insert((s, false), at: 0); i -= 1 }
+            let markedLabel = markedLine.trimmingCharacters(in: .whitespaces).dropFirst().trimmingCharacters(in: .whitespaces)
+            block.append((markedLabel, true))
+            i = markedAt + 1
+            while i < tail.count, let s = sibling(tail[i]) { block.append((s, false)); i += 1 }
+            // Unnumbered lists must come with their footer: a typed prompt line ("❯ run the
+            // tests") followed by the status rows under it would otherwise read as a menu.
+            if block.count >= 2, let footer = footerLine(in: tail, after: i - 1) {
+                return AgentMenu(options: block.enumerated().map { Option(index: $0.offset + 1, label: $0.element.label) },
+                                 highlighted: (block.firstIndex { $0.marked } ?? 0) + 1, footer: footer, typed: false)
+            }
+        }
+        // 3. A trailing y/N question.
+        if let last = tail.last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
+           yesNo.firstMatch(in: last, range: NSRange(last.startIndex..., in: last)) != nil {
+            let defaultsYes = last.contains("Y/n")
+            return AgentMenu(options: [Option(index: 1, label: "Yes"), Option(index: 2, label: "No")],
+                             highlighted: defaultsYes ? 1 : 2, footer: last.trimmingCharacters(in: .whitespaces), typed: true)
+        }
+        return nil
+    }
+
+    private static func isFooter(_ s: String) -> Bool { footerWords.contains { s.contains($0) } }
+
+    private static func footerLine(in tail: [String], after line: Int) -> String? {
+        for s in tail.dropFirst(line + 1).prefix(4) {
+            let body = s.trimmingCharacters(in: .whitespaces)
+            if isFooter(body) { return body }
+        }
+        return nil
+    }
 }

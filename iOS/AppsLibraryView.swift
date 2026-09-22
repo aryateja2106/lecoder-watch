@@ -119,8 +119,23 @@ struct MeshAppRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: app.kind == "native" ? "iphone.badge.play" : "globe")
-                .foregroundStyle(app.kind == "native" ? Color.blue : Color.green)
+            // The app's own icon when the machine has one — the one thing that tells a
+            // person which app this is without reading. A glyph otherwise.
+            if let icon = app.icon, let url = URL(string: icon) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Color(.tertiarySystemFill)
+                }
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                Image(systemName: app.kind == "native" ? "iphone.badge.play" : "globe")
+                    .font(.title2)
+                    .foregroundStyle(app.kind == "native" ? Color.blue : Color.green)
+                    .frame(width: 44, height: 44)
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
             VStack(alignment: .leading, spacing: 3) {
                 Text(app.name).font(.headline)
                 Text([kindLabel, showHost ? host : nil, updatedLabel].compactMap { $0 }.joined(separator: " · "))

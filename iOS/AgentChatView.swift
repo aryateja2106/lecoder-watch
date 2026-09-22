@@ -126,6 +126,9 @@ struct AgentChatView: View {
     /// `client.send(key:)` and `AgentNotification.command(for:typed:)` use. A raw
     /// control byte in a text field is not how this app tells a session to stop.
     let onSendKey: (String) -> Void
+    /// Several keys in order, awaited one after another — a menu pick is "Down, Down,
+    /// Enter" and three fire-and-forget sends can arrive as "Enter, Down, Down".
+    let onSendKeys: ([String]) -> Void
 
     @State private var inputText = ""
     @State private var selectedArtifact: AgentArtifact?
@@ -212,6 +215,10 @@ struct AgentChatView: View {
 
     private var decisionRisk: RiskVerdict { classifyRisk(decisionText) }
 
+    /// The menu the TUI is showing right now, read off the pane. Present whether or not a
+    /// hook fired: the trust-folder prompt never posts one and still needs answering.
+    private var menu: AgentMenu? { AgentMenu.parse(lines: rawLines) }
+
     var body: some View {
         VStack(spacing: 0) {
             agentBanner
@@ -228,7 +235,18 @@ struct AgentChatView: View {
                         } else {
                             TerminalFallbackBlock(lines: rawLines).id("fallback")
                         }
-                        if awaitingDecision {
+                        if let menu {
+                            MenuCard(menu: menu, risk: decisionRisk,
+                                     onPick: { k in
+                                         if let text = menu.text(toPick: k) { onSendText(text + "\n") }
+                                         else { onSendKeys(menu.keys(toPick: k)) }
+                                         hasResponded = true
+                                         respondedEventId = latestEvent?.id
+                                     },
+                                     onEscape: { onSendKey("escape") })
+                            .padding(.top, 14)
+                            .id("decision")
+                        } else if awaitingDecision {
                             DecisionCard(
                                 text: decisionText,
                                 risk: decisionRisk,
@@ -541,6 +559,7 @@ struct AgentChatView: View {
     private var agentKeyStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
+                Button("⏎ Enter") { onSendKey("enter") }
                 Button("Esc") { onSendKey("escape") }
                 Button("⇧Tab") { onSendKey("shift-tab") }
                     .accessibilityHint("mode")
@@ -574,6 +593,60 @@ struct AgentChatView: View {
 //
 // Replaces per-message `[y/n]` / "Allow?" text matching: shown once, driven by the
 // session's own `status` field, not guessed from whatever a TUI happened to print.
+
+/// The agent's own choices as buttons. The highlighted one is what Enter would take and
+/// is drawn as such; every other row is the cursor moves plus Enter, sent in order.
+private struct MenuCard: View {
+    let menu: AgentMenu
+    let risk: RiskVerdict
+    let onPick: (Int) -> Void
+    let onEscape: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: risk.isDestructive ? "exclamationmark.triangle.fill" : "list.bullet.rectangle")
+                    .foregroundStyle(risk.isDestructive ? Color.red : Color.orange)
+                Text("Choose")
+                    .font(.subheadline.bold())
+                Spacer()
+                if let footer = menu.footer {
+                    Text(footer).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                }
+            }
+            ForEach(menu.options) { option in
+                Button { onPick(option.index) } label: {
+                    HStack {
+                        Text(option.label)
+                            .font(.caption.weight(option.index == menu.highlighted ? .bold : .regular))
+                            .multilineTextAlignment(.leading)
+                        Spacer()
+                        if option.index == menu.highlighted {
+                            Image(systemName: "return").font(.caption2)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(option.index == menu.highlighted ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+            Button(action: onEscape) {
+                Text("Esc")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(Color(.tertiarySystemFill))
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(14)
+        .background(Color.orange.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
 
 private struct DecisionCard: View {
     let text: String

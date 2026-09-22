@@ -209,7 +209,7 @@ through `LiveActivityController.swift`.
 
 | Screen | Job | Primary action | Reads |
 | --- | --- | --- | --- |
-| Machines tab | Every machine on one list with live stats; an offline machine is shown honestly, not hidden | Open a machine | `MeshStore` snapshots |
+| Machines tab | Every machine on one list with live stats and a **live thumbnail of its screen** (**0.6**; tap it to control — the Remote tab folded in here); an offline machine is shown honestly, not hidden | Open a machine / control its screen | `MeshStore.refresh` (progressive), `/screen.jpg?width=320` every 5 s while visible |
 | No machines | The first-run state | *Pair a machine* | — |
 | Machine detail | Setup state, power, daemon version, per-service status, diagnose, wake | Fix what `/doctor` says is wrong | `/doctor`, `/health`, `DaemonCapabilities` gaps |
 | Pair machine — `PairMachineView.swift`, `PairingScanner.swift` | Turn a code or a QR into a paired fleet | Scan / enter code | `/pair/claim` (returns the token **and every host in `hosts.json`**) |
@@ -217,9 +217,9 @@ through `LiveActivityController.swift`.
 | Monitor — the bell in every tab's top bar (**0.6**; it left the tab bar so Apps could have the slot) | Usage and limits per provider at the top, then events newest first; a row opens its session, a read-only row says the agent ran outside a LeSearch session; dismiss one or clear all | Read / open | `/usage`, `/events`, `Shared/LimitHelpers.swift` |
 | Sessions and new session | List sessions per machine; start one with a chosen CLI, working directory and task; resume a previous conversation (**0.6**). The agent list comes from `/doctor`'s `agents`. | *New session* | `/agents`, `/agents/new`, `/doctor` |
 | Session peek | Recent output of one session; the attention row when it is waiting | Answer / type | `sessionsNeedingAttention` |
-| Agent chat — `AgentChatView.swift` | A conversation with a running agent: bubbles, decision cards, tool-result cards, artifacts, thinking disclosure, quick-command pills (**0.6**) | Send / decide | `/chat`, `Shared/RiskClassifier.swift` for the decision cards |
+| Agent chat — `AgentChatView.swift` | A conversation with a running agent: bubbles, decision cards, tool-result cards, artifacts, thinking disclosure, quick-command pills (**0.6**). A menu the TUI is waiting on (Claude Code's numbered permission list, the trust prompt, a y/N question) is read off the pane and shown as buttons — Choose card — with Enter/Esc/arrows/⇧Tab in the key strip; multi-line composer with paste | Send / decide / pick | `/chat`, `Shared/RiskClassifier.swift` for the decision cards, `AgentMenu` in `Shared/Models.swift` for the choices |
 | Terminal tab — `TerminalView.swift` | A live terminal over the bridge; the fallback block when the bridge is unavailable | Type | bridge `:7820` (token cookie, **0.6**) |
-| Remote tab — `RemoteScreenView.swift` | Screen, trackpad gestures, zoom to a region that arrives sharp | Tap / drag / zoom | `/screen.jpg`, `screenRegion`, `Shared/ScreenZoom.swift` |
+| Screen & control — `RemoteScreenView.swift` | Screen, trackpad gestures, zoom to a region that arrives sharp; frames back-to-back (no fixed nap); the navigation back-swipe is off while the trackpad is up, so a drag to the right stays a drag (**0.6**) | Tap / drag / zoom | `/screen.jpg`, `screenRegion`, `/input` |
 | Files — `FileBrowserView.swift` | Browse and open files on a machine | Open | `/files` |
 | Apps tab — `AppsLibraryView.swift` | Every app an agent built, across every paired machine, grouped by name, newest first; "Less Search. More Agents." as the header line. Its own tab (**0.6**). Each build shows the devices it runs on (iPhone, iPad, Watch, Mac, Vision — read off the bundle by the daemon) and whether it is on this iPhone (proven by opening its URL scheme) | Open / Install | `/built-apps` (`platforms`, `scheme`) on each machine |
 | Guides — `GuidesView.swift` | The steps no app can do for the owner: pairing, Developer Mode on iPhone and Watch, signing team, Mac permissions, a Linux desktop, running an agent overnight (**0.6**) | Read | static; linked from Settings and the empty states |

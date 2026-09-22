@@ -69,10 +69,14 @@ export async function findClaudeTranscript(cwd: string): Promise<string | null> 
   return newestJsonl(join(CLAUDE_PROJECTS, claudeProjectSlug(cwd)), (n) => !n.startsWith("agent-"));
 }
 
-/// cursor-agent keeps `~/.cursor/projects/<cwd minus its leading slash, "/" → "-">/
-/// agent-transcripts/<chatId>/<chatId>.jsonl`, one `{role, message}` line per turn.
+/// cursor-agent keeps `~/.cursor/projects/<slug>/agent-transcripts/<chatId>/<chatId>.jsonl`,
+/// one `{role, message}` line per turn. The slug is every non-alphanumeric run of the cwd
+/// as one `-`, trimmed: `/Users/a/.cursor/worktrees/x` → `Users-a-cursor-worktrees-x`
+/// (measured against ~/.cursor/projects on 2026-09-22). The old "/" → "-" only rule
+/// kept the dot, so any cwd under a dotted folder — every `.claude/worktrees/*` — found
+/// no transcript at all.
 export function cursorProjectSlug(cwd: string): string {
-  return cwd.replace(/^\//, "").replace(/\//g, "-");
+  return cwd.replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
 }
 export async function findCursorTranscript(cwd: string): Promise<string | null> {
   const root = join(CURSOR_PROJECTS, cursorProjectSlug(cwd), "agent-transcripts");

@@ -144,9 +144,14 @@ final class RemoteScreenModel: ObservableObject {
         stale = false
         pump?.cancel()
         pump = Task { [weak self] in
+            // Ask for the next frame as soon as the last one is decoded — the daemon
+            // itself takes ~135 ms a frame (screencapture + sips), and a fixed 350 ms
+            // nap on top of that was the difference between ~2 fps and the ~5 the
+            // machine can give. The short pause is only there so a machine answering
+            // instantly (a cached error, a 503) does not turn into a hot loop.
             while !Task.isCancelled {
                 await self?.refreshScreen()
-                try? await Task.sleep(for: .milliseconds(350))
+                try? await Task.sleep(for: .milliseconds(40))
             }
         }
         clock?.cancel()
@@ -626,7 +631,7 @@ struct TrackpadSurface: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+        let view = TrackpadView()
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         let c = context.coordinator
@@ -690,8 +695,18 @@ struct TrackpadSurface: UIViewRepresentable {
 
         init(_ parent: TrackpadSurface) { self.parent = parent }
 
+        // Everything on the trackpad may run together — except the navigation stack's
+        // edge back-swipe, which is also a pan and ran WITH ours: a drag to the right
+        // that started near the left edge popped the screen mid-gesture. That one must
+        // wait for ours, and ours recognises on the first move, so it never fires here.
         func gestureRecognizer(_ g: UIGestureRecognizer,
-                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            !(other is UIScreenEdgePanGestureRecognizer)
+        }
+        func gestureRecognizer(_ g: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            other is UIScreenEdgePanGestureRecognizer
+        }
 
         @objc func pan(_ g: UIPanGestureRecognizer) {
             let t = g.translation(in: g.view)
@@ -1141,5 +1156,36 @@ struct RemoteScreenView: View {
                 .padding(.top, 8)
                 .transition(.opacity)
         }
+    }
+}
+
+
+/// The trackpad's own UIView. Its one extra job: while it is in a window, the navigation
+/// stack's edge back-swipe is off. A drag to the right that starts near the left edge is
+/// exactly that gesture, and it used to slide the screen you were controlling away
+/// mid-drag. Found from the window, not from a view controller: inside SwiftUI a child
+/// controller's `navigationController` is nil more often than not.
+final class TrackpadView: UIView {
+    private weak var disabledGesture: UIGestureRecognizer?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil {
+            if let pop = Self.popGesture(from: window?.rootViewController) {
+                pop.isEnabled = false
+                disabledGesture = pop
+            }
+        } else {
+            disabledGesture?.isEnabled = true
+            disabledGesture = nil
+        }
+    }
+
+    private static func popGesture(from root: UIViewController?) -> UIGestureRecognizer? {
+        guard let root else { return nil }
+        if let nav = root as? UINavigationController, let g = nav.interactivePopGestureRecognizer { return g }
+        if let presented = root.presentedViewController, let g = popGesture(from: presented) { return g }
+        for child in root.children.reversed() { if let g = popGesture(from: child) { return g } }
+        return nil
     }
 }

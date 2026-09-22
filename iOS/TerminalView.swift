@@ -677,7 +677,8 @@ private struct SessionPeekScreen: View {
                     onSendPaste: { text in
                         Task { await send(text: text, key: "enter", paste: true) }
                     },
-                    onSendKey: { key in Task { await send(key: key) } }
+                    onSendKey: { key in Task { await send(key: key) } },
+                    onSendKeys: { keys in Task { for key in keys { await send(key: key) } } }
                 )
                 .disabled(handoffInFlight)
             } else {
@@ -699,13 +700,7 @@ private struct SessionPeekScreen: View {
                         .padding(.horizontal, 18)
                         .padding(.vertical, 14)
                     }
-                    .defaultScrollAnchor(.bottom)
-                    .onAppear { proxy.scrollTo("terminal-output-tail", anchor: .bottom) }
-                    .onChange(of: visibleLines) { _, _ in
-                        if terminalFollowsBottom {
-                            withAnimation { proxy.scrollTo("terminal-output-tail", anchor: .bottom) }
-                        }
-                    }
+                    .defaultScrollAnchor(.top)
                 }
                 .background(Color(.systemGroupedBackground))
             }
@@ -845,23 +840,32 @@ private struct SessionPeekScreen: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    Text(visibleLines.joined(separator: "\n"))
-                        .font(.system(size: min(22, max(9, terminalFontSize)), design: .monospaced))
-                        .lineSpacing(2)
-                        .textSelection(.enabled)
-                        // Accept the proposed width, wrap, grow down. Without this an
-                        // unbreakable run (a agent's ────── separator, a long path)
-                        // sets the Text's ideal width past the viewport, and inside a
-                        // ScrollView it GETS it — every maxWidth:.infinity sibling then
-                        // stretches to match, which is why the whole screen rendered
-                        // full-bleed with both gutters clipped.
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    // A terminal viewport, not a paragraph: fixed height, scrolls both ways,
+                    // never wraps a line, and a pinch INSIDE the black box changes the text
+                    // size. Wrapping at a small size made every line a riddle and the whole
+                    // page scroll for a glance at the tail — the thing being asked was "zoom
+                    // in here", the way the Remote screen zooms.
+                    ScrollViewReader { inner in
+                        ScrollView([.horizontal, .vertical]) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(visibleLines.joined(separator: "\n"))
+                                    .font(.system(size: min(22, max(9, terminalFontSize)), design: .monospaced))
+                                    .lineSpacing(2)
+                                    .textSelection(.enabled)
+                                    .fixedSize(horizontal: true, vertical: true)
+                                Color.clear
+                                    .frame(height: 1)
+                                    .id("terminal-output-tail")
+                                    .onScrollVisibilityChange { terminalFollowsBottom = $0 }
+                            }
+                        }
+                        .defaultScrollAnchor(.bottom)
+                        .frame(height: max(280, UIScreen.main.bounds.height * 0.5))
+                        .onChange(of: visibleLines) { _, _ in
+                            if terminalFollowsBottom { inner.scrollTo("terminal-output-tail", anchor: .bottom) }
+                        }
+                    }
                 }
-                Color.clear
-                    .frame(height: 1)
-                    .id("terminal-output-tail")
-                    .onScrollVisibilityChange { terminalFollowsBottom = $0 }
             }
             .padding(12)
             .background(Color.black, in: RoundedRectangle(cornerRadius: 14, style: .continuous))

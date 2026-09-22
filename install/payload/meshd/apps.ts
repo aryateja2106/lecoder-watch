@@ -134,6 +134,9 @@ export type AppRow = Omit<AppMeta, "app" | "key" | "ipa" | "icon"> & {
   /// The app's own URL scheme when it declares one — the phone opens it to launch the app,
   /// and a successful open is the only proof iOS gives that the app is installed.
   scheme?: string;
+  /// The app's icon, on the same token-free folder the installer uses (the phone's image
+  /// loader cannot send a bearer). Only for native apps whose bundle had one.
+  icon?: string;
 };
 
 /// What the bundle says about itself. plutil is macOS-only and native apps are only ever
@@ -178,6 +181,7 @@ export async function listApps(host: string, port: number): Promise<{ apps: AppR
     if (m.kind === "pwa") row.platforms = ["web"];
     if (m.kind === "native") Object.assign(row, await bundleFacts(m.app));
     if (m.kind === "pwa" && m.key) row.url = m.url ?? `http://${host}:${port}/a/${m.slug}-${m.key}/`;
+    if (m.kind === "native" && m.key && m.icon) row.icon = `${base ?? `http://${host}:${port}`}/a/${m.slug}-${m.key}/${m.icon}`;
     if (m.kind === "native" && m.key && m.ipa && base) {
       const root = `${base}/a/${m.slug}-${m.key}`;
       row.url = `${root}/`;

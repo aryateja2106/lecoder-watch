@@ -22,9 +22,9 @@
 | POST | `/agents/new` | token | server.ts:1434 |
 | GET | `/apps` | token | input.ts:530 |
 | POST | `/apps` | token | input.ts:534 |
-| GET | `/built-apps` | token | apps.ts:277 |
-| POST | `/built-apps/:x/install` | token | apps.ts:291 |
-| POST | `/built-apps/:x/push` | token | apps.ts:281 |
+| GET | `/built-apps` | token | apps.ts:281 |
+| POST | `/built-apps/:x/install` | token | apps.ts:295 |
+| POST | `/built-apps/:x/push` | token | apps.ts:285 |
 | GET | `/clipboard` | token | input.ts:483 |
 | POST | `/clipboard` | token | input.ts:487 |
 | GET | `/desktop` | token | input.ts:496 |
@@ -99,8 +99,8 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `herdr` | — (nothing gates it) | no |
 | `tailscale` | — (nothing gates it) | no |
 | `kb` | — (nothing gates it) | no |
-| `screenPeek` | RemoteScreenView.swift:109 | no |
-| `input` | WatchViews.swift:325, WatchViews.swift:823, ContentView.swift:1625, ContentView.swift:1627, ContentView.swift:1628 | no |
+| `screenPeek` | ContentView.swift:394, RemoteScreenView.swift:109 | no |
+| `input` | WatchViews.swift:325, WatchViews.swift:823 | no |
 | `files` | — (nothing gates it) | no |
 | `push` | — (nothing gates it) | no |
 | `pair` | — (nothing gates it) | no |
@@ -108,13 +108,13 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `wake` | MeshStore.swift:892 | no |
 | `screenRegion` | MeshClient.swift:219, RemoteView.swift:323, RemoteScreenView.swift:110 | yes |
 | `openUrl` | MeshClient.swift:526 | yes |
-| `power` | MeshClient.swift:509, ContentView.swift:671 | yes |
+| `power` | MeshClient.swift:509, ContentView.swift:693 | yes |
 | `laPush` | MeshClient.swift:544 | yes |
 | `sessionStatus` | — (nothing gates it) | yes |
 | `paste` | MeshClient.swift:300, RemoteScreenView.swift:111 | yes |
 | `captureJoin` | MeshClient.swift:280, WatchMeshStore.swift:552 | yes |
 | `redact` | ExposedSecretsScreen.swift:43, ExposedSecretsScreen.swift:84 | no |
-| `chat` | TerminalView.swift:1121 | no |
+| `chat` | TerminalView.swift:1125 | no |
 | `apps` | TerminalView.swift:120 | no |
 | `handoff` | MeshClient.swift:565, MeshClient.swift:574, MeshClient.swift:586 | no |
 | `brain` | — (nothing gates it) | no |

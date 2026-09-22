@@ -8,22 +8,23 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @EnvironmentObject var store: MeshStore
     #if DEBUG
-    @State private var tab = ProcessInfo.processInfo.arguments.contains("-uiRemote") ? AppTab.remote : AppTab.machines
+    @State private var tab = AppTab.machines
     #else
     @State private var tab = AppTab.machines
     #endif
 
-    enum AppTab: Hashable { case machines, terminal, remote, apps, settings }
+    enum AppTab: Hashable { case machines, terminal, apps, settings }
 
     var body: some View {
-        // Five places a thumb goes, and no more. Monitor left the bar: alerts and usage
+        // Four places a thumb goes, and no more. Monitor left the bar: alerts and usage
         // are the one thing wanted from EVERY tab, so they live behind the bell in each
-        // tab's top bar (`MonitorBell`) with the waiting count on it. Apps took the slot —
-        // the library of what agents built is a destination, not a toolbar afterthought.
+        // tab's top bar (`MonitorBell`) with the waiting count on it. Remote left too: a
+        // machine's screen IS the machine, so every Machines row carries a live thumbnail
+        // that opens Screen & control, and the Web console row went with the tab. Apps
+        // took a slot — the library of what agents built is a destination.
         TabView(selection: $tab) {
             Tab("Machines", systemImage: "server.rack", value: .machines) { MachinesTab() }
             Tab("Terminal", systemImage: "terminal", value: .terminal) { TerminalTab() }
-            Tab("Remote", systemImage: "display", value: .remote) { RemoteControlTab() }
             Tab("Apps", systemImage: "square.grid.2x2", value: .apps) { AppsTab() }
             Tab("Settings", systemImage: "gearshape", value: .settings) { SettingsTab() }
         }
@@ -68,6 +69,7 @@ struct MonitorBell: View {
             Image(systemName: waiting > 0 ? "bell.badge.fill" : "bell")
                 .symbolRenderingMode(waiting > 0 ? .multicolor : .monochrome)
                 .accessibilityLabel(waiting > 0 ? "\(waiting) waiting on you" : "Monitor")
+                .accessibilityIdentifier("Monitor")
         }
     }
 }
@@ -279,6 +281,8 @@ private struct LocalNetworkBlockedBanner: View {
 private struct MachinesTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var pairing = false
+    /// The machine whose screen a thumbnail tap opened.
+    @State private var screenFor: Machine?
 
     private var attention: [LiveSessionPick] {
         store.snapshot.map { sessionsNeedingAttention(from: $0) } ?? []
@@ -329,6 +333,14 @@ private struct MachinesTab: View {
                 }
             }
             .navigationTitle("Machines")
+            .navigationDestination(item: $screenFor) { machine in RemoteScreenView(machine: machine) }
+            // `-uiRemote` opens the first machine's screen directly: the remote surface
+            // has no deep link and the simulator cannot be tapped from a check.
+            .onAppear {
+                if ProcessInfo.processInfo.arguments.contains("-uiRemote"), screenFor == nil, let first = store.machines.first {
+                    screenFor = first
+                }
+            }
             .toolbar {
                 MonitorBell()
                 Button { Task { await store.refresh() } } label: {
@@ -372,11 +384,21 @@ private struct MachinesTab: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Text(m.authError != nil ? "token"
-                                     : m.isStale ? m.statusLabel
-                                     : (m.reachable ? "\(m.agents.count) sess" : "offline"))
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text(m.authError != nil ? "token"
+                                         : m.isStale ? m.statusLabel
+                                         : (m.reachable ? "\(m.agents.count) sess" : "offline"))
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
+                                    // What is on that machine's screen right now; tap it to control.
+                                    if m.reachable, m.capabilities?.contains("screenPeek") == true,
+                                       let machine = store.machines.first(where: { $0.host == m.host }) {
+                                        Button { screenFor = machine } label: {
+                                            MachineThumbnail(machine: machine)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
                             }
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -1564,91 +1586,6 @@ private struct PinnedLimitEditor: View {
     }
 }
 
-private struct RemoteControlTab: View {
-    @EnvironmentObject var store: MeshStore
-
-    private var machines: [Machine] {
-        guard let snaps = store.snapshot?.machines, !snaps.isEmpty else { return store.machines }
-        let sortedHosts = activeFirst(snaps).map(\.host)
-        let seen = Set(sortedHosts)
-        return sortedHosts.compactMap { host in store.machines.first { $0.host == host } }
-            + store.machines.filter { !seen.contains($0.host) }
-    }
-
-    private func snap(for machine: Machine) -> MachineSnapshot? {
-        store.snapshot?.machines.first { $0.host == machine.host }
-    }
-
-    var body: some View {
-        NavigationStack {
-            #if DEBUG
-            // `-uiRemote` opens this screen directly. The remote surface cannot be
-            // reached by any deep link and the simulator cannot be tapped from CI or
-            // from an agent, so without this the one screen whose whole job is aiming
-            // accuracy is the one screen nobody can look at.
-            if ProcessInfo.processInfo.arguments.contains("-uiRemote"), let first = machines.first {
-                RemoteScreenView(machine: first)
-            } else {
-                machineList
-            }
-            #else
-            machineList
-            #endif
-        }
-    }
-
-    private var machineList: some View {
-            List {
-                ForEach(machines) { machine in
-                    Section(machine.host) {
-                        NavigationLink {
-                            RemoteScreenView(machine: machine)
-                        } label: {
-                            Label("Screen & control", systemImage: "display")
-                        }
-                        .disabled(snap(for: machine)?.reachable != true)
-                        // meshd's own web console, kept because it is the only surface
-                        // that works when the native one hits something unexpected —
-                        // and because it is the same page on any browser.
-                        if let desktop = machine.desktopURL() {
-                            NavigationLink {
-                                RemoteWebScreen(title: machine.host,
-                                                urlString: desktop.absoluteString,
-                                                bearer: machine.token)
-                            } label: {
-                                Label("Web console", systemImage: "safari")
-                            }
-                            .disabled(snap(for: machine)?.reachable != true)
-                        }
-                        // A green "machine online / input ready" pair under every machine was
-                        // two rows of nothing; the rows only appear when one of them is the problem.
-                        if let snap = snap(for: machine), !snap.reachable || snap.capabilities?.contains("input") != true {
-                            ServiceStatusRow(label: "machine", ok: snap.reachable, detail: snap.statusLabel)
-                            ServiceStatusRow(label: "input", ok: snap.capabilities?.contains("input"),
-                                             detail: (snap.capabilities?.contains("input") ?? false) ? "ready" : "needs meshd 0.2.2")
-                        }
-                        // Legacy noVNC bridge: only offered where one is actually up.
-                        if snap(for: machine)?.vncReachable == true {
-                            NavigationLink {
-                                RemoteWebScreen(title: "\(machine.host) VNC", urlString: machine.resolvedVNC)
-                            } label: {
-                                Label("Open VNC", systemImage: "rectangle.on.rectangle")
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Remote")
-            .toolbar { MonitorBell() }
-            .overlay {
-                if machines.isEmpty {
-                    ContentUnavailableView("No machines", systemImage: "display",
-                                           description: Text("Pair a machine on the Machines tab. No VNC server needed — meshd captures the screen itself."))
-                }
-            }
-    }
-}
-
 struct RemoteWebScreen: View {
     let title: String
     let urlString: String
@@ -1829,4 +1766,40 @@ private func compactEventBody(_ body: String) -> String {
     guard trimmed.hasPrefix("/"), !trimmed.contains(" "), !trimmed.contains("\n"),
           let last = trimmed.split(separator: "/").last else { return body }
     return String(last)
+}
+
+
+/// A live glance at a machine's screen for the Machines list: a small frame every few
+/// seconds while the row is on screen, nothing when it is not. The daemon scales the
+/// frame itself (`width`), so a 3440-wide desktop costs a few KB here.
+private struct MachineThumbnail: View {
+    @EnvironmentObject var store: MeshStore
+    let machine: Machine
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Color(.tertiarySystemFill)
+                    .overlay { Image(systemName: "display").foregroundStyle(.secondary) }
+            }
+        }
+        .frame(width: 96, height: 60)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.quaternary))
+        .accessibilityLabel("Screen of \(machine.host) — tap to control")
+        .task(id: machine.id) {
+            while !Task.isCancelled {
+                if let data = try? await store.client(for: machine).screenImage(width: 320, quality: 40),
+                   let decoded = UIImage(data: data) {
+                    image = decoded
+                }
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
 }

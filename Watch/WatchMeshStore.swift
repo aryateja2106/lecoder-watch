@@ -626,6 +626,30 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Several keys in order — a menu pick is "Down, Down, Enter", and three separate
+    /// fire-and-forget sends can land as "Enter, Down, Down". One Task, awaited in turn.
+    func sendKeys(_ keys: [String]) {
+        guard let w = watching, !keys.isEmpty else { return }
+        sending = true
+        lastError = nil
+        Task {
+            for key in keys {
+                if directReachable(w.host), let c = client(for: w.host) {
+                    do { try await c.send(agent: w.agent, key: key, pane: w.pane) }
+                    catch { lastError = "send failed"; WKInterfaceDevice.current().play(.failure); break }
+                } else {
+                    let ack = await WatchLink.shared.acknowledge(
+                        WatchCommand(kind: .agentSend, host: w.host, agent: w.agent, key: key, pane: w.pane))
+                    apply(ack, verb: "send")
+                    if lastError != nil { break }
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            await pollOutput()
+            sending = false
+        }
+    }
+
     /// Answer an agent from a notification button. The host comes from the APNs
     /// payload, so it is the name the *daemon* uses; our stored name may be the key
     /// from another machine's hosts.json, hence the tolerant match.

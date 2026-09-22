@@ -998,7 +998,22 @@ struct AgentLiveView: View {
                 }
             }
 
-            if awaitingDecision {
+            // The agent's own choices as buttons, read off the pane — present whether or not
+            // a hook fired (the trust-folder prompt fires none). Enter/Esc live in Actions.
+            if let menu = AgentMenu.parse(lines: terminalLines) {
+                Section("Choose") {
+                    ForEach(menu.options) { option in
+                        MenuOptionRow(label: option.label, highlighted: option.index == menu.highlighted) {
+                            WKInterfaceDevice.current().play(.click)
+                            if let text = menu.text(toPick: option.index) { store.send(text: text + "\n") }
+                            else { store.sendKeys(menu.keys(toPick: option.index)) }
+                        }
+                    }
+                    if let footer = menu.footer {
+                        Text(footer).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            } else if awaitingDecision {
                 Section("Decision Needed") {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
@@ -1081,6 +1096,18 @@ struct AgentLiveView: View {
                 Button { store.send(key: "enter") } label: {
                     Label("Enter", systemImage: "return")
                         .frame(minHeight: WatchTouch.minHeight)
+                }
+                .buttonStyle(.bordered)
+                // Cursor keys and Esc: what a menu, a list or a mode prompt needs and what
+                // "Enter or Continue" never covered.
+                HStack(spacing: 6) {
+                    Button { store.send(key: "up") } label: { Image(systemName: "arrow.up").frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight) }
+                        .accessibilityLabel("Up")
+                    Button { store.send(key: "down") } label: { Image(systemName: "arrow.down").frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight) }
+                        .accessibilityLabel("Down")
+                    Button { store.send(key: "escape") } label: { Text("Esc").frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight) }
+                    Button { store.send(key: "shift-tab") } label: { Text("⇧⇥").frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight) }
+                        .accessibilityLabel("Shift Tab, cycle mode")
                 }
                 .buttonStyle(.bordered)
                 Button { showReply = true } label: {
@@ -1607,3 +1634,24 @@ func meshImage(from data: Data) -> Image? {
 #else
 func meshImage(from data: Data) -> Image? { nil }
 #endif
+
+
+/// One row of a menu the agent is waiting on; the highlighted row is what Enter takes.
+private struct MenuOptionRow: View {
+    let label: String
+    let highlighted: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(label).font(.caption).multilineTextAlignment(.leading)
+                Spacer(minLength: 4)
+                if highlighted { Image(systemName: "return").font(.caption2) }
+            }
+            .frame(minHeight: WatchTouch.minHeight)
+        }
+        .buttonStyle(.bordered)
+        .tint(highlighted ? Color.accentColor : Color.gray)
+    }
+}

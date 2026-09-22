@@ -14,14 +14,14 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 
 | area | files | lines | what it is |
 |---|---|---|---|
-| `Shared/` | 15 | ~3,500 | Wire types and pure logic both apps compile; the self-checks link against these |
-| `iOS/` | 20 | ~10,200 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
-| `Watch/` | 7 | ~4,500 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
+| `Shared/` | 15 | ~3,600 | Wire types and pure logic both apps compile; the self-checks link against these |
+| `iOS/` | 20 | ~10,300 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
+| `Watch/` | 7 | ~4,600 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |
 | `install/payload/meshd/` | 23 | ~6,700 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
-| `install/payload/bin/` | 9 | ~3,400 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
+| `install/payload/bin/` | 9 | ~3,500 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 3 | ~1,700 | Landing page (mesh.lesearch.ai) and the privacy page |

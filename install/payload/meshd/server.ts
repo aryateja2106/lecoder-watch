@@ -1446,7 +1446,14 @@ Bun.serve({
         const rows = Number.isFinite(rowsN) && rowsN > 0 ? Math.min(200, Math.max(5, rowsN)) : null;
         const size = `${cols ? `-x ${cols} ` : ""}${rows ? `-y ${rows} ` : ""}`;
         const base = `new-session -d -s ${shq(name)} ${b.cwd ? `-c ${shq(b.cwd)} ` : ""}`;
-        const tail = b.cmd ? shq(b.cmd) : "";
+        // fx's default permission mode is `auto`: it reviews its own tool calls and never
+        // opens a human prompt, so a phone would have nothing to approve. Started from
+        // here it asks (FX_PERMISSION_MODE=ask, fx.sh/docs/configure-fx/permissions) unless
+        // the caller set the mode themselves.
+        const cmdText = typeof b.cmd === "string" && /^\s*fx(\s|$)/.test(b.cmd) && !/FX_PERMISSION_MODE=/.test(b.cmd)
+          ? `env FX_PERMISSION_MODE=ask ${b.cmd}`
+          : b.cmd;
+        const tail = cmdText ? shq(cmdText) : "";
         if (size) {
           // rmux's -x/-y support is unverified: try sized, and if the session never
           // appeared, create it plain and ask resize-window afterwards — whose own

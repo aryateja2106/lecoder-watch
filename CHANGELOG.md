@@ -8,6 +8,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are
 each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
+- **Approve reaches Claude.** A prompt on any machine shows as a *Needs you* row and a bell badge, whatever name the phone knows the machine by; Continue answers it. Every menu an agent prints — Claude Code's permission list, the trust-folder prompt, a y/N question — appears as buttons on the phone and the watch (Choose), so the answer is a tap, not a guess.
+- Four tabs: Machines · Terminal · Apps · Settings. Monitor is the bell on every tab; each machine row carries a live thumbnail of its screen that opens Screen & control, where a drag to the right no longer closes the screen.
+- Terminal: output first, pinned to the bottom, zoom and pan inside the black box; multi-line composer with paste; Enter, Esc, arrows, ⇧Tab and newline as keys. The watch gets the same arrows and Esc, and Continue only inside a coding agent.
+- Apps show their icon and the devices each build is for (iPhone, iPad, Watch, Mac, Vision); Open proves an app is on this iPhone. Guides explain pairing, Developer Mode, Mac permissions and a Linux desktop.
+- Linux machines: running apps, clipboard, sleep/screen saver, screenshot to clipboard, sized screen frames; sessions survive a daemon upgrade.
+- Antigravity's Stop hook is wired by `mesh hooks install`; Claude Code's non-actionable notifications (sign-in, quota) no longer buzz as "needs attention"; a finished turn's card carries the agent's last words.
 - **An Apps library.** The grid button on Machines lists every app an agent built for you, across every machine — grouped by name so the same app built three ways reads as one app with three builds — with the same Open / Install actions as before.
 - Every agent can search and remember shared notes with `mesh kb` and the `/search` and `/remember` skill commands; searches reach online machines across the mesh.
 - Renamed to LeSearch AI everywhere a person reads it (bundle ids, targets and the meshwatch:// scheme stay); apps now report 0.6.0 like the daemon.
