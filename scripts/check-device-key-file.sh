@@ -327,8 +327,14 @@ function expectRefused(label, dir, privateKey) {
 });
 END_CHECK
 
-key_mode="$(stat -c '%a' "$STATE_DIR/device.key")"
-dir_mode="$(stat -c '%a' "$STATE_DIR")"
+# `stat -c` is GNU-only. macOS BSD stat exits on that flag, and `set -e`
+# then stops the script before it can print its own FAIL line. Permission
+# bits are the same number on both: os.stat(path).st_mode & 0o777, as octal.
+mode_of() {
+  python3 -c 'import os, sys; print(format(os.stat(sys.argv[1]).st_mode & 0o777, "o"))' "$1"
+}
+key_mode="$(mode_of "$STATE_DIR/device.key")"
+dir_mode="$(mode_of "$STATE_DIR")"
 key_bytes="$(wc -c < "$STATE_DIR/device.key" | tr -d ' ')"
 [ "$key_mode" = "600" ] || { echo "FAIL: check-device-key-file: stat mode is $key_mode"; exit 1; }
 [ "$dir_mode" = "700" ] || { echo "FAIL: check-device-key-file: directory mode is $dir_mode"; exit 1; }
