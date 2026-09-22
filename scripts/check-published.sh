@@ -163,8 +163,19 @@ live() {
   if [ -z "$inst" ]; then
     FAIL "3 $installer does not resolve to an installer"
   else
-    printf '%s' "$inst" | grep -Eq "VERSION=\"?$v\"?|mesh-install/releases/download/v$v/" \
-      || FAIL "3 installer at $installer is not the published daemon $v"
+    # Not "does the script mention the version" — the script points at a release by name
+    # (`latest`), so the only honest test is to fetch what it would fetch and read the
+    # daemon inside it. That is the code a stranger's machine actually runs.
+    src="$(printf '%s' "$inst" | sed -n 's/^MESH_SRC_DEFAULT="\(.*\)"$/\1/p' | head -1)"
+    [ -n "$src" ] || src="https://github.com/LeSearch-AI/mesh-install/releases/latest/download"
+    tgz="/tmp/check-published-mesh-install.$$.tgz"
+    if curl -fsSL --max-time 120 -o "$tgz" "$src/mesh-install.tgz" 2>/dev/null; then
+      got="$(tar xzf "$tgz" -O install/payload/meshd/server.ts 2>/dev/null | sed -n 's/^[[:space:]]*const VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
+      [ "$got" = "$v" ] || FAIL "3 the installer at $installer fetches a daemon $got, not $v ($src/mesh-install.tgz)"
+    else
+      FAIL "3 could not download $src/mesh-install.tgz — the installer points at nothing"
+    fi
+    rm -f "$tgz"
   fi
   if have gh; then
     tag="$(gh release view "v$v" --repo LeSearch-AI/mesh-install --json tagName -q .tagName 2>/dev/null)"

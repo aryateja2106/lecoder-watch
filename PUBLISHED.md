@@ -16,7 +16,7 @@ Signup user: 6411d66d-77bc-4837-b911-10979a49947f (created in-app on 2026-09-22 
 Feedback row: 50cb992c-a357-4a2f-b533-dd700f1d2469 (written by the published build 0.8.0 (3) from Settings → Report a problem; a second row b99adb11-3c36-49ad-8fec-9776cc6b4d21 proved the dedupe path)
 Feedback issue: https://github.com/LeSearch-AI/mesh/issues/1
 Feedback worker: launchd job `ai.lesearch.feedback-worker` on this Mac — `scripts/feedback-worker.plist` runs `bun scripts/feedback-to-issues.ts` every 600 s, logging to `~/.mesh/logs/feedback-worker.log`. It holds the Supabase service key (from the gitignored `supabase/.env`) and files through `gh`. Moving it to a Supabase edge function needs an issues-only token — see BLOCKED.md.
-Fresh-eyes issues: pending
+Fresh-eyes issues: https://github.com/LeSearch-AI/mesh/issues?q=label%3Aux-review (7: #2–#8)
 Blockers: BLOCKED.md
 
 ## What "published" means here
@@ -56,6 +56,16 @@ Its first screen is `docs/product/shots/clean-install-first-launch.png`. That ca
 also what found the first-run bug fixed in this run: a fresh install opened on *"LeSearch
 AI is locked"* because the biometric gate ran before any machine was paired. The phone
 app itself still reaches users through TestFlight — that upload is Arya's (BLOCKED.md).
+
+**The daemon a new machine installs.** `sh scripts/release-mesh-install.sh --publish` cut
+**https://github.com/LeSearch-AI/mesh-install/releases/tag/v0.8.0** (2026-09-22 12:49 UTC)
+from this green tree: `install.sh`, `mesh-install.tgz` (351 028 bytes, 84 files), its
+sha256 and `SHA256SUMS.txt`. Verified by downloading what a stranger downloads —
+`https://github.com/LeSearch-AI/mesh-install/releases/latest/download/mesh-install.tgz`
+now carries `const VERSION = "0.8.0"`. Before this, `curl -fsSL https://lesearch.ai/install.sh | sh`
+installed **0.5.2 from 2026-08-27**: the cold review's one blocker
+([issues/2](https://github.com/LeSearch-AI/mesh/issues/2)), and the reason a new user would
+have got none of the terminal, Chat, Linux control or redaction work the site describes.
 
 **Supabase.** Project `zmisjteztezaqfflwbgf` (org LeSearch AI), schema in
 `supabase/migrations/` and pushed with `supabase db push`. Probes:
