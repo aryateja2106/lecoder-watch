@@ -761,3 +761,35 @@ Pull request 207 SHALL add only `scripts/check-model-class.sh`. `agent-note.ts` 
 - **AND** the agent does not claim both jobs are green on `48f1970`
 - **AND** the agent records that daemon CI and Xcode CI are both green on `0de3ba9` (check run `35754767900`)
 - **AND** the agent does not claim a speaker or that a paper was read
+
+### Requirement: A saved note omits the model URL
+
+Pull request 208 SHALL add only `scripts/check-note-omits-model-url.sh`. `agent-note.ts` and `knowledge.ts` were not edited. An allowed ask with `http://user:sk-secret@127.0.0.1:<stub>/v1` SHALL return `modelClass` `local`, SHALL write one relative file, mode 600, not executed, and SHALL save one knowledge note whose title is the ask and whose body is the model reply only. No file under `MESHD_STATE` and no held draft MUST contain `sk-secret`, `user:sk-secret`, or that raw model URL. A pairing-code ask with `https://llm.example/v1` SHALL return `modelClass` `user-subscription`, `held` true, and `draft` null, MUST NOT call the stub, and no file under `MESHD_STATE` MUST contain `llm.example` or `sk-secret`. The knowledge list SHALL stay `{ id, title }`. `server.ts` was not edited. The coordinator re-ran `sh scripts/check-note-omits-model-url.sh` and `sh scripts/check-model-class.sh` on `127.0.0.1:8898` at `0a3fefb` and both exited 0. The gateway key was unset. An agent MUST NOT add a second `/knowledge` route and MUST NOT call the Vercel AI Gateway. An agent MUST NOT claim either CI job on `0a3fefb`. An agent MUST NOT claim both jobs are green on `48f1970`. Do not claim either CI job on `0a3fefb` (check run `35758382137`). Daemon CI is green on `48f1970` (check run `35757430003`). Apps (Xcode) is still running on that run. Do not claim both jobs are green on `48f1970`. This does not prove a speaker or that a paper was read.
+
+#### Scenario: The saved note is the reply only
+
+- **WHEN** an allowed ask uses `http://user:sk-secret@127.0.0.1:<stub>/v1`
+- **THEN** `modelClass` is `local`
+- **AND** the draft is one relative file, mode 600, and is not executed
+- **AND** the saved note title is the ask and the body is the model reply only
+- **AND** no file under `MESHD_STATE` and no held draft contains `sk-secret`, `user:sk-secret`, or that raw model URL
+
+#### Scenario: A pairing-code ask does not call the stub
+
+- **WHEN** the ask is a pairing code and the model is `https://llm.example/v1`
+- **THEN** `modelClass` is `user-subscription`, `held` is true, and `draft` is null
+- **AND** the stub is not called
+- **AND** no file under `MESHD_STATE` contains `llm.example` or `sk-secret`
+
+#### Scenario: The list stays id and title
+
+- **WHEN** the daemon lists notes after the note that omits the model URL
+- **THEN** each note is `{ id, title }`
+
+#### Scenario: Unclaimed CI on the note that omits the model URL is not either job
+
+- **WHEN** `sh scripts/check-note-omits-model-url.sh` and `sh scripts/check-model-class.sh` pass on `127.0.0.1:8898` at `0a3fefb`
+- **THEN** the agent records that both checks exited 0 and does not claim either CI job on `0a3fefb` (check run `35758382137`)
+- **AND** the agent records that daemon CI is green on `48f1970` (check run `35757430003`) while apps (Xcode) is still running
+- **AND** the agent does not claim both jobs are green on `48f1970`
+- **AND** the agent does not claim a speaker or that a paper was read
