@@ -12,10 +12,17 @@
 // The transcript records the class string only. The base URL and any key
 // in it are not written, logged, or returned.
 //
+// ask is optional local text. Absent or blank, the model receives the note
+// text only. A non-empty ask follows that text after one blank line, so the
+// caller can say what to build. An ask that contains :// or is
+// protocol-relative is refused before the model and before any draft file.
+// An ask that names a mesh token, a pairing code, hosts.json, or .mesh/token,
+// or that would upload or send a token, is held the same way a note is.
+//
 // file is an optional relative path and defaults to draft.txt. Absolute
 // paths, "..", and any path that resolves outside cwd are refused.
 //
-//   POST /agent-note  { id?, q?, cwd, model, file?, command?, confirm? }
+//   POST /agent-note  { id?, q?, cwd, model, file?, command?, confirm?, ask? }
 //        -> { modelClass, draft, commandRan, held }
 //
 // id alone is the note, as before. When id is absent, q selects one note
@@ -139,6 +146,19 @@ function noteText(note: { title: string; body: string }): string {
   const title = note.title.trim();
   const body = note.body.trim();
   return title ? `${title}\n\n${body}` : body;
+}
+
+// A URL or a protocol-relative value is not an instruction to the local model.
+function askIsRemote(ask: string): boolean {
+  return ask.includes("://") || ask.startsWith("//");
+}
+
+// Absent or blank ask leaves the note text alone. Otherwise the ask follows
+// after a blank line.
+function promptForModel(text: string, ask: string | undefined): string {
+  const extra = (ask ?? "").trim();
+  if (!extra) return text;
+  return `${text}\n\n${extra}`;
 }
 
 function assistantText(payload: unknown): string | null {
@@ -293,7 +313,8 @@ export async function runAgentNote(opts: {
   file?: string;
   command?: string;
   confirm?: boolean;
-}): Promise<{ modelClass: ModelClass; draft: string; commandRan: boolean; held: boolean }> {
+  ask?: string;
+}): Promise<{ modelClass: ModelClass; draft: string | null; commandRan: boolean; held: boolean }> {
   if (!opts.model.trim()) throw new AgentNoteError("model required", 400);
   const modelClass = modelClassOf(opts.model);
   // Classification is the gate. A URL that is neither class is not called.
@@ -311,7 +332,14 @@ export async function runAgentNote(opts: {
   if (!note) throw new AgentNoteError("note not found", 404);
   const endpoint = completionsEndpoint(opts.model);
   if (!endpoint) throw new AgentNoteError("model url not allowed", 400);
-  const assistant = await completeNote(endpoint, noteText(note), modelClass);
+  const extra = (opts.ask ?? "").trim();
+  // Refuse before the model and before the draft file. The handler returns
+  // the held shape for a secret ask; this keeps a direct call on the same side.
+  if (extra && askIsRemote(extra)) throw new AgentNoteError("ask must be local text", 400);
+  if (extra && textHeldByRoute(extra)) {
+    return { modelClass, draft: null, commandRan: false, held: true };
+  }
+  const assistant = await completeNote(endpoint, promptForModel(noteText(note), extra), modelClass);
   await writeHeldFile(heldFile.abs, assistant);
 
   const command = opts.command?.trim() ?? "";
@@ -342,12 +370,24 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
     file?: unknown;
     command?: unknown;
     confirm?: unknown;
+    ask?: unknown;
   } | null;
   if (!body || typeof body.cwd !== "string" || !body.cwd.trim()) {
     return json({ error: "id and cwd required" }, 400);
   }
   if (typeof body.model !== "string") return json({ error: "model required" }, 400);
   if (body.file !== undefined && typeof body.file !== "string") return json({ error: "file must stay inside cwd" }, 400);
+  let ask = "";
+  if (body.ask !== undefined && body.ask !== null) {
+    if (typeof body.ask !== "string") return json({ error: "ask must be local text" }, 400);
+    ask = body.ask.trim();
+  }
+  // A remote ask never reaches the model and never creates a draft file.
+  if (ask && askIsRemote(ask)) return json({ error: "ask must be local text" }, 400);
+  if (ask && textHeldByRoute(ask)) {
+    if (!body.model.trim()) return json({ error: "model required" }, 400);
+    return json({ modelClass: modelClassOf(body.model), draft: null, commandRan: false, held: true });
+  }
   const givenId = typeof body.id === "string" ? body.id.trim() : "";
   let id = givenId;
   if (!givenId) {
@@ -374,6 +414,7 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
       file: typeof body.file === "string" ? body.file : undefined,
       command: typeof body.command === "string" ? body.command : undefined,
       confirm: body.confirm === true,
+      ask,
     });
     return json(result);
   } catch (err) {
