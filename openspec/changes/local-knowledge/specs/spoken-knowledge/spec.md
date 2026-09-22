@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, a spoken replace with `speak: true` drafts that new transcript to a held file, `GET /knowledge?q=` matches a title or a body and returns only `{ id, title }`, and a local `q` on `POST /agent-note` selects one note when `id` is absent. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, pull request 193, pull request 195, and pull request 197 do not prove a microphone or a speaker. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, a spoken replace with `speak: true` drafts that new transcript to a held file, `GET /knowledge?q=` matches a title or a body and returns only `{ id, title }`, a local `q` on `POST /agent-note` selects one note when `id` is absent, and `POST /knowledge` accepts `{ pdf, title? }` whose body is stdout from a local `MESH_PDF` executable. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, pull request 193, pull request 195, pull request 197, and pull request 198 do not prove a microphone or a speaker. Pull request 198 also does not prove that a paper was read. Pull request 192 (tip `6faf3f3`) already named pull request 189. Pull request 194 (tip `cfe2b17`) already named pull request 193.
 
 ## ADDED Requirements
 
@@ -399,7 +399,7 @@ After `speak: true` with local `MESH_STT` and local `MESH_TTS` returns `spoken` 
 
 ### Requirement: A local query selects one note when id is absent
 
-When `id` is absent, `POST /agent-note` SHALL accept a local `q` and SHALL select with `listNotes`. One match SHALL draft one relative file. That file SHALL be mode 600 and SHALL NOT be executed. Zero matches MUST answer 404. Several matches MUST answer 409. A remote or empty `q` MUST answer 400. Those results MUST NOT call the model. The hold SHALL match `textMovesSecret` for a pairing code, hosts.json, a mesh token, `.mesh/token`, and the upload/send sentence, and MUST NOT import `route.ts` or `filter.ts`. `id` without `q` SHALL still draft. `server.ts` was not edited. This behavior is pull request 197. The typecheck and `sh scripts/check-query-note-draft.sh` on `127.0.0.1:8898` at `e11483d` both exited 0 with the gateway key unset. Daemon CI and Xcode CI are both green on `e11483d` (check run `35739420177`). Daemon CI and Xcode CI are both green on handoff tip `1e78b081f2c64b038008054bedad1fd3a037ec6b` (check run `35740060386`). An agent MUST NOT rebuild this draft, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. This does not prove a microphone or a speaker. Pull request 195 stays the local note search at `1238daa`, with daemon CI and Xcode CI both green (check run `35736830546`).
+When `id` is absent, `POST /agent-note` SHALL accept a local `q` and SHALL select with `listNotes`. One match SHALL draft one relative file. That file SHALL be mode 600 and SHALL NOT be executed. Zero matches MUST answer 404. Several matches MUST answer 409. A remote or empty `q` MUST answer 400. Those results MUST NOT call the model. The hold SHALL match `textMovesSecret` for a pairing code, hosts.json, a mesh token, `.mesh/token`, and the upload/send sentence, and MUST NOT import `route.ts` or `filter.ts`. `id` without `q` SHALL still draft. `server.ts` was not edited. This behavior is pull request 197. The typecheck and `sh scripts/check-query-note-draft.sh` on `127.0.0.1:8898` at `e11483d` both exited 0 with the gateway key unset. Daemon CI and Xcode CI are both green on `e11483d` (check run `35739420177`). Daemon CI and Xcode CI are both green on handoff tip `1e78b081f2c64b038008054bedad1fd3a037ec6b` (check run `35740060386`). Daemon CI and Xcode CI are both green on handoff tip `c140ce7bf73c7f979a28d55d9a4784cc723e0027` (check run `35741550431`). An agent MUST NOT rebuild this draft, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. This does not prove a microphone or a speaker. Pull request 195 stays the local note search at `1238daa`, with daemon CI and Xcode CI both green (check run `35736830546`).
 
 #### Scenario: One match drafts one relative file
 
@@ -440,5 +440,33 @@ When `id` is absent, `POST /agent-note` SHALL accept a local `q` and SHALL selec
 #### Scenario: The query draft does not prove a microphone or a speaker
 
 - **WHEN** `sh scripts/check-query-note-draft.sh` passes on `127.0.0.1:8898` at `e11483d` with the gateway key unset
-- **THEN** the agent records that spare-daemon check and that daemon CI and Xcode CI are both green on `e11483d` (check run `35739420177`) and on handoff tip `1e78b08` (check run `35740060386`)
+- **THEN** the agent records that spare-daemon check and that daemon CI and Xcode CI are both green on `e11483d` (check run `35739420177`) and on handoff tips `1e78b08` (check run `35740060386`) and `c140ce7` (check run `35741550431`)
 - **AND** the agent does not claim a microphone or a speaker was proven
+
+### Requirement: A local PDF executable writes one note
+
+`POST /knowledge` SHALL accept `{ pdf, title? }`. `MESH_PDF` MUST be a local executable. Its stdout SHALL be the note body. A remote value, a value containing `://`, a missing file, a non-executable, empty stdout, or a nonzero exit MUST write nothing. The list SHALL stay `{ id, title }`. `server.ts` was not edited. This behavior is pull request 198. The coordinator re-ran `sh scripts/check-local-pdf-note.sh` and `sh scripts/check-local-note-search.sh` on `127.0.0.1:8898` at `42211d0`. Both exited 0. The proof is a stub executable. A `path` that is a real PDF SHALL still use the in-daemon `extractPdf` scrape. An agent MUST NOT rebuild either path, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. Daemon CI is green on `42211d0` (check run `35742140469`). Apps (Xcode) is still running on that run. An agent MUST NOT claim both jobs are green on `42211d0`. This does not prove a microphone, a speaker, or that a paper was read. Pull request 197 stays the query-note draft at `e11483d`, with daemon CI and Xcode CI both green (check run `35739420177`). Pull request 195 stays the local note search at `1238daa`, with daemon CI and Xcode CI both green (check run `35736830546`).
+
+#### Scenario: Stdout from a local executable is the note body
+
+- **WHEN** a client posts `{ pdf, title? }` and `MESH_PDF` is a local executable
+- **THEN** stdout is the note body
+- **AND** the list stays `{ id, title }`
+
+#### Scenario: A refused PDF writes nothing
+
+- **WHEN** `pdf` is remote, contains `://`, names a missing file, `MESH_PDF` is not executable, stdout is empty, or the process exits nonzero
+- **THEN** the daemon writes nothing
+
+#### Scenario: A path that is a real PDF still uses extractPdf
+
+- **WHEN** a client posts a `path` that is a real PDF
+- **THEN** the in-daemon `extractPdf` scrape writes the note
+- **AND** that path does not require `MESH_PDF`
+
+#### Scenario: The stub check does not prove a paper was read
+
+- **WHEN** `sh scripts/check-local-pdf-note.sh` and `sh scripts/check-local-note-search.sh` pass on `127.0.0.1:8898` at `42211d0`
+- **THEN** the agent records that both checks exited 0, that the proof is a stub executable, and that daemon CI is green on `42211d0` (check run `35742140469`) while apps (Xcode) is still running
+- **AND** the agent does not claim both jobs are green on `42211d0`
+- **AND** the agent does not claim a microphone, a speaker, or that a paper was read
