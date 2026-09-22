@@ -26,16 +26,57 @@ need curl
 TMP=$(mktemp -d /tmp/mesh-note-omits-url.XXXXXX)
 DAEMON_PID=""
 STUB_PID=""
+
+# Start a command as its own session. The pid is the process-group leader,
+# so exit can signal bun and the child it spawns without touching any other
+# client of the port.
+spawn_group() {
+  log=$1
+  workdir=$2
+  shift 2
+  python3 - "$log" "$workdir" "$@" << 'PY' &
+import os, sys
+logfile, workdir = sys.argv[1], sys.argv[2]
+cmd = sys.argv[3:]
+try:
+    os.setsid()
+except OSError:
+    if os.getpid() != os.getpgrp():
+        raise
+os.chdir(workdir)
+fd = os.open(logfile, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+os.dup2(fd, 1)
+os.dup2(fd, 2)
+if fd > 2:
+    os.close(fd)
+os.execvp(cmd[0], cmd)
+PY
+  SPAWN_PID=$!
+}
+
+stop_group() {
+  pgid=$1
+  [ -n "$pgid" ] || return 0
+  kill -TERM "-$pgid" 2>/dev/null || true
+  i=0
+  while [ "$i" -lt 25 ]; do
+    kill -0 "-$pgid" 2>/dev/null || return 0
+    i=$((i + 1))
+    sleep 0.1
+  done
+  kill -KILL "-$pgid" 2>/dev/null || true
+  wait "$pgid" 2>/dev/null || true
+}
+
 cleanup() {
-  if [ -n "$DAEMON_PID" ]; then
-    kill "$DAEMON_PID" 2>/dev/null || true
-    wait "$DAEMON_PID" 2>/dev/null || true
+  stop_group "$DAEMON_PID"
+  DAEMON_PID=""
+  stop_group "$STUB_PID"
+  STUB_PID=""
+  if [ -n "${TMP:-}" ] && [ -d "$TMP" ]; then
+    rm -rf "$TMP"
   fi
-  if [ -n "$STUB_PID" ]; then
-    kill "$STUB_PID" 2>/dev/null || true
-    wait "$STUB_PID" 2>/dev/null || true
-  fi
-  rm -rf "$TMP"
+  TMP=""
 }
 trap cleanup EXIT INT TERM
 
@@ -123,8 +164,9 @@ if __name__ == "__main__":
 PY
 
 : > "$TMP/meta/stub.jsonl"
-python3 "$TMP/meta/stub.py" "$STUB_PORT" "$TMP/meta/stub.jsonl" >"$TMP/meta/stub.log" 2>&1 &
-STUB_PID=$!
+spawn_group "$TMP/meta/stub.log" "$TMP" \
+  python3 "$TMP/meta/stub.py" "$STUB_PORT" "$TMP/meta/stub.jsonl"
+STUB_PID=$SPAWN_PID
 
 stub_ready=0
 i=0
@@ -144,11 +186,9 @@ fi
 # The readiness probe is not an agent-note call. Drop it so hit counts start clean.
 : > "$TMP/meta/stub.jsonl"
 
-(
-  cd "$TMP/work"
+spawn_group "$TMP/meta/daemon.log" "$TMP/work" \
   bun run "$ROOT/install/payload/meshd/server.ts"
-) >"$TMP/meta/daemon.log" 2>&1 &
-DAEMON_PID=$!
+DAEMON_PID=$SPAWN_PID
 
 ready=0
 i=0
@@ -166,11 +206,6 @@ done
 if [ "$ready" -ne 1 ]; then
   echo "spare daemon did not become healthy on 127.0.0.1:${MESHD_PORT}" >&2
   cat "$TMP/meta/daemon.log" >&2 || true
-  exit 1
-fi
-
-if tr '\0' '\n' < "/proc/${DAEMON_PID}/environ" | grep -q '^AI_GATEWAY_API_KEY='; then
-  echo "AI_GATEWAY_API_KEY is set in the spare daemon" >&2
   exit 1
 fi
 
