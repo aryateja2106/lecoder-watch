@@ -67,6 +67,7 @@
 | `check-mesh-uninstall.sh` | `mesh uninstall` is a trust feature, not a convenience: someone non-technical pastes a curl command onto a… |
 | `check-mesh-upgrade.sh` | End-to-end proof of `mesh upgrade` against a throwaway MESH_HOME |
 | `check-mesh-version.sh` | `mesh version` reports the daemon that is actually installed |
+| `check-native-terminal-keys.sh` | The phone's native terminal (iOS/NativeTerminalScreen.swift) drives a pane through meshd's /send while the… |
 | `check-overnight.sh` | the 2026-09-21 regression suite: every check the overnight run added, with its live half on |
 | `check-package-mesh-install.sh` | the packaged mesh-install tarball contains every payload file the daemon and CLI need |
 | `check-pair-auth.sh` | /pair/new honours the bearer and the MESHD_TRUST_LOOPBACK kill switch (SEC-03, opt-in) |
@@ -104,6 +105,7 @@
 | `gate-build.sh` | the factory "build" gate (gates.sh full): the three apps compile for their simulators, the way CI builds them |
 | `gate-lint.sh` | the factory "lint" gate (gates.sh fast) |
 | `gate-types.sh` | the factory "types" gate (gates.sh fast): does the daemon typecheck, and do the shared models the phone, the… |
+| `native-terminal-keys-test.swift` | TerminalKeyRouter turns emulator bytes into the keys meshd accepts |
 | `package-mesh-install.sh` | Package the mesh installer for hosting |
 | `release-mesh-install.sh` | cut a daemon release to LeSearch-AI/mesh-install |
 | `release-testflight-asc.sh` | build, upload and distribute the app to TestFlight |

@@ -921,14 +921,20 @@ private struct SessionPeekScreen: View {
 
     private var controlsCard: some View {
         VStack(spacing: 10) {
+            // meshd 0.8 ("captureAnsi"): the native terminal paints the pane in colour with
+            // its cursor; older daemons still get the xterm.js bridge page.
             NavigationLink {
-                BridgeTerminalScreen(machine: machine, session: session.name, initialPane: selectedPane)
+                if client.supports("captureAnsi") {
+                    NativeTerminalScreen(machine: machine, session: session, initialPane: selectedPane)
+                } else {
+                    BridgeTerminalScreen(machine: machine, session: session.name, initialPane: selectedPane)
+                }
             } label: {
                 Label("Open terminal", systemImage: "terminal")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(session.isMuxGuest)
+            .disabled(session.isMuxGuest && !client.supports("captureAnsi"))
             // meshd's own remote desktop, opened knowing which session you came from —
             // which is what lets its paste go into this pane instead of into whatever
             // the Mac happens to have focused. Needs no VNC server installed anywhere.

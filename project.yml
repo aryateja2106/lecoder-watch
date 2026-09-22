@@ -5,6 +5,14 @@ options:
     iOS: "26.0"
     watchOS: "10.0"
   createIntermediateGroups: true
+# SwiftTerm is the phone's terminal emulator (VT100/xterm parser + UIKit view). The old
+# surfaces were polled capture-pane text and an xterm.js WKWebView; neither is a terminal.
+# Pinned below 1.19: from there the package ships a build-tool plugin that xcodebuild
+# refuses without -skipPackagePluginValidation, which every check script would then need.
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: "1.18.0"
 settings:
   base:
     MARKETING_VERSION: "0.8.0"
@@ -103,6 +111,7 @@ targets:
         embed: true
       - target: MeshWatchWidgets
         embed: true
+      - package: SwiftTerm
   # The Mac menu bar app: permissions, daemon status, pairing QR. Its sources are
   # MeshDesktop/ and nothing else — deliberately. Shared/ is written for the phone and
   # the watch (ActivityKit, WidgetKit, the phone's client), so pulling it in here would

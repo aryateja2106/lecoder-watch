@@ -71,6 +71,9 @@ enum DaemonCapabilities {
         DaemonGap(capability: "captureJoin",
                   feature: "Faster screen capture",
                   symptom: "Overlapping screen requests each pay full price, so frames arrive slower."),
+        DaemonGap(capability: "captureAnsi",
+                  feature: "Colour in the terminal",
+                  symptom: "The phone terminal shows the agent's screen in one colour, cursor guessed."),
     ]
 
     /// The gaps for a machine, given what its daemon advertised.

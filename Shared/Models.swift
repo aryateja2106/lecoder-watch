@@ -427,6 +427,9 @@ struct Agent: Codable, Hashable, Identifiable {
 struct AgentOutput: Codable, Hashable {
     var name: String
     var lines: [String]
+    /// Present only for `ansi=1` on a `captureAnsi` daemon: the pane's cursor cell and size.
+    var cursor: Cursor?
+    struct Cursor: Codable, Hashable { var x: Int; var y: Int; var cols: Int; var rows: Int }
 }
 
 /// One pane within a session (a session may hold several windows/panes).

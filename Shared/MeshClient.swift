@@ -271,8 +271,10 @@ struct MeshClient {
     /// capability; against an old daemon the flags are dropped and the output is
     /// byte-identical to today's.
     func output(agent: String, lines: Int = 80, pane: String? = nil,
-                join: Bool = false, plain: Bool = false) async throws -> AgentOutput {
+                join: Bool = false, plain: Bool = false, ansi: Bool = false) async throws -> AgentOutput {
         var path = "/agents/\(Self.pathSegment(agent))/output?lines=\(lines)"
+        // meshd 0.8 ("captureAnsi"): keep SGR colour escapes and report the cursor cell.
+        if ansi && supports("captureAnsi") { path += "&ansi=1" }
         if let pane, !pane.isEmpty {
             let enc = pane.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? pane
             path += "&pane=\(enc)"

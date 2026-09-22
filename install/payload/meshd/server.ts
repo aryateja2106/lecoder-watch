@@ -45,7 +45,7 @@ const VERSION = "0.8.0";
 // "handoff": POST /agents/<s>/handoff {to} writes HANDOFF.md from the conversation and
 // relaunches the pane under another CLI agent; GET /resumable?cwd= and
 // GET /agents/<s>/resumable list the conversations each CLI can reopen, with the command.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain", "captureAnsi"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -566,10 +566,12 @@ async function redactOutput<T extends { lines: string[] } | null>(res: T): Promi
   if (findings.length) record(findings, "output", OUTPUT_DEDUPE_MS).catch(() => {});
   return { ...res, lines };
 }
-async function agentOutput(name: string, lines: number, pane?: string, join = false, plain = false) {
-  return redactOutput(await agentOutputRaw(name, lines, pane, join, plain));
+async function agentOutput(name: string, lines: number, pane?: string, join = false, plain = false, ansi = false) {
+  return redactOutput(await agentOutputRaw(name, lines, pane, join, plain, ansi));
 }
-async function agentOutputRaw(name: string, lines: number, pane?: string, join = false, plain = false) {
+/// `ansi` keeps the pane's SGR colour escapes (`capture-pane -e`) and adds the cursor cell,
+/// so a real terminal emulator on the phone can paint the screen instead of a text blob.
+async function agentOutputRaw(name: string, lines: number, pane?: string, join = false, plain = false, ansi = false) {
   if (isHerdrAgent(name)) {
     const res = await herdrOutput(name, lines, join);
     return plain && res ? { ...res, lines: res.lines.map(plainLine) } : res;
@@ -583,10 +585,12 @@ async function agentOutputRaw(name: string, lines: number, pane?: string, join =
   if (!has.trim().endsWith("0")) return null;
   const target = pane ? shq(pane) : shq(name);
   const joinFlag = join && (await muxSupportsJoin()) ? " -J" : "";
-  const out = await sh(`${MUX} capture-pane -p${joinFlag} -t ${target} 2>/dev/null`);
+  const out = await sh(`${MUX} capture-pane -p${ansi ? " -e" : ""}${joinFlag} -t ${target} 2>/dev/null`);
   let arr = out.replace(/\n+$/, "").split("\n");
   if (plain) arr = arr.map(plainLine);
-  return { name, lines: arr.slice(-lines) };
+  if (!ansi) return { name, lines: arr.slice(-lines) };
+  const cur = (await sh(`${MUX} display-message -p -t ${target} '#{cursor_x} #{cursor_y} #{pane_width} #{pane_height}' 2>/dev/null`)).trim().split(" ").map(Number);
+  return { name, lines: arr.slice(-lines), cursor: cur.length === 4 && cur.every(Number.isFinite) ? { x: cur[0], y: cur[1], cols: cur[2], rows: cur[3] } : undefined };
 }
 const INFRA = new Set(["meshd", "rmux-bridge"]); // never killable over the wire
 async function agentKill(name: string): Promise<{ ok: boolean; error?: string }> {
@@ -649,6 +653,12 @@ const KEY_SEND_KEYS: Record<string, string> = {
   "shift-enter": "M-Enter",
 };
 
+/// `ctrl-a`…`ctrl-z` / `alt-a`…`alt-z`: what the phone's sticky Ctrl/Alt keys produce.
+/// Fifty-two table rows would each demand a watch chip; a pattern says the same thing.
+function modifierKey(key: string): string | undefined {
+  const m = /^(ctrl|alt)-([a-z])$/.exec(key);
+  return m ? `${m[1] === "ctrl" ? "C" : "M"}-${m[2]}` : undefined;
+}
 async function agentSend(name: string, text?: string, key?: string, pane?: string, paste?: boolean): Promise<{ ok: boolean; error?: string }> {
   // paste travels: a literal write of newline bytes IS the submit-per-line problem,
   // so herdrSend wraps multi-line pastes in bracketed-paste markers itself.
@@ -658,7 +668,7 @@ async function agentSend(name: string, text?: string, key?: string, pane?: strin
   const hasKey = typeof key === "string" && key.length > 0;
   if (!hasText && !hasKey) return { ok: false, error: "text or key required" };
 
-  const sendKey = hasKey ? KEY_SEND_KEYS[key] : undefined;
+  const sendKey = hasKey ? (KEY_SEND_KEYS[key] ?? modifierKey(key)) : undefined;
   if (hasKey && !sendKey) return { ok: false, error: `unsupported key: ${key}` };
 
   // send-keys to a name the mux cannot resolve fails on stderr we discard, so
@@ -1412,6 +1422,7 @@ Bun.serve({
           url.searchParams.get("pane") ?? undefined,
           url.searchParams.get("join") === "1",
           url.searchParams.get("plain") === "1",
+          url.searchParams.get("ansi") === "1",
         );
         return res ? json(res) : json({ error: "no such session" }, 404);
       }

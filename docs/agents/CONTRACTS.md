@@ -8,18 +8,18 @@
 
 | method | path | auth | where |
 |---|---|---|---|
-| GET | `/a/*` | none | server.ts:1292 |
-| ANY | `/agents` | token | server.ts:1358 |
-| DELETE | `/agents/:x` | token | server.ts:1430 |
-| GET | `/agents/:x/chat` | token | server.ts:1401 |
+| GET | `/a/*` | none | server.ts:1302 |
+| ANY | `/agents` | token | server.ts:1368 |
+| DELETE | `/agents/:x` | token | server.ts:1441 |
+| GET | `/agents/:x/chat` | token | server.ts:1411 |
 | POST | `/agents/:x/handoff` | token | handoff.ts:287 |
-| GET | `/agents/:x/output` | token | server.ts:1408 |
-| GET | `/agents/:x/panes` | token | server.ts:1388 |
-| POST | `/agents/:x/panes` | token | server.ts:1392 |
-| DELETE | `/agents/:x/panes/:x` | token | server.ts:1425 |
+| GET | `/agents/:x/output` | token | server.ts:1418 |
+| GET | `/agents/:x/panes` | token | server.ts:1398 |
+| POST | `/agents/:x/panes` | token | server.ts:1402 |
+| DELETE | `/agents/:x/panes/:x` | token | server.ts:1436 |
 | GET | `/agents/:x/resumable` | token | handoff.ts:281 |
-| POST | `/agents/:x/send` | token | server.ts:1419 |
-| POST | `/agents/new` | token | server.ts:1434 |
+| POST | `/agents/:x/send` | token | server.ts:1430 |
+| POST | `/agents/new` | token | server.ts:1445 |
 | GET | `/apps` | token | input.ts:530 |
 | POST | `/apps` | token | input.ts:534 |
 | GET | `/built-apps` | token | apps.ts:281 |
@@ -31,8 +31,8 @@
 | GET | `/displays` | token | input.ts:501 |
 | GET | `/doctor` | token | doctor.ts:123 |
 | POST | `/doctor/fix` | token | doctor.ts:124 |
-| GET | `/events` | token | server.ts:1360 |
-| POST | `/events` | token | server.ts:1361 |
+| GET | `/events` | token | server.ts:1370 |
+| POST | `/events` | token | server.ts:1371 |
 | GET | `/exposures` | token | redact.ts:264 |
 | POST | `/exposures/:x` | token | redact.ts:274 |
 | POST | `/exposures/record` | token | redact.ts:265 |
@@ -42,13 +42,13 @@
 | POST | `/fs/move` | token | files.ts:175 |
 | GET | `/fs/read` | token | files.ts:116 |
 | POST | `/fs/write` | token | files.ts:121 |
-| ANY | `/health` | none | server.ts:1280 |
+| ANY | `/health` | none | server.ts:1290 |
 | GET | `/input` | token | input.ts:474 |
 | POST | `/input` | token | input.ts:477 |
-| POST | `/kb` | token | server.ts:1369 |
-| PUT | `/kb` | token | server.ts:1369 |
-| GET | `/kb/:x/:x` | token | server.ts:1383 |
-| GET | `/kb/search` | token | server.ts:1373 |
+| POST | `/kb` | token | server.ts:1379 |
+| PUT | `/kb` | token | server.ts:1379 |
+| GET | `/kb/:x/:x` | token | server.ts:1393 |
+| GET | `/kb/search` | token | server.ts:1383 |
 | POST | `/la/token` | token | push.ts:458 |
 | POST | `/open` | token | input.ts:519 |
 | POST | `/pair/claim` | none | pair.ts:109 |
@@ -58,13 +58,13 @@
 | POST | `/push/test` | token | push.ts:494 |
 | GET | `/resumable` | token | handoff.ts:275 |
 | GET | `/screen.jpg` | token | input.ts:507 |
-| ANY | `/stats` | token | server.ts:1356 |
+| ANY | `/stats` | token | server.ts:1366 |
 | POST | `/system` | token | input.ts:557 |
-| ANY | `/tailnet` | token | server.ts:1357 |
-| ANY | `/usage` | token | server.ts:1359 |
+| ANY | `/tailnet` | token | server.ts:1367 |
+| ANY | `/usage` | token | server.ts:1369 |
 | GET | `/volume` | token | input.ts:562 |
 | POST | `/volume` | token | input.ts:562 |
-| POST | `/wake` | token | server.ts:1346 |
+| POST | `/wake` | token | server.ts:1356 |
 
 ### `meshd/cmux-bridge.ts` (its own listener)
 
@@ -107,17 +107,18 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `doctor` | — (nothing gates it) | no |
 | `wake` | MeshStore.swift:892 | no |
 | `screenRegion` | MeshClient.swift:219, RemoteView.swift:323, RemoteScreenView.swift:110 | yes |
-| `openUrl` | MeshClient.swift:552 | yes |
-| `power` | MeshClient.swift:535, ContentView.swift:689 | yes |
-| `laPush` | MeshClient.swift:570 | yes |
+| `openUrl` | MeshClient.swift:554 | yes |
+| `power` | MeshClient.swift:537, ContentView.swift:689 | yes |
+| `laPush` | MeshClient.swift:572 | yes |
 | `sessionStatus` | — (nothing gates it) | yes |
-| `paste` | MeshClient.swift:300, RemoteScreenView.swift:111 | yes |
-| `captureJoin` | MeshClient.swift:280, WatchMeshStore.swift:552 | yes |
+| `paste` | MeshClient.swift:302, RemoteScreenView.swift:111 | yes |
+| `captureJoin` | MeshClient.swift:282, WatchMeshStore.swift:552 | yes |
 | `redact` | ExposedSecretsScreen.swift:43, ExposedSecretsScreen.swift:84 | no |
-| `chat` | TerminalView.swift:1144 | no |
+| `chat` | TerminalView.swift:1150 | no |
 | `apps` | TerminalView.swift:120 | no |
-| `handoff` | MeshClient.swift:591, MeshClient.swift:600, MeshClient.swift:612 | no |
+| `handoff` | MeshClient.swift:593, MeshClient.swift:602, MeshClient.swift:614 | no |
 | `brain` | — (nothing gates it) | no |
+| `captureAnsi` | MeshClient.swift:277, TerminalView.swift:927, TerminalView.swift:937 | yes |
 
 ## Watch → phone relay commands
 
