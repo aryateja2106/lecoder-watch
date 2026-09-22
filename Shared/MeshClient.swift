@@ -282,6 +282,14 @@ struct MeshClient {
         return listed.notes
     }
 
+    /// Save one typed note. `POST /knowledge` with `{ title, body }` returns `{ id, title }`.
+    func createKnowledgeNote(title: String, body: String) async throws -> KnowledgeNoteSummary {
+        let payload: [String: Any] = ["title": title, "body": body]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        let response = try await request("/knowledge", method: "POST", body: data)
+        return try JSONDecoder().decode(KnowledgeNoteSummary.self, from: response)
+    }
+
     /// Create a new rmux session (optionally launching a command, e.g. "claude" / "codex").
     ///
     /// `cols`/`rows` (meshd 0.5.0+) set the new PTY's size, so a session created

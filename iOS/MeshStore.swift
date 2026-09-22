@@ -742,6 +742,34 @@ final class MeshStore: ObservableObject {
         }
     }
 
+    /// Save a typed note on this machine. Nothing is posted until the user confirms.
+    func saveKnowledgeNote(host: String, title: String, body: String, confirmed: Bool) {
+        guard confirmed else { return }
+        let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !named.isEmpty, !text.isEmpty else {
+            fail("Name the note and write it first")
+            return
+        }
+        guard let machine = machineMatching(host, in: machines),
+              let snap = snapshot?.machines.first(where: { $0.host == machine.host }),
+              snap.reachable, snap.authError == nil else {
+            fail("Save needs a direct link to this Mac")
+            return
+        }
+        lastError = nil
+        let c = client(for: machine)
+        Task {
+            do {
+                let saved = try await c.createKnowledgeNote(title: named, body: text)
+                currentKnowledgeNote = saved.title
+                loadKnowledgeNotes(host: host)
+            } catch {
+                fail("save failed")
+            }
+        }
+    }
+
     private static func knowledgeAskLine(_ reply: AgentNoteAsk) -> String {
         if reply.held { return "Held" }
         if let draft = reply.draft, !draft.isEmpty {

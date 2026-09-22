@@ -556,9 +556,18 @@ async function ingest(req: Request): Promise<Response> {
     audio?: unknown;
     pdf?: unknown;
     title?: unknown;
+    body?: unknown;
   } | null;
   if (body && typeof body.audio === "string" && body.audio.trim()) return ingestSpoken(body.audio);
   if (body && "pdf" in body) return ingestLocalPdf(body.pdf, body.title, body.speak === true);
+  const typedTitle = typeof body?.title === "string" ? body.title.trim() : "";
+  const typedBody = typeof body?.body === "string" ? body.body.trim() : "";
+  const hasPath = typeof body?.path === "string" && body.path.trim().length > 0;
+  if (!hasPath && (body?.title !== undefined || body?.body !== undefined)) {
+    if (!typedTitle || !typedBody) return json({ error: "title and body required" }, 400);
+    const note = await writeNote(typedTitle, typedBody);
+    return json({ id: note.id, title: note.title }, 201);
+  }
   if (!body || typeof body.path !== "string" || !body.path.trim()) return json({ error: "path required" }, 400);
   if (isRemote(body.path)) return json({ error: "path must be a local file" }, 400);
   const filePath = resolve(body.path);
