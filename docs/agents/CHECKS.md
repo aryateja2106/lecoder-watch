@@ -77,6 +77,7 @@
 | `check-pointer-gain.swift` | The gain curve decides whether the pad can both cross two screens and hit a close button |
 | `check-preview-mapping.swift` | Tap-to-place-cursor is the flagship interaction |
 | `check-product-spec.sh` | docs/product/PRODUCT.md is the one place the product is defined, so it must name every screen file, every… |
+| `check-published.sh` | the finish line for "LeSearch AI is published at lesearch.ai and ready for real users": exits 0 only when… |
 | `check-redact.sh` | redact.ts self-check: one fixture per rule is replaced and fingerprinted, benign strings that merely look… |
 | `check-relay-ack.swift` | The watch → phone relay used to say "delivered" for every command the phone accepted, including the ones the… |
 | `check-relay-receiver.sh` | Structural check: the relay receiver delegate, failure-reason wiring, and honest ack guards |
