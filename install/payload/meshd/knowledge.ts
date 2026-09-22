@@ -2,10 +2,10 @@
 // becomes one file under the daemon state directory. Nothing in this module
 // opens a socket: no Supabase client, no model call, no download.
 //
-//   POST /knowledge      { path, speak? } | { audio }  -> { id, title, spoken }
-//   POST /knowledge/:id  { body } | { audio }          -> { id, title, body }
-//   GET  /knowledge                        -> { notes: [{ id, title }] }
-//   GET  /knowledge/:id                    -> { id, title, body }
+//   POST /knowledge      { path, speak? } | { audio }       -> { id, title, spoken }
+//   POST /knowledge/:id  { body } | { audio, speak? }       -> { id, title, body, spoken? }
+//   GET  /knowledge                                     -> { notes: [{ id, title }] }
+//   GET  /knowledge/:id                                 -> { id, title, body }
 //
 // Posting an existing id replaces that one note's body. A missing id does
 // not create a note. A remote URL, a scheme, or a protocol-relative path
@@ -13,12 +13,16 @@
 //
 // speak is optional. When it is true and MESH_TTS names a binary the user
 // already has, that binary receives the note text on stdin. The note is
-// written either way.
+// written either way. On a replace, spoken is true only when that binary
+// is local and exits 0. speak false, or a missing binary, still stores the
+// transcript and leaves spoken false. A remote TTS path does not write and
+// does not start. An empty transcript keeps the old body and does not speak.
 //
 // audio is optional. When it names a local file and MESH_STT names a local
-// binary, that binary is the only process started. Its stdout is the note
-// body. A scheme:// value or any other remote URL is not started. A missing
-// binary, a nonzero exit, or a transcript that is empty writes no note.
+// binary, that binary transcribes it. Its stdout is the note body. A scheme://
+// value or any other remote URL is not started. A missing binary, a nonzero
+// exit, or a transcript that is empty writes no note. A replace may then start
+// MESH_TTS, and only when speak is true.
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -311,6 +315,31 @@ async function maybeSpeak(text: string, speak: boolean): Promise<boolean> {
   return true;
 }
 
+// Speak one replaced note. spoken is true only when MESH_TTS is a local file
+// and that process exits 0. A missing file does not spawn. The caller has
+// already refused a remote path, so this never writes the note.
+async function speakReplaced(text: string): Promise<boolean> {
+  const bin = (process.env.MESH_TTS ?? "").trim();
+  if (!bin || refusesRemote(bin)) return false;
+  const binPath = resolve(bin);
+  const info = await stat(binPath).catch(() => null);
+  if (!info?.isFile()) return false;
+  let proc: ReturnType<typeof Bun.spawn>;
+  try {
+    proc = Bun.spawn([binPath], {
+      stdin: new TextEncoder().encode(text),
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+  } catch {
+    return false;
+  }
+  const killer = setTimeout(() => { try { proc.kill(); } catch { /* already gone */ } }, SPEAK_MS);
+  const code = await proc.exited.catch(() => 1);
+  clearTimeout(killer);
+  return code === 0;
+}
+
 // Replace the body of a note that is already on disk. The id in the path is
 // the only note this writes. A missing file stays missing. The text itself
 // is stored; a remote URL is not fetched and is not written.
@@ -334,6 +363,7 @@ async function replaceNoteBody(id: string, req: Request): Promise<Response> {
     path?: unknown;
     audio?: unknown;
     url?: unknown;
+    speak?: unknown;
   } | null;
   const presented = [payload?.body, payload?.path, payload?.audio, payload?.url];
   for (const value of presented) {
@@ -342,6 +372,13 @@ async function replaceNoteBody(id: string, req: Request): Promise<Response> {
     }
   }
   if (payload && typeof payload.audio === "string" && payload.audio.trim()) {
+    const speak = payload.speak === true;
+    const ttsBin = (process.env.MESH_TTS ?? "").trim();
+    // A remote speaker is refused before the transcriber starts, so nothing
+    // is written and nothing is spawned.
+    if (speak && ttsBin && refusesRemote(ttsBin)) {
+      return json({ error: "tts must be a local binary" }, 400);
+    }
     const audioPath = resolve(payload.audio.trim());
     const audioInfo = await stat(audioPath).catch(() => null);
     if (!audioInfo) return json({ error: "not found" }, 404);
@@ -359,7 +396,8 @@ async function replaceNoteBody(id: string, req: Request): Promise<Response> {
     await writeFile(file, `${JSON.stringify(raw)}\n`, { mode: FILE_MODE });
     await chmod(file, FILE_MODE);
     await chmod(dir, DIR_MODE);
-    return json({ id: decoded, title: raw.title, body: transcript });
+    const spoken = speak ? await speakReplaced(`${raw.title}\n${transcript}`.trim()) : false;
+    return json({ id: decoded, title: raw.title, body: transcript, spoken });
   }
   if (!payload || typeof payload.body !== "string") return json({ error: "body required" }, 400);
   const next = clip(payload.body.replace(/\u0000/g, ""), MAX_BODY);
