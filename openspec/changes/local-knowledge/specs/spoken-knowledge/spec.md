@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, optional local TTS speaks a note, and a held app draft waits for confirm before any further command. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, optional local TTS speaks a note, a held app draft waits for confirm before any further command, and a replaced note that asks to send a pairing code or copy hosts.json stays on hold. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase.
 
 ## ADDED Requirements
 
@@ -143,3 +143,62 @@ After `POST /knowledge/:id` replaces a note, the agent-note path SHALL draft tha
 - **WHEN** the replaced-note draft has written a held file and confirm is not true
 - **THEN** the command stays unrun
 - **AND** the held file remains on disk unexecuted
+
+### Requirement: A replaced note that asks to send a pairing code or copy hosts.json stays on hold
+
+After a note body has been replaced, a body that asks to send a pairing code or to copy hosts.json SHALL stay on hold. The model MUST NOT be called. A live gateway call MUST NOT be made. The body "summarize this paper" SHALL still be drafted as the new body. This behavior is pull request 182. An agent MUST NOT add a second hold path.
+
+#### Scenario: A pairing-code body stays on hold
+
+- **WHEN** a replaced note asks to send a pairing code
+- **THEN** that note stays on hold
+- **AND** the model is not called
+- **AND** no request is sent to the AI Gateway
+
+#### Scenario: A hosts.json body stays on hold
+
+- **WHEN** a replaced note asks to copy hosts.json
+- **THEN** that note stays on hold
+- **AND** the model is not called
+- **AND** no held file is written from that ask
+
+#### Scenario: A paper summary still drafts the new body
+
+- **WHEN** a replaced note's new body is "summarize this paper" and a client asks the agent-note path to draft that id
+- **THEN** the draft is from that new body
+- **AND** the held file is not executed
+
+### Requirement: POST /knowledge/:id accepts audio and a local transcript replaces that note body
+
+`POST /knowledge/:id` SHALL accept `{ audio }` for a note that is already on disk. When `MESH_STT` names a local binary that prints a transcript and exits 0, that transcript SHALL replace that note's body. The title SHALL stay. The list SHALL stay `{ id, title }` for each note. A missing id SHALL create nothing. A remote URL SHALL NOT write. An empty transcript SHALL keep the old body. `server.ts` still calls `handleKnowledge` once. An agent MUST NOT add a second `/knowledge` route. This behavior is pull request 183. A spoken note is that local binary transcript. An agent MUST NOT claim a microphone was proven.
+
+#### Scenario: A local transcript replaces the body
+
+- **WHEN** a client posts `{ audio }` to `/knowledge/:id` for a note that is already on disk and `MESH_STT` names a local binary that prints a transcript and exits 0
+- **THEN** that note's body is the transcript
+- **AND** the title is unchanged
+- **AND** a list request still returns that note as id and title
+
+#### Scenario: A missing id creates nothing
+
+- **WHEN** the id in `POST /knowledge/:id` with `{ audio }` is not a note on disk
+- **THEN** the daemon creates no note
+- **AND** the existing notes stay as they were
+
+#### Scenario: A remote URL does not write
+
+- **WHEN** the audio path is an `http`, `https`, scheme, or protocol-relative URL
+- **THEN** the daemon does not write a note
+- **AND** the existing note body stays as it was
+
+#### Scenario: An empty transcript keeps the old body
+
+- **WHEN** `MESH_STT` names a local binary that exits 0 and prints no transcript
+- **THEN** the existing note body stays as it was
+- **AND** the response does not replace that body
+
+#### Scenario: The replace does not prove a microphone
+
+- **WHEN** the new body came from a local `MESH_STT` transcript
+- **THEN** the agent records that local binary transcript
+- **AND** the agent does not claim a microphone was proven

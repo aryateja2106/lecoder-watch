@@ -11,10 +11,14 @@ See proposal.md for why. The spoken knowledge base and the held app draft alread
 | Spoken-in via a local `MESH_STT` binary; a remote URL does not run | PR 162, branch `cursor/spoken-note-in-e469` | `4e14cab` (`4e14cab8c9a5edef4f509b7096fcf238f02ffc2d`) |
 | `POST /knowledge/:id` replaces that note's body in the same file. The list stays `{ id, title }`. A missing id creates nothing. A remote URL does not write. `server.ts` was not edited | PR 174, branch `cursor/knowledge-note-update-e469` | `426d66d7` (`426d66d7ae016a67b66b809a7cb4a10aaa300460`) |
 | After that replace, the agent-note path drafts the new body. The held file is mode 600 and is not executed. A missing id does not call the model. An unconfirmed command stays unrun | PR 176, branch `cursor/updated-note-draft-e469` | `ff4d633c` (`ff4d633cf15c69776a314c79a4c243d39bf5cd31`) |
+| A replaced note that asks to send a pairing code or copy hosts.json stays on hold and the model is not called. "summarize this paper" still drafts the new body. No live gateway call | PR 182, branch `cursor/updated-note-hold-e469` | `56d8ae7` (`56d8ae73883ac3276e7be01f16a949a016bb1253`) |
+| `POST /knowledge/:id` accepts `{ audio }`. A local `MESH_STT` transcript replaces that note body. The title stays. The list stays `{ id, title }`. A missing id creates nothing. A remote URL does not write. An empty transcript keeps the old body. `server.ts` still calls `handleKnowledge` once. This does not prove a microphone | PR 183, branch `cursor/spoken-note-replace-e469` | `52ce629` (`52ce62929a7c7e3c660943767311ac3c32d36ca8`) |
 
 On `origin/main` at `5579efd` (the base of this change), `/knowledge` is unregistered in `install/payload/meshd/server.ts`. The knowledge branch already registers `handleKnowledge` once. Do not add a second `/knowledge` route.
 
 Pull request 174 and pull request 176 were re-checked with `gh` on 2026-09-22. Both tips matched the hashes above. Daemon CI and Xcode CI were green on both. Neither pull request edited `server.ts`. On pull request 176, `sh scripts/check-updated-note-draft.sh` passed on `127.0.0.1:8898`. Notes stay on the machine. Nothing from the note is stored in Supabase.
+
+Pull request 182 and pull request 183 were re-checked with `gh` on 2026-09-22. Both tips matched the hashes above. On pull request 182, daemon CI and Xcode CI were green, and there was no live gateway call. On pull request 183, daemon CI was green. The first check showed apps (Xcode) still running. A later check of the same run reported apps (Xcode) pass. This handoff records that pass. It does not treat the job as green before that later check. `sh scripts/check-spoken-note-replace.sh` passed on `127.0.0.1:8898`. Neither pull request edited `server.ts`. On the spoken-replace tip, `server.ts` still calls `handleKnowledge` once. The spoken replace does not prove a microphone.
 
 `openspec/changes/local-brain-and-harness/` stays a spike. `meshd` stays the session layer. The model is one the user configured. Jev only picks a route. The company does not host the coding model.
 
@@ -26,12 +30,12 @@ Stakeholders: the person who already has a PDF and (optionally) local speech bin
 
 - Give the next agent one contract for notes on disk, local speech handoffs, and the held app draft.
 - Keep knowledge bodies under `MESHD_STATE`. Keep them off Supabase and off any other cloud store.
-- Keep finished drafts as the implementation, including the in-place note replace and the replaced-note draft. Re-check each tip before editing the same files.
+- Keep finished drafts as the implementation, including the in-place note replace, the replaced-note draft, the replaced-note hold, and the spoken note replace. Re-check each tip before editing the same files.
 - Make the `server.ts` rule obvious: this change does not edit it. On `origin/main`, `/knowledge` is unregistered. The knowledge branch already registers it once. Do not add a second `/knowledge` route. A later agent registers only when the route is missing and no other agent holds that file.
 
 **Non-Goals:**
 
-- A second copy of pull requests 139, 145, 154, 160, 162, 174, or 176.
+- A second copy of pull requests 139, 145, 154, 160, 162, 174, 176, 182, or 183.
 - Editing `server.ts`, `pair.ts`, `Shared/Models.swift`, `Shared/MeshClient.swift`, or `project.yml` in this change.
 - A live AI Gateway call. Committing an API key, a JWT, or a database URL.
 - Merging the local-brain harness. Replacing `meshd`.
@@ -41,7 +45,7 @@ Stakeholders: the person who already has a PDF and (optionally) local speech bin
 
 ### 1. Finished drafts are the implementation
 
-PR 139 is the local PDF note and the knowledge module that owns its own file. PR 145 is spoken-out through `MESH_TTS`. PR 154 is the note-to-held-file path. PR 160 is the route-gated draft. PR 162 is spoken-in through `MESH_STT`. PR 174 is the in-place note replace. PR 176 is the replaced-note draft. An agent who needs one of those behaviors opens that pull request and re-checks the tip. Do not start another copy of any of them.
+PR 139 is the local PDF note and the knowledge module that owns its own file. PR 145 is spoken-out through `MESH_TTS`. PR 154 is the note-to-held-file path. PR 160 is the route-gated draft. PR 162 is spoken-in through `MESH_STT`. PR 174 is the in-place note replace. PR 176 is the replaced-note draft. PR 182 is the replaced-note hold. PR 183 is the spoken note replace. An agent who needs one of those behaviors opens that pull request and re-checks the tip. Do not start another copy of any of them.
 
 Alternative considered: re-implement each slice on `main` inside this change so the spec and the code land together. Rejected. A second copy of a finished draft is the failure mode this handoff exists to prevent.
 
@@ -65,7 +69,7 @@ Alternative considered: let Jev draft the file text. Rejected. Jev evaluates. Th
 
 ### 5. This change does not edit `server.ts`
 
-On `origin/main`, `/knowledge` is unregistered. The knowledge branch already registers it once. A later agent checks the tree it is editing. If `/knowledge` is already registered, that agent says so and does not add a second `/knowledge` route. If it is not, one later task may register the existing handler only when no other agent holds `server.ts`. This pull request itself contains no `server.ts` edit. Pull request 174 and pull request 176 did not edit `server.ts`.
+On `origin/main`, `/knowledge` is unregistered. The knowledge branch already registers it once. A later agent checks the tree it is editing. If `/knowledge` is already registered, that agent says so and does not add a second `/knowledge` route. If it is not, one later task may register the existing handler only when no other agent holds `server.ts`. This pull request itself contains no `server.ts` edit. Pull request 174 and pull request 176 did not edit `server.ts`. Pull request 182 and pull request 183 did not edit `server.ts`. On the spoken-replace tip, `server.ts` still calls `handleKnowledge` once.
 
 Alternative considered: register the route in this change so the next agent has a green path on `main`. Rejected. Shared contracts are serialized. This change is the handoff, not the registration. A second `/knowledge` route on the knowledge branch is the same failure.
 
@@ -81,9 +85,21 @@ A spoken note is a local binary transcript or a local TTS exit code. Agents cann
 
 Alternative considered: write a second replace handler or a second draft check beside these pull requests. Rejected. Those drafts are the implementation.
 
+### 8. The replaced-note hold is finished
+
+Pull request 182 holds a replaced note that asks to send a pairing code or copy hosts.json. The model is not called. There is no live gateway call. "summarize this paper" still drafts the new body. Daemon CI and Xcode CI were green when this handoff was written.
+
+Alternative considered: add another hold beside the route that already refuses a pairing code and hosts.json. Rejected. That hold is the implementation.
+
+### 9. The spoken note replace is finished
+
+Pull request 183 accepts `{ audio }` on `POST /knowledge/:id`. A local `MESH_STT` transcript replaces that note body. The title stays. The list stays `{ id, title }`. A missing id creates nothing. A remote URL does not write. An empty transcript keeps the old body. `server.ts` still calls `handleKnowledge` once. `sh scripts/check-spoken-note-replace.sh` passed on `127.0.0.1:8898`. Daemon CI was green. The first check showed apps (Xcode) still running. A later check of the same run reported apps (Xcode) pass. This handoff records that pass. It does not treat the job as green before that later check. This does not prove a microphone. It is not a second speech-in path and it is not a second `/knowledge` route.
+
+Alternative considered: add a second speech-in route for an existing note. Rejected. Spoken-in for a new note stays on pull request 162. This replace uses the knowledge handler that is already registered once.
+
 ## Risks / Trade-offs
 
-- [An agent rebuilds PR 139, 145, 154, 160, 162, 174, or 176] → The tasks point at the existing pull request, record the current `headRefOid`, and stop. A new file for one of those slices is a failed task.
+- [An agent rebuilds PR 139, 145, 154, 160, 162, 174, 176, 182, or 183] → The tasks point at the existing pull request, record the current `headRefOid`, and stop. A new file for one of those slices is a failed task.
 - [An agent registers `/knowledge` a second time because PR 139 is not merged] → On `origin/main`, `/knowledge` is unregistered. The knowledge branch already registers it once. The later agent first checks whether the route is already present. If it is, do not add a second `/knowledge` route. If it is not, register only when no other agent holds `server.ts`.
 - [Knowledge bodies land in Supabase, logs, or a gateway payload] → The specs treat that as a failed design. The checks on the finished drafts already refuse a Supabase client and a gateway call in the knowledge and draft paths.
 - [A draft file is treated as an executed app] → The held-file and route-gated drafts stop for confirm. An unconfirmed command does not run.
