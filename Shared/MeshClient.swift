@@ -272,6 +272,16 @@ struct MeshClient {
         return try JSONDecoder().decode(AgentNoteAsk.self, from: data)
     }
 
+    /// Titles on this machine. `GET /knowledge` returns `{ notes: [{ id, title }] }`.
+    func listKnowledgeNotes() async throws -> [KnowledgeNoteSummary] {
+        struct Listed: Decodable {
+            var notes: [KnowledgeNoteSummary]
+        }
+        let data = try await request("/knowledge", method: "GET")
+        let listed = try JSONDecoder().decode(Listed.self, from: data)
+        return listed.notes
+    }
+
     /// Create a new rmux session (optionally launching a command, e.g. "claude" / "codex").
     ///
     /// `cols`/`rows` (meshd 0.5.0+) set the new PTY's size, so a session created
