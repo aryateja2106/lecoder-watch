@@ -170,9 +170,13 @@ Live on the Pi (Linux, tmux 3.4, aarch64), 2026-09-22 17:0x IST: the daemon upgr
 redeploy never produces and reports "still 0.8.0" although nothing is wrong), `pi-claude`
 survived the restart, `/health` advertises `pty` and `captureAnsi`, and a WebSocket from the
 Mac replayed the pane's scrollback, was sized to the client (18×57 under tmux's status line)
-and echoed a keystroke in **151 ms** over Tailscale. The pane's own SGR bytes arrive intact;
-a raw ESC typed into an interactive shell is a line-editor keypress, not text, which is why
-the probe's own `printf '\033[32m…'` came back without its escapes.
+and echoed a keystroke in **38 ms** over Tailscale (Mac→Pi, WebSocket round trip measured at
+5 ms granularity; an earlier 151 ms reading was the probe's own poll interval, not the link).
+The pane's own SGR bytes arrive intact; a raw ESC typed into an interactive shell is a
+line-editor keypress, not text, which is why the probe's `printf '\033[32m…'` came back
+without its escapes. The Mac's own daemon was upgraded the same way and **rmux 0.3.1 attaches
+under the pty exactly like tmux** — replay, resize to 57 columns, 6 ms echo on loopback —
+which was the open question in the map's "verify before coding" list.
 
 Verify-before-coding results: SwiftTerm ≥ 1.19 ships a build-tool plugin xcodebuild refuses
 without `-skipPackagePluginValidation` — pinned to 1.18.0. Its GPU renderer needs the Xcode
