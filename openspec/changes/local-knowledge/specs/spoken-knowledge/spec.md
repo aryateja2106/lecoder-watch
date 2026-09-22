@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, and a spoken replace drafts that new body to `held-note.txt`. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187 and pull request 189 do not prove a microphone or a speaker.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, a local `MESH_TTS` binary can speak that replaced note, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, a spoken replace drafts that new body to `held-note.txt`, and a spoken replace with `speak: true` drafts that new transcript to a held file. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase. Pull request 187, pull request 189, and pull request 193 do not prove a microphone or a speaker. Pull request 192 (tip `6faf3f3`) already named pull request 189.
 
 ## ADDED Requirements
 
@@ -290,4 +290,57 @@ After a local `MESH_STT` transcript replaces one note, `POST /knowledge/:id` SHA
 
 - **WHEN** `sh scripts/check-spoken-replace-speak.sh` passes on `127.0.0.1:8898`
 - **THEN** the agent records that local TTS exit code and that daemon CI and Xcode CI are both green on `611f321` (check run `35714316679`)
+- **AND** the agent does not claim a microphone or a speaker was proven
+
+### Requirement: A spoken replace with speak true drafts the new transcript to a held file
+
+After `speak: true` with local `MESH_STT` and local `MESH_TTS` returns `spoken` true, the agent-note path SHALL draft that new transcript to a held file. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code transcript and a hosts.json transcript SHALL stay on hold. The body "summarize this paper" SHALL still draft. A missing id and a remote audio or TTS path MUST NOT write and MUST NOT call the model. There SHALL be no `liveGatewayCall`. The check runs with the gateway key unset. This behavior is pull request 193, which adds only `scripts/check-spoken-replace-draft.sh`. Daemon CI is green on `37d417aa`. An agent MUST NOT rebuild that check, MUST NOT add a second `/knowledge` route, and MUST NOT call the Vercel AI Gateway. On `origin/main`, `/knowledge` is unregistered. This line registers `handleKnowledge` once. A spoken note is that local binary transcript or that local TTS exit code. An agent MUST NOT claim a microphone or a speaker was proven. Pull request 192 (tip `6faf3f3`) already named pull request 189.
+
+#### Scenario: Speak true drafts the new transcript
+
+- **WHEN** a client posts `{ audio, speak: true }` to `/knowledge/:id`, local `MESH_STT` prints a transcript and exits 0, local `MESH_TTS` exits 0, and a client asks the agent-note path to draft that id
+- **THEN** the response reports spoken as true
+- **AND** the draft is that new transcript in a held file
+- **AND** that file is mode 600 and is not executed
+
+#### Scenario: A pairing-code transcript stays on hold
+
+- **WHEN** the spoken replacement transcript asks to send a pairing code
+- **THEN** that transcript stays on hold
+- **AND** the model is not called
+
+#### Scenario: A hosts.json transcript stays on hold
+
+- **WHEN** the spoken replacement transcript asks to copy hosts.json
+- **THEN** that transcript stays on hold
+- **AND** the model is not called
+
+#### Scenario: A paper summary still drafts
+
+- **WHEN** the spoken replacement transcript is "summarize this paper" and a client asks the agent-note path to draft that id
+- **THEN** the draft is from that new transcript
+- **AND** the held file is not executed
+
+#### Scenario: A missing id does not write or call the model
+
+- **WHEN** the spoken replace draft is asked for an id that is not on disk
+- **THEN** the model is not called
+- **AND** no draft file is created
+
+#### Scenario: A remote audio or TTS path does not write or call the model
+
+- **WHEN** the audio path or `MESH_TTS` is an `http`, `https`, scheme, or protocol-relative URL
+- **THEN** the daemon does not write a note
+- **AND** the model is not called
+
+#### Scenario: There is no liveGatewayCall
+
+- **WHEN** `sh scripts/check-spoken-replace-draft.sh` runs
+- **THEN** the check and the draft path contain no `liveGatewayCall`
+- **AND** no request is sent to the AI Gateway
+
+#### Scenario: The spoken replace draft does not prove a microphone or a speaker
+
+- **WHEN** `sh scripts/check-spoken-replace-draft.sh` passes on `127.0.0.1:8898` with the gateway key unset
+- **THEN** the agent records that local STT transcript, that local TTS exit code, and that daemon CI is green on `37d417aa`
 - **AND** the agent does not claim a microphone or a speaker was proven
