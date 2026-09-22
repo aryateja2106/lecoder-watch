@@ -113,6 +113,29 @@ shot: one row per machine, each with its version and `doctor: 7/7 ok`.
 
 ---
 
+## When a machine will not come back
+
+Removing a machine from the phone **tombstones** it: pairing with a *different* machine will
+not resurrect it, on purpose, so a deliberate removal survives the next QR scan. Until 0.8.0
+that was silent — the sheet said "Added 2 machines" and the third was simply gone. Now the
+Pair screen lists it under **Not added**, with an **Add anyway** button that clears the
+tombstone and adds it.
+
+Two ways back, both in the app you have:
+
+1. **Add anyway** — pair with any machine that knows the missing one, then tap it in the
+   *Not added* section.
+2. **Pair with the machine itself** — pairing a machine always un-removes it. Codes are
+   minted only on the machine, so run it there (ssh is fine, the QR prints in your terminal):
+
+   ```sh
+   ssh <user>@<machine> 'PATH="$HOME/.bun/bin:$PATH" ~/.mesh/bin/mesh pair'
+   ```
+
+   The explicit `PATH` matters over a non-interactive ssh: `mesh` is a `#!/usr/bin/env bun`
+   script and the installer puts bun on the PATH in the interactive part of the shell rc, so
+   a bare `ssh host '~/.mesh/bin/mesh …'` dies with `env: 'bun': No such file or directory`.
+
 ## What not to claim on camera
 
 - **The phone app is not on the App Store or TestFlight at 0.8.0 yet.** The daemon is
@@ -122,3 +145,6 @@ shot: one row per machine, each with its version and `doctor: 7/7 ok`.
   colour, repainting from polls. If a viewer's terminal looks flat, that is the tell.
 - The watch **shows** the terminal and answers prompts; it does not render video or a full
   emulator. Do not imply a terminal on the wrist.
+- A machine whose **monitor is asleep** streams a black screen: the thumbnail and Screen &
+  control are honest, there is simply nothing lit. Any input wakes it — a two-pixel pointer
+  move is enough — so nudge the trackpad before you film that machine.
