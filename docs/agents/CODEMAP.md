@@ -14,7 +14,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 
 | area | files | lines | what it is |
 |---|---|---|---|
-| `Shared/` | 16 | ~3,700 | Wire types and pure logic both apps compile; the self-checks link against these |
+| `Shared/` | 17 | ~3,900 | Wire types and pure logic both apps compile; the self-checks link against these |
 | `iOS/` | 24 | ~11,500 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
 | `Watch/` | 7 | ~4,600 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
@@ -41,6 +41,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `MeshClient.swift` | L | Talks to a single machine's `meshd` over Tailscale *[serialized — every endpoint call]* | check-agent-identity-transport, check-inspect-crop, check-native-terminal-keys, check-watch-terminal-wiring |
 | `Models.swift` | XL | every wire type the phone, the watch and meshd agree on (Agent, AgentEvent, Machine, WatchCommand…) plus the pure logic derived from them, above all… *[serialized — every wire type incl. WatchCommand]* | check-approve-path, check-brand, check-inspect-crop, check-limit-helpers, check-mesh-push, check-session-state, check-usage-alert-identity, check-watch-terminal-wiring |
 | `PowerActions.swift` | S | Shared catalogue for every machine-level action offered by the phone and watch | — |
+| `PtyClient.swift` | S | the phone's end of meshd's `GET /agents/:name/pty` WebSocket: raw pty bytes in, keystrokes out, resize/ping as JSON, reconnect with backoff | — |
 | `RiskClassifier.swift` | S | How much damage a one-tap answer could do | check-inspect-crop, check-usage-alert-identity |
 | `ScreenZoom.swift` | S | Geometry for a zoomable remote screen with a pointer drawn on it | check-inspect-crop |
 | `SecureStore.swift` | S | Keychain storage for anything that grants access to a user's machines | — |

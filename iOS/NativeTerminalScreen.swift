@@ -1,9 +1,9 @@
 // NativeTerminalScreen.swift — the phone terminal as a terminal: SwiftTerm paints the
 // pane (colour, cursor, alt-screen) and a fixed key bar sits under it, the way a
-// mobile terminal is expected to look. Slice 1 of the Moshi parity plan
-// (docs/product/moshi-parity-2026-09-22.md): the screen is fed by `/output?ansi=1`
-// polls and keys go out over `/send`, so it works against every 0.8 daemon today;
-// the streaming pty route replaces the poll in the next slice without touching the UI.
+// mobile terminal is expected to look (docs/product/moshi-parity-2026-09-22.md).
+// Two transports behind one screen: on a `pty` daemon the pane is attached over a
+// WebSocket and every keystroke is a raw byte (PtyClient); on a `captureAnsi` daemon the
+// screen is repainted from `/output?ansi=1` polls and keys go out over `/send`.
 import SwiftUI
 import SwiftTerm
 
@@ -14,6 +14,8 @@ struct NativeTerminalScreen: View {
     var initialPane: String? = nil
 
     @StateObject private var terminal = TerminalController()
+    /// Set once on appear from the daemon's capabilities; nil until then.
+    @State private var pty: PtyClient?
     @State private var paneSize = (cols: 80, rows: 24)
     @State private var lastInteraction = Date.distantPast
     @State private var failure: String?
@@ -36,11 +38,11 @@ struct NativeTerminalScreen: View {
 
     var body: some View {
         GeometryReader { geo in
-            // The pane keeps its own width (a detached tmux session is 80 columns); the
+            // Streaming: the pane is sized to the phone, nothing to scroll. Polling: the
+            // pane keeps its own width (a detached tmux session is 80 columns) and the
             // phone scrolls sideways rather than wrapping every TUI line into a riddle.
-            // The streaming slice sizes the pane to the phone and this scroll disappears.
             let cell = TerminalController.cellWidth(fontSize: fontSize)
-            let width = max(geo.size.width, CGFloat(paneSize.cols) * cell + 8)
+            let width = pty != nil ? geo.size.width : max(geo.size.width, CGFloat(paneSize.cols) * cell + 8)
             ScrollView(.horizontal, showsIndicators: false) {
                 SwiftTermView(controller: terminal, fontSize: fontSize)
                     .frame(width: width, height: geo.size.height)
@@ -100,11 +102,28 @@ struct NativeTerminalScreen: View {
             // One keystroke per POST, and the POSTs must land in order: fired as
             // independent Tasks they overtook each other and "echo" arrived as "ehco".
             terminal.onBytes = { bytes in terminal.enqueue { await route(bytes) } }
+            if pty == nil, client.supports("pty"), !session.isMuxGuest {
+                let stream = PtyClient(machine: machine, session: session.name, pane: initialPane)
+                stream.onBytes = { data in terminal.feed(data) }
+                stream.onState = { state in
+                    switch state {
+                    case .open: failure = nil
+                    case .closed(let why?): failure = "Reconnecting — \(why)"
+                    default: break
+                    }
+                }
+                terminal.onResize = { cols, rows in stream.resize(cols: cols, rows: rows) }
+                pty = stream
+                let size = terminal.size
+                stream.connect(cols: size.cols, rows: size.rows)
+            }
         }
+        .onDisappear { pty?.close() }
         .task(id: session.name) {
-            // Same cadence as the peek screen: 500 ms while the user is driving, 2 s idle,
-            // nothing in the background.
+            // Polling transport only. Same cadence as the peek screen: 500 ms while the
+            // user is driving, 2 s idle, nothing in the background.
             while !Task.isCancelled {
+                if pty != nil { try? await Task.sleep(for: .seconds(1)); continue }
                 let parked = UIApplication.shared.applicationState == .background
                 if !parked { await refresh() }
                 let fast = !parked && Date().timeIntervalSince(lastInteraction) < 10
@@ -119,9 +138,9 @@ struct NativeTerminalScreen: View {
         HStack(spacing: 6) {
             modifierKey("Ctrl", armed: $ctrlArmed)
             modifierKey("Alt", armed: $altArmed)
-            barKey("Esc") { terminal.enqueue { await send(key: "escape") } }
-            barKey("Tab") { terminal.enqueue { await send(key: "tab") } }
-            barKey("↑") { terminal.enqueue { await send(key: "up") } }
+            barKey("Esc") { press([0x1b], key: "escape") }
+            barKey("Tab") { press([0x09], key: "tab") }
+            barKey("↑") { press([0x1b, 0x5b, 0x41], key: "up") }
             Spacer(minLength: 0)
             barButton(systemImage: "mic.fill") { showingVoice = true }
                 .accessibilityLabel("Dictate")
@@ -180,8 +199,20 @@ struct NativeTerminalScreen: View {
         }
     }
 
+    /// A key-bar key: the raw bytes when streaming, the daemon's key name when polling.
+    private func press(_ bytes: [UInt8], key: String) {
+        if let pty { lastInteraction = Date(); pty.send(bytes) }
+        else { terminal.enqueue { await send(key: key) } }
+    }
+
+    /// Text from dictation or the polling router. Streaming sends the bytes as typed.
     private func send(text: String? = nil, key: String? = nil) async {
         lastInteraction = Date()
+        if let pty {
+            if let text { pty.send(Array(text.utf8)) }
+            if key == "enter" { pty.send([0x0d]) }
+            return
+        }
         do {
             try await client.send(agent: session.name, text: text, key: key, pane: initialPane)
             refusal = nil
@@ -191,15 +222,21 @@ struct NativeTerminalScreen: View {
         await refresh()
     }
 
-    /// Bytes SwiftTerm produced from the system keyboard, a hardware keyboard or its
-    /// own accessory, turned into the daemon's `/send` vocabulary. Pure, so it is checked
-    /// by scripts/check-native-terminal-keys.swift.
+    /// Bytes SwiftTerm produced from the system keyboard, a hardware keyboard or its own
+    /// accessory. Streaming: straight to the pty, with an armed Ctrl/Alt folded into the
+    /// first letter. Polling: TerminalKeyRouter turns them into the daemon's `/send`
+    /// vocabulary (pure, checked by scripts/check-native-terminal-keys.sh).
     private func route(_ bytes: [UInt8]) async {
-        for step in TerminalKeyRouter.route(bytes, ctrl: ctrlArmed, alt: altArmed) {
-            switch step {
-            case .text(let t): await send(text: t)
-            case .key(let k): await send(key: k)
-            case .unsupported(let what): refusal = "\(what) needs the streaming terminal"
+        if let pty {
+            lastInteraction = Date()
+            pty.send(TerminalKeyRouter.applyModifiers(bytes, ctrl: ctrlArmed, alt: altArmed))
+        } else {
+            for step in TerminalKeyRouter.route(bytes, ctrl: ctrlArmed, alt: altArmed) {
+                switch step {
+                case .text(let t): await send(text: t)
+                case .key(let k): await send(key: k)
+                case .unsupported(let what): refusal = "\(what) needs the streaming terminal"
+                }
             }
         }
         if ctrlArmed || altArmed { ctrlArmed = false; altArmed = false }
@@ -255,6 +292,16 @@ final class TerminalController: ObservableObject {
         chain = Task { await previous?.value; await work() }
     }
 
+    /// Streaming transport: pane bytes straight into the emulator.
+    func feed(_ data: Data) { view?.feed(byteArray: ArraySlice([UInt8](data))) }
+
+    /// The emulator's current grid, for the attach size.
+    var size: (cols: Int, rows: Int) {
+        guard let t = view?.getTerminal() else { return (80, 24) }
+        return (max(20, t.cols), max(5, t.rows))
+    }
+    var onResize: ((Int, Int) -> Void)?
+
     func focus(_ on: Bool) {
         if on { _ = view?.becomeFirstResponder() } else { _ = view?.resignFirstResponder() }
     }
@@ -300,7 +347,9 @@ struct SwiftTermView: UIViewRepresentable {
             let bytes = Array(data)
             Task { @MainActor in controller.onBytes?(bytes) }
         }
-        func sizeChanged(source: SwiftTerm.TerminalView, newCols: Int, newRows: Int) {}
+        func sizeChanged(source: SwiftTerm.TerminalView, newCols: Int, newRows: Int) {
+            Task { @MainActor in controller.onResize?(newCols, newRows) }
+        }
         func setTerminalTitle(source: SwiftTerm.TerminalView, title: String) {}
         func hostCurrentDirectoryUpdate(source: SwiftTerm.TerminalView, directory: String?) {}
         func scrolled(source: SwiftTerm.TerminalView, position: Double) {}

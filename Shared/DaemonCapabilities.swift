@@ -74,6 +74,9 @@ enum DaemonCapabilities {
         DaemonGap(capability: "captureAnsi",
                   feature: "Colour in the terminal",
                   symptom: "The phone terminal shows the agent's screen in one colour, cursor guessed."),
+        DaemonGap(capability: "pty",
+                  feature: "Live terminal",
+                  symptom: "The phone terminal repaints from polls instead of streaming; keys take a round trip each."),
     ]
 
     /// The gaps for a machine, given what its daemon advertised.

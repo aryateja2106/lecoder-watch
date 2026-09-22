@@ -14,6 +14,17 @@ enum TerminalKeyRouter {
         "[5~": "page-up", "[6~": "page-down", "[3~": "delete", "[Z": "shift-tab", "\r": "shift-enter",
     ]
 
+    /// Streaming transport: fold an armed Ctrl/Alt into the first letter of the bytes and
+    /// pass everything else through untouched. Ctrl-c is 0x03; Alt-b is ESC b.
+    static func applyModifiers(_ bytes: [UInt8], ctrl: Bool, alt: Bool) -> [UInt8] {
+        guard ctrl || alt, let i = bytes.firstIndex(where: { (0x61...0x7a).contains($0) || (0x41...0x5a).contains($0) }) else { return bytes }
+        var out = bytes
+        let lower = bytes[i] | 0x20
+        if ctrl { out[i] = lower & 0x1f }
+        else { out.replaceSubrange(i...i, with: [0x1b, lower]) }
+        return out
+    }
+
     /// Sticky Ctrl/Alt from the key bar apply to the first letter typed and no further.
     static func route(_ bytes: [UInt8], ctrl: Bool = false, alt: Bool = false) -> [Step] {
         var steps: [Step] = []

@@ -119,7 +119,7 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `handoff` | MeshClient.swift:593, MeshClient.swift:602, MeshClient.swift:614 | no |
 | `brain` | — (nothing gates it) | no |
 | `captureAnsi` | MeshClient.swift:277, TerminalView.swift:927, TerminalView.swift:937 | yes |
-| `pty` | — (nothing gates it) | no |
+| `pty` | NativeTerminalScreen.swift:105 | yes |
 
 ## Watch → phone relay commands
 

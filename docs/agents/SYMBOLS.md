@@ -450,6 +450,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | primaryIPv4 | function | install/payload/meshd/wol.ts:137 |
 | primaryMac | function | install/payload/meshd/wol.ts:121 |
 | ProcInfo | struct | Shared/Models.swift:263 |
+| PtyClient | class | Shared/PtyClient.swift:10 |
 | PtyOpts | type | install/payload/meshd/pty.ts:22 |
 | ptyWebSocket | function | install/payload/meshd/pty.ts:61 |
 | pushAlert | function | install/payload/meshd/push.ts:280 |
@@ -554,7 +555,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | stripRcLines | function | install/payload/bin/mesh:1998 |
 | SuggestionChip | struct | iOS/AgentChatView.swift:1165 |
 | swapInMeshd | function | install/payload/bin/mesh:769 |
-| SwiftTermView | struct | iOS/NativeTerminalScreen.swift:267 |
+| SwiftTermView | struct | iOS/NativeTerminalScreen.swift:314 |
 | syncAgyHooks | function | install/payload/bin/mesh:1467 |
 | syncBin | function | install/payload/bin/mesh:782 |
 | syncBridgePage | function | install/payload/bin/mesh:838 |
@@ -564,12 +565,12 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | TailnetSnapshot | struct | Shared/Models.swift:369 |
 | tailscaleBin | function | install/payload/bin/mesh:1695 |
 | terminalActiveFirst | func | iOS/TerminalView.swift:181 |
-| TerminalController | class | iOS/NativeTerminalScreen.swift:233 |
+| TerminalController | class | iOS/NativeTerminalScreen.swift:270 |
 | TerminalFallbackBlock | struct | iOS/AgentChatView.swift:966 |
 | TerminalKeyRouter | enum | Shared/TerminalKeyRouter.swift:8 |
 | terminalReady | func | iOS/TerminalView.swift:189 |
 | TerminalTab | struct | iOS/TerminalView.swift:11 |
-| TerminalTheme | struct | iOS/NativeTerminalScreen.swift:211 |
+| TerminalTheme | struct | iOS/NativeTerminalScreen.swift:248 |
 | ThinkingDisclosure | struct | iOS/AgentChatView.swift:823 |
 | tokenWeakness | function | install/payload/meshd/doctor.ts:35 |
 | ToolResultCard | struct | iOS/AgentChatView.swift:863 |
