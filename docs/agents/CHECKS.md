@@ -31,6 +31,7 @@
 | `check-docs-index.sh` | every doc is findable, and the index does not point at ghosts |
 | `check-drag-lock-release.sh` | the watch must never walk away holding the Mac's mouse button down |
 | `check-entitlements.sh` | the capabilities the code calls are the capabilities the build is entitled to |
+| `check-feedback-redact.swift` | the problem report never carries a secret: every key shape the daemon's redactor knows is replaced by its… |
 | `check-file-browser-filter.swift` | Run via `sh scripts/check-all.sh`, which compiles every check-*.swift against the full Shared/ dependency set |
 | `check-fleet.sh` | every machine in ~/.mesh/hosts.json runs THIS tree's meshd and is usable |
 | `check-glance.swift` | A complication is the most-seen and least-interactive surface in the product: it is on the watch face all day… |

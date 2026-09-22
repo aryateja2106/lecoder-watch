@@ -15,7 +15,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | area | files | lines | what it is |
 |---|---|---|---|
 | `Shared/` | 15 | ~3,600 | Wire types and pure logic both apps compile; the self-checks link against these |
-| `iOS/` | 21 | ~10,900 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
+| `iOS/` | 23 | ~11,100 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
 | `Watch/` | 7 | ~4,600 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
@@ -25,7 +25,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 3 | ~1,700 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 106 | ~10,300 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `scripts/` | 107 | ~10,300 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
@@ -59,10 +59,12 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `BackgroundRefresh.swift` | S | Periodic usage/limit polling while the app is closed | — |
 | `ContentView.swift` | XL | the phone's tab shell: Machines, attention rows, machine detail, Settings, the daemon-update and Local Network banners | — |
 | `ExposedSecretsScreen.swift` | S | Settings → Exposed secrets. meshd 0.6+ ("redact") replaces a token, key or password in event and output text before it ever leaves the machine — but printing… | — |
+| `FeedbackView.swift` | S | report a problem from the phone: what happened in your words, plus a redacted bundle (app build, machines, daemon versions, recent events, the last error) you… | check-feedback-redact |
 | `FileBrowserView.swift` | M | browse a machine's filesystem over /files and /fs, open links, read text files | — |
 | `FileViewer.swift` | M | read a file off a machine on the phone: Markdown rendered, HTML shown, code and text with a pinch to size — because most of watching an agent work is reading… | — |
 | `GuidesView.swift` | S | the short how-tos a new owner needs: pairing, letting agents install apps on this phone and watch, granting a Mac, a Linux desktop, overnight agents | — |
 | `LiveActivityController.swift` | M | Runs the live card for whichever session currently deserves one | — |
+| `MachineStatsView.swift` | S | a machine's load at a glance: memory, disk and CPU gauges, a live line of the last minute, the heaviest processes, and how many more agents would fit | — |
 | `MeshRelayApp.swift` | S | Receives the APNs device token and hands it to whoever registered interest | check-phone-input-and-wake |
 | `MeshStore.swift` | XL | the phone brain: polls every machine, holds the machine list and tokens, relays snapshots to the watch, and executes the watch's WatchCommands (`handle(_:)`) | check-inspect-crop, check-relay-receiver, check-watch-scrollback, check-watch-terminal-wiring |
 | `NotificationManager.swift` | L | Usage limit lifecycle notifications: budget tiers at 50% and 25% left, hit at 95% used, session-window-open, scheduled reset alert, ping when a blocked limit… | check-usage-alert-identity |

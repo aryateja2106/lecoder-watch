@@ -23,6 +23,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | AgentNotification | enum | Shared/AgentNotifications.swift:11 |
 | AgentOutput | struct | Shared/Models.swift:427 |
 | AgentRisk | enum | Shared/RiskClassifier.swift:14 |
+| agentsThatFit | func | iOS/MachineStatsView.swift:58 |
 | airMouseDelta | func | Shared/Models.swift:1281 |
 | alertKey | function | install/payload/meshd/push.ts:201 |
 | api | function | install/payload/bin/mesh:75 |
@@ -73,6 +74,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | CheckAttentionHostname | struct | scripts/check-attention-hostname.swift:13 |
 | CheckConnectionPhase | struct | scripts/check-connection-phase.swift:11 |
 | CheckDaemonGaps | struct | scripts/check-daemon-gaps.swift:12 |
+| CheckFeedbackRedact | struct | scripts/check-feedback-redact.swift:8 |
 | CheckFileBrowserFilter | struct | scripts/check-file-browser-filter.swift:12 |
 | CheckGlance | struct | scripts/check-glance.swift:7 |
 | CheckLaunchable | struct | scripts/check-launchable.swift:6 |
@@ -190,6 +192,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | ExposureRow | struct | iOS/ExposedSecretsScreen.swift:107 |
 | ExposureStatus | type | install/payload/meshd/redact.ts:28 |
 | externalFootprint | function | install/payload/bin/mesh:1963 |
+| FeedbackBundle | enum | iOS/FeedbackView.swift:85 |
+| FeedbackView | struct | iOS/FeedbackView.swift:11 |
 | FileBrowserView | struct | iOS/FileBrowserView.swift:19 |
 | fileSizeLabel | func | iOS/FileBrowserView.swift:315 |
 | fileSymbol | func | iOS/FileBrowserView.swift:371 |
@@ -316,6 +320,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | LiveSessionPick | struct | Shared/Models.swift:687 |
 | liveSessionPick | func | Shared/Models.swift:773 |
 | loadAppsConfig | function | install/payload/bin/mesh:1627 |
+| loadColor | func | iOS/MachineStatsView.swift:63 |
 | loadConfig | function | install/payload/bin/mesh:35 |
 | LocalDaemon | enum | MeshDesktop/LocalDaemon.swift:12 |
 | LocalNetworkBlockedBanner | struct | iOS/ContentView.swift:256 |
@@ -339,6 +344,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MachinesListView | struct | Watch/WatchViews.swift:120 |
 | MachineSnapshot | struct | Shared/Models.swift:919 |
 | MachinesTab | struct | iOS/ContentView.swift:281 |
+| MachineStatsRow | struct | iOS/MachineStatsView.swift:19 |
+| MachineStatsView | struct | iOS/MachineStatsView.swift:67 |
 | machineSummary | func | iOS/ContentView.swift:1078 |
 | MachineThumbnail | struct | iOS/ContentView.swift:1774 |
 | magicPacket | function | install/payload/meshd/wol.ts:24 |
@@ -532,6 +539,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | StatPill | struct | iOS/TerminalView.swift:1534 |
 | StatRow | struct | iOS/ContentView.swift:1703 |
 | Stats | struct | Shared/Models.swift:272 |
+| StatsSample | struct | iOS/MachineStatsView.swift:11 |
 | statusColor | func | Watch/WatchViews.swift:479 |
 | StepRow | struct | iOS/PairMachineView.swift:257 |
 | StopReason | type | install/payload/meshd/codex-state.ts:19 |

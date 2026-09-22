@@ -8,6 +8,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are
 each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
+
+_This block is the 0.8.0 beta — app and daemon both report 0.8.0 (CFBundleVersion 2). Cut the heading when the TestFlight build is uploaded._
 - **Approve reaches Claude.** A prompt on any machine shows as a *Needs you* row and a bell badge, whatever name the phone knows the machine by; Continue answers it. Every menu an agent prints — Claude Code's permission list, the trust-folder prompt, a y/N question — appears as buttons on the phone and the watch (Choose), so the answer is a tap, not a guess.
 - Screen & control knows which keyboard it is: ⌘⌥⌃⇧ on a Mac, Ctrl/Alt/Super on Linux, a held modifier filled orange; one tap opens the machine's launcher (Spotlight/Raycast, or rofi/ulauncher/`MESH_LAUNCHER` on Linux) or a terminal; a search sheet opens any running or installed app; two monitors are two pictures with chips to switch.
 - Screen & control types like the machine's own keyboard: every key goes straight through, modifiers stick for chords (⌘q, ⌘w, ⌘tab…), and the controls are one small floating capsule instead of a bar. Taps land where you point on Linux too.
