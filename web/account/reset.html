@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set a new password — LeSearch Mesh</title>
+<meta name="description" content="Set a new password for a LeSearch Mesh website account from the recovery link. This does not read or write devices or the mailbox.">
+<link rel="icon" href="/appicon.png">
+<meta name="theme-color" content="#191919">
+<link rel="stylesheet" href="/account/account.css">
+</head>
+<body data-account="reset">
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="/"><img src="/logo.svg" alt=""> LeSearch Mesh</a>
+    <div class="spacer"></div>
+    <a class="link" href="/">← Back</a>
+  </div>
+</header>
+<main class="wrap">
+  <h1>Set a new password</h1>
+  <p class="lede">This page uses the recovery session in the link you opened, then sends you back to sign in. Setting a new password does not read or write devices or the mailbox, and it does not grant access to your machines.</p>
+  <p id="setup" class="setup" role="status">Account setup is not finished on this deploy</p>
+  <form id="form" method="post" action="/account/reset">
+    <label for="new-password">New password</label>
+    <input id="new-password" name="new-password" type="password" autocomplete="new-password" required>
+    <button class="btn btn-primary" type="submit">Update password</button>
+  </form>
+  <p id="status" class="status" role="status"></p>
+  <p class="switch"><a href="/account/sign-in">Back to sign in</a></p>
+</main>
+<script src="/account/config.js"></script>
+<script src="/account/account.js"></script>
+</body>
+</html>

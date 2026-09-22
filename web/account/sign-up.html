@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create account — LeSearch Mesh</title>
+<meta name="description" content="Create a LeSearch Mesh website account. It is a username, email, and password — identity only, not a copy of your machines.">
+<link rel="icon" href="/appicon.png">
+<meta name="theme-color" content="#191919">
+<link rel="stylesheet" href="/account/account.css">
+</head>
+<body data-account="sign-up">
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="/"><img src="/logo.svg" alt=""> LeSearch Mesh</a>
+    <div class="spacer"></div>
+    <a class="link" href="/">← Back</a>
+  </div>
+</header>
+<main class="wrap">
+  <h1>Create an account</h1>
+  <p class="lede">A username, an email, and a password. This account is your identity on the website. It does not copy mesh tokens, tailnet addresses, or a host list, and signing in does not put those on another device. Installing the daemon and pairing with the eight-character code still work with no account.</p>
+  <p id="setup" class="setup" role="status">Account setup is not finished on this deploy</p>
+  <form id="form" method="post" action="/account/sign-up">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="32" pattern="[a-z0-9_]{3,32}">
+    <p class="hint">3–32 characters: a–z, 0–9, underscore.</p>
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" required>
+    <button class="btn btn-primary" type="submit">Create account</button>
+  </form>
+  <p id="status" class="status" role="status"></p>
+  <p class="switch"><a href="/account/sign-in">Already have an account? Sign in</a></p>
+</main>
+<script src="/account/config.js"></script>
+<script src="/account/account.js"></script>
+</body>
+</html>

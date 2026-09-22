@@ -1,0 +1,74 @@
+/* Account pages. Same monochrome tokens as web/index.html:
+   --bg #191919, --ink #e9e9e7, JetBrains Mono. No third-party requests. */
+:root{
+  --bg:#191919; --bg-2:#202020; --panel:#1f1f1f; --elev:#252525; --hover:#2a2a2a;
+  --line:#2a2a2a; --line-2:#373737; --line-h:#525252;
+  --ink:#e9e9e7; --ink-2:#9b9b9b; --ink-3:#6b6b6b;
+  --ok:#4ade80; --danger:#ef4444;
+  --mono:'JetBrains Mono','Fira Code','SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  --radius:8px; --wrap:720px;
+}
+*{box-sizing:border-box}
+html{color-scheme:dark}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);
+  font-size:15.5px;line-height:1.65;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(900px 520px at 68% -12%,rgba(233,233,231,.06),transparent 60%),
+             radial-gradient(640px 420px at 8% -4%,rgba(233,233,231,.035),transparent 60%)}
+::selection{background:var(--ink);color:var(--bg)}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:4px}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+
+header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
+  background:rgba(25,25,25,.85);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;gap:16px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;text-decoration:none;font-size:15px}
+.brand img{width:28px;height:28px;background:transparent;padding:0;filter:invert(.92)}
+.nav .spacer{flex:1}
+.nav a.link{color:var(--ink-2);text-decoration:none;font-size:13.5px}
+.nav a.link:hover{color:var(--ink)}
+
+main{padding:64px 0 90px}
+h1{font-size:clamp(30px,5vw,40px);letter-spacing:-.03em;line-height:1.1;margin:0;font-weight:800;color:var(--ink)}
+@supports(-webkit-background-clip:text){
+  h1{background:linear-gradient(180deg,#ffffff 55%,#b9b9b6);
+     -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+}
+.lede{color:var(--ink-2);margin:18px 0 0;max-width:62ch}
+.lede strong{color:var(--ink)}
+
+.setup{margin:28px 0 0;background:var(--panel);border:1px solid var(--line-2);border-radius:var(--radius);
+  padding:14px 16px;color:var(--ink);font-size:14px}
+.setup[hidden]{display:none}
+
+form{margin-top:28px;background:linear-gradient(180deg,#232323,#1d1d1d);border:1px solid var(--line);
+  border-radius:var(--radius);padding:22px;box-shadow:inset 0 1px 0 rgba(255,255,255,.045);max-width:440px}
+label{display:block;margin-top:16px;font-size:12px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-3)}
+form label:first-child{margin-top:0}
+input{display:block;width:100%;margin-top:8px;background:var(--bg);color:var(--ink);
+  border:1px solid var(--line-2);border-radius:var(--radius);padding:12px 14px;
+  font:14px/1.4 var(--mono)}
+input:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+input:-webkit-autofill{-webkit-text-fill-color:var(--ink);box-shadow:0 0 0 1000px var(--bg) inset}
+.hint{margin:8px 0 0;color:var(--ink-3);font-size:12.5px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:var(--radius);
+  padding:11px 18px;font-size:14px;font-weight:600;text-decoration:none;border:1px solid transparent;
+  font-family:var(--mono);cursor:pointer}
+.btn-primary{width:100%;margin-top:22px;background:var(--ink);color:var(--bg);
+  box-shadow:0 0 0 1px rgba(255,255,255,.06),0 10px 30px -16px rgba(233,233,231,.3)}
+.btn-primary:hover{background:#fff}
+.btn-primary:disabled{opacity:.55;cursor:default}
+.btn:active{transform:translateY(1px)}
+@media (prefers-reduced-motion:reduce){.btn:active{transform:none}}
+
+.status{margin:16px 0 0;font-size:13.5px;max-width:62ch;min-height:1.4em}
+.status.error{color:var(--danger)}
+.status.ok{color:var(--ok)}
+.switch{margin:22px 0 0;color:var(--ink-2);font-size:13.5px}
+.switch a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--line-h)}
+.switch a:hover{text-decoration-color:var(--ink)}
+.switch .sep{color:var(--ink-3);margin:0 8px}

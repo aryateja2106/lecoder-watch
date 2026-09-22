@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — LeSearch Mesh</title>
+<meta name="description" content="Sign in to a LeSearch Mesh website account with email and password. The account is identity only and does not copy your machines.">
+<link rel="icon" href="/appicon.png">
+<meta name="theme-color" content="#191919">
+<link rel="stylesheet" href="/account/account.css">
+</head>
+<body data-account="sign-in">
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="/"><img src="/logo.svg" alt=""> LeSearch Mesh</a>
+    <div class="spacer"></div>
+    <a class="link" href="/">← Back</a>
+  </div>
+</header>
+<main class="wrap">
+  <h1>Sign in</h1>
+  <p class="lede">Email and password. This account is your identity on the website. Signing in does not move a mesh token, a tailnet address, or a host list onto this device. Installing and pairing still work with no account.</p>
+  <p id="setup" class="setup" role="status">Account setup is not finished on this deploy</p>
+  <form id="form" method="post" action="/account/sign-in">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button class="btn btn-primary" type="submit">Sign in</button>
+  </form>
+  <p id="status" class="status" role="status"></p>
+  <p class="switch"><a href="/account/sign-up">Create an account</a><span class="sep">·</span><a href="/account/forgot">Forgot password</a></p>
+</main>
+<script src="/account/config.js"></script>
+<script src="/account/account.js"></script>
+</body>
+</html>
