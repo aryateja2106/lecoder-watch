@@ -122,6 +122,9 @@ const KEYSYMS: Record<string, string> = {
   // (cmd-shift-2, cmd-shift-4) made digits part of the key bar's vocabulary.
   0: "0", 1: "1", 2: "2", 3: "3", 4: "4",
   5: "5", 6: "6", 7: "7", 8: "8", 9: "9",
+  // Letters likewise: the phone's chord chips now include ⌘w and ⌘q, and the coverage
+  // check wants every chip's key in this map by name.
+  a: "a", b: "b", c: "c", d: "d", e: "e", f: "f", g: "g", h: "h", i: "i", j: "j", k: "k", l: "l", m: "m", n: "n", o: "o", p: "p", q: "q", r: "r", s: "s", t: "t", u: "u", v: "v", w: "w", x: "x", y: "y", z: "z",
 };
 // cmd from the watch means "the primary shortcut modifier" — on Linux that is ctrl.
 const MODS: Record<string, string> = {
@@ -149,7 +152,13 @@ function keysym(key: string): string | null {
 export function eventToArgs(e: any): string[] | null {
   switch (e.t) {
     case "move": return ["mousemove_relative", "--", String(Math.round(e.dx ?? 0)), String(Math.round(e.dy ?? 0))];
-    case "moveto": case "moveTo": return null; // needs per-display geometry; watch falls back to relative
+    case "moveto": case "moveTo": {
+      // Absolute, normalized within the display (the same contract as the Mac helper).
+      // The geometry is stamped onto the event by linuxInjectEvents before we get here.
+      const w = Number(e._screenW), h = Number(e._screenH);
+      if (!(w > 0 && h > 0) || typeof e.x !== "number" || typeof e.y !== "number") return null;
+      return ["mousemove", "--", String(Math.round(Math.min(1, Math.max(0, e.x)) * (w - 1))), String(Math.round(Math.min(1, Math.max(0, e.y)) * (h - 1)))];
+    }
     case "click": {
       const btn = BUTTONS[String(e.button ?? "left")] ?? "1";
       const count = Math.min(3, Math.max(1, Number(e.count ?? 1)));
@@ -187,7 +196,16 @@ export function eventToArgs(e: any): string[] | null {
 export async function linuxInjectEvents(events: any[]): Promise<{ ok: boolean; count?: number; error?: string }> {
   if (!(await has("xdotool"))) return { ok: false, error: "xdotool not installed (apt install xdotool)" };
   let count = 0;
-  for (const e of events) {
+  // The phone positions the pointer absolutely (moveTo, normalized), and a click is
+  // "moveTo, click". moveTo used to be dropped here, so every tap from the phone
+  // clicked wherever the pointer already was — measured on the Pi 2026-09-22.
+  let screen: { w: number; h: number } | null = null;
+  if (events.some((e) => e?.t === "moveTo" || e?.t === "moveto")) {
+    const geometry = (await run(["xdotool", "getdisplaygeometry"])).out.trim().split(/\s+/).map(Number);
+    if (geometry[0] > 0 && geometry[1] > 0) screen = { w: geometry[0], h: geometry[1] };
+  }
+  for (const raw of events) {
+    const e = screen && (raw?.t === "moveTo" || raw?.t === "moveto") ? { ...raw, _screenW: screen.w, _screenH: screen.h } : raw;
     const args = eventToArgs(e);
     if (!args) continue;
     await run(["xdotool", ...args]);

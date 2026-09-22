@@ -165,6 +165,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | DiagnoseRow | struct | iOS/ContentView.swift:1499 |
 | DictateLink | struct | Watch/WatchViews.swift:34 |
 | die | function | install/payload/bin/mesh:112 |
+| DirectKeyboard | struct | iOS/RemoteScreenView.swift:1214 |
 | DiskInfo | struct | Shared/Models.swift:256 |
 | Display | struct | install/payload/bin/mesh-input.swift:70 |
 | display | func | install/payload/bin/mesh-input.swift:88 |
@@ -181,7 +182,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | EventAlertDeduper | struct | Shared/AlertGating.swift:45 |
 | EventsView | struct | Watch/WatchViews.swift:489 |
 | eventTime | func | iOS/ContentView.swift:1755 |
-| eventToArgs | function | install/payload/meshd/input-linux.ts:149 |
+| eventToArgs | function | install/payload/meshd/input-linux.ts:152 |
 | ExpandedDetailBlock | struct | iOS/AgentChatView.swift:935 |
 | ExposedSecretsScreen | struct | iOS/ExposedSecretsScreen.swift:8 |
 | Exposure | type | install/payload/meshd/redact.ts:29 |
@@ -280,6 +281,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | kbGet | function | install/payload/meshd/kb.ts:85 |
 | kbPut | function | install/payload/meshd/kb.ts:55 |
 | kbSearch | function | install/payload/meshd/kb.ts:90 |
+| KeyCaptureView | class | iOS/RemoteScreenView.swift:1236 |
 | lastLink | func | Watch/WatchLinks.swift:37 |
 | lastPathBit | func | Watch/WatchViews.swift:1625 |
 | launchCommand | function | install/payload/meshd/handoff.ts:51 |
@@ -289,15 +291,15 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | LimitStatus | enum | Shared/LimitHelpers.swift:4 |
 | linkedClientCount | function | install/payload/bin/mesh:1523 |
 | LinkTarget | struct | iOS/FileBrowserView.swift:319 |
-| linuxActivateApp | function | install/payload/meshd/input-linux.ts:302 |
+| linuxActivateApp | function | install/payload/meshd/input-linux.ts:320 |
 | linuxCaptureScreen | function | install/payload/meshd/input-linux.ts:58 |
-| linuxClipboard | function | install/payload/meshd/input-linux.ts:212 |
-| linuxInjectEvents | function | install/payload/meshd/input-linux.ts:187 |
-| linuxInputStatus | function | install/payload/meshd/input-linux.ts:199 |
-| linuxListApps | function | install/payload/meshd/input-linux.ts:278 |
+| linuxClipboard | function | install/payload/meshd/input-linux.ts:230 |
+| linuxInjectEvents | function | install/payload/meshd/input-linux.ts:196 |
+| linuxInputStatus | function | install/payload/meshd/input-linux.ts:217 |
+| linuxListApps | function | install/payload/meshd/input-linux.ts:296 |
 | linuxScreenStatus | function | install/payload/meshd/input-linux.ts:47 |
-| linuxSystemAction | function | install/payload/meshd/input-linux.ts:259 |
-| linuxVolume | function | install/payload/meshd/input-linux.ts:226 |
+| linuxSystemAction | function | install/payload/meshd/input-linux.ts:277 |
+| linuxVolume | function | install/payload/meshd/input-linux.ts:244 |
 | listApps | function | install/payload/meshd/apps.ts:173 |
 | listExposures | function | install/payload/meshd/redact.ts:240 |
 | listResumable | function | install/payload/meshd/handoff.ts:133 |
@@ -457,7 +459,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | RemoteKeysView | struct | Watch/RemoteView.swift:1161 |
 | RemoteMediaView | struct | Watch/RemoteView.swift:1298 |
 | RemoteScreenModel | class | iOS/RemoteScreenView.swift:34 |
-| RemoteScreenView | struct | iOS/RemoteScreenView.swift:754 |
+| RemoteScreenView | struct | iOS/RemoteScreenView.swift:763 |
 | RemoteSystemView | struct | Watch/RemoteView.swift:1352 |
 | RemoteTouch | enum | Watch/RemoteView.swift:1077 |
 | RemoteView | struct | Watch/RemoteView.swift:435 |
@@ -545,8 +547,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | ThinkingDisclosure | struct | iOS/AgentChatView.swift:823 |
 | tokenWeakness | function | install/payload/meshd/doctor.ts:35 |
 | ToolResultCard | struct | iOS/AgentChatView.swift:863 |
-| TrackpadSurface | struct | iOS/RemoteScreenView.swift:617 |
-| TrackpadView | class | iOS/RemoteScreenView.swift:1168 |
+| TrackpadSurface | struct | iOS/RemoteScreenView.swift:626 |
+| TrackpadView | class | iOS/RemoteScreenView.swift:1182 |
 | treeVersion | function | install/payload/bin/mesh:656 |
 | TypeSheet | struct | Watch/RemoteView.swift:1603 |
 | typeText | func | install/payload/bin/mesh-input.swift:338 |

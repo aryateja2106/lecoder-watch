@@ -15,12 +15,12 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | area | files | lines | what it is |
 |---|---|---|---|
 | `Shared/` | 15 | ~3,600 | Wire types and pure logic both apps compile; the self-checks link against these |
-| `iOS/` | 20 | ~10,300 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
+| `iOS/` | 20 | ~10,400 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
 | `Watch/` | 7 | ~4,600 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |
-| `install/payload/meshd/` | 23 | ~6,700 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
+| `install/payload/meshd/` | 23 | ~6,800 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
 | `install/payload/bin/` | 9 | ~3,500 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
@@ -68,7 +68,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `PairMachineView.swift` | M | Onboarding. Two fields, because everything else is derivable: the machine's address and a code it prints. The code buys the real token over `/pair/claim`, and… | — |
 | `PairingScanner.swift` | S | Camera-based reader for a `meshwatch://pair` QR, opened from inside the pairing sheet | — |
 | `PhoneConnectivity.swift` | S | Phone side of the relay: receives commands from the watch, forwards the latest mesh snapshot to the watch via WatchConnectivity (option A — the watch never… | check-relay-receiver, check-watch-scrollback |
-| `RemoteScreenView.swift` | L | the phone's Remote tab: live screen, trackpad gestures, chords and the key bar, driving meshd /screen.jpg and /input | check-inspect-crop, check-mesh-chords, check-remote-screen-gestures |
+| `RemoteScreenView.swift` | XL | the phone's Remote tab: live screen, trackpad gestures, chords and the key bar, driving meshd /screen.jpg and /input | check-inspect-crop, check-mesh-chords, check-remote-screen-gestures |
 | `ShellSafeText.swift` | S | Undo iOS smart punctuation on text that is going to reach a shell | — |
 | `TerminalView.swift` | XL | the Terminal tab: session list, the xterm.js bridge WebView, the read-only peek screen, New Session sheet, and the built-apps screen | check-harness-picker, check-phone-input-and-wake, check-watch-terminal-wiring |
 | `VoiceInput.swift` | S | the one voice-input sheet. | — |

@@ -882,6 +882,17 @@ setup_path
 report_path
 printf '\nThen let the wizard finish the job (permissions, QR pairing, fleet check):\n    mesh setup\n'
 
+# A fresh install on a terminal someone is looking at ends with the pairing QR on
+# screen: scan it with the phone's Camera and every machine this one knows comes
+# along. Before this, the one-liner ended with a paragraph to read and a second
+# command to type. Upgrades and piped installs (CI, ssh -T) print nothing extra.
+if [ "$DO_UPGRADE" != "1" ] && [ "$NO_START" != "1" ] && [ -t 1 ] && want_component tools \
+   && [ "${MESHD_STATUS:-}" = "up" ] && [ -x "$MESH_HOME/bin/mesh" ]; then
+  printf '\nPair your phone now — Camera app, point at this:\n'
+  # bun was just installed to ~/.bun/bin; this shell's PATH does not have it yet.
+  PATH="$HOME/.bun/bin:$PATH" "$MESH_HOME/bin/mesh" pair 2>/dev/null || printf '  (run "mesh pair" any time to show it again)\n'
+fi
+
 if [ "$NO_START" != "1" ]; then
   want_component meshd  && [ "$MESHD_STATUS" != "up" ] && exit 1
   want_component bridge && [ "$BRIDGE_STATUS" != "up" ] && exit 1
