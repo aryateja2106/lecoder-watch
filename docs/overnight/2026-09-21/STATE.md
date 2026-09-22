@@ -25,6 +25,7 @@ Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.s
 | M5 menus as buttons, 4 tabs + thumbnails, harnesses.md, hook fixes (63487c0 → 25f5ef4) | DONE | check-agent-menu.swift; full gate GREEN run 4 | trust prompt on the Pi answered from the phone's Choose card |
 | M6 keyboard = the machine's, floating capsule, Linux absolute pointer, ordered input (473eafa) | DONE — deployed mac/pi/jetson | check-remote-screen-gestures, check-mesh-chords; full gate GREEN run 5 | 54 chars letter-perfect on the Pi; sticky ⌘+q closed an app |
 | M7 FileViewer + platform-shape ADR (9e16793) | DONE | check-product-spec, fast gate | REPORT.md rendered on the sim off the Pi |
+| M8 third pass (e16610b → 98fda4d): keyboard layouts + launcher + app search + display chips, stats charts, limit→hand-off, Report a problem, Live Activity fix, Hundred app via mesh, device build OTA, **0.8.0**, upgrade --src fix | DONE — fleet on 0.8.0 | check-feedback-redact.swift; fast gate GREEN; **full gate RED at 758a6d1, failing check not yet named** (interrupted) — see /tmp/handoff-lesearch-ai-2026-09-22.md | next session: name it, fix, gate GREEN |
 | S12 ship | DONE — fleet on the branch build (Mac backup ~/.mesh/backups/meshd-0.6.0-1790020360); draft PR https://github.com/aryateja2106/lecoder-watch/pull/133; files sent (Telegram unavailable — no token vars on this Mac) | | |
 
 ## Log
