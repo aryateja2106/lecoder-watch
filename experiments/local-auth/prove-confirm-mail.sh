@@ -563,7 +563,7 @@ function seedMailbox(userId) {
     "insert into public.mailbox (user_id, recipient_device_id, sender_device_id, ciphertext, expires_at) " +
     "select " + sqlQuote(userId) + ", dev.id, dev.id, " + sqlQuote(marker) + ", '2030-01-01 00:00:00+00' from dev " +
     "returning id"
-  ).trim();
+  ).trim().split(/\n/)[0].trim();
   assertUuid(inserted, "mailbox row");
   var storedKey = psql(
     "select public_key from public.devices where user_id = " + sqlQuote(userId)
