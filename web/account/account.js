@@ -6,7 +6,9 @@
    Password reset reads the recovery session from the URL hash and
    writes a new password. It does not read or write devices or a mailbox.
    Deleting an account removes that identity. It does not rotate mesh
-   tokens and does not reach a machine. */
+   tokens and does not reach a machine.
+   The signed-in home page reads device label and platform only.
+   Pairing still happens on the machine. */
 (function () {
   var SETUP = "Account setup is not finished on this deploy";
 
@@ -394,6 +396,58 @@
     setStatus("Password updated. Sign in with the new one. This did not change anything on your machines.", "ok");
   }
 
+  function showDeviceLabels(rows) {
+    var empty = document.getElementById("devices-empty");
+    var list = document.getElementById("device-labels");
+    if (!list) return;
+    while (list.firstChild) list.removeChild(list.firstChild);
+    var count = 0;
+    var data = Object.prototype.toString.call(rows) === "[object Array]" ? rows : [];
+    for (var i = 0; i < data.length; i++) {
+      var row = data[i];
+      if (!row || typeof row !== "object") continue;
+      var label = typeof row.label === "string" ? row.label.trim() : "";
+      var platform = typeof row.platform === "string" ? row.platform.trim() : "";
+      if (!label && !platform) continue;
+      var li = document.createElement("li");
+      var name = document.createElement("span");
+      name.className = "device-label";
+      name.textContent = label;
+      var kind = document.createElement("span");
+      kind.className = "device-platform";
+      kind.textContent = platform;
+      li.appendChild(name);
+      li.appendChild(kind);
+      list.appendChild(li);
+      count++;
+    }
+    if (count > 0) {
+      list.hidden = false;
+      if (empty) empty.hidden = true;
+    } else {
+      list.hidden = true;
+      if (empty) empty.hidden = false;
+    }
+  }
+
+  function readDeviceLabels(session) {
+    if (!session || typeof session.id !== "string" || !session.id) {
+      showDeviceLabels([]);
+      return Promise.resolve(null);
+    }
+    return meshAccountCall(
+      "/rest/v1/devices?select=label,platform&user_id=eq." + encodeURIComponent(session.id),
+      { method: "GET", token: session.token }
+    ).then(function (res) {
+      if (!res || res.ok !== true || Object.prototype.toString.call(res.data) !== "[object Array]") {
+        showDeviceLabels([]);
+        return null;
+      }
+      showDeviceLabels(res.data);
+      return null;
+    });
+  }
+
   function paintSignedIn() {
     if (page !== "home") return;
     var signedIn = loadSession();
@@ -412,6 +466,10 @@
     }
     meshAccountHideSetup();
     paintSignedIn();
+    if (page === "home") {
+      var signedIn = loadSession();
+      if (signedIn) readDeviceLabels(signedIn);
+    }
   });
 
   if (page === "home") {

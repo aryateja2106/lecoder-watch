@@ -20,6 +20,9 @@
 <main class="wrap">
   <h1>Your account</h1>
   <p class="lede">This is the signed-in website account. It is your identity here. It does not hold mesh tokens, addresses, or a host list.</p>
+  <h2 id="devices-heading">Devices</h2>
+  <p id="devices-empty" class="lede">Pairing still happens on the machine. This page lists labels only.</p>
+  <ul id="device-labels" class="devices" hidden aria-labelledby="devices-heading"></ul>
   <p id="setup" class="setup" role="status">Account setup is not finished on this deploy</p>
   <h2>Delete account</h2>
   <p class="lede">Deleting the account does not rotate mesh tokens and does not reach a machine. Machines stay paired until the person runs token rotation locally.</p>
