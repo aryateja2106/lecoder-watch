@@ -195,6 +195,26 @@ export type NoteSummary = { id: string; title: string };
 
 const NOTE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// One new note. The title is clipped the same way other note titles are.
+// The list stays { id, title }. The file is mode 600 and the directory 700.
+export async function writeNote(title: string, body: string): Promise<{ id: string; title: string }> {
+  const clipped = clip(title, MAX_TITLE);
+  const id = crypto.randomUUID();
+  const dir = knowledgeDir();
+  await ensureDir(dir);
+  const file = join(dir, `${id}.json`);
+  const note = {
+    id,
+    title: clipped,
+    body,
+    created: new Date().toISOString(),
+  };
+  await writeFile(file, `${JSON.stringify(note)}\n`, { mode: FILE_MODE });
+  await chmod(file, FILE_MODE);
+  await chmod(dir, DIR_MODE);
+  return { id, title: clipped };
+}
+
 export async function readNote(id: string): Promise<{ id: string; title: string; body: string } | null> {
   let decoded = id;
   try { decoded = decodeURIComponent(id); } catch { return null; }
