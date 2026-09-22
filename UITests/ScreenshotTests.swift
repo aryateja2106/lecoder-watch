@@ -25,6 +25,24 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20))
         sleep(2)
 
+        // Screens of an app with nothing paired teach a reader nothing, so the runner can
+        // hand this test a pairing link (`mesh pair --json`): opening it fills the pair
+        // sheet, and the Pair button is the same one a person taps after scanning the QR.
+        if let link = ProcessInfo.processInfo.environment["MESH_PAIR_URL"], let url = URL(string: link) {
+            XCUIDevice.shared.system.open(url)
+            sleep(3)
+            let pair = app.buttons["Pair"].firstMatch
+            if pair.waitForExistence(timeout: 8) { pair.tap(); sleep(6) }
+            // A code is single-use: a link that was already claimed leaves the sheet up
+            // with an error, and every screenshot after it would be that sheet. Close it
+            // either way before going on.
+            for label in ["Done", "Cancel"] {
+                let button = app.buttons[label].firstMatch
+                if button.exists && button.isHittable { button.tap(); sleep(2); break }
+            }
+            XCTAssertFalse(app.navigationBars["Pair a machine"].exists, "the pair sheet stayed up — every later screenshot would be of it")
+        }
+
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 10))
         for name in ["Machines", "Terminal", "Apps"] {

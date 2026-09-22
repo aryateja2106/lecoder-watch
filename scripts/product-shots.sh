@@ -24,21 +24,31 @@ WATCH="${2:-$(booted Watch)}"
 
 xcodegen generate >/dev/null 2>&1
 RES="$ROOT/build/shots.xcresult"; rm -rf "$RES"
-TEST_RUNNER_MESH_SHOTS=1 xcodebuild test -project MeshWatch.xcodeproj -scheme MeshWatch \
+# A pairing link makes the screens show a real machine instead of empty states. The
+# simulator loses its Keychain on every reinstall, so this is minted fresh each run;
+# MESH_NO_PAIR=1 skips it.
+PAIR=""
+if [ -z "${MESH_NO_PAIR:-}" ] && command -v bun >/dev/null 2>&1; then
+  PAIR="$(bun "$ROOT/install/payload/bin/mesh" pair --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("url",""))' 2>/dev/null || true)"
+fi
+xcrun simctl bootstatus "$IPHONE" -b >/dev/null 2>&1 || true
+TEST_RUNNER_MESH_PAIR_URL="$PAIR" TEST_RUNNER_MESH_SHOTS=1 xcodebuild test -project MeshWatch.xcodeproj -scheme MeshWatch \
   -destination "id=$IPHONE" -derivedDataPath build/Smoke \
   -only-testing:MeshWatchUITests/ScreenshotTests -resultBundlePath "$RES" >"$ROOT/build/shots.log" 2>&1 \
   || { echo "product-shots: ScreenshotTests failed — see build/shots.log"; grep -E "error:" "$ROOT/build/shots.log" | head -5; exit 1; }
 TMP="$(mktemp -d)"
 xcrun xcresulttool export attachments --path "$RES" --output-path "$TMP" >/dev/null 2>&1
 python3 - "$TMP" "$OUT" <<'EOF'
-import json, shutil, sys, os
+import json, re, shutil, sys, os
 tmp, out = sys.argv[1], sys.argv[2]
 n = 0
 for t in json.load(open(os.path.join(tmp, "manifest.json"))):
     for a in t["attachments"]:
         name = a.get("suggestedHumanReadableName", "")
+        # xcresulttool suffixes a duplicate-proof id: "iphone-apps_0_<uuid>.png".
         if name.startswith("iphone-") and name.endswith(".png"):
-            shutil.copyfile(os.path.join(tmp, a["exportedFileName"]), os.path.join(out, name)); n += 1
+            clean = re.sub(r"_\d+_[0-9A-F-]{36}\.png$", ".png", name)
+            shutil.copyfile(os.path.join(tmp, a["exportedFileName"]), os.path.join(out, clean)); n += 1
 print(f"product-shots: {n} iPhone screens exported")
 EOF
 rm -rf "$TMP"
@@ -49,4 +59,8 @@ if [ -n "$WATCH" ]; then
   sleep 4
   xcrun simctl io "$WATCH" screenshot --type=png "$OUT/watch-machines.png" >/dev/null 2>&1 && echo "product-shots: watch-machines.png"
 fi
+# A modal that refuses to close turns every later capture into the same picture; the run
+# is worthless then, and silently so.
+dupes="$(md5 -q "$OUT"/iphone-*.png | sort | uniq -d | wc -l | tr -d ' ')"
+[ "$dupes" -eq 0 ] || { echo "FAIL: product-shots: $dupes iPhone screens are identical — a sheet stayed open, or a tab never switched"; exit 1; }
 ls -la "$OUT"/*.png | awk '{print $5, $NF}'
