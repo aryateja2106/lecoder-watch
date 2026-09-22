@@ -57,8 +57,8 @@ header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
 .nav a.link{color:var(--ink-2);text-decoration:none;font-size:13.5px}
 .nav a.link:hover{color:var(--ink)}
 @media(max-width:760px){.nav a.link.hide-sm{display:none}}
-@media(max-width:480px){.nav{gap:10px}.nav .btn{padding:9px 12px;font-size:13px}
-  .nav a.link{display:none}.brand{white-space:nowrap}}
+@media(max-width:480px){.nav{gap:10px;height:auto;flex-wrap:wrap;padding:8px 0}.nav .btn{padding:9px 12px;font-size:13px}
+  .nav a.link:not([href^="/account/"]){display:none}.brand{white-space:nowrap}}
 
 /* ---- buttons ---- */
 .btn{display:inline-flex;align-items:center;gap:8px;border-radius:var(--radius);padding:11px 18px;
@@ -262,6 +262,8 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--ink-3);f
     <a class="link hide-sm" href="#wrist">On your wrist</a>
     <a class="link hide-sm" href="#faq">FAQ</a>
     <a class="link" href="https://github.com/LeSearch-AI/mesh">GitHub</a>
+    <a class="link" href="/account/sign-in">Sign in</a>
+    <a class="link" href="/account/sign-up">Sign up</a>
     <a class="btn btn-primary" href="https://testflight.apple.com/join/pVYPTxc7">Join the beta</a>
   </div>
 </header>
