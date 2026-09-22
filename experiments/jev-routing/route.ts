@@ -74,7 +74,11 @@ function resolveEvaluation(evaluation: EvaluateResult): EvaluateResult {
 }
 
 function textMovesSecret(value: string): boolean {
-  if (/\bmesh\s+token\b/i.test(value)) return true;
+  // The credential can already be gone. The ask still names what would move.
+  if (/\bmesh\s+(?:token|bearer)\b/i.test(value)) return true;
+  if (/\bpairing\s+code\b/i.test(value)) return true;
+  if (/\bhosts\.json\b/i.test(value)) return true;
+  if (/\.mesh\/token\b/i.test(value)) return true;
   return /\b(?:upload|send|post|forward|exfiltrate)\b[^.!?\n]{0,80}\b(?:token|password|secret|credential)\b/i.test(
     value,
   );

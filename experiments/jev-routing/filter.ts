@@ -102,7 +102,7 @@ export function textCarriesSecret(value: string): boolean {
 
 function redactEmbedded(value: string): string {
   return value
-    .replace(/bearer\s+\S{8,}/gi, "")
+    .replace(/\b(bearer)\s+\S{8,}/gi, "$1")
     .replace(/[a-f0-9]{32,}/gi, "")
     .replace(/[A-Za-z0-9+/_-]{32,}={0,2}/g, "")
     .replace(new RegExp(EMBEDDED_IPV4.source, "g"), "");

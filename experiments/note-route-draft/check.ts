@@ -13,6 +13,12 @@ const fixtures = JSON.parse(readFileSync(join(here, "../jev-routing/fixtures.jso
   notePage: { title: string; text: string };
   uploadToken: { text: string };
   withSecret: { token: unknown; ip: unknown };
+  sendPairingCode: { text: string };
+  copyHosts: { text: string };
+  readMeshToken: { text: string };
+  sendMeshBearer: { text: string };
+  summarizePaper: { text: string };
+  sendMessage: { text: string };
 };
 
 const FAKE_TOKEN = String(fixtures.withSecret.token);
@@ -184,6 +190,23 @@ async function main(): Promise<void> {
     console.log("note-route-draft: fixture token and address are absent from the routed note");
 
     await held("secret-moving note", secretState(), allowEval(), "gpt-4o");
+    await held("pairing code", { text: fixtures.sendPairingCode.text + " " + FAKE_TOKEN }, allowEval(), "local");
+    await held("hosts.json", { text: fixtures.copyHosts.text + " " + FAKE_TOKEN }, allowEval(), "local");
+    await held("mesh token path", { text: fixtures.readMeshToken.text + " " + FAKE_TOKEN }, allowEval(), "local");
+    await held(
+      "mesh bearer",
+      { text: fixtures.sendMeshBearer.text + " " + FAKE_TOKEN },
+      allowEval(),
+      "local",
+    );
+    if (route(filter({ text: fixtures.summarizePaper.text }), allowEval()) !== "allow-local-tool") {
+      fail("clean paper was held");
+    }
+    if (route(filter({ text: fixtures.sendMessage.text }), allowEval()) !== "allow-local-tool") {
+      fail("plain send was held");
+    }
+    console.log("note-route-draft: clean paper would allow a local tool");
+    console.log("note-route-draft: plain send would allow a local tool");
     await held("graphical ask", pageState(), allowEval({ surface: "needs-graphical-screen" }), "local");
     await held("wait-for-human", pageState(), allowEval({ surface: "wait-for-human" }), "local");
     await held("high risk", pageState(), allowEval({ score: 0.91 }), "local");

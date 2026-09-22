@@ -10,6 +10,12 @@ const fixtures = JSON.parse(readFileSync(join(here, "fixtures.json"), "utf8")) a
   withSecret: Record<string, unknown>;
   notePage: { title: string; text: string };
   uploadToken: { text: string };
+  sendPairingCode: { text: string };
+  copyHosts: { text: string };
+  readMeshToken: { text: string };
+  sendMeshBearer: { text: string };
+  summarizePaper: { text: string };
+  sendMessage: { text: string };
   sensitiveKeys: Record<string, unknown>;
 };
 
@@ -200,6 +206,35 @@ if (!uploadEncoded.toLowerCase().includes("mesh token")) fail("upload ask was re
 if (route(upload, noteAllow) !== "hold-for-review") fail("secret upload was allowed");
 if (route(uploadFiltered, noteAllow) !== "hold-for-review") fail("filtered secret upload was allowed");
 
+function assertMovedAsk(text: string, ask: string, label: string): void {
+  const plain = filter(structuredClone({ text }));
+  if (plain.text !== text) fail(label + " ask was altered");
+  if (route(plain, noteAllow) !== "hold-for-review") fail(label + " was allowed");
+  const withSecret = {
+    text: text + " " + FAKE_TOKEN + " " + FAKE_IP,
+  };
+  const redacted = filter(structuredClone(withSecret));
+  const encoded = JSON.stringify(redacted);
+  if (encoded.includes(FAKE_TOKEN)) fail(label + " token still present after filter");
+  if (encoded.includes(FAKE_IP)) fail(label + " address still present after filter");
+  if (!encoded.toLowerCase().includes(ask.toLowerCase())) fail(label + " ask was removed with the secret");
+  if (route(withSecret, noteAllow) !== "hold-for-review") fail(label + " with a secret was allowed");
+  if (route(redacted, noteAllow) !== "hold-for-review") fail("redacted " + label + " was allowed");
+}
+
+assertMovedAsk(fixtures.sendPairingCode.text, "pairing code", "pairing code");
+assertMovedAsk(fixtures.copyHosts.text, "hosts.json", "hosts.json");
+assertMovedAsk(fixtures.readMeshToken.text, ".mesh/token", "mesh token path");
+assertMovedAsk(fixtures.sendMeshBearer.text, "mesh bearer", "mesh bearer");
+
+const cleanPaper = filter(structuredClone(fixtures.summarizePaper));
+if (cleanPaper.text !== "summarize this paper") fail("clean paper was altered");
+if (route(cleanPaper, noteAllow) !== "allow-local-tool") fail("clean paper was held");
+
+const plainSend = filter(structuredClone(fixtures.sendMessage));
+if (plainSend.text !== "send a message") fail("plain send was altered");
+if (route(plainSend, noteAllow) !== "allow-local-tool") fail("plain send was held");
+
 const sensitiveNames = [
   "token",
   "ip",
@@ -231,4 +266,10 @@ console.log("jev-routing: local model unfit routed to hold-for-review");
 console.log("jev-routing: note page on terminal-text routed to allow-local-tool");
 console.log("jev-routing: note page with unfit, low confidence, graphical screen, or high risk held");
 console.log("jev-routing: secret upload routed to hold-for-review");
+console.log("jev-routing: pairing code routed to hold-for-review");
+console.log("jev-routing: hosts.json routed to hold-for-review");
+console.log("jev-routing: mesh token path routed to hold-for-review");
+console.log("jev-routing: mesh bearer routed to hold-for-review");
+console.log("jev-routing: clean paper routed to allow-local-tool");
+console.log("jev-routing: plain send routed to allow-local-tool");
 console.log("jev-routing: sensitive keys are absent");
