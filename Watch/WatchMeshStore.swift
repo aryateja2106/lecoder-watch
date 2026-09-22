@@ -20,6 +20,7 @@ final class WatchMeshStore: ObservableObject {
     @Published var sending = false
     /// The knowledge note this wrist is asking. Empty until the user names one.
     @Published var currentKnowledgeNote = ""
+    @Published var knowledgeNotes: [KnowledgeNoteSummary] = []
     /// The last ask's draft, or a short status when the daemon held it.
     @Published var knowledgeAskLine: String?
     @Published var phoneReachable = false
@@ -937,6 +938,15 @@ final class WatchMeshStore: ObservableObject {
             }
         } else {
             WatchLink.shared.send(WatchCommand(kind: .killPane, host: host, agent: agent, text: nil, key: nil, pane: pane))
+        }
+    }
+
+    func loadKnowledgeNotes(host: String) {
+        knowledgeNotes = []
+        guard directReachable(host), let c = client(for: host) else { return }
+        Task {
+            do { knowledgeNotes = try await c.listKnowledgeNotes() }
+            catch { knowledgeNotes = [] }
         }
     }
 
