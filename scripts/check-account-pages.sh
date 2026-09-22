@@ -66,8 +66,10 @@ done
 JS="$ACC/account.js"
 [ -f "$JS" ] || bad "web/account/account.js is missing"
 grep -q "$SETUP" "$JS" || bad "account.js is missing the setup message"
-# The only fetch must sit after the missing-config return.
+# Supabase fetches must sit after the missing-config return. The only
+# other fetch asks /api/account-config and is not a Supabase call.
 awk '
+  /function loadAccountConfig/ { infn = "cfgload" }
   /function meshAccountCall/ { infn = "call"; callguard = 0; callret = 0 }
   /function deleteAccount/ { infn = "del"; delguard = 0; delret = 0 }
   infn == "call" && /if \(!cfg\)/ { callguard = 1 }
@@ -82,13 +84,16 @@ awk '
     } else if (infn == "del") {
       if (!(delguard && delret)) bad = 1
       delfetch = 1
+    } else if (infn == "cfgload" && /\/api\/account-config/) {
+      cfgfetch = 1
     } else bad = 1
   }
   END {
-    if (fetches != 2 || bad || !callfetch || !delfetch) exit 1
+    if (fetches != 3 || bad || !callfetch || !delfetch || !cfgfetch) exit 1
   }
 ' "$JS" || bad "account.js must refuse the network when config is missing, before each fetch"
 
+grep -q '/api/account-config' "$JS" || bad "account.js does not request /api/account-config"
 grep -q '/api/delete-account' "$JS" || bad "account.js does not call /api/delete-account"
 grep -q 'Authorization: "Bearer " + session.token' "$JS" \
   || bad "account.js does not send the session access token"
@@ -108,6 +113,14 @@ if [ -f "$API" ]; then
   grep -E -q 'console\.' "$API" && bad "delete-account.js logs" || true
   grep -E -q "['\"]service_role['\"]" "$API" && bad "delete-account.js contains service_role as a value" || true
   grep -E -q "['\"][A-Za-z0-9_-]{40,}['\"]" "$API" && bad "delete-account.js contains a literal key" || true
+fi
+
+CFGAPI="$ROOT/web/api/account-config.js"
+[ -f "$CFGAPI" ] || bad "web/api/account-config.js is missing"
+if [ -f "$CFGAPI" ]; then
+  grep -q 'SERVICE_ROLE' "$CFGAPI" && bad "account-config.js contains SERVICE_ROLE" || true
+  grep -F -q 'eyJ' "$CFGAPI" && bad "account-config.js contains an eyJ string" || true
+  grep -E -q 'console\.' "$CFGAPI" && bad "account-config.js logs" || true
 fi
 
 if ! command -v python3 >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
