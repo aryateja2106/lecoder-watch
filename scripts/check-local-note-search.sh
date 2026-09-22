@@ -1,7 +1,7 @@
 #!/bin/sh
 # Spare daemon on 127.0.0.1:8898: GET /knowledge still lists every note as
-# {id, title}. GET /knowledge?q=paper returns only titles that contain that
-# text, still without bodies. No match is an empty list. A remote URL, a
+# {id, title}. GET /knowledge?q=paper matches a title or a body, still
+# without bodies. No match is an empty list. A remote URL, a
 # scheme, a protocol-relative value, or any string containing :// is refused.
 # A pairing-code body and a hosts.json body are not selected into a draft,
 # and the loopback model is not called for them. The matching paper note is
@@ -465,16 +465,68 @@ echo "check-local-note-search: no match is an empty list"
 
 code="$(curl -G --connect-timeout 1 --max-time 5 -sS -o "$TH/bodyq.json" -w '%{http_code}' \
   -H "authorization: Bearer ${TOKEN}" \
-  --data-urlencode "q=summarize" \
+  --data-urlencode "q=SUMMARIZE" \
   "http://127.0.0.1:$PORT/knowledge" || true)"
 [ "$code" = "200" ] || { echo "FAIL: body word search -> ${code}"; exit 1; }
-python3 - "$TH/bodyq.json" <<'PY'
+python3 - "$TH/bodyq.json" "$PAPER_ID" "$SPARE_ID" "$PAIR_ID" "$HOST_ID" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1]))
+notes = data.get("notes")
+if not isinstance(notes, list) or len(notes) != 1:
+    raise SystemExit("FAIL: body search is %r" % (notes,))
+note = notes[0]
+if set(note.keys()) != {"id", "title"}:
+    raise SystemExit("FAIL: body match keys are %r" % (sorted(note.keys()),))
+if note.get("id") != sys.argv[2] or note.get("title") != "Paper note":
+    raise SystemExit("FAIL: body match is %r" % (note,))
+if note.get("id") in (sys.argv[3], sys.argv[4], sys.argv[5]):
+    raise SystemExit("FAIL: body search returned another note")
+PY
+if grep -q "$PAPER" "$TH/bodyq.json" || grep -q "$PAIRING" "$TH/bodyq.json" || grep -q "$HOSTS" "$TH/bodyq.json"; then
+  echo "FAIL: body search returned a body"
+  exit 1
+fi
+echo "check-local-note-search: a body match is returned as id and title"
+
+code="$(curl -G --connect-timeout 1 --max-time 5 -sS -o "$TH/pairq.json" -w '%{http_code}' \
+  -H "authorization: Bearer ${TOKEN}" \
+  --data-urlencode "q=send the" \
+  "http://127.0.0.1:$PORT/knowledge" || true)"
+[ "$code" = "200" ] || { echo "FAIL: pairing body search -> ${code}"; exit 1; }
+python3 - "$TH/pairq.json" "$PAIR_ID" <<'PY'
 import json, sys
 notes = json.load(open(sys.argv[1])).get("notes")
-if notes != []:
-    raise SystemExit("FAIL: a body word was treated as a title")
+if not isinstance(notes, list) or len(notes) != 1:
+    raise SystemExit("FAIL: pairing search is %r" % (notes,))
+note = notes[0]
+if set(note.keys()) != {"id", "title"} or note.get("id") != sys.argv[2] or note.get("title") != "Pairing paper":
+    raise SystemExit("FAIL: pairing search note is %r" % (note,))
 PY
-echo "check-local-note-search: search does not read bodies"
+if grep -q "$PAIRING" "$TH/pairq.json"; then
+  echo "FAIL: pairing search returned the body"
+  exit 1
+fi
+echo "check-local-note-search: pairing search did not return the body"
+
+code="$(curl -G --connect-timeout 1 --max-time 5 -sS -o "$TH/hostq.json" -w '%{http_code}' \
+  -H "authorization: Bearer ${TOKEN}" \
+  --data-urlencode "q=hosts.json" \
+  "http://127.0.0.1:$PORT/knowledge" || true)"
+[ "$code" = "200" ] || { echo "FAIL: hosts body search -> ${code}"; exit 1; }
+python3 - "$TH/hostq.json" "$HOST_ID" <<'PY'
+import json, sys
+notes = json.load(open(sys.argv[1])).get("notes")
+if not isinstance(notes, list) or len(notes) != 1:
+    raise SystemExit("FAIL: hosts search is %r" % (notes,))
+note = notes[0]
+if set(note.keys()) != {"id", "title"} or note.get("id") != sys.argv[2] or note.get("title") != "Hosts paper":
+    raise SystemExit("FAIL: hosts search note is %r" % (note,))
+PY
+if grep -q "$HOSTS" "$TH/hostq.json"; then
+  echo "FAIL: hosts search returned the body"
+  exit 1
+fi
+echo "check-local-note-search: hosts.json search did not return the body"
 
 refuse_query() {
   label="$1"
