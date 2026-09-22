@@ -165,6 +165,15 @@ hardware-keyboard commands, the dictation pill + composer bubble, OSC 52 clipboa
 cards with thumbnails and the Home/Inbox tabs, image paste, diff viewer, docs site, pricing.
 The rmux-bridge daemon on :7820 is untouched (the Mac's web console still uses it).
 
+Live on the Pi (Linux, tmux 3.4, aarch64), 2026-09-22 17:0x IST: the daemon upgraded in place
+(the installer's ssh path — `mesh upgrade -H pi` waits for a version bump a same-version
+redeploy never produces and reports "still 0.8.0" although nothing is wrong), `pi-claude`
+survived the restart, `/health` advertises `pty` and `captureAnsi`, and a WebSocket from the
+Mac replayed the pane's scrollback, was sized to the client (18×57 under tmux's status line)
+and echoed a keystroke in **151 ms** over Tailscale. The pane's own SGR bytes arrive intact;
+a raw ESC typed into an interactive shell is a line-editor keypress, not text, which is why
+the probe's own `printf '\033[32m…'` came back without its escapes.
+
 Verify-before-coding results: SwiftTerm ≥ 1.19 ships a build-tool plugin xcodebuild refuses
 without `-skipPackagePluginValidation` — pinned to 1.18.0. Its GPU renderer needs the Xcode
 Metal toolchain, installed with `xcodebuild -downloadComponent MetalToolchain`. `Bun.Terminal`
