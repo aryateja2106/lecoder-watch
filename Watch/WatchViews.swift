@@ -1368,6 +1368,10 @@ struct AgentLiveView: View {
                 keyChip("Enter", "return") { store.send(key: "enter") }
                 keyChip("Interrupt", "xmark.octagon", role: .destructive) { store.send(key: "ctrl-c") }
                 keyChip("Tab", "arrow.right.to.line") { store.send(key: "tab") }
+                // Shift-Tab cycles a coding agent's mode; Shift-Enter is a newline without
+                // submitting (ESC CR — what Claude Code reads as meta+return).
+                keyChip("Shift Tab, cycle mode", "arrow.left.arrow.right") { store.send(key: "shift-tab") }
+                keyChip("Newline, do not submit", "return.left") { store.send(key: "shift-enter") }
                 keyChip("Escape", "escape") { store.send(key: "escape") }
                 keyChip("Up", "arrow.up") { store.send(key: "up") }
                 keyChip("Down", "arrow.down") { store.send(key: "down") }

@@ -209,7 +209,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | frontmostWindow | func | install/payload/bin/mesh-input.swift:356 |
 | FsEntry | struct | Shared/Models.swift:459 |
 | FsListing | struct | Shared/Models.swift:478 |
-| GaugeRow | struct | Watch/WatchViews.swift:1602 |
+| GaugeRow | struct | Watch/WatchViews.swift:1606 |
 | GlanceEntry | struct | WatchWidgets/WatchGlanceWidget.swift:31 |
 | GlanceProvider | struct | WatchWidgets/WatchGlanceWidget.swift:36 |
 | GlanceStore | enum | Shared/WatchGlance.swift:129 |
@@ -281,7 +281,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | kbPut | function | install/payload/meshd/kb.ts:55 |
 | kbSearch | function | install/payload/meshd/kb.ts:90 |
 | lastLink | func | Watch/WatchLinks.swift:37 |
-| lastPathBit | func | Watch/WatchViews.swift:1621 |
+| lastPathBit | func | Watch/WatchViews.swift:1625 |
 | launchCommand | function | install/payload/meshd/handoff.ts:51 |
 | LevelMeter | struct | iOS/VoiceInput.swift:155 |
 | LimitHelpers | enum | Shared/LimitHelpers.swift:18 |
@@ -339,7 +339,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MemInfo | struct | Shared/Models.swift:250 |
 | MenuCard | struct | iOS/AgentChatView.swift:599 |
 | MenuContent | struct | MeshDesktop/MeshDesktopApp.swift:48 |
-| MenuOptionRow | struct | Watch/WatchViews.swift:1642 |
+| MenuOptionRow | struct | Watch/WatchViews.swift:1646 |
 | mergeDuplicateMachineRows | func | Shared/Models.swift:528 |
 | mergingPairedHosts | func | Shared/Models.swift:212 |
 | MeshApp | struct | Shared/Models.swift:1159 |
@@ -351,8 +351,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MeshDesktopApp | struct | MeshDesktop/MeshDesktopApp.swift:20 |
 | meshIdHash | func | Shared/AlertGating.swift:143 |
 | meshIdSafe | func | Shared/AlertGating.swift:135 |
-| meshImage | func | Watch/WatchViews.swift:1632 |
-| meshImage | func | Watch/WatchViews.swift:1637 |
+| meshImage | func | Watch/WatchViews.swift:1636 |
+| meshImage | func | Watch/WatchViews.swift:1641 |
 | meshNotificationId | func | Shared/AlertGating.swift:106 |
 | meshNotificationId | func | Shared/AlertGating.swift:87 |
 | MeshRelayApp | struct | iOS/MeshRelayApp.swift:21 |
@@ -463,7 +463,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | RemoteView | struct | Watch/RemoteView.swift:435 |
 | RemoteWebScreen | struct | iOS/ContentView.swift:1589 |
 | RemoteWindowView | struct | Watch/RemoteView.swift:1256 |
-| resetText | func | Watch/WatchViews.swift:1626 |
+| resetText | func | Watch/WatchViews.swift:1630 |
 | resetText | func | iOS/ContentView.swift:1750 |
 | resolveHost | function | install/payload/bin/mesh:58 |
 | restartDaemon | function | install/payload/bin/mesh:890 |
@@ -481,7 +481,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | saveConfig | function | install/payload/bin/mesh:45 |
 | say | function | install/payload/bin/mesh:111 |
 | ScannerViewController | class | iOS/PairingScanner.swift:69 |
-| ScreenPeekView | struct | Watch/WatchViews.swift:1464 |
+| ScreenPeekView | struct | Watch/WatchViews.swift:1468 |
 | scroll | func | install/payload/bin/mesh-input.swift:259 |
 | SecretExposure | struct | Shared/Models.swift:1135 |
 | SectionLabel | struct | iOS/ContentView.swift:1739 |
@@ -512,7 +512,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | SettingsTab | struct | iOS/ContentView.swift:1252 |
 | shellCommand | func | Shared/Models.swift:1435 |
 | shellQuotedArgument | func | Shared/Models.swift:1511 |
-| shortName | func | Watch/WatchViews.swift:1615 |
+| shortName | func | Watch/WatchViews.swift:1619 |
 | shouldSend | function | install/payload/meshd/push.ts:205 |
 | skillsPayloadDir | function | install/payload/bin/mesh:1503 |
 | smokeTest | function | install/payload/bin/mesh:730 |
@@ -556,7 +556,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | UsageProvider | struct | Shared/Models.swift:569 |
 | UsageRows | struct | iOS/ContentView.swift:1180 |
 | UsageSnapshot | struct | Shared/Models.swift:580 |
-| UsageView | struct | Watch/WatchViews.swift:1544 |
+| UsageView | struct | Watch/WatchViews.swift:1548 |
 | utcStamp | function | install/payload/bin/mesh:1067 |
 | verifyDigest | function | install/payload/bin/mesh:669 |
 | visibleRect | func | Shared/ScreenZoom.swift:103 |
@@ -570,7 +570,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | WatchCommandKind | enum | Shared/Models.swift:1364 |
 | WatchGlance | struct | Shared/WatchGlance.swift:12 |
 | WatchGlanceWidget | struct | WatchWidgets/WatchGlanceWidget.swift:19 |
-| WatchLimitRow | struct | Watch/WatchViews.swift:1569 |
+| WatchLimitRow | struct | Watch/WatchViews.swift:1573 |
 | WatchLink | class | Watch/WatchLink.swift:7 |
 | WatchMeshStore | class | Watch/WatchMeshStore.swift:19 |
 | WatchNotifications | class | Watch/WatchNotifications.swift:14 |
