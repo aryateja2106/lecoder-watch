@@ -209,7 +209,7 @@ PY
 }
 
 # Model stub on loopback. The configured host stays llm.example.
-python3 - "$TH/stub.port" "$STUB_BODIES" "$TH/stub.reply" 2>"$TH/stub.err" <<'PY' &
+python3 -u - "$TH/stub.port" "$STUB_BODIES" "$TH/stub.reply" 2>"$TH/stub.err" <<'PY' &
 import sys; sys.stderr.write("stub-start\n"); sys.stderr.flush()
 import json, os
 port_path, body_dir, reply_path = sys.argv[1:4]
@@ -237,15 +237,21 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         return
 
+sys.stderr.write("stub-bind\n"); sys.stderr.flush()
 server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-with open(port_path, "w", encoding="utf-8") as fh:
+tmp_port = port_path + ".tmp"
+with open(tmp_port, "w", encoding="utf-8") as fh:
     fh.write(str(server.server_address[1]))
+    fh.write("\n")
     fh.flush()
+os.rename(tmp_port, port_path)
 server.serve_forever()
 PY
 STUB=$!
+# The port file is written only after Python imports http.server and binds.
+# On the macOS CI runner that startup was still in progress after 15s.
 i=0
-while [ ! -s "$TH/stub.port" ] && [ "$i" -lt 150 ]; do
+while [ ! -s "$TH/stub.port" ] && [ "$i" -lt 300 ]; do
   kill -0 "$STUB" 2>/dev/null || { echo "FAIL: model stub exited"; cat "$TH/stub.err" 2>/dev/null || true; exit 1; }
   sleep 0.1
   i=$((i + 1))
