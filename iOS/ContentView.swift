@@ -279,6 +279,14 @@ private struct MachineDetailView: View {
         List {
             if let m = snapshot {
                 if m.reachable {
+                    Section {
+                        NavigationLink {
+                            KnowledgeNoteAskView(host: host).environmentObject(store)
+                        } label: {
+                            Label("Ask note", systemImage: "text.book.closed")
+                        }
+                    }
+                    .disabled(m.authError != nil)
                     if let machine = store.machines.first(where: { $0.host == m.host }) {
                         MachineSetupSection(machine: machine)
                     }
@@ -412,6 +420,60 @@ private struct MachineDetailView: View {
         .navigationTitle(machineShortName(host))
         .navigationBarTitleDisplayMode(.inline)
         .refreshable { await store.refresh() }
+    }
+}
+
+/// Ask the note named on this screen. The question stays here until Ask is confirmed.
+struct KnowledgeNoteAskView: View {
+    @EnvironmentObject var store: MeshStore
+    let host: String
+    @State private var note = ""
+    @State private var ask = ""
+    @State private var confirming = false
+
+    private var namedNote: String {
+        note.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var question: String {
+        ask.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        List {
+            Section("Note") {
+                TextField("Note", text: $note)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+            }
+            Section("Ask") {
+                TextField("Question", text: $ask, axis: .vertical)
+                    .autocorrectionDisabled()
+                Button("Ask") { confirming = true }
+                    .disabled(namedNote.isEmpty || question.isEmpty)
+            }
+            if let line = store.knowledgeAskLine {
+                Section("Answer") {
+                    Text(line).font(.caption)
+                }
+            }
+        }
+        .navigationTitle("Ask note")
+        .onAppear {
+            if note.isEmpty { note = store.currentKnowledgeNote }
+        }
+        .onChange(of: note) { _, value in
+            store.currentKnowledgeNote = value
+        }
+        .confirmationDialog("Ask this note?", isPresented: $confirming, titleVisibility: .visible) {
+            Button("Ask") {
+                store.currentKnowledgeNote = note
+                store.askCurrentKnowledgeNote(host: host, ask: ask, confirmed: true)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(namedNote)
+        }
     }
 }
 
