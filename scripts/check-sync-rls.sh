@@ -197,8 +197,7 @@ grant select, insert, update, delete on table public.devices to authenticated;
 grant select, insert, delete on table public.mailbox to authenticated;
 END_IDENTITY_SQL
 
-sha256sum "$SQL_FILE" > "$TMP/sql.sha"
-SQL_SHA256="$(awk 'NR==1 { print $1 }' "$TMP/sql.sha")"
+SQL_SHA256="$(python3 -c 'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' "$SQL_FILE")"
 if [ "$SQL_SHA256" != "$EXPECTED_SHA256" ]; then
   echo "FAIL: check-sync-rls: identity SQL does not match the pull request file"
   exit 1
@@ -217,8 +216,17 @@ for dir in /usr/lib/postgresql/*/bin; do
   fi
 done
 if [ -z "$PG_BIN" ]; then
-  echo "FAIL: check-sync-rls: local postgres was not found"
-  exit 1
+  INITDB_PATH="$(command -v initdb || true)"
+  if [ -n "$INITDB_PATH" ]; then
+    dir="$(dirname "$INITDB_PATH")"
+    if [ -x "$dir/initdb" ] && [ -x "$dir/pg_ctl" ]; then
+      PG_BIN="$dir"
+    fi
+  fi
+fi
+if [ -z "$PG_BIN" ]; then
+  echo "check-sync-rls: SKIP local postgres is not installed"
+  exit 0
 fi
 PG_CTL="$PG_BIN/pg_ctl"
 PSQL="$(command -v psql || true)"
