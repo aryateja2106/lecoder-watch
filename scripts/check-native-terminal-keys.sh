@@ -18,6 +18,7 @@ else
 fi
 grep -q 'function modifierKey' "$SERVER" || bad "meshd lost modifierKey (ctrl-/alt-letter keys)"
 grep -q 'KEY_SEND_KEYS\[key\] ?? modifierKey(key)' "$SERVER" || bad "agentSend does not fall back to modifierKey"
+grep -q 'key === "ctrl-z"' "$SERVER" || bad "modifierKey would accept ctrl-z on /send — check-approve-path pins it as unsupported"
 grep -q 'capture-pane -p${ansi ? " -e" : ""}' "$SERVER" || bad "/output lost the ansi=1 -e capture"
 grep -q '"captureAnsi"' "$SERVER" || bad "captureAnsi capability not advertised"
 grep -q 'ansi: true' "$ROOT/iOS/NativeTerminalScreen.swift" || bad "native terminal no longer asks for ansi output"

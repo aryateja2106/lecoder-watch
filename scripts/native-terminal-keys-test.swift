@@ -32,6 +32,9 @@ import Foundation
         expectBytes(TerminalKeyRouter.applyModifiers(Array("b".utf8), ctrl: false, alt: true), [0x1b, 0x62], "stream: Alt + b is ESC b")
         expectBytes(TerminalKeyRouter.applyModifiers(Array("ls".utf8), ctrl: false, alt: false), Array("ls".utf8), "stream: nothing armed passes through")
         expectBytes(TerminalKeyRouter.applyModifiers([0x0d], ctrl: true, alt: false), [0x0d], "stream: Ctrl with no letter leaves the bytes alone")
-        print("native-terminal-keys-test: ok (22 cases)")
+        // meshd refuses ctrl-z on /send (no client to resume a suspended job); the router
+        // still produces it, because on the pty stream the phone IS the client.
+        expect(TerminalKeyRouter.route([0x1a]), [.key("ctrl-z")], "0x1a is ctrl-z on the stream")
+        print("native-terminal-keys-test: ok (23 cases)")
     }
 }

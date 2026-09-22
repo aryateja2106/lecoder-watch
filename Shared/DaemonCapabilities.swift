@@ -71,13 +71,12 @@ enum DaemonCapabilities {
         DaemonGap(capability: "captureJoin",
                   feature: "Faster screen capture",
                   symptom: "Overlapping screen requests each pay full price, so frames arrive slower."),
-        DaemonGap(capability: "captureAnsi",
-                  feature: "Colour in the terminal",
-                  symptom: "The phone terminal shows the agent's screen in one colour, cursor guessed."),
-        DaemonGap(capability: "pty",
-                  feature: "Live terminal",
-                  symptom: "The phone terminal repaints from polls instead of streaming; keys take a round trip each."),
     ]
+    // `captureAnsi` and `pty` (0.8) are deliberately NOT here. This list is the
+    // "your agent is out of date" warning, and check-daemon-gaps.swift pins it against a
+    // literal 0.5.0 capability snapshot: anything added here accuses every daemon in that
+    // snapshot of being stale. The terminal already degrades on its own (stream → colour
+    // polls → the old text path), so there is nothing for the row to warn about.
 
     /// The gaps for a machine, given what its daemon advertised.
     ///

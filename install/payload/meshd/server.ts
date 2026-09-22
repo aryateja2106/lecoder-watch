@@ -654,11 +654,16 @@ const KEY_SEND_KEYS: Record<string, string> = {
   "shift-enter": "M-Enter",
 };
 
-/// `ctrl-a`…`ctrl-z` / `alt-a`…`alt-z`: what the phone's sticky Ctrl/Alt keys produce.
+/// `ctrl-a`…`ctrl-y` / `alt-a`…`alt-z`: what the phone's sticky Ctrl/Alt keys produce.
 /// Fifty-two table rows would each demand a watch chip; a pattern says the same thing.
+///
+/// `ctrl-z` is deliberately not one of them: over this route there is no client to resume
+/// a suspended job, so it would strand whatever the pane was running. A phone attached to
+/// the pty stream can still send the raw byte — it has a terminal to resume it with.
 function modifierKey(key: string): string | undefined {
   const m = /^(ctrl|alt)-([a-z])$/.exec(key);
-  return m ? `${m[1] === "ctrl" ? "C" : "M"}-${m[2]}` : undefined;
+  if (!m || key === "ctrl-z") return undefined;
+  return `${m[1] === "ctrl" ? "C" : "M"}-${m[2]}`;
 }
 async function agentSend(name: string, text?: string, key?: string, pane?: string, paste?: boolean): Promise<{ ok: boolean; error?: string }> {
   // paste travels: a literal write of newline bytes IS the submit-per-line problem,
