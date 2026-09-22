@@ -996,6 +996,9 @@ final class WatchMeshStore: ObservableObject {
             do {
                 let reply = try await c.askAgentNote(q: q, ask: question, confirm: true)
                 knowledgeAskLine = Self.knowledgeAskLine(reply)
+                if !reply.held {
+                    loadKnowledgeNotes(host: host)
+                }
                 WKInterfaceDevice.current().play(.success)
             } catch {
                 lastError = "ask failed"
