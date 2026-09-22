@@ -98,6 +98,7 @@ const server = http.createServer((req, res) => {
       host: req.headers.host,
       authorization: req.headers.authorization,
       contentType: req.headers["content-type"],
+      headers: req.headers,
       body: Buffer.concat(chunks).toString("utf8"),
     });
     res.writeHead(204);
@@ -136,6 +137,15 @@ try {
 
 if (hits.length !== 2) fail(`expected 2 requests, saw ${hits.length}`);
 
+for (const hit of hits) {
+  const fullUrl = `http://${hit.host}${hit.url}`;
+  assertClean("request body", hit.body, encodings);
+  assertClean("request url", fullUrl, encodings);
+  if (hit.body.includes(ACCESS)) fail("request body contains the access token");
+  if (fullUrl.includes(ACCESS)) fail("request url contains the access token");
+  assertClean("a request header", JSON.stringify(hit.headers), encodings);
+}
+
 const devices = hits[0];
 const mailbox = hits[1];
 if (devices.method !== "POST" || devices.url !== "/devices") {
@@ -170,20 +180,6 @@ if (typeof mailboxJson.ciphertext !== "string" || mailboxJson.ciphertext.length 
   fail("mailbox ciphertext is empty");
 }
 
-for (const hit of hits) {
-  const fullUrl = `http://${hit.host}${hit.url}`;
-  assertClean(`${hit.url} body`, hit.body, encodings);
-  assertClean(`${hit.url} url`, fullUrl, encodings);
-  if (hit.body.includes(ACCESS)) fail(`${hit.url} body contains the access token`);
-  if (fullUrl.includes(ACCESS)) fail(`${hit.url} url contains the access token`);
-  const headerDump = JSON.stringify({
-    host: hit.host,
-    authorization: hit.authorization,
-    contentType: hit.contentType,
-  });
-  assertClean(`${hit.url} headers`, headerDump, encodings);
-}
-
 const withToken = hits.length;
 hits.length = 0;
 try {
@@ -198,9 +194,10 @@ try {
 if (hits.length !== 2) fail(`expected 2 requests without a token, saw ${hits.length}`);
 for (const hit of hits) {
   if (hit.authorization !== undefined) fail("a missing access token still set Authorization");
-  if (hit.body.includes(ACCESS)) fail("body contains the access token when no header was requested");
-  assertClean(`${hit.url} body without token`, hit.body, encodings);
-  assertClean(`${hit.url} url without token`, `http://${hit.host}${hit.url}`, encodings);
+  if (hit.body.includes(ACCESS)) fail("request body contains the access token");
+  assertClean("request body", hit.body, encodings);
+  assertClean("request url", `http://${hit.host}${hit.url}`, encodings);
+  assertClean("a request header", JSON.stringify(hit.headers), encodings);
 }
 
 await new Promise((resolve) => server.close(resolve));
