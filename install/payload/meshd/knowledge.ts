@@ -6,9 +6,9 @@
 //   GET  /knowledge                        -> { notes: [{ id, title }] }
 //   GET  /knowledge/:id                    -> { id, title, body }
 //
-// speak is optional. When it is true and MESH_TTS names a binary the user
-// already has, that binary receives the note text on stdin. The note is
-// written either way.
+// speak is optional. spoken is true only when the caller asked and MESH_TTS
+// is a local binary that exits 0. A URL is not started. The note is written
+// either way.
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { chmod, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -195,15 +195,20 @@ async function maybeSpeak(text: string, speak: boolean): Promise<boolean> {
   if (!speak) return false;
   const bin = (process.env.MESH_TTS ?? "").trim();
   if (!bin || isRemote(bin)) return false;
-  const proc = Bun.spawn([bin], {
-    stdin: new TextEncoder().encode(text),
-    stdout: "ignore",
-    stderr: "ignore",
-  });
+  let proc: ReturnType<typeof Bun.spawn>;
+  try {
+    proc = Bun.spawn([bin], {
+      stdin: new TextEncoder().encode(text),
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+  } catch {
+    return false;
+  }
   const killer = setTimeout(() => { try { proc.kill(); } catch { /* already gone */ } }, SPEAK_MS);
-  await proc.exited.catch(() => 1);
+  const code = await proc.exited.catch(() => 1);
   clearTimeout(killer);
-  return true;
+  return code === 0;
 }
 
 async function ingest(req: Request): Promise<Response> {
