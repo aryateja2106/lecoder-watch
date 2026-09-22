@@ -1,6 +1,6 @@
 ## Purpose
 
-Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, optional local TTS speaks a note, a held app draft waits for confirm before any further command, and a replaced note that asks to send a pairing code or copy hosts.json stays on hold. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase.
+Local notes from a PDF or a local speech-in binary stay under `MESHD_STATE`, an existing note's body can be replaced in the same file, a local `MESH_STT` transcript can replace that body, optional local TTS speaks a note, a held app draft waits for confirm before any further command, a replaced note that asks to send a pairing code or copy hosts.json stays on hold, and a spoken replace drafts that new body to `held-note.txt`. A spoken note is a local binary transcript or a local TTS exit code. Notes stay on the machine. Nothing from the note is stored in Supabase.
 
 ## ADDED Requirements
 
@@ -201,4 +201,51 @@ After a note body has been replaced, a body that asks to send a pairing code or 
 
 - **WHEN** the new body came from a local `MESH_STT` transcript
 - **THEN** the agent records that local binary transcript
+- **AND** the agent does not claim a microphone was proven
+
+### Requirement: A spoken replace drafts the new body to held-note.txt
+
+After a local `MESH_STT` transcript replaces one note, the agent-note path SHALL draft that new body to `held-note.txt`. That file SHALL be mode 600 and SHALL NOT be executed. A pairing-code transcript and a hosts.json transcript SHALL stay on hold, and the loopback model MUST NOT be called for either. The body "summarize this paper" SHALL draft the new body. A missing id MUST NOT call the model. A remote audio path MUST NOT write. The check runs with the gateway key unset. This behavior is pull request 187, which adds only `scripts/check-spoken-note-draft.sh`. An agent MUST NOT rebuild that check and MUST NOT add a second `/knowledge` route. A spoken note is that local binary transcript. An agent MUST NOT claim a microphone was proven.
+
+#### Scenario: The new transcript is drafted to held-note.txt
+
+- **WHEN** a local `MESH_STT` transcript replaces one note and a client asks the agent-note path to draft that id
+- **THEN** the draft file is `held-note.txt`
+- **AND** that file is mode 600
+- **AND** that file is not executed
+
+#### Scenario: A pairing-code transcript stays on hold
+
+- **WHEN** the replacement transcript asks to send a pairing code
+- **THEN** that transcript stays on hold
+- **AND** the loopback model is not called
+
+#### Scenario: A hosts.json transcript stays on hold
+
+- **WHEN** the replacement transcript asks to copy hosts.json
+- **THEN** that transcript stays on hold
+- **AND** the loopback model is not called
+
+#### Scenario: A paper summary drafts the new body
+
+- **WHEN** the replacement transcript is "summarize this paper" and a client asks the agent-note path to draft that id
+- **THEN** the draft is from that new body
+- **AND** the held file is not executed
+
+#### Scenario: A missing id does not call the model
+
+- **WHEN** the spoken-note draft is asked for an id that is not on disk
+- **THEN** the model is not called
+- **AND** no draft file is created
+
+#### Scenario: A remote audio path does not write
+
+- **WHEN** the audio path is an `http`, `https`, scheme, or protocol-relative URL
+- **THEN** the daemon does not write a note
+- **AND** the model is not called
+
+#### Scenario: The spoken-note draft does not prove a microphone
+
+- **WHEN** `sh scripts/check-spoken-note-draft.sh` passes on `127.0.0.1:8898` with the gateway key unset
+- **THEN** the agent records that local `MESH_STT` transcript and that spare-daemon check
 - **AND** the agent does not claim a microphone was proven
