@@ -848,11 +848,17 @@ struct KnowledgeNoteAskView: View {
     @EnvironmentObject var store: WatchMeshStore
     let host: String
     @State private var note = ""
+    @State private var noteBody = ""
     @State private var ask = ""
     @State private var confirming = false
+    @State private var confirmingSave = false
 
     private var namedNote: String {
         note.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var written: String {
+        noteBody.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var question: String {
@@ -870,6 +876,12 @@ struct KnowledgeNoteAskView: View {
                 TextField("Note", text: $note)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+            }
+            Section("Body") {
+                TextField("Body", text: $noteBody, axis: .vertical)
+                    .autocorrectionDisabled()
+                Button("Save") { confirmingSave = true }
+                    .disabled(namedNote.isEmpty || written.isEmpty)
             }
             Section("Ask") {
                 TextField("Question", text: $ask, axis: .vertical)
@@ -895,6 +907,15 @@ struct KnowledgeNoteAskView: View {
             Button("Ask") {
                 store.currentKnowledgeNote = note
                 store.askCurrentKnowledgeNote(host: host, ask: ask, confirmed: true)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(namedNote)
+        }
+        .confirmationDialog("Save this note?", isPresented: $confirmingSave, titleVisibility: .visible) {
+            Button("Save") {
+                store.currentKnowledgeNote = note
+                store.saveKnowledgeNote(host: host, title: note, body: noteBody, confirmed: true)
             }
             Button("Cancel", role: .cancel) { }
         } message: {
