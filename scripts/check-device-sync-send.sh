@@ -219,6 +219,10 @@ console.log("token_in_urls: false");
 console.log("address_in_urls: false");
 console.log("private_key_in_urls: false");
 console.log("check-device-sync-send: node OK");
+})().catch((error) => {
+  console.error(`FAIL: check-device-sync-send: ${error instanceof Error ? error.message : "send failed"}`);
+  process.exit(1);
+});
 END_CHECK
 
 if [ -e "$TMP/.mesh" ]; then
