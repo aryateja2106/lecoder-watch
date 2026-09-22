@@ -1,19 +1,25 @@
 // One scripted step for an agent that already has a note on this machine.
 // Read that note, ask the caller's own model for a draft, write that draft
-// into the caller's cwd, and stop. A further command runs only when the
-// caller passes confirm. That is the review-before-dispatch gate.
+// into one file in the caller's cwd, and stop. The file is not executed.
+// A further command runs only when the caller passes confirm. That is the
+// review-before-dispatch gate.
 //
 // The caller passes a base URL. modelClassOf already sorts that URL into
 // "local" or "user-subscription". The daemon POSTs the note text to that
 // URL's OpenAI-compatible /v1/chat/completions and stores the assistant
-// text. Anything that does not classify as one of those two is not fetched.
+// text. A text/html body is the app source itself and is stored the same
+// way. Anything that does not classify as one of those two is not fetched.
 // The transcript records the class string only. The base URL and any key
 // in it are not written, logged, or returned.
 //
-//   POST /agent-note  { id, cwd, model, command?, confirm? }
+// file is an optional relative path and defaults to draft.txt. Absolute
+// paths, "..", and any path that resolves outside cwd are refused.
+//
+//   POST /agent-note  { id, cwd, model, file?, command?, confirm? }
 //        -> { modelClass, draft, commandRan, held }
-import { resolve } from "node:path";
-import { chmod, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { constants as fsConstants } from "node:fs";
+import { chmod, lstat, mkdir, open, realpath, stat } from "node:fs/promises";
 import { readNote } from "./knowledge";
 
 const FILE_MODE = 0o600;
@@ -125,7 +131,7 @@ async function completeNote(endpoint: string, text: string, modelClass: ModelCla
       method: "POST",
       redirect: "error",
       signal: AbortSignal.timeout(MODEL_MS),
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: { "content-type": "application/json", accept: "application/json, text/html" },
       body: JSON.stringify({
         model: modelClass,
         messages: [{ role: "user", content: text }],
@@ -143,6 +149,12 @@ async function completeNote(endpoint: string, text: string, modelClass: ModelCla
     throw new AgentNoteError("model request failed", 400);
   }
   if (raw.length > 200_000) throw new AgentNoteError("model request failed", 400);
+  // An HTML body is the app source. Store those bytes and do not run them.
+  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  if (contentType.includes("text/html")) {
+    if (raw.length === 0) throw new AgentNoteError("model request failed", 400);
+    return raw;
+  }
   let payload: unknown;
   try { payload = JSON.parse(raw); } catch {
     throw new AgentNoteError("model request failed", 400);
@@ -152,10 +164,98 @@ async function completeNote(endpoint: string, text: string, modelClass: ModelCla
   return textOut;
 }
 
+// The caller's file name, relative to cwd. Absolute paths and ".." are
+// refused here, before the joined path is resolved.
+function heldRelativeName(file: string | undefined): string {
+  const raw = (file ?? "").trim();
+  const name = raw.length === 0 ? DRAFT_NAME : raw;
+  if (name.includes("\0")) throw new AgentNoteError("file must stay inside cwd", 400);
+  if (isAbsolute(name) || name.startsWith("/") || name.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(name)) {
+    throw new AgentNoteError("file must stay inside cwd", 400);
+  }
+  const parts = name.split(/[\\/]+/);
+  const kept: string[] = [];
+  for (const part of parts) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") throw new AgentNoteError("file must stay inside cwd", 400);
+    kept.push(part);
+  }
+  if (kept.length === 0) throw new AgentNoteError("file must stay inside cwd", 400);
+  return kept.join("/");
+}
+
+function pathInside(root: string, abs: string): boolean {
+  const back = relative(root, abs);
+  return Boolean(back) && back !== ".." && !back.startsWith(`..${sep}`) && !isAbsolute(back);
+}
+
+function ioCode(err: unknown): string {
+  if (!err || typeof err !== "object" || !("code" in err)) return "";
+  return String((err as { code?: unknown }).code ?? "");
+}
+
+// Join cwd and the relative name. realpath the deepest existing ancestor so
+// a symlink chain cannot land the write outside cwd.
+async function resolveHeldFile(cwd: string, file: string | undefined): Promise<{ abs: string; rel: string }> {
+  const rel = heldRelativeName(file);
+  const root = await realpath(cwd);
+  const abs = resolve(root, rel);
+  if (!pathInside(root, abs)) throw new AgentNoteError("file must stay inside cwd", 400);
+  const landed = await landedHeldPath(root, abs);
+  if (!pathInside(root, landed)) throw new AgentNoteError("file must stay inside cwd", 400);
+  const back = relative(root, abs);
+  return { abs, rel: back.split(sep).join("/") };
+}
+
+async function landedHeldPath(root: string, abs: string): Promise<string> {
+  const missing: string[] = [];
+  let cursor = abs;
+  while (true) {
+    let info;
+    try {
+      info = await lstat(cursor);
+    } catch (err) {
+      if (ioCode(err) !== "ENOENT") throw err;
+      if (cursor === root) throw new AgentNoteError("file must stay inside cwd", 400);
+      missing.unshift(basename(cursor));
+      const parent = dirname(cursor);
+      if (parent === cursor) throw new AgentNoteError("file must stay inside cwd", 400);
+      cursor = parent;
+      continue;
+    }
+    if (cursor === abs && info.isSymbolicLink()) throw new AgentNoteError("file must stay inside cwd", 400);
+    const real = await realpath(cursor).catch(() => "");
+    if (!real) throw new AgentNoteError("file must stay inside cwd", 400);
+    return resolve(real, ...missing);
+  }
+}
+
+// Store the assistant text. O_NOFOLLOW so a symlink cannot redirect the write.
+async function writeHeldFile(abs: string, text: string): Promise<void> {
+  const parent = dirname(abs);
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  const noFollow = typeof fsConstants.O_NOFOLLOW === "number" ? fsConstants.O_NOFOLLOW : 0;
+  const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | noFollow;
+  let fh;
+  try {
+    fh = await open(abs, flags, FILE_MODE);
+  } catch (err) {
+    if (ioCode(err) === "ELOOP") throw new AgentNoteError("file must stay inside cwd", 400);
+    throw err;
+  }
+  try {
+    await fh.writeFile(text);
+  } finally {
+    await fh.close();
+  }
+  await chmod(abs, FILE_MODE);
+}
+
 export async function runAgentNote(opts: {
   id: string;
   cwd: string;
   model: string;
+  file?: string;
   command?: string;
   confirm?: boolean;
 }): Promise<{ modelClass: ModelClass; draft: string; commandRan: boolean; held: boolean }> {
@@ -170,19 +270,20 @@ export async function runAgentNote(opts: {
   const info = await stat(cwd).catch(() => null);
   if (!info) throw new AgentNoteError("cwd not found", 404);
   if (!info.isDirectory()) throw new AgentNoteError("cwd is not a directory", 400);
+  // Refuse a path that leaves cwd before any model request.
+  const heldFile = await resolveHeldFile(cwd, opts.file);
   const note = await readNote(opts.id);
   if (!note) throw new AgentNoteError("note not found", 404);
   const endpoint = completionsEndpoint(opts.model);
   if (!endpoint) throw new AgentNoteError("model url not allowed", 400);
   const assistant = await completeNote(endpoint, noteText(note), modelClass);
-  const draftPath = resolve(cwd, DRAFT_NAME);
-  await writeFile(draftPath, assistant, { mode: FILE_MODE });
-  await chmod(draftPath, FILE_MODE);
+  await writeHeldFile(heldFile.abs, assistant);
 
   const command = opts.command?.trim() ?? "";
-  if (!command) return { modelClass, draft: DRAFT_NAME, commandRan: false, held: false };
-  // Review before dispatch: do not spawn unless the caller confirmed.
-  if (opts.confirm !== true) return { modelClass, draft: DRAFT_NAME, commandRan: false, held: true };
+  if (!command) return { modelClass, draft: heldFile.rel, commandRan: false, held: false };
+  // Review before dispatch: the file stays on disk. A shell command runs
+  // only when the caller confirmed, and that command is not the file.
+  if (opts.confirm !== true) return { modelClass, draft: heldFile.rel, commandRan: false, held: true };
 
   const proc = Bun.spawn(["/bin/sh", "-c", command], {
     cwd,
@@ -192,7 +293,7 @@ export async function runAgentNote(opts: {
   });
   const code = await proc.exited;
   if (code !== 0) throw new AgentNoteError("command failed", 400);
-  return { modelClass, draft: DRAFT_NAME, commandRan: true, held: false };
+  return { modelClass, draft: heldFile.rel, commandRan: true, held: false };
 }
 
 export async function handleAgentNote(req: Request, url: URL): Promise<Response | null> {
@@ -202,6 +303,7 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
     id?: unknown;
     cwd?: unknown;
     model?: unknown;
+    file?: unknown;
     command?: unknown;
     confirm?: unknown;
   } | null;
@@ -209,11 +311,13 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
     return json({ error: "id and cwd required" }, 400);
   }
   if (typeof body.model !== "string") return json({ error: "model required" }, 400);
+  if (body.file !== undefined && typeof body.file !== "string") return json({ error: "file must stay inside cwd" }, 400);
   try {
     const result = await runAgentNote({
       id: body.id,
       cwd: body.cwd,
       model: body.model,
+      file: typeof body.file === "string" ? body.file : undefined,
       command: typeof body.command === "string" ? body.command : undefined,
       confirm: body.confirm === true,
     });
