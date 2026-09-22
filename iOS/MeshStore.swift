@@ -224,6 +224,25 @@ final class MeshStore: ObservableObject {
         save()
     }
 
+    /// Fleet entries the last pairing refused to add because the user had removed that
+    /// machine before. They are NOT added silently — nor dropped silently, which is the
+    /// defect this exists to answer: one deletion banned a machine from every future
+    /// pairing, and the sheet said "Added 2 machines" with no hint that a third was
+    /// skipped. The Pair screen lists these with an Add anyway button.
+    @Published var skippedByRemoval: [PairedHost] = []
+
+    /// Undo a removal for one fleet entry and add it, from the Pair screen.
+    func addDespiteRemoval(_ host: PairedHost) {
+        var set = removedHosts
+        set.remove(host.host.lowercased())
+        set.remove(host.ip.lowercased())
+        removedHosts = set
+        machines = mergingPairedHosts(machines, [host])
+        skippedByRemoval.removeAll { $0.ip == host.ip && $0.host == host.host }
+        save()
+        Task { await refresh() }
+    }
+
     /// Redeem a pairing code and adopt everything the paired machine knows about.
     /// Returns the hosts that were added or refreshed, so the UI can say what happened.
     @discardableResult
@@ -244,6 +263,10 @@ final class MeshStore: ObservableObject {
         removedHosts = tombstones
         let hosts = filteringRemovedHosts(result.allHosts, removed: tombstones,
                                           pairedHost: result.host, pairedAddress: address)
+        // What the filter threw away, so the screen can say so instead of quietly
+        // handing back a shorter fleet than the machine offered.
+        let kept = Set(hosts.map { "\($0.host)\u{0}\($0.ip)" })
+        skippedByRemoval = result.allHosts.filter { !kept.contains("\($0.host)\u{0}\($0.ip)") }
         machines = mergingPairedHosts(machines, hosts)
         save()
         // The highest-intent moment in the app: they just connected a machine, so

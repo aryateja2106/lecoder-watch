@@ -105,7 +105,7 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `push` | — (nothing gates it) | no |
 | `pair` | — (nothing gates it) | no |
 | `doctor` | — (nothing gates it) | no |
-| `wake` | MeshStore.swift:892 | no |
+| `wake` | MeshStore.swift:915 | no |
 | `screenRegion` | MeshClient.swift:219, RemoteView.swift:323, RemoteScreenView.swift:110 | yes |
 | `openUrl` | MeshClient.swift:554 | yes |
 | `power` | MeshClient.swift:537, ContentView.swift:689 | yes |
@@ -127,23 +127,23 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 
 | command | handled in MeshStore |
 |---|---|
-| `.refresh` | MeshStore.swift:1032 |
-| `.agentSend` | MeshStore.swift:1037 |
-| `.agentOutput` | MeshStore.swift:1064 |
-| `.screenPeek` | MeshStore.swift:1071 |
-| `.newAgent` | MeshStore.swift:1086 |
-| `.newPane` | MeshStore.swift:1098 |
-| `.killAgent` | MeshStore.swift:1044 |
-| `.killPane` | MeshStore.swift:1054 |
-| `.input` | MeshStore.swift:1105 |
-| `.volume` | MeshStore.swift:1112 |
-| `.clipboard` | MeshStore.swift:1118 |
-| `.system` | MeshStore.swift:1124 |
-| `.readClipboard` | MeshStore.swift:1145 |
-| `.inputStatus` | MeshStore.swift:1195 |
-| `.listApps` | MeshStore.swift:1179 |
-| `.activateApp` | MeshStore.swift:1184 |
-| `.listDisplays` | MeshStore.swift:1190 |
-| `.readPhoneClipboard` | MeshStore.swift:1150 |
-| `.openURL` | MeshStore.swift:1161 |
-| `.fsList` | MeshStore.swift:1174 |
+| `.refresh` | MeshStore.swift:1055 |
+| `.agentSend` | MeshStore.swift:1060 |
+| `.agentOutput` | MeshStore.swift:1087 |
+| `.screenPeek` | MeshStore.swift:1094 |
+| `.newAgent` | MeshStore.swift:1109 |
+| `.newPane` | MeshStore.swift:1121 |
+| `.killAgent` | MeshStore.swift:1067 |
+| `.killPane` | MeshStore.swift:1077 |
+| `.input` | MeshStore.swift:1128 |
+| `.volume` | MeshStore.swift:1135 |
+| `.clipboard` | MeshStore.swift:1141 |
+| `.system` | MeshStore.swift:1147 |
+| `.readClipboard` | MeshStore.swift:1168 |
+| `.inputStatus` | MeshStore.swift:1218 |
+| `.listApps` | MeshStore.swift:1202 |
+| `.activateApp` | MeshStore.swift:1207 |
+| `.listDisplays` | MeshStore.swift:1213 |
+| `.readPhoneClipboard` | MeshStore.swift:1173 |
+| `.openURL` | MeshStore.swift:1184 |
+| `.fsList` | MeshStore.swift:1197 |

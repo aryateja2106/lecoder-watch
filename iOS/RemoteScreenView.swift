@@ -715,9 +715,17 @@ struct TrackpadSurface: UIViewRepresentable {
 
         // Press-and-hold then move is a drag on a real trackpad: button down, move,
         // release. Without it you cannot move a window or select text.
+        //
+        // `allowableMovement` is what separates "hold" from "move", and only applies
+        // BEFORE the press is recognised — once the drag has begun the finger may go
+        // anywhere. It used to be infinite, which meant any finger still on the glass
+        // after 0.35 s pressed the mouse button, whatever it had been doing: on a real
+        // phone, where aiming the pointer takes longer than a simulator's synthetic
+        // swipe, ordinary pointer moves turned into drags and the Mac spent the whole
+        // session selecting text. 12 pt is a resting finger, not a moving one.
         let hold = UILongPressGestureRecognizer(target: c, action: #selector(Coordinator.hold(_:)))
         hold.minimumPressDuration = 0.35
-        hold.allowableMovement = .greatestFiniteMagnitude
+        hold.allowableMovement = 12
         view.addGestureRecognizer(hold)
         hold.delegate = c                    // the other half of the drag: see pan.delegate above
 
@@ -731,6 +739,10 @@ struct TrackpadSurface: UIViewRepresentable {
         private var lastPan = CGPoint.zero
         private var lastScroll = CGPoint.zero
         private var dragging = false
+        /// How far this one-finger gesture has travelled. The long press and the pan run
+        /// together, so `allowableMovement` alone cannot see a finger that crept 11 pt
+        /// during the press and then set off: that still has to be a move, not a drag.
+        private var panTravel: CGFloat = 0
 
         init(_ parent: TrackpadSurface) { self.parent = parent }
 
@@ -749,11 +761,14 @@ struct TrackpadSurface: UIViewRepresentable {
 
         @objc func pan(_ g: UIPanGestureRecognizer) {
             let t = g.translation(in: g.view)
-            if g.state == .began { lastPan = .zero }
-            parent.onMove(CGSize(width: t.x - lastPan.x, height: t.y - lastPan.y))
+            if g.state == .began { lastPan = .zero; panTravel = 0 }
+            let dx = t.x - lastPan.x, dy = t.y - lastPan.y
+            panTravel += abs(dx) + abs(dy)
+            parent.onMove(CGSize(width: dx, height: dy))
             lastPan = t
             if g.state == .ended || g.state == .cancelled {
                 lastPan = .zero
+                panTravel = 0
                 if dragging { dragging = false; parent.onDragEnded() }
                 parent.onGestureEnded()
             }
@@ -780,7 +795,13 @@ struct TrackpadSurface: UIViewRepresentable {
         @objc func tertiary(_ g: UITapGestureRecognizer) { parent.onTertiaryTap() }
 
         @objc func hold(_ g: UILongPressGestureRecognizer) {
-            if g.state == .began { dragging = true; parent.onDragBegan() }
+            // A finger that has already travelled is aiming, not pressing: pressing the
+            // button under it would turn the rest of the move into a drag.
+            if g.state == .began {
+                guard panTravel < 12 else { return }
+                dragging = true
+                parent.onDragBegan()
+            }
             if g.state == .ended || g.state == .cancelled, dragging {
                 dragging = false; parent.onDragEnded()
             }

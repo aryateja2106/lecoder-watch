@@ -151,7 +151,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | ContentView | struct | iOS/ContentView.swift:8 |
 | ControlWebView | struct | iOS/ContentView.swift:1641 |
 | copyableCommand | func | iOS/ContentView.swift:1036 |
-| CopyableCommand | struct | iOS/PairMachineView.swift:281 |
+| CopyableCommand | struct | iOS/PairMachineView.swift:310 |
 | copySide | function | install/payload/bin/mesh:144 |
 | createLineRedactor | function | install/payload/meshd/redact.ts:153 |
 | cursor | func | install/payload/bin/mesh-input.swift:206 |
@@ -170,7 +170,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | DiagnoseRow | struct | iOS/ContentView.swift:1524 |
 | DictateLink | struct | Watch/WatchViews.swift:34 |
 | die | function | install/payload/bin/mesh:112 |
-| DirectKeyboard | struct | iOS/RemoteScreenView.swift:1290 |
+| DirectKeyboard | struct | iOS/RemoteScreenView.swift:1311 |
 | DiskInfo | struct | Shared/Models.swift:256 |
 | Display | struct | install/payload/bin/mesh-input.swift:70 |
 | display | func | install/payload/bin/mesh-input.swift:88 |
@@ -296,11 +296,11 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | kbGet | function | install/payload/meshd/kb.ts:85 |
 | kbPut | function | install/payload/meshd/kb.ts:55 |
 | kbSearch | function | install/payload/meshd/kb.ts:90 |
-| KeyCaptureView | class | iOS/RemoteScreenView.swift:1312 |
+| KeyCaptureView | class | iOS/RemoteScreenView.swift:1333 |
 | lastLink | func | Watch/WatchLinks.swift:37 |
 | lastPathBit | func | Watch/WatchViews.swift:1625 |
 | launchCommand | function | install/payload/meshd/handoff.ts:51 |
-| LaunchSheet | struct | iOS/RemoteScreenView.swift:1362 |
+| LaunchSheet | struct | iOS/RemoteScreenView.swift:1383 |
 | LeSearchCloud | enum | iOS/LeSearchCloud.swift:26 |
 | LevelMeter | struct | iOS/VoiceInput.swift:155 |
 | LimitHandoffBanner | struct | iOS/TerminalView.swift:996 |
@@ -398,7 +398,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | needsSelfCheck | func | iOS/ContentView.swift:1119 |
 | needsUpdate | func | iOS/ContentView.swift:1111 |
 | NewSessionSheet | struct | iOS/TerminalView.swift:243 |
-| NoMachinesView | struct | iOS/PairMachineView.swift:312 |
+| NoMachinesView | struct | iOS/PairMachineView.swift:341 |
 | normalizeChords | function | install/payload/meshd/input.ts:160 |
 | normalizeCode | function | install/payload/meshd/pair.ts:51 |
 | normalizedPairingCode | func | Shared/Models.swift:135 |
@@ -489,7 +489,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | RemoteKeysView | struct | Watch/RemoteView.swift:1161 |
 | RemoteMediaView | struct | Watch/RemoteView.swift:1298 |
 | RemoteScreenModel | class | iOS/RemoteScreenView.swift:34 |
-| RemoteScreenView | struct | iOS/RemoteScreenView.swift:793 |
+| RemoteScreenView | struct | iOS/RemoteScreenView.swift:814 |
 | RemoteSystemView | struct | Watch/RemoteView.swift:1352 |
 | RemoteTouch | enum | Watch/RemoteView.swift:1077 |
 | RemoteView | struct | Watch/RemoteView.swift:435 |
@@ -556,7 +556,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | Stats | struct | Shared/Models.swift:272 |
 | StatsSample | struct | iOS/MachineStatsView.swift:11 |
 | statusColor | func | Watch/WatchViews.swift:479 |
-| StepRow | struct | iOS/PairMachineView.swift:257 |
+| StepRow | struct | iOS/PairMachineView.swift:286 |
 | StopReason | type | install/payload/meshd/codex-state.ts:19 |
 | stopService | function | install/payload/bin/mesh:2029 |
 | StoreError | struct | iOS/MeshStore.swift:10 |
@@ -586,7 +586,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | tokenWeakness | function | install/payload/meshd/doctor.ts:35 |
 | ToolResultCard | struct | iOS/AgentChatView.swift:863 |
 | TrackpadSurface | struct | iOS/RemoteScreenView.swift:656 |
-| TrackpadView | class | iOS/RemoteScreenView.swift:1258 |
+| TrackpadView | class | iOS/RemoteScreenView.swift:1279 |
 | treeVersion | function | install/payload/bin/mesh:663 |
 | TypeSheet | struct | Watch/RemoteView.swift:1603 |
 | typeText | func | install/payload/bin/mesh-input.swift:338 |
