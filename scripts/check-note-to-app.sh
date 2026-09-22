@@ -106,7 +106,7 @@ open(path, "wb").write(out)
 PY
 
 mkdir -p "$WORK"
-python3 - "$TH/stub.port" "$TH/stub.body" "$TH/stub.path" "$TH/stub.headers" "$TH/stub.reply" <<'PY' &
+python3 - "$TH/stub.port" "$TH/stub.body" "$TH/stub.path" "$TH/stub.headers" "$TH/stub.reply" 2>"$TH/stub.err" <<'PY' &
 import json, os, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -152,12 +152,24 @@ os.rename(tmp_port, port_file)
 server.serve_forever()
 PY
 STUB=$!
+# The port file is written only after Python imports http.server and binds.
+# On the macOS CI runner that startup was still in progress after 5s, so the
+# process was alive and stub.port did not exist yet.
 i=0
-while [ ! -s "$TH/stub.port" ] && [ "$i" -lt 50 ]; do
-  kill -0 "$STUB" 2>/dev/null || { echo "FAIL: model stub exited"; exit 1; }
+while [ ! -s "$TH/stub.port" ] && [ "$i" -lt 300 ]; do
+  kill -0 "$STUB" 2>/dev/null || {
+    echo "FAIL: model stub exited"
+    tail -n 40 "$TH/stub.err" || true
+    exit 1
+  }
   sleep 0.1
   i=$((i + 1))
 done
+if [ ! -s "$TH/stub.port" ]; then
+  echo "FAIL: model stub port file never appeared"
+  tail -n 40 "$TH/stub.err" || true
+  exit 1
+fi
 STUB_PORT="$(tr -d '[:space:]' < "$TH/stub.port")"
 if [ -z "$STUB_PORT" ] || [ "$STUB_PORT" = "$PORT" ] || [ "$STUB_PORT" = "8899" ] || [ "$STUB_PORT" = "8898" ]; then
   echo "FAIL: model stub port is not a spare localhost port"
