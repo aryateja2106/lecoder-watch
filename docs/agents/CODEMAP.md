@@ -25,7 +25,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 4 | ~1,300 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 119 | ~11,500 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `scripts/` | 120 | ~11,500 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
@@ -60,7 +60,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `AppLock.swift` | S | Biometric gate in front of the app | — |
 | `AppsLibraryView.swift` | M | every app an agent built for you, across every machine, in one list | — |
 | `BackgroundRefresh.swift` | S | Periodic usage/limit polling while the app is closed | — |
-| `ContentView.swift` | XL | the phone's tab shell: Machines, attention rows, machine detail, Settings, the daemon-update and Local Network banners | — |
+| `ContentView.swift` | XL | the phone's tab shell: Machines, attention rows, machine detail, Settings, the daemon-update and Local Network banners | check-event-dismissal |
 | `ExposedSecretsScreen.swift` | S | Settings → Exposed secrets. meshd 0.6+ ("redact") replaces a token, key or password in event and output text before it ever leaves the machine — but printing… | — |
 | `FeedbackView.swift` | M | report a problem from the phone: kind, title, what happened in your words, an optional screenshot or recording you pick, an optional contact email, and a… | check-feedback-cloud, check-feedback-redact |
 | `FileBrowserView.swift` | M | browse a machine's filesystem over /files and /fs, open links, read text files | — |
@@ -70,7 +70,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `LiveActivityController.swift` | M | Runs the live card for whichever session currently deserves one | — |
 | `MachineStatsView.swift` | S | a machine's load at a glance: memory, disk and CPU gauges, a live line of the last minute, the heaviest processes, and how many more agents would fit | — |
 | `MeshRelayApp.swift` | S | Receives the APNs device token and hands it to whoever registered interest | check-phone-input-and-wake |
-| `MeshStore.swift` | XL | the phone brain: polls every machine, holds the machine list and tokens, relays snapshots to the watch, and executes the watch's WatchCommands (`handle(_:)`) | check-inspect-crop, check-relay-receiver, check-watch-scrollback, check-watch-terminal-wiring |
+| `MeshStore.swift` | XL | the phone brain: polls every machine, holds the machine list and tokens, relays snapshots to the watch, and executes the watch's WatchCommands (`handle(_:)`) | check-event-dismissal, check-inspect-crop, check-relay-receiver, check-watch-scrollback, check-watch-terminal-wiring |
 | `NativeTerminalScreen.swift` | M | the phone terminal as a terminal: SwiftTerm paints the pane (colour, cursor, alt-screen) and a fixed key bar sits under it, the way a mobile terminal is… | check-native-terminal-keys |
 | `NotificationManager.swift` | L | Usage limit lifecycle notifications: budget tiers at 50% and 25% left, hit at 95% used, session-window-open, scheduled reset alert, ping when a blocked limit… | check-usage-alert-identity |
 | `PairMachineView.swift` | M | Onboarding. Two fields, because everything else is derivable: the machine's address and a code it prints. The code buys the real token over `/pair/claim`, and… | — |

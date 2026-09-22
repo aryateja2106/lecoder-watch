@@ -33,6 +33,7 @@
 | `check-docs-index.sh` | every doc is findable, and the index does not point at ghosts |
 | `check-drag-lock-release.sh` | the watch must never walk away holding the Mac's mouse button down |
 | `check-entitlements.sh` | the capabilities the code calls are the capabilities the build is entitled to |
+| `check-event-dismissal.sh` | An alert you cannot clear is worse than no alert: it teaches you to ignore the badge |
 | `check-feedback-cloud.sh` | the in-app feedback client talks to the live contract and nothing more: the anon key is the daemon's (one… |
 | `check-feedback-pipeline.sh` | the feedback worker files the right issues: a report that matches an open from-users issue becomes a comment… |
 | `check-feedback-redact.swift` | the problem report never carries a secret: every key shape the daemon's redactor knows is replaced by its… |
