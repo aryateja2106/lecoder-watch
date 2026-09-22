@@ -695,14 +695,14 @@ struct TrackpadSurface: UIViewRepresentable {
 
         init(_ parent: TrackpadSurface) { self.parent = parent }
 
-        // Everything on the trackpad may run together — except the navigation stack's
-        // edge back-swipe, which is also a pan and ran WITH ours: a drag to the right
-        // that started near the left edge popped the screen mid-gesture. That one must
-        // wait for ours, and ours recognises on the first move, so it never fires here.
+        // Everything on the trackpad runs together (pan and hold, pinch and pan) —
+        // check-remote-screen-gestures.sh pins this line, and the edge case below does
+        // not need it changed. The navigation stack's edge back-swipe is also a pan, and
+        // it used to fire WITH ours: a drag to the right that started near the left edge
+        // popped the screen mid-gesture. It now has to wait for our pan to fail, and ours
+        // recognises on the first move, so on the trackpad it never begins at all.
         func gestureRecognizer(_ g: UIGestureRecognizer,
-                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-            !(other is UIScreenEdgePanGestureRecognizer)
-        }
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
         func gestureRecognizer(_ g: UIGestureRecognizer,
                                shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
             other is UIScreenEdgePanGestureRecognizer

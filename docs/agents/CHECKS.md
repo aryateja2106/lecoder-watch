@@ -5,6 +5,7 @@
 | script | proves / does |
 |---|---|
 | `check-agent-identity-transport.sh` | two ways a session identity gets silently lost in transit, both verified against a live daemon before this… |
+| `check-agent-menu.swift` | AgentMenu recognises the menus real agents print and picks options with the right keys |
 | `check-agent-new-latency.sh` | the 900ms toll on session creation must stay dead |
 | `check-agent-notifications.swift` | These buttons type into a live terminal session on someone's machine |
 | `check-air-mouse.swift` | A wrist is never still. If the deadzone or the shaping is wrong the cursor either drifts on its own or… |

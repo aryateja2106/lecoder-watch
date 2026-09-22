@@ -25,7 +25,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 3 | ~1,700 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 105 | ~10,200 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `scripts/` | 106 | ~10,300 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
