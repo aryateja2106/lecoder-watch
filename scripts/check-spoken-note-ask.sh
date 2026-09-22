@@ -597,7 +597,8 @@ python3 - "$TH/list2.json" "$TH/note.id" "$TITLE" "$ASK" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
 notes = data.get("notes")
-orig, title, ask = sys.argv[2], sys.argv[3], sys.argv[4]
+orig = open(sys.argv[2]).read().strip()
+title, ask = sys.argv[3], sys.argv[4]
 if not isinstance(notes, list) or len(notes) != 2:
     raise SystemExit("FAIL: list after ask is %r" % (data,))
 found = False

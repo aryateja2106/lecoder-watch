@@ -346,7 +346,9 @@ python3 - "$TH/list.json" "$PAPER_ID" "$TH/reply.id" "$SENTENCE" <<'PY'
 import json, sys
 raw = open(sys.argv[1]).read()
 data = json.loads(raw)
-paper, reply, sentence = sys.argv[2], sys.argv[3], sys.argv[4]
+paper = sys.argv[2].strip()
+reply = open(sys.argv[3]).read().strip()
+sentence = sys.argv[4]
 if sentence in raw or "body" in raw:
     raise SystemExit("FAIL: list includes the reply")
 notes = data.get("notes")
@@ -413,7 +415,8 @@ code="$(post_json "$TH/long.out" "$TH/long.json" "/agent-note")"
 [ "$code" = "200" ] || { echo "FAIL: long ask -> ${code}"; cat "$TH/long.out"; echo; exit 1; }
 python3 - "$STATE/knowledge" "$PAPER_ID" "$TH/reply.id" "$LONG" "$TH/assistant.txt" <<'PY'
 import json, os, sys
-directory, paper, reply, ask, assistant = sys.argv[1:6]
+directory, paper, ask, assistant = sys.argv[1], sys.argv[2], sys.argv[4], sys.argv[5]
+reply = open(sys.argv[3]).read().strip()
 want = ask[:200]
 found = None
 for name in os.listdir(directory):
