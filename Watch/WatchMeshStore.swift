@@ -942,12 +942,23 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
-    func loadKnowledgeNotes(host: String) {
-        knowledgeNotes = []
+    func loadKnowledgeNotes(host: String, query: String = "") {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if needle.contains("://") {
+            lastError = "Search needs local text"
+            return
+        }
         guard directReachable(host), let c = client(for: host) else { return }
         Task {
-            do { knowledgeNotes = try await c.listKnowledgeNotes() }
-            catch { knowledgeNotes = [] }
+            do {
+                if needle.isEmpty {
+                    knowledgeNotes = try await c.listKnowledgeNotes()
+                } else {
+                    knowledgeNotes = try await c.listKnowledgeNotes(query: needle)
+                }
+            } catch {
+                lastError = "list failed"
+            }
         }
     }
 

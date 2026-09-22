@@ -273,11 +273,20 @@ struct MeshClient {
     }
 
     /// Titles on this machine. `GET /knowledge` returns `{ notes: [{ id, title }] }`.
-    func listKnowledgeNotes() async throws -> [KnowledgeNoteSummary] {
+    /// A non-empty `query` is sent as `q`, percent-encoded.
+    func listKnowledgeNotes(query: String = "") async throws -> [KnowledgeNoteSummary] {
         struct Listed: Decodable {
             var notes: [KnowledgeNoteSummary]
         }
-        let data = try await request("/knowledge", method: "GET")
+        let path: String
+        if query.isEmpty {
+            path = "/knowledge"
+        } else {
+            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+            let enc = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
+            path = "/knowledge?q=\(enc)"
+        }
+        let data = try await request(path, method: "GET")
         let listed = try JSONDecoder().decode(Listed.self, from: data)
         return listed.notes
     }

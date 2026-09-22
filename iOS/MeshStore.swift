@@ -698,8 +698,12 @@ final class MeshStore: ObservableObject {
     }
 
     /// Load titles for a reachable machine. A tap later copies one into the note field.
-    func loadKnowledgeNotes(host: String) {
-        knowledgeNotes = []
+    func loadKnowledgeNotes(host: String, query: String = "") {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if needle.contains("://") {
+            fail("Search needs local text")
+            return
+        }
         guard let machine = machineMatching(host, in: machines),
               let snap = snapshot?.machines.first(where: { $0.host == machine.host }),
               snap.reachable, snap.authError == nil else {
@@ -708,9 +712,13 @@ final class MeshStore: ObservableObject {
         let c = client(for: machine)
         Task {
             do {
-                knowledgeNotes = try await c.listKnowledgeNotes()
+                if needle.isEmpty {
+                    knowledgeNotes = try await c.listKnowledgeNotes()
+                } else {
+                    knowledgeNotes = try await c.listKnowledgeNotes(query: needle)
+                }
             } catch {
-                knowledgeNotes = []
+                fail("list failed")
             }
         }
     }
