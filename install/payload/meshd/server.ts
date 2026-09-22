@@ -644,6 +644,9 @@ const KEY_SEND_KEYS: Record<string, string> = {
   end: "End",
   "page-up": "PPage",
   "page-down": "NPage",
+  "shift-tab": "BTab",
+  // Claude Code's newline-without-submit is meta+return (ESC CR); tmux spells that M-Enter.
+  "shift-enter": "M-Enter",
 };
 
 async function agentSend(name: string, text?: string, key?: string, pane?: string, paste?: boolean): Promise<{ ok: boolean; error?: string }> {
@@ -695,7 +698,17 @@ async function agentSend(name: string, text?: string, key?: string, pane?: strin
       }
     }
   }
-  if (sendKey) await sh(`${MUX} send-keys -t ${target} ${sendKey}`);
+  if (sendKey) {
+    // A pane target the mux cannot resolve (renumbered, stale event, rmux spelling) used to
+    // vanish into sh()'s discarded stderr and still answer ok:true — "Approve" showed Sent
+    // and Claude stayed on its prompt. Retry on the session itself before giving up.
+    const r = await shChecked(`${MUX} send-keys -t ${target} ${sendKey}`).catch(() => ({ code: 1, out: "", err: "" }));
+    if (r.code !== 0) {
+      if (!pane) return { ok: false, error: `send-keys failed: ${r.err.trim() || r.code}` };
+      const again = await shChecked(`${MUX} send-keys -t ${shq(name)} ${sendKey}`).catch(() => ({ code: 1, out: "", err: "" }));
+      if (again.code !== 0) return { ok: false, error: `send-keys failed: ${again.err.trim() || again.code}` };
+    }
+  }
   return { ok: true };
 }
 
@@ -817,7 +830,7 @@ async function readEvents(since?: string | null): Promise<AgentEvent[]> {
 // row from it, so both clients read one truth over the endpoint they already poll.
 // Warmed once at boot from the tail of the JSONL so a daemon restart does not blank
 // every row to "idle".
-type LastSessionEvent = { level?: string; title: string; iso: string; atMs: number };
+type LastSessionEvent = { level?: string; title: string; iso: string; atMs: number; sessionId?: string };
 const lastEventBySession = new Map<string, LastSessionEvent>();
 // Sessions whose current wait was announced with a Live Activity push — the set that
 // still owes the Lock Screen an "end" once the wait clears.
@@ -837,7 +850,7 @@ function noteSessionEvent(event: AgentEvent) {
   if (prev && prev.atMs > atMs) return;
   // Re-insert so the Map's insertion order tracks recency; the oldest row leaves.
   lastEventBySession.delete(event.session);
-  lastEventBySession.set(event.session, { level: event.level, title: event.title, iso: event.createdISO, atMs });
+  lastEventBySession.set(event.session, { level: event.level, title: event.title, iso: event.createdISO, atMs, sessionId: event.sessionId ?? prev?.sessionId });
   while (lastEventBySession.size > MAX_TRACKED_SESSIONS) {
     const oldest = lastEventBySession.keys().next().value;
     if (oldest === undefined) break;
@@ -980,7 +993,7 @@ const WAITING_LEVELS = new Set(["warning", "needs-input", "needs_input", "needsi
 /// question nobody answered all morning is stale, not actionable); "working" means
 /// someone is attached or an event landed in the last five minutes; everything
 /// else — including a finished turn once its five minutes lapse — is "idle".
-function sessionStatusFields(name: string, attached: boolean, nowMs: number): { status: "working" | "waiting" | "error" | "idle"; lastEventLevel?: string; lastEventISO?: string } {
+function sessionStatusFields(name: string, attached: boolean, nowMs: number): { status: "working" | "waiting" | "error" | "idle"; lastEventLevel?: string; lastEventISO?: string; sessionId?: string } {
   const last = lastEventBySession.get(name);
   const ageMin = last ? (nowMs - last.atMs) / 60000 : Infinity;
   const level = String(last?.level ?? "").toLowerCase();
@@ -989,7 +1002,11 @@ function sessionStatusFields(name: string, attached: boolean, nowMs: number): { 
   else if (last && ageMin < 60 && (WAITING_LEVELS.has(level) || /needs[ _-](attention|input)/i.test(last.title))) status = "waiting";
   else if (attached || (last && ageMin < 5)) status = "working";
   else status = "idle";
-  return { status, lastEventLevel: last?.level, lastEventISO: last?.iso };
+  // sessionId: the agent's own conversation id from its last hook event. The phone matches
+  // a needs-attention event to a row by this id FIRST (Shared/Models.swift matchingAgent) and
+  // never falls back to the name when the event carries one — so a row without it could not
+  // own any Claude Code event, and the Monitor tab never showed an Approve for one.
+  return { status, lastEventLevel: last?.level, lastEventISO: last?.iso, ...(last?.sessionId ? { sessionId: last.sessionId } : {}) };
 }
 
 /// The Live Activity card's changing half. Keys mirror ContentState in
@@ -1124,8 +1141,15 @@ function json(data: any, status = 200) {
 // interface — rejected before the exemption or the token can wave it through.
 function isBrowserCrossSite(req: Request): boolean {
   const site = req.headers.get("sec-fetch-site");
-  if (site && site !== "same-origin" && site !== "none") return true;
-  return req.headers.get("origin") !== null;
+  if (site) return site !== "same-origin" && site !== "none";
+  const origin = req.headers.get("origin");
+  if (origin === null) return false;
+  // Browsers stamp Origin on every POST, same-origin included, so "any Origin" blocked
+  // the console page this daemon served itself: /desktop rendered frames and every click
+  // it posted to /input came back 401 — measured 2026-09-22 on the Mac's own browser and
+  // the phone's Web console. A page can only carry THIS origin if meshd served it.
+  const host = req.headers.get("host");
+  return !host || origin.toLowerCase() !== `${new URL(req.url).protocol}//${host}`.toLowerCase();
 }
 function authed(req: Request, server?: any): boolean {
   if (isBrowserCrossSite(req)) return false;
@@ -1334,7 +1358,14 @@ Bun.serve({
       if (path === "/agents") return json(await listAgents());
       if (path === "/usage") return json(await getUsage());
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));
-      if (path === "/events" && req.method === "POST") return json(await addEvent((await req.json().catch(() => ({}))) as any), 201);
+      if (path === "/events" && req.method === "POST") {
+        const input = (await req.json().catch(() => ({}))) as any;
+        // claude-mem's observer is a background Claude that runs a turn after every turn of a
+        // real session; its Stop hooks doubled the Monitor list with "Claude stopped" rows nobody
+        // asked for. Nothing a person can act on ever comes from that cwd.
+        if (typeof input.cwd === "string" && input.cwd.includes("/.claude-mem/")) return json({ ok: true, ignored: "observer" }, 202);
+        return json(await addEvent(input), 201);
+      }
       if (path === "/kb" && (req.method === "PUT" || req.method === "POST")) {
         try { return json(kbPut((await req.json().catch(() => ({}))) as any, os.hostname()), 201); }
         catch (e: any) { return json({ error: String(e?.message ?? e) }, 400); }

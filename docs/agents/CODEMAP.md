@@ -15,12 +15,12 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | area | files | lines | what it is |
 |---|---|---|---|
 | `Shared/` | 14 | ~3,400 | Wire types and pure logic both apps compile; the self-checks link against these |
-| `iOS/` | 18 | ~9,800 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
+| `iOS/` | 19 | ~9,900 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
 | `Watch/` | 7 | ~4,500 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |
-| `install/payload/meshd/` | 23 | ~6,600 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
+| `install/payload/meshd/` | 23 | ~6,700 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
 | `install/payload/bin/` | 9 | ~3,400 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~900 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
@@ -54,6 +54,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 |---|---|---|---|
 | `AgentChatView.swift` | L | the transcript chat for one agent session: bubbles, decision cards, artifacts, suggestion chips | — |
 | `AppLock.swift` | S | Biometric gate in front of the app | — |
+| `AppsLibraryView.swift` | S | every app an agent built for you, across every machine, in one list | — |
 | `BackgroundRefresh.swift` | S | Periodic usage/limit polling while the app is closed | — |
 | `ContentView.swift` | XL | the phone's tab shell: Machines, attention rows, machine detail, Settings, the daemon-update and Local Network banners | — |
 | `ExposedSecretsScreen.swift` | S | Settings → Exposed secrets. meshd 0.6+ ("redact") replaces a token, key or password in event and output text before it ever leaves the machine — but printing… | — |

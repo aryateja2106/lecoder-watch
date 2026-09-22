@@ -34,7 +34,7 @@ import { stat, mkdir, readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   linuxInjectEvents, linuxInputStatus, linuxClipboard, linuxVolume, linuxSystemAction,
-  linuxCaptureScreen, linuxScreenStatus,
+  linuxCaptureScreen, linuxScreenStatus, linuxListApps, linuxActivateApp,
 } from "./input-linux";
 
 const IS_MAC = process.platform === "darwin";
@@ -248,6 +248,8 @@ const SYSTEM_ACTIONS: Record<string, string[]> = {
   sleep: ["/usr/bin/pmset", "sleepnow"],
   lock: ["/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession", "-suspend"],
   screensaver: ["/usr/bin/open", "-a", "ScreenSaverEngine"],
+  // A full-screen shot straight into the clipboard, ready to paste into an agent.
+  screenshot: ["/usr/sbin/screencapture", "-c", "-x"],
   shutdown: ["/usr/bin/osascript", "-e", 'tell app "System Events" to shut down'],
   restart: ["/usr/bin/osascript", "-e", 'tell app "System Events" to restart'],
 };
@@ -283,7 +285,7 @@ const INSTALLED_APPS_SH =
   `"$HOME/Applications" 2>/dev/null | sed -n 's/\\.app$//p' | sort -u`;
 
 async function listApps() {
-  if (!IS_MAC) return { ok: false, error: "app control is macOS only" };
+  if (!IS_MAC) return linuxListApps();
   const [rawRunning, rawFront, rawInstalled] = await Promise.all([
     run(["/bin/sh", "-c", RUNNING_APPS_SH]),
     run(["/bin/sh", "-c", `/usr/bin/lsappinfo info -only name "$(/usr/bin/lsappinfo front)" 2>/dev/null`]),
@@ -300,7 +302,7 @@ async function listApps() {
 
 /// `open -a` via argv, never a shell string — the name comes from the watch.
 async function activateApp(name: string) {
-  if (!IS_MAC) return { ok: false, error: "app control is macOS only" };
+  if (!IS_MAC) return linuxActivateApp(name);
   if (!name.trim()) return { ok: false, error: "app name required" };
   const p = Bun.spawn(["/usr/bin/open", "-a", name], { stdout: "ignore", stderr: "pipe" });
   if ((await p.exited) !== 0) {

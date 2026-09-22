@@ -5,7 +5,8 @@
 //   volume                   -> pactl
 //   lock / displaysleep      -> loginctl / xset
 // ponytail: X11 only — Wayland needs ydotool+uinput; add a ydotool branch when a
-// Wayland box actually joins the mesh. Apps/windows/displays stay unsupported here.
+// Wayland box actually joins the mesh. Windows/displays stay unsupported here; apps are
+// the X client list (xprop), activated with xdotool.
 import { existsSync } from "node:fs";
 import { readFile, unlink } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -85,7 +86,23 @@ export async function linuxCaptureScreen(params: {
     // scrot can exit 0 and leave nothing behind (X gone mid-shot); an empty 200 would read as a black screen.
     if (!bytes || bytes.byteLength === 0) return json({ error: "screenshot empty" }, 503);
     if (params.rect) headers["x-mesh-rect"] = `${params.rect.x},${params.rect.y},${params.rect.w},${params.rect.h}`;
-    // ponytail: full-size JPEG; add ffmpeg/convert -resize when a watch chokes on 1080p.
+    // width is honoured when a resizer is around: a 3440-wide JPEG measured 78 KB per frame
+    // whatever the watch asked for, and the watch decodes every pixel of it.
+    const width = params.width && params.width > 0 && params.width < screenWidth ? Math.round(params.width) : 0;
+    if (width) {
+      const q = String(params.quality ?? 70);
+      const small = path.replace(/\.jpg$/, "-small.jpg");
+      const resized = (await has("convert"))
+        ? await run(["convert", path, "-resize", `${width}x`, "-quality", q, small])
+        : (await has("ffmpeg"))
+          ? await run(["ffmpeg", "-loglevel", "error", "-y", "-i", path, "-vf", `scale=${width}:-2`, "-q:v", String(Math.max(2, Math.round(31 - (Number(q) / 100) * 29))), small])
+          : { code: 1, out: "", stderr: "" };
+      if (resized.code === 0) {
+        const smallBytes = await readFile(small).catch(() => null);
+        await unlink(small).catch(() => {});
+        if (smallBytes && smallBytes.byteLength > 0) return new Response(smallBytes, { headers });
+      }
+    }
     return new Response(bytes, { headers });
   } finally {
     await unlink(path).catch(() => {});
@@ -195,8 +212,13 @@ export async function linuxInputStatus() {
 export async function linuxClipboard(text?: string): Promise<{ ok: boolean; text?: string; error?: string }> {
   if (!(await has("xclip"))) return { ok: false, error: "xclip not installed (apt install xclip)" };
   if (typeof text === "string") {
-    await run(["xclip", "-selection", "clipboard", "-in"], text);
-    return { ok: true };
+    // xclip forks a child that keeps serving the selection, and that child inherits our
+    // stdout pipe: run() waited on it and the route hung until the client's timeout
+    // (measured 15 s on the Pi while the text had landed instantly). Nothing to read here.
+    const p = Bun.spawn(["xclip", "-selection", "clipboard", "-in"], { env: ENV, stdin: "pipe", stdout: "ignore", stderr: "ignore" });
+    p.stdin.write(text);
+    await p.stdin.end();
+    return (await p.exited) === 0 ? { ok: true } : { ok: false, error: "xclip failed" };
   }
   return { ok: true, text: (await run(["xclip", "-selection", "clipboard", "-out"])).out };
 }
@@ -222,6 +244,11 @@ export async function linuxVolume(body: any) {
 const LINUX_SYSTEM: Record<string, string[]> = {
   lock: ["loginctl", "lock-session"],
   displaysleep: ["xset", "dpms", "force", "off"],
+  sleep: ["systemctl", "suspend"],
+  screensaver: ["xdg-screensaver", "activate"],
+  // A full-screen PNG into the clipboard — the thing a person hands to an agent next.
+  // xclip forks to keep serving the selection and would hold our stdout pipe open forever.
+  screenshot: ["/bin/sh", "-c", 'f=$(mktemp --suffix=.png) && scrot -o "$f" && xclip -selection clipboard -t image/png -i "$f" >/dev/null 2>&1; s=$?; rm -f "$f"; exit $s'],
   shutdown: ["systemctl", "poweroff"],
   restart: ["systemctl", "reboot"],
 };
@@ -241,4 +268,47 @@ export async function linuxSystemAction(action: string) {
     stderr: r.stderr,
     ...(r.code === 0 ? {} : { error: r.stderr.slice(0, 300) || `exit ${r.code}` }),
   };
+}
+
+/// Running apps = the window manager's client list, read with xprop (present on every X desktop;
+/// wmctrl is not). One spawn for the list, one per window for its class and title, one for the
+/// active window. Same wire shape as the Mac's lsappinfo pass: `bundleID` carries the WM_CLASS so
+/// the watch can group and activate by it. `installed` stays empty — launching by .desktop id is
+/// a different verb and nobody has asked for it from the wrist yet.
+export async function linuxListApps() {
+  if (!(await has("xprop"))) return { ok: false, error: "xprop not installed (apt install x11-utils)" };
+  const list = await run(["xprop", "-root", "_NET_CLIENT_LIST_STACKING"]);
+  if (list.code !== 0) return { ok: false, error: list.stderr.trim() || "no window manager on the display" };
+  const ids = (list.out.split("#")[1] ?? "").split(",").map((x) => x.trim()).filter((x) => /^0x[0-9a-f]+$/i.test(x)).slice(-40);
+  const active = (await run(["xprop", "-root", "_NET_ACTIVE_WINDOW"])).out.match(/0x[0-9a-f]+/i)?.[0]?.toLowerCase();
+  const seen = new Map<string, { name: string; bundleID: string; front: boolean; windowID: string }>();
+  for (const id of ids) {
+    const props = (await run(["xprop", "-id", id, "WM_CLASS", "_NET_WM_NAME", "WM_NAME"])).out;
+    const cls = props.match(/WM_CLASS\(STRING\) = "[^"]*", "([^"]*)"/)?.[1];
+    const title = props.match(/_NET_WM_NAME\([^)]*\) = "((?:[^"\\]|\\.)*)"/)?.[1] ?? props.match(/WM_NAME\([^)]*\) = "((?:[^"\\]|\\.)*)"/)?.[1];
+    if (!cls) continue;
+    const front = id.toLowerCase() === active;
+    const prev = seen.get(cls);
+    // One row per app, the frontmost window's title winning; the stacking list is bottom-up.
+    if (!prev || front || !prev.front) seen.set(cls, { name: cls, bundleID: cls, front: prev?.front || front, windowID: id });
+    if (title && seen.get(cls)) seen.get(cls)!.name = `${cls} — ${title}`.slice(0, 80);
+  }
+  const running = [...seen.values()];
+  return { ok: true, front: running.find((a) => a.front)?.bundleID, running, installed: [] as string[] };
+}
+
+/// Bring a running app's window to the front by class (what linuxListApps reports as
+/// bundleID) or by title; argv only, the name comes from the watch.
+export async function linuxActivateApp(name: string) {
+  if (!name.trim()) return { ok: false, error: "app name required" };
+  if (!(await has("xdotool"))) return { ok: false, error: "xdotool not installed" };
+  const query = name.split(" — ")[0].trim();
+  let found = "";
+  for (const by of ["--class", "--classname", "--name"]) {
+    found = (await run(["xdotool", "search", "--onlyvisible", by, query])).out.trim().split("\n")[0];
+    if (found) break;
+  }
+  if (!found) return { ok: false, error: `no window for ${query}` };
+  const r = await run(["xdotool", "windowactivate", "--sync", found]);
+  return r.code === 0 ? { ok: true, activated: query } : { ok: false, error: r.stderr.trim() || "could not activate" };
 }

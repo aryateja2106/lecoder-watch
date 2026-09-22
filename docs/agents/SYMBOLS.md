@@ -34,6 +34,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | AppMeta | type | install/payload/meshd/apps.ts:24 |
 | AppRow | type | install/payload/meshd/apps.ts:129 |
 | appsErr | function | install/payload/bin/mesh:1586 |
+| AppsLibraryView | struct | iOS/AppsLibraryView.swift:11 |
 | appsOk | function | install/payload/bin/mesh:1582 |
 | ArtifactCardView | struct | iOS/AgentChatView.swift:885 |
 | ArtifactDetailSheet | struct | iOS/AgentChatView.swift:922 |
@@ -49,7 +50,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | BuildInfo | enum | Shared/Models.swift:957 |
 | buildPayload | function | install/payload/meshd/push.ts:248 |
 | capDetail | func | iOS/ContentView.swift:983 |
-| captureScreen | function | install/payload/meshd/input.ts:398 |
+| captureScreen | function | install/payload/meshd/input.ts:400 |
 | cardState | func | Shared/SessionCard.swift:48 |
 | cardStateForLevel | func | Shared/Models.swift:802 |
 | Channel | type | install/payload/meshd/redact.ts:26 |
@@ -176,7 +177,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | EventAlertDeduper | struct | Shared/AlertGating.swift:45 |
 | EventsView | struct | Watch/WatchViews.swift:487 |
 | eventTime | func | iOS/ContentView.swift:1706 |
-| eventToArgs | function | install/payload/meshd/input-linux.ts:132 |
+| eventToArgs | function | install/payload/meshd/input-linux.ts:149 |
 | ExpandedDetailBlock | struct | iOS/AgentChatView.swift:821 |
 | ExposedSecretsScreen | struct | iOS/ExposedSecretsScreen.swift:8 |
 | Exposure | type | install/payload/meshd/redact.ts:29 |
@@ -215,7 +216,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | handleExposures | function | install/payload/meshd/redact.ts:263 |
 | handleFiles | function | install/payload/meshd/files.ts:104 |
 | handleHandoff | function | install/payload/meshd/handoff.ts:274 |
-| handleInput | function | install/payload/meshd/input.ts:469 |
+| handleInput | function | install/payload/meshd/input.ts:471 |
 | handlePair | function | install/payload/meshd/pair.ts:93 |
 | handlePush | function | install/payload/meshd/push.ts:437 |
 | handoff | function | install/payload/meshd/handoff.ts:215 |
@@ -280,13 +281,15 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | LimitStatus | enum | Shared/LimitHelpers.swift:4 |
 | linkedClientCount | function | install/payload/bin/mesh:1463 |
 | LinkTarget | struct | iOS/FileBrowserView.swift:319 |
-| linuxCaptureScreen | function | install/payload/meshd/input-linux.ts:57 |
-| linuxClipboard | function | install/payload/meshd/input-linux.ts:195 |
-| linuxInjectEvents | function | install/payload/meshd/input-linux.ts:170 |
-| linuxInputStatus | function | install/payload/meshd/input-linux.ts:182 |
-| linuxScreenStatus | function | install/payload/meshd/input-linux.ts:46 |
-| linuxSystemAction | function | install/payload/meshd/input-linux.ts:232 |
-| linuxVolume | function | install/payload/meshd/input-linux.ts:204 |
+| linuxActivateApp | function | install/payload/meshd/input-linux.ts:302 |
+| linuxCaptureScreen | function | install/payload/meshd/input-linux.ts:58 |
+| linuxClipboard | function | install/payload/meshd/input-linux.ts:212 |
+| linuxInjectEvents | function | install/payload/meshd/input-linux.ts:187 |
+| linuxInputStatus | function | install/payload/meshd/input-linux.ts:199 |
+| linuxListApps | function | install/payload/meshd/input-linux.ts:278 |
+| linuxScreenStatus | function | install/payload/meshd/input-linux.ts:47 |
+| linuxSystemAction | function | install/payload/meshd/input-linux.ts:259 |
+| linuxVolume | function | install/payload/meshd/input-linux.ts:226 |
 | listApps | function | install/payload/meshd/apps.ts:137 |
 | listExposures | function | install/payload/meshd/redact.ts:240 |
 | listResumable | function | install/payload/meshd/handoff.ts:133 |
@@ -331,6 +334,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MeshApp | struct | Shared/Models.swift:1153 |
 | MeshAppInstallResult | struct | Shared/Models.swift:1174 |
 | MeshAppList | struct | Shared/Models.swift:1170 |
+| MeshAppRow | struct | iOS/AppsLibraryView.swift:105 |
 | MeshAppsScreen | struct | iOS/TerminalView.swift:226 |
 | MeshClient | struct | Shared/MeshClient.swift:5 |
 | MeshDesktopApp | struct | MeshDesktop/MeshDesktopApp.swift:20 |
@@ -383,7 +387,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | PaneList | struct | Shared/Models.swift:444 |
 | panStep | func | Shared/MeshClient.swift:620 |
 | parse | function | install/payload/bin/mesh:127 |
-| parseCaptureParams | function | install/payload/meshd/input.ts:342 |
+| parseCaptureParams | function | install/payload/meshd/input.ts:344 |
 | parseClaudeTranscript | function | install/payload/meshd/chat.ts:133 |
 | parseCodexRollout | function | install/payload/meshd/chat.ts:187 |
 | parseEnvelope | function | install/payload/meshd/herdr.ts:40 |
