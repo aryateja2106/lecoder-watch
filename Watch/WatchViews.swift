@@ -1004,6 +1004,11 @@ struct AgentLiveView: View {
             // a hook fired (the trust-folder prompt fires none). Enter/Esc live in Actions.
             if let menu = AgentMenu.parse(lines: terminalLines) {
                 Section("Choose") {
+                    // The question, first: on a 45 mm screen "Yes / No" with no subject is
+                    // an answer to nothing.
+                    if let prompt = menu.prompt {
+                        Text(prompt).font(.caption2).foregroundStyle(.primary)
+                    }
                     ForEach(menu.options) { option in
                         MenuOptionRow(label: option.label, highlighted: option.index == menu.highlighted) {
                             WKInterfaceDevice.current().play(.click)

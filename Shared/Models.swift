@@ -1609,6 +1609,11 @@ struct AgentMenu: Equatable {
     let options: [Option]
     /// 1-based index of the option carrying the `❯` marker (what Enter would take).
     let highlighted: Int
+    /// The question the options answer — the line above the list ("Do you want to
+    /// proceed?", "Claude Code'll be able to read, edit, and execute files here."). Without
+    /// it the card reads "Choose · 1. Yes · 2. No" and you are approving you-know-not-what.
+    /// `var` with a default so every existing initializer still compiles.
+    var prompt: String? = nil
     /// The line under the list, when the TUI printed one ("Enter to confirm · Esc to cancel").
     let footer: String?
     /// True for `[y/N]`-style questions: the answer is a typed letter, not a cursor move.
@@ -1657,7 +1662,9 @@ struct AgentMenu: Equatable {
         if rows.count >= 2, let marked = rows.first(where: { $0.marked }) {
             let footer = footerLine(in: tail, after: rows.last!.line)
             return AgentMenu(options: rows.map { Option(index: $0.index, label: $0.label) },
-                             highlighted: marked.index, footer: footer, typed: false)
+                             highlighted: marked.index,
+                             prompt: promptLine(in: tail, above: rows.first!.line),
+                             footer: footer, typed: false)
         }
         // 2. A `❯` row with unnumbered siblings at the same indent (the trust prompt).
         if let markedAt = tail.lastIndex(where: { marked.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil }) {
@@ -1681,8 +1688,11 @@ struct AgentMenu: Equatable {
             // Unnumbered lists must come with their footer: a typed prompt line ("❯ run the
             // tests") followed by the status rows under it would otherwise read as a menu.
             if block.count >= 2, let footer = footerLine(in: tail, after: i - 1) {
+                let firstRow = markedAt - block.prefix(while: { !$0.marked }).count
                 return AgentMenu(options: block.enumerated().map { Option(index: $0.offset + 1, label: $0.element.label) },
-                                 highlighted: (block.firstIndex { $0.marked } ?? 0) + 1, footer: footer, typed: false)
+                                 highlighted: (block.firstIndex { $0.marked } ?? 0) + 1,
+                                 prompt: promptLine(in: tail, above: firstRow),
+                                 footer: footer, typed: false)
             }
         }
         // 3. A trailing y/N question.
@@ -1696,6 +1706,24 @@ struct AgentMenu: Equatable {
     }
 
     private static func isFooter(_ s: String) -> Bool { footerWords.contains { s.contains($0) } }
+
+    /// The question above a menu: the nearest non-empty line that is not itself an option,
+    /// a footer, a rule or a box edge. Looks at most four lines up — further than that and
+    /// it is the output the agent was working on, not what it is asking.
+    private static func promptLine(in tail: [String], above line: Int) -> String? {
+        guard line > 0 else { return nil }
+        for s in tail[max(0, line - 4)..<line].reversed() {
+            var body = s.trimmingCharacters(in: .whitespaces)
+            // Strip a TUI's box edges: "│ Do you want to proceed?  │".
+            body = body.trimmingCharacters(in: CharacterSet(charactersIn: "│|╭╮╰╯─═ "))
+            guard !body.isEmpty, !isFooter(body) else { continue }
+            guard numbered.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)) == nil,
+                  marked.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)) == nil,
+                  !body.allSatisfy({ "─-═•· ".contains($0) }) else { continue }
+            return String(body.prefix(200))
+        }
+        return nil
+    }
 
     private static func footerLine(in tail: [String], after line: Int) -> String? {
         for s in tail.dropFirst(line + 1).prefix(4) {

@@ -614,6 +614,15 @@ private struct MenuCard: View {
                     Text(footer).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                 }
             }
+            // What the options answer. Without it the card is "Choose · Yes · No" and you
+            // are approving something you cannot see from here.
+            if let prompt = menu.prompt {
+                Text(prompt)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
             ForEach(menu.options) { option in
                 Button { onPick(option.index) } label: {
                     HStack {
