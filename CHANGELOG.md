@@ -9,7 +9,21 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
-_This block is the 0.8.0 beta — app and daemon both report 0.8.0 (CFBundleVersion 2). Cut the heading when the TestFlight build is uploaded._
+_Nothing yet since 0.8.0._
+
+## [0.8.0] — 2026-09-22
+
+_App and daemon both report 0.8.0 (app build 3). The daemon is published as
+`LeSearch-AI/mesh-install` v0.8.0, which is what `curl -fsSL https://lesearch.ai/install.sh | sh`
+installs. The iPhone app reaches testers through TestFlight._
+- **Report a problem reaches us.** Settings → Report a problem sends the report you wrote —
+  kind, title, your words, an optional screenshot or recording you pick yourself, an optional
+  contact address, and the redacted diagnostic bundle you read first — to LeSearch AI on one
+  explicit tap. Reports become public GitHub issues labeled `from-users`, deduplicated, with
+  the contact address hashed and never copied. Settings → Account is optional and exists only
+  so a report can be answered; it never gates a machine.
+- A fresh install no longer opens on the biometric lock screen: with nothing paired there is
+  no token to protect.
 - **The terminal is a terminal.** The session screen's *Terminal* mode is now the real thing, full screen: the pane attached over a live stream (`/agents/:s/pty`, a pty on the machine sized to your phone, 2000 lines of scrollback) painted by a real emulator (SwiftTerm) — colour, cursor, the agent's own layout, tmux's status line; pinch sets the font; four themes; it reconnects by itself. A fixed key bar under it: Ctrl and Alt (tap for one key, tap again to lock), Esc, Tab, ↑ (hold for arrows, Enter, Backspace, paging), dictate, keyboard — and the system keyboard types straight into the pane, in order. The pane picker, screen control, paste and pane/session actions moved to the ⋯ menu. The old xterm.js web page and the polled text card are gone. Needs a 0.8 daemon; a 0.6 one still paints from polls, in one colour.
 - **Approve reaches Claude.** A prompt on any machine shows as a *Needs you* row and a bell badge, whatever name the phone knows the machine by; Continue answers it. Every menu an agent prints — Claude Code's permission list, the trust-folder prompt, a y/N question — appears as buttons on the phone and the watch (Choose), so the answer is a tap, not a guess.
 - Screen & control knows which keyboard it is: ⌘⌥⌃⇧ on a Mac, Ctrl/Alt/Super on Linux, a held modifier filled orange; one tap opens the machine's launcher (Spotlight/Raycast, or rofi/ulauncher/`MESH_LAUNCHER` on Linux) or a terminal; a search sheet opens any running or installed app; two monitors are two pictures with chips to switch.

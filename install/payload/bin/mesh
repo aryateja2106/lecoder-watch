@@ -478,7 +478,11 @@ async function cmdKb(pos: string[], flags: Record<string, string>, bools: Set<st
     if (bools.has("local")) qs.set("federate", "0");
     const r = await api(h, "GET", `/kb/search?${qs}`);
     out(() => {
-      for (const hit of r?.results ?? []) {
+      const hits = r?.results ?? [];
+      // Silence is not an answer: printing nothing at all is indistinguishable from a
+      // hang or a swallowed error, and it was read as one (fresh-eyes review 2026-09-22).
+      if (!hits.length) { console.log(`no notes match "${query}"${bools.has("local") ? " on this machine" : " on any online machine"}`); return; }
+      for (const hit of hits) {
         const body = String(hit.body ?? "").replace(/\s+/g, " ").slice(0, 80);
         console.log(`${hit.host ?? h.name}  ${hit.scope}/${hit.key}  ${hit.title ?? ""}  — ${body}`);
       }

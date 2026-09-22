@@ -92,7 +92,11 @@ gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 \
 # Release notes come from CHANGELOG's Unreleased block, which is written as it ships and is
 # already the source for TestFlight's "What to Test". One description, not two that drift.
 NOTES="$OUT/notes.md"
-awk '/^## \[Unreleased\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md" > "$NOTES"
+# Prefer the block for the version being released; fall back to Unreleased for a cut made
+# before the changelog is folded. A release whose notes are someone else's version is worse
+# than no notes, so an empty result is never silently shipped.
+awk -v v="$VERSION" '$0 ~ ("^## \\[" v "\\]") {f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md" > "$NOTES"
+[ -s "$NOTES" ] || awk '/^## \[Unreleased\]/{f=1;next} /^## \[/{f=0} f' "$ROOT/CHANGELOG.md" > "$NOTES"
 [ -s "$NOTES" ] || echo "See CHANGELOG.md." > "$NOTES"
 
 echo "==> publishing $TAG"
