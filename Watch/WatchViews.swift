@@ -861,6 +861,11 @@ struct KnowledgeNoteAskView: View {
 
     var body: some View {
         List {
+            Section("Notes") {
+                ForEach(store.knowledgeNotes) { summary in
+                    Button(summary.title) { note = summary.title }
+                }
+            }
             Section("Note") {
                 TextField("Note", text: $note)
                     .autocorrectionDisabled()
@@ -881,6 +886,7 @@ struct KnowledgeNoteAskView: View {
         .navigationTitle("Ask note")
         .onAppear {
             if note.isEmpty { note = store.currentKnowledgeNote }
+            store.loadKnowledgeNotes(host: host)
         }
         .onChange(of: note) { _, value in
             store.currentKnowledgeNote = value
