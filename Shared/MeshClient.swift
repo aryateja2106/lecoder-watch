@@ -262,6 +262,16 @@ struct MeshClient {
         _ = try await request("/agents/\(Self.pathSegment(agent))/send", method: "POST", body: body)
     }
 
+    /// Ask one local knowledge note. `confirm` stays off the body unless the caller
+    /// passes true, so a draft is not a command until the wrist says to run it.
+    func askAgentNote(q: String, ask: String, confirm: Bool = false) async throws -> AgentNoteAsk {
+        var payload: [String: Any] = ["q": q, "ask": ask]
+        if confirm { payload["confirm"] = true }
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        let data = try await request("/agent-note", method: "POST", body: body)
+        return try JSONDecoder().decode(AgentNoteAsk.self, from: data)
+    }
+
     /// Create a new rmux session (optionally launching a command, e.g. "claude" / "codex").
     ///
     /// `cols`/`rows` (meshd 0.5.0+) set the new PTY's size, so a session created
