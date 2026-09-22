@@ -852,6 +852,7 @@ struct KnowledgeNoteAskView: View {
     @State private var ask = ""
     @State private var confirming = false
     @State private var confirmingSave = false
+    @State private var search = ""
 
     private var namedNote: String {
         note.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -868,6 +869,12 @@ struct KnowledgeNoteAskView: View {
     var body: some View {
         List {
             Section("Notes") {
+                TextField("Search", text: $search)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onChange(of: search) { _, value in
+                        store.loadKnowledgeNotes(host: host, query: value)
+                    }
                 ForEach(store.knowledgeNotes) { summary in
                     Button(summary.title) {
                         note = summary.title
