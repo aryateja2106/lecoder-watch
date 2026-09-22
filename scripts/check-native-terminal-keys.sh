@@ -23,4 +23,11 @@ grep -q '"captureAnsi"' "$SERVER" || bad "captureAnsi capability not advertised"
 grep -q 'ansi: true' "$ROOT/iOS/NativeTerminalScreen.swift" || bad "native terminal no longer asks for ansi output"
 grep -q 'supports("captureAnsi")' "$ROOT/Shared/MeshClient.swift" || bad "client sends ansi=1 without gating on the capability"
 grep -q 'inputAccessoryView = nil' "$ROOT/iOS/NativeTerminalScreen.swift" || bad "SwiftTerm's own accessory bar would stack on the key bar"
+# Slices 3–6: the stream is the transport, the native screen is the Terminal mode, the
+# xterm.js WKWebView is gone, and a modifier can be locked with a second tap.
+grep -q 'supports("pty")' "$ROOT/iOS/NativeTerminalScreen.swift" || bad "native terminal no longer streams on a pty daemon"
+grep -q 'embedded: true' "$ROOT/iOS/TerminalView.swift" || bad "Terminal mode is not the native terminal any more"
+grep -q 'BridgeTerminalScreen\|WKWebView' "$ROOT/iOS/TerminalView.swift" && bad "the xterm.js WKWebView terminal is back in TerminalView.swift"
+grep -q 'case off, once, locked' "$ROOT/iOS/NativeTerminalScreen.swift" || bad "Ctrl/Alt lost the tap-once / tap-twice-to-lock states"
+grep -q 'kill("SIGWINCH")' "$ROOT/install/payload/meshd/pty.ts" || bad "pty resize no longer sends SIGWINCH (tmux would keep the old size)"
 [ "$fail" = 0 ] && echo "check-native-terminal-keys: ok" || exit 1

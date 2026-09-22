@@ -15,7 +15,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | area | files | lines | what it is |
 |---|---|---|---|
 | `Shared/` | 17 | ~3,900 | Wire types and pure logic both apps compile; the self-checks link against these |
-| `iOS/` | 24 | ~11,500 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
+| `iOS/` | 24 | ~11,000 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
 | `Watch/` | 7 | ~4,600 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
@@ -76,7 +76,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `PhoneConnectivity.swift` | S | Phone side of the relay: receives commands from the watch, forwards the latest mesh snapshot to the watch via WatchConnectivity (option A — the watch never… | check-relay-receiver, check-watch-scrollback |
 | `RemoteScreenView.swift` | XL | the phone's Remote tab: live screen, trackpad gestures, chords and the key bar, driving meshd /screen.jpg and /input | check-inspect-crop, check-mesh-chords, check-remote-screen-gestures |
 | `ShellSafeText.swift` | S | Undo iOS smart punctuation on text that is going to reach a shell | — |
-| `TerminalView.swift` | XL | the Terminal tab: session list, the xterm.js bridge WebView, the read-only peek screen, New Session sheet, and the built-apps screen | check-harness-picker, check-phone-input-and-wake, check-watch-terminal-wiring |
+| `TerminalView.swift` | L | the Terminal tab: session list, the session screen (chat or the native terminal), New Session sheet, and the built-apps screen | check-harness-picker, check-native-terminal-keys, check-phone-input-and-wake, check-watch-terminal-wiring |
 | `VoiceInput.swift` | S | the one voice-input sheet. | — |
 | `VoiceTranscriber.swift` | M | on-device speech to text for the chat composer | — |
 
@@ -136,7 +136,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `kb.ts` | S | meshd KB — durable, searchable shared memory for agents (bun:sqlite + FTS5) | — |
 | `loopback-trust.ts` | S | when meshd may skip the bearer token for a loopback peer | check-pair-auth |
 | `pair.ts` | S | bring a phone onto the mesh without typing a 64-character token *[serialized — pairing and tokens]* | check-mesh-pair, check-pairing |
-| `pty.ts` | S | GET /agents/:name/pty (WebSocket): attaches the session in a real pty and streams its bytes both ways, so a phone can run a terminal emulator instead of… | check-pty-route |
+| `pty.ts` | S | GET /agents/:name/pty (WebSocket): attaches the session in a real pty and streams its bytes both ways, so a phone can run a terminal emulator instead of… | check-native-terminal-keys, check-pty-route |
 | `push.ts` | M | APNs push — meshd notifies the phone directly (no cloud relay, local-first) | check-alert-gating, check-mesh-push |
 | `qr.ts` | L | a QR encoder with no dependencies, because the payload ships as plain .ts files that bun runs in place: an npm package here would mean an install step on every… | check-pair-qr |
 | `redact.ts` | M | every string that leaves this Mac for a phone, a watch, Apple's push servers or the events file passes through redact() first | check-redact |

@@ -1,13 +1,11 @@
-// TerminalView.swift — the Terminal tab: session list, the xterm.js bridge WebView, the read-only peek screen, New Session sheet, and the built-apps screen.
+// TerminalView.swift — the Terminal tab: session list, the session screen (chat or the native terminal), New Session sheet, and the built-apps screen.
 import SwiftUI
 import UIKit
-import WebKit
 
 // MARK: - Terminal tab
 
-/// First-class rmux terminal on the phone. Lists every machine that has a bridge
-/// deployed, shows its live sessions, and opens a real interactive terminal
-/// (the proven rmux-bridge xterm) in a WKWebView. "+" creates a new session.
+/// The Terminal tab: every machine with its live sessions; a row opens the session
+/// screen (chat, or the native terminal over the pty stream). "+" creates a new session.
 struct TerminalTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var creatingOn: Machine?
@@ -96,13 +94,6 @@ struct TerminalTab: View {
                                 Text(snap.authError != nil ? "token needed to list sessions" : (snap.reachable ? "no sessions" : "start meshd to list sessions"))
                                     .foregroundStyle(.secondary)
                             }
-                            if snap.bridgeReachable == true {
-                                NavigationLink {
-                                    ManualBridgeScreen(machine: m)
-                                } label: {
-                                    Label("Open known session", systemImage: "rectangle.connected.to.line.below")
-                                }
-                            }
                             Button {
                                 creatingOn = m
                             } label: {
@@ -190,47 +181,6 @@ private func terminalReady(_ snap: MachineSnapshot) -> Bool {
     snap.reachable && snap.authError == nil
 }
 
-private struct ManualBridgeScreen: View {
-    let machine: Machine
-    @State private var session = ""
-
-    var body: some View {
-        Form {
-            Section("Session") {
-                TextField("pi-shell", text: $session.shellSafe)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                FlowButtons(items: suggestions) { session = $0 }
-                NavigationLink {
-                    BridgeTerminalScreen(machine: machine, session: sessionName, initialPane: nil)
-                } label: {
-                    Label("Open terminal", systemImage: "terminal")
-                }
-                .disabled(sessionName.isEmpty)
-            }
-        }
-        .navigationTitle(machine.host)
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var sessionName: String {
-        session.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var suggestions: [String] {
-        let host = machine.host.lowercased()
-        if host.contains("pi") { return ["pi-shell", "watch-shell", "mesh-smoke"] }
-        if host.contains("mac") { return ["mesh-smoke", "codex", "claude"] }
-        return ["shell", "codex", "claude"]
-    }
-}
-
-// MARK: - Hosted apps (meshd 0.6+, capability "apps")
-
-/// What an agent built and published on this machine — a PWA or a native app — listed
-/// outside of whatever chat card first showed it. The same two actions as the chat
-/// artifact card: PWA opens in real Safari (Add to Home Screen only exists there),
-/// native posts to the machine's own install route.
 private struct MeshAppsScreen: View {
     @EnvironmentObject var store: MeshStore
     let machine: Machine
@@ -582,16 +532,11 @@ private struct SessionPeekScreen: View {
     /// Why the last keystroke did not land, in the daemon's own words. Cleared by the
     /// next send that succeeds, so it describes the present and not a solved problem.
     @State private var inputRefusal: String?
-    @State private var openingLink: LinkTarget?
-    /// Links the session printed — a dev server, a PR, an auth callback. Computed once
-    /// per poll rather than per body pass: scanning is cheap, but not once a scroll.
-    @State private var links: [URL] = []
     /// When the user last drove this session (key, text, paste). The poll loop reads
     /// it to decide between the 500ms interactive cadence and the 2s ambient one.
     @State private var lastInteraction = Date.distantPast
-    @State private var terminalFollowsBottom = true
-    @State private var magnifyStartSize: Double?
-    @AppStorage("terminalFontSize") private var terminalFontSize: Double = 12
+    @State private var pushingControl = false
+    @State private var pushingVNC = false
 
     // MARK: - Hand-off (meshd 0.6+, capability "handoff")
 
@@ -623,15 +568,6 @@ private struct SessionPeekScreen: View {
     /// The store's constructor, never a bare `MeshClient(machine:)`: one built without
     /// capabilities silently switches every 0.5.0 feature off.
     private var client: MeshClient { store.client(for: machine) }
-
-    private var visibleLines: [String] {
-        // Keep interior blank lines so TUI output (tables, code, agent panes) stays
-        // vertically aligned; only trim empty lines at the top/bottom of the window.
-        var lines = output
-        while let first = lines.first, first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.removeFirst() }
-        while let last = lines.last, last.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { lines.removeLast() }
-        return lines
-    }
 
     private var activePane: Pane? {
         guard let selectedPane else { return panes.first(where: { $0.active }) }
@@ -690,31 +626,35 @@ private struct SessionPeekScreen: View {
                 )
                 .disabled(handoffInFlight)
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
-                            terminalHeaderRow
-                            // The header card that used to carry these went; the sentence that
-                            // says "what you see is stale, and why" must not go with it.
-                            if !visibleLines.isEmpty, let stale = staleOutputLine {
-                                Label(stale.text, systemImage: stale.symbol)
-                                    .font(.caption)
-                                    .foregroundStyle(stale.quiet ? Color.secondary : Color.orange)
-                            }
-                            outputCard
-                            controlsCard
-                            presetsCard
-                        }
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 14)
-                    }
-                    .defaultScrollAnchor(.top)
-                }
-                .background(Color(.systemGroupedBackground))
+                // The terminal is the whole screen: SwiftTerm over the pty stream (or
+                // ansi polls on an older daemon), the key bar under it. Everything the
+                // old card list offered lives in the ⋯ menu now.
+                NativeTerminalScreen(machine: machine, session: session, initialPane: selectedPane, embedded: true)
+                    .id(selectedPane ?? "")
             }
+        }
+        .toolbar(viewMode == .terminal ? .hidden : .visible, for: .tabBar)
+        // Watching a session is why the screen must not dim; released when this screen goes.
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .navigationDestination(isPresented: $pushingControl) {
+            RemoteScreenView(machine: machine, session: session.name, pane: selectedPane)
+        }
+        .navigationDestination(isPresented: $pushingVNC) {
+            RemoteWebScreen(title: "\(machine.host) screen", urlString: machine.resolvedVNC)
         }
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
+                // A refused keystroke has to say so, in the daemon's words.
+                if let inputRefusal, viewMode == .chat {
+                    Label("Input refused · \(inputRefusal)", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(.thinMaterial)
+                }
                 if let handoffResultMessage {
                     Text(handoffResultMessage)
                         .font(.caption)
@@ -747,8 +687,32 @@ private struct SessionPeekScreen: View {
                 .frame(width: 150)
             }
             ToolbarItem(placement: .primaryAction) {
-                Button { Task { await refresh() } } label: {
-                    Image(systemName: loading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
+                Menu {
+                    if panes.count > 1 {
+                        Picker("Pane", selection: $selectedPane) {
+                            ForEach(panes) { pane in Text(pane.label).tag(Optional(pane.paneId)) }
+                        }
+                    }
+                    Button { pushingControl = true } label: { Label("Control screen", systemImage: "cursorarrow.rays") }
+                    Button { pushingVNC = true } label: { Label("Watch screen (VNC)", systemImage: "display") }
+                    Divider()
+                    // Straight into this pane, as one bracketed paste where the daemon
+                    // supports it: typed as keystrokes a TUI submits on every newline.
+                    Button { Task { await pasteIntoPane() } } label: { Label("Paste clipboard", systemImage: "doc.on.clipboard") }
+                        .disabled(!UIPasteboard.general.hasStrings)
+                    if !session.isMuxGuest {
+                        Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
+                        if activePane != nil {
+                            Button(role: .destructive) { Task { await killPane() } } label: { Label("Kill pane", systemImage: "rectangle.split.1x2") }
+                        }
+                        Divider()
+                        Button(role: .destructive) {
+                            Task { await store.kill(on: machine, name: session.name); dismiss() }
+                        } label: { Label("Kill session", systemImage: "trash") }
+                    }
+                    Button { Task { await refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
             }
             if !handoffTargets.isEmpty {
@@ -783,7 +747,6 @@ private struct SessionPeekScreen: View {
         }
         .sheet(isPresented: $showingCompose) { composeSheet }
         .sheet(isPresented: $showingPhrase) { phraseSheet }
-        .sheet(item: $openingLink) { target in SafariView(url: target.url) }
         .alert("Hand off to \(confirmingHandoffTo ?? "")?", isPresented: handoffConfirmPresented,
                presenting: confirmingHandoffTo) { target in
             Button("Cancel", role: .cancel) {}
@@ -791,247 +754,6 @@ private struct SessionPeekScreen: View {
         } message: { target in
             Text("Interrupt \(agentDisplayName) and continue this task with \(target). The conversation so far is written to HANDOFF.md in the working directory.")
         }
-    }
-
-    /// What the output card is showing when the session is not answering: stale, and why.
-    private var staleOutputLine: (text: String, symbol: String, quiet: Bool)? {
-        switch peekFailure {
-        case .unreachable: return ("\(machine.host) stopped answering · showing the last output", "wifi.exclamationmark", false)
-        case .sessionGone: return ("This session has ended · showing its last output", "moon.zzz", true)
-        case .tokenRejected: return ("\(machine.host) rejected the token — pair again from Machines", "key.slash", false)
-        case .none: return nil
-        }
-    }
-
-    private var terminalHeaderRow: some View {
-        HStack(spacing: 8) {
-            Text("\(session.displayName) · \(session.agentType ?? "shell")")
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            if panes.count > 1 {
-                Picker("Pane", selection: $selectedPane) {
-                    ForEach(panes) { pane in
-                        Text(pane.label).tag(Optional(pane.paneId))
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
-                .onChange(of: selectedPane) { _, _ in Task { await refresh() } }
-            }
-            Button("A−") { terminalFontSize = max(9, terminalFontSize - 1) }
-            Button("A+") { terminalFontSize = min(22, terminalFontSize + 1) }
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .padding(.horizontal, 4)
-    }
-
-    private var outputCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("Latest output", systemImage: "text.alignleft")
-                    .font(.headline)
-                Spacer()
-                if loading { ProgressView().controlSize(.small) }
-            }
-            if let inputRefusal {
-                Label("Input refused · \(inputRefusal)", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Group {
-                if visibleLines.isEmpty {
-                    // "No output yet" is only true when the session answered. Each
-                    // failure gets its own sentence: a vanished pane, a silent machine
-                    // and a rejected token demand three different next moves, and
-                    // printing the reassuring line over any of them is what made the
-                    // terminal look merely quiet.
-                    Text({
-                        switch peekFailure {
-                        case .unreachable: "\(machine.host) isn't answering — this is not an empty session."
-                        case .sessionGone: "This session has ended. Nothing more will appear here."
-                        case .tokenRejected: "\(machine.host) rejected the token — pair again from Machines."
-                        case .none: "No output yet. Tap refresh or open the terminal."
-                        }
-                    }())
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    // A terminal viewport, not a paragraph: fixed height, scrolls both ways,
-                    // never wraps a line, and a pinch INSIDE the black box changes the text
-                    // size. Wrapping at a small size made every line a riddle and the whole
-                    // page scroll for a glance at the tail — the thing being asked was "zoom
-                    // in here", the way the Remote screen zooms.
-                    ScrollViewReader { inner in
-                        ScrollView([.horizontal, .vertical]) {
-                            VStack(alignment: .leading, spacing: 0) {
-                                Text(visibleLines.joined(separator: "\n"))
-                                    .font(.system(size: min(22, max(9, terminalFontSize)), design: .monospaced))
-                                    .lineSpacing(2)
-                                    .textSelection(.enabled)
-                                    .fixedSize(horizontal: true, vertical: true)
-                                Color.clear
-                                    .frame(height: 1)
-                                    .id("terminal-output-tail")
-                                    .onScrollVisibilityChange { terminalFollowsBottom = $0 }
-                            }
-                        }
-                        .defaultScrollAnchor(.bottom)
-                        .frame(height: max(280, UIScreen.main.bounds.height * 0.5))
-                        .onChange(of: visibleLines) { _, _ in
-                            if terminalFollowsBottom { inner.scrollTo("terminal-output-tail", anchor: .bottom) }
-                        }
-                    }
-                }
-            }
-            .padding(12)
-            .background(Color.black, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .foregroundStyle(.white)
-            .gesture(
-                MagnifyGesture()
-                    .onChanged { value in
-                        let start = magnifyStartSize ?? terminalFontSize
-                        if magnifyStartSize == nil { magnifyStartSize = start }
-                        terminalFontSize = min(22, max(9, start * Double(value.magnification)))
-                    }
-                    .onEnded { _ in magnifyStartSize = nil }
-            )
-            if !links.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(links, id: \.absoluteString) { link in
-                            Button {
-                                openingLink = LinkTarget(url: link)
-                            } label: {
-                                Label(link.host ?? link.absoluteString, systemImage: "safari")
-                                    .lineLimit(1)
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-
-    private var controlsCard: some View {
-        VStack(spacing: 10) {
-            // meshd 0.8 ("captureAnsi"): the native terminal paints the pane in colour with
-            // its cursor; older daemons still get the xterm.js bridge page.
-            NavigationLink {
-                if client.supports("captureAnsi") {
-                    NativeTerminalScreen(machine: machine, session: session, initialPane: selectedPane)
-                } else {
-                    BridgeTerminalScreen(machine: machine, session: session.name, initialPane: selectedPane)
-                }
-            } label: {
-                Label("Open terminal", systemImage: "terminal")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(session.isMuxGuest && !client.supports("captureAnsi"))
-            // meshd's own remote desktop, opened knowing which session you came from —
-            // which is what lets its paste go into this pane instead of into whatever
-            // the Mac happens to have focused. Needs no VNC server installed anywhere.
-            NavigationLink {
-                RemoteScreenView(machine: machine, session: session.name, pane: selectedPane)
-            } label: {
-                Label("Control screen", systemImage: "cursorarrow.rays")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            // Watch a computer-use/browser agent live, then Stop/Reply on this same card.
-            NavigationLink {
-                RemoteWebScreen(title: "\(machine.host) screen", urlString: machine.resolvedVNC)
-            } label: {
-                Label("Watch screen (VNC)", systemImage: "display")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            HStack {
-                Button { showingCompose = true } label: { Label("Reply", systemImage: "square.and.pencil") }
-                Button { showingPhrase = true } label: { Label("Command", systemImage: "waveform") }
-                // Straight into this pane, as one bracketed paste where the daemon
-                // supports it. Typing a multi-line block as keystrokes makes a TUI
-                // submit on every newline, which is how a pasted prompt becomes eight
-                // half-finished ones.
-                Button { Task { await pasteIntoPane() } } label: {
-                    Label("Paste", systemImage: "doc.on.clipboard")
-                }
-                .disabled(!UIPasteboard.general.hasStrings)
-                if !session.isMuxGuest {
-                    Button { Task { await newPane() } } label: { Label("New pane", systemImage: "rectangle.split.2x1") }
-                }
-                if activePane != nil && !session.isMuxGuest {
-                    // isMuxGuest, not isCmux: the daemon refuses kill for herdr panes
-                    // too, and a button that always answers 400 is not a control.
-                    Button(role: .destructive) { Task { await killPane() } } label: { Label("Kill pane", systemImage: "rectangle.split.1x2") }
-                }
-            }
-            .buttonStyle(.bordered)
-            .labelStyle(.iconOnly)
-            // Scrolls sideways instead of dictating the page's width: eight bordered
-            // icon buttons want ~450pt on a 402pt screen, and an HStack that gets its
-            // ideal width inside this ScrollView stretched EVERY card past both edges —
-            // the whole peek screen rendered full-bleed with its gutters clipped.
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack {
-                    Button { Task { await send(key: "enter") } } label: { Label("Enter", systemImage: "return") }
-                    Button(role: .destructive) { Task { await send(key: "ctrl-c") } } label: { Label("Stop", systemImage: "xmark.octagon") }
-                    Button { Task { await send(key: "up") } } label: { Label("Up", systemImage: "arrow.up") }
-                    Button { Task { await send(key: "down") } } label: { Label("Down", systemImage: "arrow.down") }
-                    Button { Task { await send(key: "left") } } label: { Label("Left", systemImage: "arrow.left") }
-                    Button { Task { await send(key: "right") } } label: { Label("Right", systemImage: "arrow.right") }
-                    Button { Task { await send(key: "tab") } } label: { Label("Tab", systemImage: "arrow.right.to.line") }
-                    Button { Task { await send(key: "escape") } } label: { Label("Esc", systemImage: "escape") }
-                }
-            }
-            .buttonStyle(.bordered)
-            .labelStyle(.iconOnly)
-            // rmux supports the full key set; cmux surfaces only take the row above.
-            if !session.isMuxGuest {
-                HStack {
-                    Button { Task { await send(key: "page-up") } } label: { Label("Page up", systemImage: "arrow.up.to.line") }
-                    Button { Task { await send(key: "page-down") } } label: { Label("Page down", systemImage: "arrow.down.to.line") }
-                    Button { Task { await send(key: "home") } } label: { Label("Home", systemImage: "arrow.up.left") }
-                    Button { Task { await send(key: "end") } } label: { Label("End", systemImage: "arrow.down.right") }
-                    Button { Task { await send(key: "ctrl-d") } } label: { Label("Ctrl-D", systemImage: "d.square") }
-                }
-                .buttonStyle(.bordered)
-                .labelStyle(.iconOnly)
-            }
-            if !session.isMuxGuest {
-                Button(role: .destructive) {
-                    Task {
-                        await store.kill(on: machine, name: session.name)
-                        dismiss()
-                    }
-                } label: {
-                    Label("Kill session", systemImage: "trash")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
-        }
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-    }
-
-    private var presetsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Quick send")
-                .font(.headline)
-            FlowButtons(items: store.quickCommands, isDisabled: { continueBlocked && LimitHelpers.isContinueCommand($0) }) { cmd in
-                Task { await send(text: cmd + "\n") }
-            }
-        }
-        .padding(16)
-        .background(.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
     private var composeSheet: some View {
@@ -1118,9 +840,6 @@ private struct SessionPeekScreen: View {
         let panesResult = await panesTask.result
         if case .success(let fetchedOutput) = outResult {
             output = fetchedOutput.lines
-            // Scanned off the fetched lines rather than off `visibleLines`, so this
-            // never depends on when a @State write becomes readable again.
-            links = detectedLinks(in: Array(fetchedOutput.lines.suffix(32)))
         }
         if case .success(let fetchedPanes) = panesResult {
             panes = fetchedPanes
@@ -1269,294 +988,7 @@ private struct FlowButtons: View {
     }
 }
 
-// MARK: - Terminal screen (WKWebView over the bridge)
 
-private struct BridgeTerminalScreen: View {
-    @EnvironmentObject var store: MeshStore
-    @Environment(\.scenePhase) private var scenePhase
-    let machine: Machine
-    let session: String
-    let initialPane: String?
-
-    @State private var panes: [Pane] = []
-    @State private var selectedPane: String?   // nil = whole session (default)
-    @State private var phase: WebLoadPhase = .loading
-    @State private var reloadToken = 0
-    /// Set once the bridge auth cookie has landed in the shared cookie store — see the
-    /// `.task(id: machine.token)` below. `BridgeWebView` (and its `web.load`) is not
-    /// created until this is true, so the bridge's very first request always carries it;
-    /// a cookie added after an unauthenticated page has already started loading would
-    /// not retroactively fix that navigation.
-    @State private var cookieReady = false
-    /// When the page was last (re)loaded. The bridge posts nothing about its own
-    /// WebSocket, so there is no "the socket closed" signal to read here — coming
-    /// back to the foreground after a while is the proxy: a phone that sat
-    /// backgrounded long enough for the terminal's socket to die is exactly the
-    /// stuck terminal the owner saw.
-    @State private var lastLoadAt = Date()
-    @AppStorage("terminalFontSize") private var terminalFontSize: Double = 12
-
-    private var terminalURL: URL? {
-        guard let url = machine.terminalURL(session: session, pane: selectedPane),
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
-        var items = components.queryItems ?? []
-        items.removeAll { $0.name == "fontSize" }
-        items.append(URLQueryItem(name: "fontSize", value: String(Int(min(22, max(9, terminalFontSize)).rounded()))))
-        components.queryItems = items
-        return components.url
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if panes.count > 1 {
-                paneSwitcher
-            }
-            if let url = terminalURL {
-                ZStack {
-                    if cookieReady {
-                        BridgeWebView(url: url, reloadToken: reloadToken, phase: $phase)
-                            .ignoresSafeArea(edges: .bottom)
-                    }
-                    // `phase` defaults to .loading, so this reads as "connecting" for
-                    // free during the cookie wait too — the same screen either way.
-                    webStatus(url: url)
-                }
-            } else {
-                ContentUnavailableView("No bridge", systemImage: "wifi.exclamationmark")
-            }
-        }
-        .navigationTitle(session)
-        .navigationBarTitleDisplayMode(.inline)
-        .task { await loadPanes() }
-        // install/payload/rmux-bridge auth.ts: a browser cannot put a header on a
-        // WebSocket upgrade, so the bridge accepts this machine's bearer token as the
-        // `mesh_token` cookie instead — never in the URL. Keyed on the token so a
-        // re-pair while this screen happens to still be open resets it.
-        .task(id: machine.token) {
-            guard let bridge = machine.resolvedBridge, let host = URL(string: bridge)?.host,
-                  !machine.token.isEmpty else {
-                cookieReady = true
-                return
-            }
-            let cookie = HTTPCookie(properties: [
-                .domain: host,
-                .path: "/",
-                .name: "mesh_token",
-                .value: machine.token,
-                .expires: Date().addingTimeInterval(86400),
-            ])
-            if let cookie {
-                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                    WKWebsiteDataStore.default().httpCookieStore.setCookie(cookie) {
-                        continuation.resume()
-                    }
-                }
-            }
-            cookieReady = true
-        }
-        // Watching an agent work is a screen you look at without touching, so the auto
-        // lock dims it mid-run. Released on disappear, never at app scope: a phone that
-        // never sleeps again is a worse bug than the dim.
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
-        // A backgrounded WKWebView's socket does not reliably survive an arbitrary
-        // nap. Coming back to a page that has sat idle over a minute reloads it
-        // rather than leaving a frozen terminal on screen with no way to tell it
-        // apart from a quiet one.
-        .onChange(of: scenePhase) { _, newPhase in
-            guard newPhase == .active, Date().timeIntervalSince(lastLoadAt) > 60 else { return }
-            lastLoadAt = Date()
-            reloadToken += 1
-        }
-    }
-
-    /// A WKWebView that cannot reach its host renders a blank black rectangle — which,
-    /// on a terminal page, is indistinguishable from a terminal that has nothing to say.
-    /// This is the difference between the two.
-    @ViewBuilder
-    private func webStatus(url: URL) -> some View {
-        switch phase {
-        case .ready:
-            EmptyView()
-        case .loading:
-            VStack(spacing: 10) {
-                ProgressView().tint(.white)
-                Text("Connecting to \(machine.host)'s bridge")
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.75))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.black)
-            .allowsHitTesting(false)
-        case .failed(let message):
-            VStack(spacing: 12) {
-                Image(systemName: "wifi.exclamationmark")
-                    .font(.largeTitle)
-                    .foregroundStyle(.orange)
-                Text("Can't reach the terminal bridge")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.75))
-                    .multilineTextAlignment(.center)
-                Text(url.absoluteString)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.white.opacity(0.5))
-                    .lineLimit(2)
-                    .textSelection(.enabled)
-                Button {
-                    phase = .loading
-                    lastLoadAt = Date()
-                    reloadToken += 1
-                } label: {
-                    Label("Retry", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.black)
-        }
-    }
-
-    private var paneSwitcher: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(panes) { pane in
-                    Button {
-                        selectedPane = pane.paneId
-                    } label: {
-                        Text(pane.label)
-                            .font(.caption.monospaced())
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(selectedPane == pane.paneId ? Color.accentColor : Color(.secondarySystemBackground))
-                            .foregroundStyle(selectedPane == pane.paneId ? Color.white : Color.primary)
-                            .clipShape(Capsule())
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-        }
-        .background(.black)
-    }
-
-    private func loadPanes() async {
-        do {
-            let fetched = try await store.client(for: machine).panes(agent: session)
-            panes = fetched
-            // Default to the active pane so the chip selection matches the bridge's view.
-            if selectedPane == nil { selectedPane = initialPane ?? fetched.first(where: { $0.active })?.paneId }
-        } catch {
-            panes = []
-        }
-    }
-}
-
-/// What a hosted page is doing. Reported by the navigation delegate, because a
-/// `WKWebView` tells nobody anything unless you ask it to.
-enum WebLoadPhase {
-    case loading
-    case ready
-    case failed(String)
-}
-
-/// WKWebView wrapper. The bridge page (xterm + keybar + splits) handles all
-/// touch input, scroll/select/copy, and the WebSocket stream itself.
-///
-/// The delegate exists because the failure looks like success: a bridge that is down,
-/// a tailnet that dropped, a wrong port — every one of them paints the same black
-/// rectangle a working terminal at a fresh prompt does. `phase` carries the answer back
-/// out so the screen above can say which it is and offer a retry.
-private struct BridgeWebView: UIViewRepresentable {
-    let url: URL
-    /// Bumped by the retry button. `url` alone cannot express "same page, try again".
-    var reloadToken: Int
-    @Binding var phase: WebLoadPhase
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.allowsInlineMediaPlayback = true
-        let web = WKWebView(frame: .zero, configuration: config)
-        web.isOpaque = false
-        web.backgroundColor = .black
-        web.scrollView.backgroundColor = .black
-        web.scrollView.bounces = false
-        web.navigationDelegate = context.coordinator
-        context.coordinator.requested = url
-        context.coordinator.token = reloadToken
-        web.load(URLRequest(url: url))
-        return web
-    }
-
-    func updateUIView(_ web: WKWebView, context: Context) {
-        context.coordinator.parent = self
-        guard context.coordinator.requested != url || context.coordinator.token != reloadToken else { return }
-        context.coordinator.requested = url
-        context.coordinator.token = reloadToken
-        web.load(URLRequest(url: url))
-    }
-
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        var parent: BridgeWebView
-        /// What we last asked for, so `updateUIView` reloads on a real change rather
-        /// than on every layout pass (`web.url` is nil until the first load lands).
-        var requested: URL?
-        var token = -1
-
-        init(_ parent: BridgeWebView) { self.parent = parent }
-
-        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-            parent.phase = .loading
-        }
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            parent.phase = .ready
-        }
-
-        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            report(error)
-        }
-
-        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
-                     withError error: Error) {
-            report(error)
-        }
-
-        private func report(_ error: Error) {
-            // -999 is "a newer load replaced this one", which every retry produces and
-            // which is not a failure anybody wants to read about.
-            let ns = error as NSError
-            guard !(ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled) else { return }
-            parent.phase = .failed(ns.localizedDescription)
-        }
-    }
-}
-
-private struct StatPill: View {
-    let label: String
-    let value: String
-    var tone: Color = .primary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption.bold())
-                .foregroundStyle(tone)
-                .monospacedDigit()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-}
 
 
 /// "Claude's session limit is reached — continue this task with…" and one button per agent

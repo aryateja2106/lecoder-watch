@@ -12,6 +12,8 @@ struct NativeTerminalScreen: View {
     let machine: Machine
     let session: Agent
     var initialPane: String? = nil
+    /// Inside SessionPeekScreen, which owns the title, the mode picker and the tab bar.
+    var embedded: Bool = false
 
     @StateObject private var terminal = TerminalController()
     /// Set once on appear from the daemon's capabilities; nil until then.
@@ -20,12 +22,22 @@ struct NativeTerminalScreen: View {
     @State private var lastInteraction = Date.distantPast
     @State private var failure: String?
     @State private var refusal: String?
-    @State private var ctrlArmed = false
-    @State private var altArmed = false
+    /// Tap arms a modifier for one key; a second tap while armed locks it until tapped again.
+    enum Modifier { case off, once, locked
+        var on: Bool { self != .off }
+        mutating func tap() { self = self == .off ? .once : self == .once ? .locked : .off }
+        mutating func consumed() { if self == .once { self = .off } }
+    }
+    @State private var ctrl: Modifier = .off
+    @State private var alt: Modifier = .off
+    @State private var showDpad = false
+    @State private var holdOpenedDpad = false
+    @AppStorage("terminalTheme") private var themeName: String = TerminalTheme.moshi.name
     @State private var keyboardShown = false
     @State private var showingVoice = false
     @State private var magnifyStart: Double?
     @AppStorage("terminalFontSize") private var fontSize: Double = 12
+    private var theme: TerminalTheme { TerminalTheme.named(themeName) }
 
     private var client: MeshClient { store.client(for: machine) }
     private var agentKind: AgentCLIKind { AgentCLIKind.detect(from: session.name, agentType: session.agentType) }
@@ -44,13 +56,13 @@ struct NativeTerminalScreen: View {
             let cell = TerminalController.cellWidth(fontSize: fontSize)
             let width = pty != nil ? geo.size.width : max(geo.size.width, CGFloat(paneSize.cols) * cell + 8)
             ScrollView(.horizontal, showsIndicators: false) {
-                SwiftTermView(controller: terminal, fontSize: fontSize)
+                SwiftTermView(controller: terminal, fontSize: fontSize, theme: theme)
                     .frame(width: width, height: geo.size.height)
             }
             .defaultScrollAnchor(.leading)
             .scrollDisabled(width <= geo.size.width)
         }
-        .background(TerminalTheme.moshi.background)
+        .background(theme.background)
         .gesture(
             MagnifyGesture()
                 .onChanged { value in
@@ -60,7 +72,12 @@ struct NativeTerminalScreen: View {
                 }
                 .onEnded { _ in magnifyStart = nil }
         )
-        .safeAreaInset(edge: .bottom, spacing: 0) { keyBar }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if showDpad { dpad }
+                keyBar
+            }
+        }
         .overlay(alignment: .top) {
             if let line = refusal ?? failure {
                 Text(line)
@@ -72,26 +89,38 @@ struct NativeTerminalScreen: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                VStack(spacing: 1) {
-                    Text(session.displayName).font(.headline).lineLimit(1)
-                    HStack(spacing: 6) {
-                        Text(agentKind.rawValue)
-                        Text(muxLabel)
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(agentKind.brandColor.opacity(0.25), in: Capsule())
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Picker("Theme", selection: $themeName) {
+                        ForEach(TerminalTheme.all, id: \.name) { Text($0.name).tag($0.name) }
                     }
-                    .font(.caption).foregroundStyle(.secondary)
+                    Button { press([0x0c], key: "ctrl-l") } label: { Label("Clear screen", systemImage: "eraser") }
+                } label: {
+                    Image(systemName: "paintpalette")
+                }
+            }
+            if !embedded {
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 1) {
+                        Text(session.displayName).font(.headline).lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(agentKind.rawValue)
+                            Text(muxLabel)
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(agentKind.brandColor.opacity(0.25), in: Capsule())
+                        }
+                        .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
         }
         .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarBackground(TerminalTheme.moshi.chrome, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(theme.chrome, for: .navigationBar)
+        .toolbarColorScheme(theme.dark ? .dark : .light, for: .navigationBar)
         .navigationBarTitleDisplayMode(.inline)
         // The terminal is the whole screen; the tab bar comes back on pop.
-        .toolbar(.hidden, for: .tabBar)
+        .toolbar(embedded ? .visible : .hidden, for: .tabBar)
         .sheet(isPresented: $showingVoice) {
             VoiceInputSheet(onSend: { text in
                 showingVoice = false
@@ -136,11 +165,20 @@ struct NativeTerminalScreen: View {
 
     private var keyBar: some View {
         HStack(spacing: 6) {
-            modifierKey("Ctrl", armed: $ctrlArmed)
-            modifierKey("Alt", armed: $altArmed)
+            modifierKey("Ctrl", state: $ctrl)
+            modifierKey("Alt", state: $alt)
             barKey("Esc") { press([0x1b], key: "escape") }
             barKey("Tab") { press([0x09], key: "tab") }
-            barKey("↑") { press([0x1b, 0x5b, 0x41], key: "up") }
+            // Tap is Up; holding opens the d-pad row (arrows, Enter, Backspace, paging).
+            // The button still fires on the release that ends a hold, so that one is eaten.
+            barKey("↑") {
+                if holdOpenedDpad { holdOpenedDpad = false; return }
+                press([0x1b, 0x5b, 0x41], key: "up")
+            }
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.35).onEnded { _ in
+                holdOpenedDpad = true
+                withAnimation(.snappy(duration: 0.15)) { showDpad.toggle() }
+            })
             Spacer(minLength: 0)
             barButton(systemImage: "mic.fill") { showingVoice = true }
                 .accessibilityLabel("Dictate")
@@ -151,7 +189,35 @@ struct NativeTerminalScreen: View {
             .accessibilityLabel(keyboardShown ? "Hide keyboard" : "Show keyboard")
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(TerminalTheme.moshi.chrome)
+        .background(theme.chrome)
+    }
+
+    // Seven keys at 44pt: wider than the screen and SwiftUI centres the overflow, which
+    // pushed the whole terminal a column off the left edge.
+    private var dpad: some View {
+        HStack(spacing: 6) {
+            barIcon("arrow.left", "Left") { press([0x1b, 0x5b, 0x44], key: "left") }
+            barIcon("arrow.down", "Down") { press([0x1b, 0x5b, 0x42], key: "down") }
+            barIcon("arrow.right", "Right") { press([0x1b, 0x5b, 0x43], key: "right") }
+            barIcon("return", "Enter") { press([0x0d], key: "enter") }
+            barIcon("delete.left", "Backspace") { press([0x7f], key: "backspace") }
+            barIcon("arrow.up.to.line", "Page up") { press([0x1b, 0x5b, 0x35, 0x7e], key: "page-up") }
+            barIcon("arrow.down.to.line", "Page down") { press([0x1b, 0x5b, 0x36, 0x7e], key: "page-down") }
+        }
+        .padding(.horizontal, 10).padding(.top, 8)
+        .frame(maxWidth: .infinity)
+        .background(theme.chrome)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func barIcon(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .medium)).frame(width: 44, height: 34)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.white)
+        .background(SwiftUI.Color.white.opacity(0.12), in: Capsule())
+        .accessibilityLabel(label)
     }
 
     // Fixed widths: five keys and two icons must fit a 402pt phone with the bar's own
@@ -166,15 +232,19 @@ struct NativeTerminalScreen: View {
         .background(SwiftUI.Color.white.opacity(0.12), in: Capsule())
     }
 
-    private func modifierKey(_ title: String, armed: Binding<Bool>) -> some View {
-        Button { armed.wrappedValue.toggle() } label: {
-            Text(title).font(.system(size: 14, weight: .medium, design: .monospaced))
-                .frame(width: 52, height: 36)
+    private func modifierKey(_ title: String, state: Binding<Modifier>) -> some View {
+        let m = state.wrappedValue
+        return Button { state.wrappedValue.tap() } label: {
+            HStack(spacing: 2) {
+                Text(title).font(.system(size: 14, weight: .medium, design: .monospaced))
+                if m == .locked { Image(systemName: "lock.fill").font(.system(size: 9)) }
+            }
+            .frame(width: 52, height: 36)
         }
         .buttonStyle(.borderless)
-        .foregroundStyle(armed.wrappedValue ? .black : .white)
-        .background(armed.wrappedValue ? SwiftUI.Color.orange : SwiftUI.Color.white.opacity(0.12), in: Capsule())
-        .accessibilityValue(armed.wrappedValue ? "armed" : "off")
+        .foregroundStyle(m.on ? .black : .white)
+        .background(m.on ? SwiftUI.Color.orange : SwiftUI.Color.white.opacity(0.12), in: Capsule())
+        .accessibilityValue(m == .off ? "off" : m == .once ? "armed" : "locked")
     }
 
     private func barButton(systemImage: String, action: @escaping () -> Void) -> some View {
@@ -229,9 +299,9 @@ struct NativeTerminalScreen: View {
     private func route(_ bytes: [UInt8]) async {
         if let pty {
             lastInteraction = Date()
-            pty.send(TerminalKeyRouter.applyModifiers(bytes, ctrl: ctrlArmed, alt: altArmed))
+            pty.send(TerminalKeyRouter.applyModifiers(bytes, ctrl: ctrl.on, alt: alt.on))
         } else {
-            for step in TerminalKeyRouter.route(bytes, ctrl: ctrlArmed, alt: altArmed) {
+            for step in TerminalKeyRouter.route(bytes, ctrl: ctrl.on, alt: alt.on) {
                 switch step {
                 case .text(let t): await send(text: t)
                 case .key(let k): await send(key: k)
@@ -239,31 +309,53 @@ struct NativeTerminalScreen: View {
                 }
             }
         }
-        if ctrlArmed || altArmed { ctrlArmed = false; altArmed = false }
+        ctrl.consumed(); alt.consumed()
     }
 }
 
 // MARK: - SwiftTerm bridge
 
+/// One theme recolours the terminal and the chrome around it. Palettes are the 16 ANSI
+/// slots as 0xRRGGBB; background/foreground/cursor follow.
 struct TerminalTheme {
-    let background: SwiftUI.Color
-    let chrome: SwiftUI.Color
-    let foreground: UIColor
-    let cursor: UIColor
-    let ansi: [SwiftTerm.Color]
+    let name: String
+    let dark: Bool
+    let bg: UInt32, fg: UInt32, cursorHex: UInt32, chromeHex: UInt32
+    let palette: [UInt32]
 
-    static let moshi = TerminalTheme(
-        background: SwiftUI.Color(red: 0.09, green: 0.10, blue: 0.13),
-        chrome: SwiftUI.Color(red: 0.06, green: 0.07, blue: 0.09),
-        foreground: UIColor(red: 0.86, green: 0.87, blue: 0.90, alpha: 1),
-        cursor: UIColor(red: 0.55, green: 0.95, blue: 0.55, alpha: 1),
-        ansi: [
-            (0x1a, 0x1b, 0x26), (0xf7, 0x76, 0x8e), (0x9e, 0xce, 0x6a), (0xe0, 0xaf, 0x68),
-            (0x7a, 0xa2, 0xf7), (0xbb, 0x9a, 0xf7), (0x7d, 0xcf, 0xff), (0xa9, 0xb1, 0xd6),
-            (0x41, 0x48, 0x68), (0xf7, 0x76, 0x8e), (0x9e, 0xce, 0x6a), (0xe0, 0xaf, 0x68),
-            (0x7a, 0xa2, 0xf7), (0xbb, 0x9a, 0xf7), (0x7d, 0xcf, 0xff), (0xc0, 0xca, 0xf5),
-        ].map { (rgb: (UInt16, UInt16, UInt16)) -> SwiftTerm.Color in SwiftTerm.Color(red8: rgb.0, green8: rgb.1, blue8: rgb.2) }
-    )
+    var background: SwiftUI.Color { SwiftUI.Color(hex: bg) }
+    var chrome: SwiftUI.Color { SwiftUI.Color(hex: chromeHex) }
+    var foreground: UIColor { UIColor(hex: fg) }
+    var cursor: UIColor { UIColor(hex: cursorHex) }
+    var ansi: [SwiftTerm.Color] {
+        palette.map { SwiftTerm.Color(red8: UInt16(($0 >> 16) & 0xff), green8: UInt16(($0 >> 8) & 0xff), blue8: UInt16($0 & 0xff)) }
+    }
+
+    static let moshi = TerminalTheme(name: "Moshi", dark: true, bg: 0x171a21, fg: 0xdbdee6, cursorHex: 0x8cf28c, chromeHex: 0x0f1117, palette: [
+        0x1a1b26, 0xf7768e, 0x9ece6a, 0xe0af68, 0x7aa2f7, 0xbb9af7, 0x7dcfff, 0xa9b1d6,
+        0x414868, 0xf7768e, 0x9ece6a, 0xe0af68, 0x7aa2f7, 0xbb9af7, 0x7dcfff, 0xc0caf5])
+    static let dracula = TerminalTheme(name: "Dracula", dark: true, bg: 0x282a36, fg: 0xf8f8f2, cursorHex: 0xf8f8f2, chromeHex: 0x1e1f29, palette: [
+        0x21222c, 0xff5555, 0x50fa7b, 0xf1fa8c, 0xbd93f9, 0xff79c6, 0x8be9fd, 0xf8f8f2,
+        0x6272a4, 0xff6e6e, 0x69ff94, 0xffffa5, 0xd6acff, 0xff92df, 0xa4ffff, 0xffffff])
+    static let nord = TerminalTheme(name: "Nord", dark: true, bg: 0x2e3440, fg: 0xd8dee9, cursorHex: 0xd8dee9, chromeHex: 0x242933, palette: [
+        0x3b4252, 0xbf616a, 0xa3be8c, 0xebcb8b, 0x81a1c1, 0xb48ead, 0x88c0d0, 0xe5e9f0,
+        0x4c566a, 0xbf616a, 0xa3be8c, 0xebcb8b, 0x81a1c1, 0xb48ead, 0x8fbcbb, 0xeceff4])
+    static let paper = TerminalTheme(name: "Paper", dark: false, bg: 0xfafafa, fg: 0x383a42, cursorHex: 0x526eff, chromeHex: 0xececec, palette: [
+        0x383a42, 0xe45649, 0x50a14f, 0xc18401, 0x4078f2, 0xa626a4, 0x0184bc, 0xa0a1a7,
+        0x696c77, 0xe45649, 0x50a14f, 0xc18401, 0x4078f2, 0xa626a4, 0x0184bc, 0x383a42])
+    static let all: [TerminalTheme] = [moshi, dracula, nord, paper]
+    static func named(_ name: String) -> TerminalTheme { all.first { $0.name == name } ?? moshi }
+}
+
+private extension SwiftUI.Color {
+    init(hex: UInt32) {
+        self.init(red: Double((hex >> 16) & 0xff) / 255, green: Double((hex >> 8) & 0xff) / 255, blue: Double(hex & 0xff) / 255)
+    }
+}
+private extension UIColor {
+    convenience init(hex: UInt32) {
+        self.init(red: CGFloat((hex >> 16) & 0xff) / 255, green: CGFloat((hex >> 8) & 0xff) / 255, blue: CGFloat(hex & 0xff) / 255, alpha: 1)
+    }
 }
 
 @MainActor
@@ -314,18 +406,15 @@ final class TerminalController: ObservableObject {
 struct SwiftTermView: UIViewRepresentable {
     let controller: TerminalController
     let fontSize: Double
+    let theme: TerminalTheme
 
     func makeCoordinator() -> Coordinator { Coordinator(controller: controller) }
 
     func makeUIView(context: Context) -> SwiftTerm.TerminalView {
         let font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         let view = SwiftTerm.TerminalView(frame: .zero, font: font, options: TerminalOptions(scrollback: 2000))
-        let theme = TerminalTheme.moshi
-        view.nativeBackgroundColor = UIColor(theme.background)
-        view.nativeForegroundColor = theme.foreground
-        view.caretColor = theme.cursor
-        view.installColors(theme.ansi)
-        view.keyboardAppearance = .dark
+        apply(theme, to: view)
+        context.coordinator.themeName = theme.name
         // The key bar below the terminal is the one accessory; SwiftTerm's own would
         // stack a second row of Esc/Ctrl/Tab on top of it whenever the keyboard is up.
         view.inputAccessoryView = nil
@@ -338,10 +427,24 @@ struct SwiftTermView: UIViewRepresentable {
         if abs(view.font.pointSize - fontSize) > 0.5 {
             view.font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         }
+        if context.coordinator.themeName != theme.name {
+            context.coordinator.themeName = theme.name
+            apply(theme, to: view)
+        }
+    }
+
+    private func apply(_ theme: TerminalTheme, to view: SwiftTerm.TerminalView) {
+        view.nativeBackgroundColor = UIColor(hex: theme.bg)
+        view.nativeForegroundColor = theme.foreground
+        view.caretColor = theme.cursor
+        view.installColors(theme.ansi)
+        view.keyboardAppearance = theme.dark ? .dark : .light
+        view.backgroundColor = UIColor(hex: theme.bg)
     }
 
     final class Coordinator: NSObject, TerminalViewDelegate {
         let controller: TerminalController
+        var themeName = ""
         init(controller: TerminalController) { self.controller = controller }
         func send(source: SwiftTerm.TerminalView, data: ArraySlice<UInt8>) {
             let bytes = Array(data)

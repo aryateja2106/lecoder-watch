@@ -21,7 +21,7 @@ struct FeedbackView: View {
     var body: some View {
         Form {
             Section {
-                TextField("What were you doing, and what did you expect?", text: $whatHappened, axis: .vertical)
+                TextField("What were you doing, and what did you expect?", text: $whatHappened.shellSafe, axis: .vertical)
                     .lineLimit(3...8)
             } header: {
                 Text("What happened")

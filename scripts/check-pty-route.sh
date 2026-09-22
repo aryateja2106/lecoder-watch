@@ -6,6 +6,7 @@
 #   - the attach is sized to the client: `stty size` inside the pane echoes rows cols
 #   - typed bytes reach the pane and its output (with SGR colour) comes back
 #   - a resize message reaches the mux (SIGWINCH), so the pane really changes size
+#   - the pane's scrollback is replayed before the attach draws the screen
 #   - closing the socket detaches; the session is still there afterwards
 # Everything is throwaway: meshd on :8895 with HOME in a temp dir, tmux on a private
 # socket with no user config. The real daemon, tmux server and ~/.mesh are never touched.
@@ -39,6 +40,10 @@ chmod 600 "$TMP/.mesh/token"
 tmux -L "$SOCK" -f /dev/null new-session -d -s mesh-boot "exec cat"
 tmux -L "$SOCK" set-option -g default-shell /bin/sh \; set-option -g default-command 'exec /bin/sh'
 tmux -L "$SOCK" new-session -d -s pty-probe -x 80 -y 24
+# Fill the pane's scrollback so the attach has history to replay: 60 lines on a 24-row
+# pane leaves HISTMARK-1 well above the visible screen.
+tmux -L "$SOCK" send-keys -t pty-probe 'i=1; while [ $i -le 60 ]; do echo HISTMARK-$i; i=$((i+1)); done' Enter
+sleep 0.5
 
 MESHD_TOKEN="$(cat "$TMP/.mesh/token")" \
 HOME="$TMP" MESHD_HOST=127.0.0.1 MESHD_PORT="$PORT" \
@@ -77,6 +82,8 @@ const text = () => new TextDecoder().decode(Buffer.concat(chunks));
 const waitFor = async (pred, what) => { for (let i = 0; i < 50; i++) { if (pred()) return; await Bun.sleep(100); } fail(`timed out waiting for ${what}; last bytes: ${JSON.stringify(text().slice(-300))}`); };
 
 await Bun.sleep(400);
+await waitFor(() => text().includes("HISTMARK-1\u001b[0m\r\n"), "scrollback replay (HISTMARK-1 is above the visible screen)");
+console.log("ok: scrollback replayed before the attach");
 ws.send(new TextEncoder().encode("stty size; printf \"\\033[31mPTYRED\\033[0m\\n\"\r"));
 // tmux keeps one row for its status line: a 17-row client is a 16-row pane.
 await waitFor(() => /16 61/.test(text()), "stty size 16 61 (got: " + JSON.stringify(text().slice(-200)) + ")");

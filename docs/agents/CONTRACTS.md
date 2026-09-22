@@ -114,12 +114,12 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `paste` | MeshClient.swift:302, RemoteScreenView.swift:111 | yes |
 | `captureJoin` | MeshClient.swift:282, WatchMeshStore.swift:552 | yes |
 | `redact` | ExposedSecretsScreen.swift:43, ExposedSecretsScreen.swift:84 | no |
-| `chat` | TerminalView.swift:1150 | no |
-| `apps` | TerminalView.swift:120 | no |
+| `chat` | TerminalView.swift:869 | no |
+| `apps` | TerminalView.swift:111 | no |
 | `handoff` | MeshClient.swift:593, MeshClient.swift:602, MeshClient.swift:614 | no |
 | `brain` | — (nothing gates it) | no |
-| `captureAnsi` | MeshClient.swift:277, TerminalView.swift:927, TerminalView.swift:937 | yes |
-| `pty` | NativeTerminalScreen.swift:105 | yes |
+| `captureAnsi` | MeshClient.swift:277 | yes |
+| `pty` | NativeTerminalScreen.swift:134 | yes |
 
 ## Watch → phone relay commands
 

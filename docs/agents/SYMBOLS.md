@@ -48,8 +48,6 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | BackgroundRefresh | enum | iOS/BackgroundRefresh.swift:15 |
 | Binding | extension | iOS/ShellSafeText.swift:36 |
 | BLOCKED_LEVELS | export | install/payload/meshd/push.ts:222 |
-| BridgeTerminalScreen | struct | iOS/TerminalView.swift:1274 |
-| BridgeWebView | struct | iOS/TerminalView.swift:1473 |
 | BuildInfo | enum | Shared/Models.swift:973 |
 | buildPayload | function | install/payload/meshd/push.ts:248 |
 | capDetail | func | iOS/ContentView.swift:1097 |
@@ -209,7 +207,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | firstPairedIphoneUdid | function | install/payload/bin/mesh:1898 |
 | fittedSize | func | Shared/ScreenZoom.swift:16 |
 | fleetLine | func | Shared/Models.swift:803 |
-| FlowButtons | struct | iOS/TerminalView.swift:1253 |
+| FlowButtons | struct | iOS/TerminalView.swift:972 |
 | FollowsTail | struct | Watch/WatchViews.swift:877 |
 | frameTransform | func | Shared/MeshClient.swift:637 |
 | freePort | function | install/payload/bin/mesh:716 |
@@ -233,7 +231,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | handleHandoff | function | install/payload/meshd/handoff.ts:274 |
 | handleInput | function | install/payload/meshd/input.ts:471 |
 | handlePair | function | install/payload/meshd/pair.ts:93 |
-| handlePtyUpgrade | function | install/payload/meshd/pty.ts:41 |
+| handlePtyUpgrade | function | install/payload/meshd/pty.ts:44 |
 | handlePush | function | install/payload/meshd/push.ts:437 |
 | handoff | function | install/payload/meshd/handoff.ts:215 |
 | HANDOFF_TARGETS | export | install/payload/meshd/handoff.ts:29 |
@@ -296,7 +294,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | launchCommand | function | install/payload/meshd/handoff.ts:51 |
 | LaunchSheet | struct | iOS/RemoteScreenView.swift:1362 |
 | LevelMeter | struct | iOS/VoiceInput.swift:155 |
-| LimitHandoffBanner | struct | iOS/TerminalView.swift:1564 |
+| LimitHandoffBanner | struct | iOS/TerminalView.swift:996 |
 | LimitHelpers | enum | Shared/LimitHelpers.swift:18 |
 | LimitRow | struct | iOS/ContentView.swift:1195 |
 | LimitStatus | enum | Shared/LimitHelpers.swift:4 |
@@ -351,7 +349,6 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MachineThumbnail | struct | iOS/ContentView.swift:1774 |
 | magicPacket | function | install/payload/meshd/wol.ts:24 |
 | main | function | install/payload/bin/mesh:2334 |
-| ManualBridgeScreen | struct | iOS/TerminalView.swift:193 |
 | MarkdownBlocks | struct | iOS/AgentChatView.swift:750 |
 | MarkdownDocument | struct | iOS/FileViewer.swift:122 |
 | matchingAgent | func | Shared/Models.swift:728 |
@@ -365,7 +362,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MeshAppInstallResult | struct | Shared/Models.swift:1198 |
 | MeshAppList | struct | Shared/Models.swift:1194 |
 | MeshAppRow | struct | iOS/AppsLibraryView.swift:107 |
-| MeshAppsScreen | struct | iOS/TerminalView.swift:234 |
+| MeshAppsScreen | struct | iOS/TerminalView.swift:184 |
 | MeshClient | struct | Shared/MeshClient.swift:5 |
 | MeshDesktopApp | struct | MeshDesktop/MeshDesktopApp.swift:20 |
 | meshIdHash | func | Shared/AlertGating.swift:143 |
@@ -391,7 +388,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | needsBridge | func | iOS/ContentView.swift:1115 |
 | needsSelfCheck | func | iOS/ContentView.swift:1119 |
 | needsUpdate | func | iOS/ContentView.swift:1111 |
-| NewSessionSheet | struct | iOS/TerminalView.swift:293 |
+| NewSessionSheet | struct | iOS/TerminalView.swift:243 |
 | NoMachinesView | struct | iOS/PairMachineView.swift:312 |
 | normalizeChords | function | install/payload/meshd/input.ts:160 |
 | normalizeCode | function | install/payload/meshd/pair.ts:51 |
@@ -432,7 +429,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | passesPushGate | function | install/payload/meshd/push.ts:240 |
 | peerDetail | func | iOS/ContentView.swift:1057 |
 | PermissionsView | struct | MeshDesktop/PermissionsView.swift:13 |
-| phoneClipboardText | func | iOS/TerminalView.swift:1248 |
+| phoneClipboardText | func | iOS/TerminalView.swift:967 |
 | PhoneConnectivity | class | iOS/PhoneConnectivity.swift:7 |
 | pickPane | function | install/payload/meshd/handoff.ts:207 |
 | PinnedLimitEditor | struct | iOS/ContentView.swift:1537 |
@@ -451,8 +448,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | primaryMac | function | install/payload/meshd/wol.ts:121 |
 | ProcInfo | struct | Shared/Models.swift:263 |
 | PtyClient | class | Shared/PtyClient.swift:10 |
-| PtyOpts | type | install/payload/meshd/pty.ts:22 |
-| ptyWebSocket | function | install/payload/meshd/pty.ts:61 |
+| PtyOpts | type | install/payload/meshd/pty.ts:23 |
+| ptyWebSocket | function | install/payload/meshd/pty.ts:65 |
 | pushAlert | function | install/payload/meshd/push.ts:280 |
 | PushDelegate | class | iOS/MeshRelayApp.swift:6 |
 | pushInstall | function | install/payload/meshd/push.ts:300 |
@@ -520,7 +517,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | SessionLimitsBanner | struct | iOS/ContentView.swift:1123 |
 | SessionLiveActivity | struct | MeshWatchWidgets/SessionLiveActivity.swift:8 |
 | SessionLockScreenView | struct | MeshWatchWidgets/SessionLockScreenView.swift:11 |
-| SessionPeekScreen | struct | iOS/TerminalView.swift:552 |
+| SessionPeekScreen | struct | iOS/TerminalView.swift:502 |
 | SessionRoute | struct | Watch/WatchViews.swift:576 |
 | sessionsNeedingAttention | func | Shared/Models.swift:735 |
 | SessionState | extension | Shared/Models.swift:1536 |
@@ -542,7 +539,6 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | smokeTest | function | install/payload/bin/mesh:730 |
 | snapshotMachineMatching | func | Shared/Models.swift:167 |
 | stagePayload | function | install/payload/bin/mesh:684 |
-| StatPill | struct | iOS/TerminalView.swift:1540 |
 | StatRow | struct | iOS/ContentView.swift:1703 |
 | Stats | struct | Shared/Models.swift:272 |
 | StatsSample | struct | iOS/MachineStatsView.swift:11 |
@@ -555,7 +551,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | stripRcLines | function | install/payload/bin/mesh:1998 |
 | SuggestionChip | struct | iOS/AgentChatView.swift:1165 |
 | swapInMeshd | function | install/payload/bin/mesh:769 |
-| SwiftTermView | struct | iOS/NativeTerminalScreen.swift:314 |
+| SwiftTermView | struct | iOS/NativeTerminalScreen.swift:406 |
+| SwiftUI | extension | iOS/NativeTerminalScreen.swift:350 |
 | syncAgyHooks | function | install/payload/bin/mesh:1467 |
 | syncBin | function | install/payload/bin/mesh:782 |
 | syncBridgePage | function | install/payload/bin/mesh:838 |
@@ -564,13 +561,13 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | TailnetPeer | struct | Shared/Models.swift:360 |
 | TailnetSnapshot | struct | Shared/Models.swift:369 |
 | tailscaleBin | function | install/payload/bin/mesh:1695 |
-| terminalActiveFirst | func | iOS/TerminalView.swift:181 |
-| TerminalController | class | iOS/NativeTerminalScreen.swift:270 |
+| terminalActiveFirst | func | iOS/TerminalView.swift:172 |
+| TerminalController | class | iOS/NativeTerminalScreen.swift:362 |
 | TerminalFallbackBlock | struct | iOS/AgentChatView.swift:966 |
 | TerminalKeyRouter | enum | Shared/TerminalKeyRouter.swift:8 |
-| terminalReady | func | iOS/TerminalView.swift:189 |
-| TerminalTab | struct | iOS/TerminalView.swift:11 |
-| TerminalTheme | struct | iOS/NativeTerminalScreen.swift:248 |
+| terminalReady | func | iOS/TerminalView.swift:180 |
+| TerminalTab | struct | iOS/TerminalView.swift:9 |
+| TerminalTheme | struct | iOS/NativeTerminalScreen.swift:320 |
 | ThinkingDisclosure | struct | iOS/AgentChatView.swift:823 |
 | tokenWeakness | function | install/payload/meshd/doctor.ts:35 |
 | ToolResultCard | struct | iOS/AgentChatView.swift:863 |
@@ -579,6 +576,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | treeVersion | function | install/payload/bin/mesh:656 |
 | TypeSheet | struct | Watch/RemoteView.swift:1603 |
 | typeText | func | install/payload/bin/mesh-input.swift:338 |
+| UIColor | extension | iOS/NativeTerminalScreen.swift:355 |
 | uninstallSkills | function | install/payload/bin/mesh:1591 |
 | UsageLimit | struct | Shared/Models.swift:565 |
 | UsageModel | struct | Shared/Models.swift:573 |
@@ -607,7 +605,6 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | watchSessionSubtitle | func | Watch/WatchViews.swift:484 |
 | WatchTouch | enum | Watch/WatchViews.swift:466 |
 | WatchWidgetsBundle | struct | WatchWidgets/WatchGlanceWidget.swift:6 |
-| WebLoadPhase | enum | iOS/TerminalView.swift:1460 |
 | windowFrame | func | install/payload/bin/mesh-input.swift:381 |
 | WindowID | enum | MeshDesktop/MeshDesktopApp.swift:14 |
 | workArea | func | install/payload/bin/mesh-input.swift:368 |

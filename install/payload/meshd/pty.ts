@@ -9,6 +9,7 @@
 //   client → server  binary            keystrokes / paste, exactly as an emulator emits them
 //   client → server  {"t":"resize","cols":N,"rows":N}
 //   client → server  {"t":"ping"}      answered {"t":"pong"}
+//   ?history=N on the upgrade replays N lines of the pane's scrollback first (default 2000)
 //   server → client  binary            pty output, redacted line-wise like every other byte path
 //   server → client  {"t":"exit","code":N}   the attach ended (session gone, mux died)
 //   server → client  {"t":"error","msg":"…"}
@@ -27,6 +28,8 @@ type Conn = {
   pane?: string;
   cols: number;
   rows: number;
+  /// Lines of scrollback replayed before the attach (0 = none).
+  history: number;
   term?: InstanceType<typeof Bun.Terminal>;
   proc?: ReturnType<typeof Bun.spawn>;
   decoder: TextDecoder;
@@ -50,6 +53,7 @@ export async function handlePtyUpgrade(req: Request, url: URL, server: any, opts
     pane: url.searchParams.get("pane") ?? undefined,
     cols: clamp(Number(url.searchParams.get("cols")), 20, 400, 80),
     rows: clamp(Number(url.searchParams.get("rows")), 5, 200, 24),
+    history: clamp(Number(url.searchParams.get("history") ?? "2000"), 0, 20000, 2000),
     decoder: new TextDecoder("utf-8", { fatal: false }),
   };
   if (server.upgrade(req, { data })) return undefined;
@@ -81,6 +85,15 @@ export function ptyWebSocket(opts: PtyOpts) {
         },
       });
       c.term = term;
+      // Scrollback first: the attach only redraws the visible screen, so the emulator would
+      // have nothing above it. tmux's history (negative line numbers) goes down the socket
+      // as plain lines before the attach paints over them; the phone scrolls up into it.
+      const target = c.pane ?? c.name;
+      const hist = Bun.spawnSync([...argv(opts), "capture-pane", "-p", "-e", "-J", "-S", `-${c.history}`, "-E", "-1", "-t", target]);
+      if (hist.exitCode === 0 && hist.stdout.length) {
+        const lines = hist.stdout.toString().replace(/\n+$/, "");
+        if (lines) ws.sendBinary(encoder.encode(lines.split("\n").join("\x1b[0m\r\n") + "\x1b[0m\r\n"));
+      }
       // A pane target focuses that window/pane first; the attach that follows shows it.
       if (c.pane) {
         Bun.spawnSync([...argv(opts), "select-window", "-t", c.pane]);

@@ -143,3 +143,29 @@ Not done, said plainly: configurable shortcuts/aliases fired from the watch (the
 | 0.8 | app 0.8.0 (build 2) == daemon 0.8.0; fleet mac/pi/jetson upgraded; remote `mesh upgrade -H` fixed on the way (it dropped `--src`) | `mesh status` |
 
 Not done, plainly: a Raycast-class launcher of our own (the machine's own launcher is one tap; ours is the `/apps` search sheet); configurable shortcut sets per user; the on-device brain; VNC credential flow; plugin route loader; CloudKit sync for Hundred; a real-phone pass on gestures/haptics.
+
+## Evening, fourth pass — Moshi parity, phase 1 (6511d50 → ) — after Arya's "make it look and work like Moshi"
+
+The map: `docs/product/moshi-parity-2026-09-22.md` (163 Moshi features from 41 docs pages
+against 55 of ours; root cause of every rendering/input gap: no emulator, no byte stream).
+
+| Slice | Done | Proof |
+|---|---|---|
+| 1 Native terminal screen | SwiftTerm 1.18 via SPM; colour, cursor, full-bleed dark, Moshi-like key bar; `/output?ansi=1` (`capture-pane -e` + cursor cell, capability `captureAnsi`); keystroke bytes → `/send` through `Shared/TerminalKeyRouter.swift`; meshd resolves `ctrl-`/`alt-` letters; sends serialised (they overtook each other: "ehco") | `check-native-terminal-keys.sh` (22 router cases); sim: coloured Claude-style screen, 35 chars typed in order, sticky Ctrl+c killed a sleep — `shots/native-terminal-colour.png`, `-keyboard.png` |
+| 2 `/agents/:s/pty` | WebSocket, `tmux attach` under `Bun.Terminal` sized to the client (bun ≥ 1.3, no new dependency), binary = bytes, JSON = resize/ping, redacted on the bridge channel, SIGWINCH after resize (Bun's resize alone never reached tmux), 2000 lines of scrollback replayed first; capability `pty` | `check-pty-route.sh`: 401 without bearer, 404 unknown session, `stty size` echoes the client size, SGR bytes intact, resize changes the pane, pong, replay, close detaches and the session survives |
+| 3 Phone stream | `Shared/PtyClient.swift`: bearer on the upgrade, bytes → `TerminalView.feed`, keystrokes raw with Ctrl/Alt folded in, resize on every layout change, 0.5→8 s backoff | sim: tmux resized the pane to 46×38 on attach and again under the keyboard; 47 chars in order; Ctrl+c; daemon killed and restarted → reattached in 1 s — `shots/native-terminal-stream.png` |
+| 4 Key bar | Ctrl/Alt tap-once / tap-twice-to-lock (lock glyph); ↑ tap = Up, hold = d-pad row (← ↓ → ⏎ ⌫ PgUp PgDn), the hold's release no longer also sends Up | sim |
+| 5 Themes + scrollback | Moshi / Dracula / Nord / Paper from the palette menu, applied live, remembered; Clear screen | sim: Dracula background sampled `(40,42,54)` |
+| 6 Default + delete | Terminal mode of the session screen **is** the native terminal, full screen, tab bar hidden; pane picker / Control screen / VNC / paste / new–kill pane / kill session in the ⋯ menu; `BridgeTerminalScreen`, `BridgeWebView`, `ManualBridgeScreen`, the output/controls/presets cards and `import WebKit` deleted from TerminalView.swift (−~500 lines); idle-timer hold moved to the session screen (the existing check still counts it) | `check-native-terminal-keys.sh` pins no WKWebView in TerminalView.swift; sim: menu, d-pad, theme |
+| The red check from the handoff | Named: `check-phone-input-and-wake` — `FeedbackView.swift:24` TextField without `.shellSafe` (from the third pass). Fixed | check OK |
+
+Not done, plainly (phase 2+ in the map): swipe gestures for windows/panes, double-tap paste,
+hardware-keyboard commands, the dictation pill + composer bubble, OSC 52 clipboard, session
+cards with thumbnails and the Home/Inbox tabs, image paste, diff viewer, docs site, pricing.
+The rmux-bridge daemon on :7820 is untouched (the Mac's web console still uses it).
+
+Verify-before-coding results: SwiftTerm ≥ 1.19 ships a build-tool plugin xcodebuild refuses
+without `-skipPackagePluginValidation` — pinned to 1.18.0. Its GPU renderer needs the Xcode
+Metal toolchain, installed with `xcodebuild -downloadComponent MetalToolchain`. `Bun.Terminal`
+exists on bun 1.3.14 (mac, pi) and 1.4.2 (jetson).
+
