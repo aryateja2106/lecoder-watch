@@ -135,7 +135,76 @@ if "Spare note" not in titles:
 PY
 echo "check-knowledge: list contains title"
 
-SRV_PID="$SRV" python3 - <<'PY'
+# Linux reads /proc. The macOS Xcode job has no /proc; it uses ps -E and lsof
+# for the same two facts: telemetry is off, and no TCP socket leaves loopback.
+if [ "$(uname -s)" = "Darwin" ]; then
+  command -v lsof >/dev/null 2>&1 || { echo "FAIL: lsof is required on Darwin"; exit 1; }
+  SRV_PID="$SRV" python3 - <<'PY'
+import os, re, subprocess, sys
+root = int(os.environ["SRV_PID"])
+
+def run(args):
+    return subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+
+listed = run(["ps", "-ax", "-o", "pid=,ppid="])
+if listed.returncode != 0 or not listed.stdout.strip():
+    sys.exit("FAIL: could not list processes to check sockets")
+by_ppid = {}
+for line in listed.stdout.splitlines():
+    parts = line.split()
+    if len(parts) != 2:
+        continue
+    pid, ppid = int(parts[0]), int(parts[1])
+    by_ppid.setdefault(ppid, []).append(pid)
+pids, seen, stack = [], set(), [root]
+while stack:
+    cur = stack.pop()
+    if cur in seen:
+        continue
+    seen.add(cur)
+    pids.append(cur)
+    stack.extend(by_ppid.get(cur, []))
+
+# ps -E appends the environment. Do not print it: it holds the daemon token.
+env_text = run(["ps", "-wwE", "-p", str(root), "-o", "command="]).stdout
+if "MESHD_TELEMETRY=off" not in env_text.split():
+    sys.exit("FAIL: daemon is not running with telemetry off")
+
+lsof = run(["lsof", "-nP", "-a", "-p", ",".join(str(p) for p in pids), "-iTCP"])
+rows = []
+for line in lsof.stdout.splitlines():
+    match = re.search(r"\bTCP\s+(\S+)(?:\s+\(([^)]+)\))?\s*$", line)
+    if match:
+        rows.append(match.group(1))
+if not rows:
+    sys.exit("FAIL: could not see the daemon's TCP sockets")
+
+def loopback(host):
+    h = host.strip("[]").lower()
+    if h.startswith("::ffff:"):
+        h = h.split("::ffff:", 1)[1]
+    return h in ("127.0.0.1", "::1", "localhost")
+
+def remote_host(name):
+    if "->" not in name:
+        return None
+    remote = name.split("->", 1)[1]
+    if remote.startswith("["):
+        end = remote.find("]")
+        return remote[1:end] if end >= 0 else remote
+    return remote.rsplit(":", 1)[0]
+
+bad = []
+for name in rows:
+    host = remote_host(name)
+    if host is None or loopback(host):
+        continue
+    bad.append(name)
+if bad:
+    sys.exit("FAIL: daemon has a non-loopback socket: %s" % ", ".join(bad))
+PY
+else
+  SRV_PID="$SRV" python3 - <<'PY'
 import os, sys
 root = int(os.environ["SRV_PID"])
 
@@ -216,5 +285,6 @@ if not env_ok:
 if bad:
     sys.exit("FAIL: daemon has a non-loopback socket: %s" % ", ".join(bad))
 PY
+fi
 echo "check-knowledge: daemon did not call Supabase"
 echo "check-knowledge: OK"
