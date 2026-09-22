@@ -765,6 +765,9 @@ final class MeshStore: ObservableObject {
             do {
                 let reply = try await c.askAgentNote(q: q, ask: question, confirm: true)
                 knowledgeAskLine = Self.knowledgeAskLine(reply)
+                if !reply.held {
+                    loadKnowledgeNotes(host: host)
+                }
             } catch {
                 fail("ask failed")
                 knowledgeAskLine = nil
