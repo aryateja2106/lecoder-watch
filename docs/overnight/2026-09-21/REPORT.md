@@ -177,7 +177,13 @@ line-editor keypress, not text, which is why the probe's `printf '\033[32m…'` 
 without its escapes. The Mac's own daemon was upgraded the same way and **rmux 0.3.1 attaches
 under the pty exactly like tmux** — replay, resize to 57 columns, 6 ms echo on loopback —
 which was the open question in the map's "verify before coding" list. The Jetson followed
-(tmux 3.2a, bun 1.4.2): replay, 18×57, 6 ms — the whole fleet streams.
+(tmux 3.2a, bun 1.4.2): replay, 18×57, 6 ms — the whole fleet streams. A second session then
+published the daemon as **mesh-install v0.8.0**, so `curl -fsSL https://lesearch.ai/install.sh | sh`
+now lands it on a machine that has never seen the app; verified from this side by unpacking the
+tarball the installer resolves to (`releases/latest/download/mesh-install.tgz`): it carries
+`install/payload/meshd/pty.ts` byte-identical to this branch's, `const VERSION = "0.8.0"` and
+`"captureAnsi", "pty"` in the capability list. A new user's phone terminal therefore streams on
+first install rather than falling back to polling.
 
 Verify-before-coding results: SwiftTerm ≥ 1.19 ships a build-tool plugin xcodebuild refuses
 without `-skipPackagePluginValidation` — pinned to 1.18.0. Its GPU renderer needs the Xcode
