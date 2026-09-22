@@ -2,11 +2,20 @@
 // becomes one file under the daemon state directory. Nothing in this module
 // opens a socket: no Supabase client, no model call, no download.
 //
-//   POST /knowledge      { path, speak? } | { audio }       -> { id, title, spoken }
+//   POST /knowledge      { path, speak? } | { audio } | { pdf, title? }
 //   POST /knowledge/:id  { body } | { audio, speak? }       -> { id, title, body, spoken? }
 //   GET  /knowledge                                     -> { notes: [{ id, title }] }
 //   GET  /knowledge?q=text                              -> { id, title } for a title or body match
 //   GET  /knowledge/:id                                 -> { id, title, body }
+//
+// pdf names a file already on this machine. MESH_PDF must name a local
+// executable. That executable is run with the pdf path as its only argument,
+// and its stdout is the note body. A missing executable, a remote path, a
+// value containing ://, or a protocol-relative value is refused before a
+// note is written and is not fetched. A nonzero exit or empty stdout writes
+// nothing. The title is the optional title, otherwise the file basename
+// without its extension. The list stays { id, title } and does not include
+// the absolute path.
 //
 // q is local text, matched without case. A remote URL, a scheme, a
 // protocol-relative value, or any string containing :// is refused and is
@@ -41,6 +50,7 @@ const MAX_TITLE = 200;
 const MAX_BODY = 100_000;
 const SPEAK_MS = 8_000;
 const STT_MS = 8_000;
+const PDF_MS = 8_000;
 
 export function knowledgeDir(): string {
   const root = (process.env.MESHD_STATE ?? "").trim() || join(homedir(), ".mesh");
@@ -289,6 +299,79 @@ async function runStt(bin: string, audioPath: string): Promise<string | null> {
   return text ? clip(text, MAX_BODY) : null;
 }
 
+// Same bound as the transcriber: one local executable, one path argument,
+// stdout is the note. A killed run did not finish, so it is not a note.
+async function runPdf(bin: string, pdfPath: string): Promise<string | null> {
+  let proc: ReturnType<typeof Bun.spawn>;
+  try {
+    proc = Bun.spawn([bin, pdfPath], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+  } catch {
+    return null;
+  }
+  const killer = setTimeout(() => { try { proc.kill(); } catch { /* already gone */ } }, PDF_MS);
+  const stdout = proc.stdout;
+  const textPromise = typeof stdout === "number"
+    ? Promise.resolve("")
+    : readCapped(stdout, MAX_BODY).catch(() => "");
+  const code = await proc.exited.catch(() => 1);
+  clearTimeout(killer);
+  const text = (await textPromise).replace(/\u0000/g, "").trim();
+  if (code !== 0) return null;
+  return text ? clip(text, MAX_BODY) : null;
+}
+
+function localPdfTitle(given: unknown, filePath: string): string {
+  const custom = typeof given === "string"
+    ? given.replace(/\u0000/g, "").replace(/\s+/g, " ").trim()
+    : "";
+  if (custom) return clip(custom, MAX_TITLE);
+  const base = basename(filePath);
+  const dot = base.lastIndexOf(".");
+  const stem = (dot > 0 ? base.slice(0, dot) : base).trim();
+  return clip(stem || "note", MAX_TITLE);
+}
+
+// MESH_PDF is a local executable the user already has. A remote value is not
+// downloaded. The note is written only after stdout is non-empty.
+async function ingestLocalPdf(pdf: unknown, title: unknown): Promise<Response> {
+  if (typeof pdf !== "string" || !pdf.trim()) return json({ error: "pdf required" }, 400);
+  const raw = pdf.trim();
+  if (refusesRemote(raw)) return json({ error: "pdf must be a local file" }, 400);
+  const filePath = resolve(raw);
+  const info = await stat(filePath).catch(() => null);
+  if (!info?.isFile()) return json({ error: "pdf must be a local file" }, 400);
+  if (info.size > MAX_PDF_BYTES) return json({ error: "pdf too large" }, 400);
+  const bin = (process.env.MESH_PDF ?? "").trim();
+  if (!bin || refusesRemote(bin)) return json({ error: "pdf must be a local executable" }, 400);
+  const binPath = resolve(bin);
+  const binInfo = await stat(binPath).catch(() => null);
+  if (!binInfo?.isFile() || (binInfo.mode & 0o111) === 0) {
+    return json({ error: "pdf must be a local executable" }, 400);
+  }
+  const body = await runPdf(binPath, filePath);
+  if (body === null) return json({ error: "pdf failed" }, 400);
+  const noteTitle = localPdfTitle(title, filePath);
+  const id = crypto.randomUUID();
+  const dir = knowledgeDir();
+  await ensureDir(dir);
+  const file = join(dir, `${id}.json`);
+  const note = {
+    id,
+    title: noteTitle,
+    body,
+    source: basename(filePath),
+    created: new Date().toISOString(),
+  };
+  await writeFile(file, `${JSON.stringify(note)}\n`, { mode: FILE_MODE });
+  await chmod(file, FILE_MODE);
+  await chmod(dir, DIR_MODE);
+  return json({ id, title: noteTitle }, 201);
+}
+
 async function ingestSpoken(audio: string): Promise<Response> {
   if (refusesRemote(audio)) return json({ error: "audio must be a local file" }, 400);
   const audioPath = resolve(audio.trim());
@@ -433,8 +516,15 @@ async function replaceNoteBody(id: string, req: Request): Promise<Response> {
 }
 
 async function ingest(req: Request): Promise<Response> {
-  const body = (await req.json().catch(() => null)) as { path?: unknown; speak?: unknown; audio?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as {
+    path?: unknown;
+    speak?: unknown;
+    audio?: unknown;
+    pdf?: unknown;
+    title?: unknown;
+  } | null;
   if (body && typeof body.audio === "string" && body.audio.trim()) return ingestSpoken(body.audio);
+  if (body && "pdf" in body) return ingestLocalPdf(body.pdf, body.title);
   if (!body || typeof body.path !== "string" || !body.path.trim()) return json({ error: "path required" }, 400);
   if (isRemote(body.path)) return json({ error: "path must be a local file" }, 400);
   const filePath = resolve(body.path);
