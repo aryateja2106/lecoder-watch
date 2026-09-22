@@ -20,6 +20,7 @@ import { handleDoctor, tokenWeakness, AGENT_CLIS } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
 import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount } from "./herdr";
+import { handlePtyUpgrade, ptyWebSocket } from "./pty";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
@@ -45,7 +46,7 @@ const VERSION = "0.8.0";
 // "handoff": POST /agents/<s>/handoff {to} writes HANDOFF.md from the conversation and
 // relaunches the pane under another CLI agent; GET /resumable?cwd= and
 // GET /agents/<s>/resumable list the conversations each CLI can reopen, with the command.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain", "captureAnsi"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain", "captureAnsi", "pty"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -1314,6 +1315,9 @@ Bun.serve({
     if (paired) return paired;
     if (!authed(req, server)) return json({ error: "unauthorized" }, 401);
     try {
+      // A terminal emulator's byte stream: the session attached in a pty over a WebSocket.
+      const pty = await handlePtyUpgrade(req, url, server, { mux: MUX, shq });
+      if (pty !== null) return pty;
       // Secrets seen in agent/terminal text — fingerprints and counts, never values.
       const exposures = await handleExposures(req, url);
       if (exposures) return exposures;
@@ -1499,6 +1503,7 @@ Bun.serve({
     }
     return json({ error: "not found" }, 404);
   },
+  websocket: ptyWebSocket({ mux: MUX, shq }),
 });
 // Exact-match redaction targets: this daemon's token, every peer token in hosts.json,
 // and the process's secret-shaped env. Values stay inside redact.ts; only hints leave.

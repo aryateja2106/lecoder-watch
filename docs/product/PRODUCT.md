@@ -126,7 +126,7 @@ string, and when a capability is missing they name the symptom the user sees
 `events` `newPane` `paneTarget` `usage` `agents` `cmux` `herdr` `tailscale` `kb`
 `screenPeek` `input` `files` `push` `pair` `doctor` `wake` `screenRegion` `openUrl`
 `power` `laPush` `sessionStatus` `paste` `captureJoin` `redact` `chat` `apps` `handoff` `brain`
-`captureAnsi`
+`captureAnsi` `pty`
 
 ### 5.2 Modules (`install/payload/meshd/`)
 
@@ -147,6 +147,7 @@ route line). That is the rule for adding anything.
 | `chat.ts` | **0.6** Transcript chat: talk to a running coding agent from the phone. |
 | `handoff.ts` | **0.6** Hand a session to a different agent CLI via `HANDOFF.md` in the working directory. |
 | `brain.ts` | **0.7** `GET /brain`: which local model server answers on this machine (edge0 :8001, mference :8080, ollama :11434, LM Studio :1234, or `MESHD_BRAIN_URL`), its model, and measured capabilities. Never starts or stops one. Ported from PR #119. |
+| `pty.ts` | **0.8** `GET /agents/:name/pty` (WebSocket): the session attached in a real pty (`Bun.Terminal`) sized to the client; binary frames are raw bytes both ways, text frames are `resize`/`ping`; output is redacted like every other path; closing detaches, never kills. The phone's native terminal streams from here; `/output` polling stays for the watch and older phones. |
 | `redact.ts` | **0.6** Every line leaving the machine is redacted; exposures are counted by fingerprint, never by value. |
 | `codex-state.ts` | Reads why Codex stopped and when its window resets. |
 | `cmux-bridge.ts` / `herdr.ts` | Multiplexer adapters. |

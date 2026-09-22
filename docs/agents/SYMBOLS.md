@@ -233,6 +233,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | handleHandoff | function | install/payload/meshd/handoff.ts:274 |
 | handleInput | function | install/payload/meshd/input.ts:471 |
 | handlePair | function | install/payload/meshd/pair.ts:93 |
+| handlePtyUpgrade | function | install/payload/meshd/pty.ts:41 |
 | handlePush | function | install/payload/meshd/push.ts:437 |
 | handoff | function | install/payload/meshd/handoff.ts:215 |
 | HANDOFF_TARGETS | export | install/payload/meshd/handoff.ts:29 |
@@ -449,6 +450,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | primaryIPv4 | function | install/payload/meshd/wol.ts:137 |
 | primaryMac | function | install/payload/meshd/wol.ts:121 |
 | ProcInfo | struct | Shared/Models.swift:263 |
+| PtyOpts | type | install/payload/meshd/pty.ts:22 |
+| ptyWebSocket | function | install/payload/meshd/pty.ts:61 |
 | pushAlert | function | install/payload/meshd/push.ts:280 |
 | PushDelegate | class | iOS/MeshRelayApp.swift:6 |
 | pushInstall | function | install/payload/meshd/push.ts:300 |
