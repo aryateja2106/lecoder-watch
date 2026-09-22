@@ -107,3 +107,18 @@ task inside a mesh session, posted Started/Completed events (the notify path), a
 3. Rotate the gateway key you pasted in chat (`vck_…`), then update `AI_GATEWAY_API_KEY` in `~/.config/secrets.env`.
 4. Watch: this morning's tap-through on the watch simulator was unreliable (taps landing late or on the wrong row); the Session-screen Continue gate and the new System list are built and reviewed, not tapped. A real wrist check takes a minute.
 5. The rest of the night's TODO above still stands (TestFlight, skill promotion, `/pair/new` default, CI wiring, installer share cleanup).
+
+## Morning, second pass (63487c0 →) — after Arya's second review
+
+| Ask | Done | Proof |
+|---|---|---|
+| Arrows + Enter into the agent from the phone and the watch; the trust prompt / permission list as something tappable | **Choose card** on the phone and **Choose section** on the watch: the menu is read off the pane (`AgentMenu`, fixtures from real captures), options are buttons, the highlighted one marked; a tap sends the cursor moves then Enter in order. Key strip gains Enter; watch gains ↑ ↓ Esc ⇧Tab and a prominent "Type or dictate" | `check-agent-menu.swift`; the trust prompt on the Pi answered from the phone's Choose card (claude then at its prompt in `~/trust-probe`); watch: build + parser check — sim taps still unreliable, wrist check needed |
+| Zoom inside the terminal, not around it | Terminal mode is a fixed-height viewport that scrolls both ways, never wraps, pinch inside the black box | on the sim |
+| Screen closes when the mouse moves right | The trackpad's pan refuses to run with the navigation edge-swipe and requires it to fail; edge drag to the right now moves the cursor | reproduced, then fixed, on the sim against the Pi |
+| Web console pointless; more fps | Web console row and the Remote tab removed; frames requested back-to-back (was a 350 ms nap per frame). Daemon ceiling unchanged (~135 ms/frame Mac, ~170 Jetson); phone rate not re-measured | — |
+| Screen control from Machines; preview of each machine | Every Machines row carries a live thumbnail (daemon-scaled 320 px, every 5 s while visible) that opens Screen & control; four tabs | on the sim: pi / Mac / jetson thumbnails live |
+| App icons; install indication | Icons from the machine's token-free app folder; the earlier Open/"on this iPhone" stays | on the sim |
+| Repeatable hook workflow for claude, fx, cursor-agent, agy, pi | `docs/agents/harnesses.md`: adapter matrix, 6-step onboarding, ranked gaps with files, prompt-detection spec. Closed today: Claude notification types (sign-in/quota no longer buzz), Stop bodies, cursor relabel + transcript slug (measured), agy Stop hook via `mesh hooks install`, fx sessions start in `ask` mode | dry-run probes in the commit; hooks installed on this Mac; fleet redeployed |
+| References + local models on every device | `references/reference-projects.md` (mobilecode, Apple-Watch-Edge-AI, flash-moe, Needle 2, fx, Edge0, Jev, Desert Ant) and `docs/adr-2026-09-22-on-device-brain.md` — Needle as the on-device tool caller over the app's own functions, Jev daemon-side, llama.cpp-on-watch as a recipe; first-slice done criteria and budgets. **Not built yet.** | docs |
+
+Not done, said plainly: configurable shortcuts/aliases fired from the watch (the Quick grid and Keyboard sheet exist; no alias editor); pi and cursor hook installers (spec'd in harnesses.md §C); fx/cursor/agy prompt regexes beyond what a captured pane proves; a real fps measurement of the new pump; the on-device brain itself.

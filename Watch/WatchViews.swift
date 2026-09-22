@@ -1110,11 +1110,13 @@ struct AgentLiveView: View {
                         .accessibilityLabel("Shift Tab, cycle mode")
                 }
                 .buttonStyle(.bordered)
+                // Dictate or scribble, read it back, fix a word, then send — the sheet holds
+                // the draft until you say so ("Send" types it, "Send ⏎" submits it).
                 Button { showReply = true } label: {
-                    Label("Reply", systemImage: "square.and.pencil")
+                    Label("Type or dictate", systemImage: "mic.badge.plus")
                         .frame(minHeight: WatchTouch.minHeight)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 // The one thing a wrist cannot produce for itself: a URL, a stack
                 // trace, a key. It is nearly always already on the phone in your
                 // pocket, so fetch it from there rather than asking anyone to scribble
