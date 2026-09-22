@@ -251,6 +251,9 @@ private struct MachinesTab: View {
             }
             .navigationTitle("Machines")
             .toolbar {
+                // The library of every app an agent built, across every machine.
+                NavigationLink { AppsLibraryView() } label: { Label("Apps", systemImage: "square.grid.2x2") }
+                    .disabled(store.machines.isEmpty)
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: store.polling ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                 }

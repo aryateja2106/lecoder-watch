@@ -221,6 +221,7 @@ through `LiveActivityController.swift`.
 | Terminal tab — `TerminalView.swift` | A live terminal over the bridge; the fallback block when the bridge is unavailable | Type | bridge `:7820` (token cookie, **0.6**) |
 | Remote tab — `RemoteScreenView.swift` | Screen, trackpad gestures, zoom to a region that arrives sharp | Tap / drag / zoom | `/screen.jpg`, `screenRegion`, `Shared/ScreenZoom.swift` |
 | Files — `FileBrowserView.swift` | Browse and open files on a machine | Open | `/files` |
+| Apps library — `AppsLibraryView.swift` | Every app an agent built, across every paired machine, grouped by name, newest first; "Less Search. More Agents." as the header line | Open (web) / Install (native, wireless or via the machine) | `/built-apps` on each machine; the Machines tab's grid button |
 | Exposed secrets — `ExposedSecretsScreen.swift` | **0.6** What the daemon redacted, by kind and fingerprint; mark rotated | Mark rotated | `/exposures` |
 | Mesh Apps | Apps published or added on a machine; install one on this phone, with or without a cable | Install | `/apps` |
 | Voice — `VoiceInput.swift`, `VoiceTranscriber.swift` | One sheet: live editable transcript, Stop/Resume, Send; recordings kept (last five) with *Transcribe again* (**0.6**) | Send | Speech framework, `Shared/VoiceSegments.swift` |

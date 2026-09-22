@@ -8,6 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are
 each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
+- **An Apps library.** The grid button on Machines lists every app an agent built for you, across every machine — grouped by name so the same app built three ways reads as one app with three builds — with the same Open / Install actions as before.
 - Every agent can search and remember shared notes with `mesh kb` and the `/search` and `/remember` skill commands; searches reach online machines across the mesh.
 - Renamed to LeSearch AI everywhere a person reads it (bundle ids, targets and the meshwatch:// scheme stay); apps now report 0.6.0 like the daemon.
 - **Watch commands relayed through the iPhone now arrive.** Screen peek, new session, kill, split, remote-control keys and volume sent while the watch

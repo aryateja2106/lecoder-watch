@@ -100,7 +100,7 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `tailscale` | — (nothing gates it) | no |
 | `kb` | — (nothing gates it) | no |
 | `screenPeek` | RemoteScreenView.swift:109 | no |
-| `input` | WatchViews.swift:323, WatchViews.swift:821, ContentView.swift:1520, ContentView.swift:1521 | no |
+| `input` | WatchViews.swift:323, WatchViews.swift:821, ContentView.swift:1523, ContentView.swift:1524 | no |
 | `files` | — (nothing gates it) | no |
 | `push` | — (nothing gates it) | no |
 | `pair` | — (nothing gates it) | no |
@@ -108,13 +108,13 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `wake` | MeshStore.swift:892 | no |
 | `screenRegion` | MeshClient.swift:219, RemoteView.swift:322, RemoteScreenView.swift:110 | yes |
 | `openUrl` | MeshClient.swift:526 | yes |
-| `power` | MeshClient.swift:509, ContentView.swift:572 | yes |
+| `power` | MeshClient.swift:509, ContentView.swift:575 | yes |
 | `laPush` | MeshClient.swift:544 | yes |
 | `sessionStatus` | — (nothing gates it) | yes |
 | `paste` | MeshClient.swift:300, RemoteScreenView.swift:111 | yes |
 | `captureJoin` | MeshClient.swift:280, WatchMeshStore.swift:544 | yes |
 | `redact` | ExposedSecretsScreen.swift:43, ExposedSecretsScreen.swift:84 | no |
-| `chat` | TerminalView.swift:1212 | no |
+| `chat` | TerminalView.swift:1162 | no |
 | `apps` | TerminalView.swift:113 | no |
 | `handoff` | MeshClient.swift:565, MeshClient.swift:574, MeshClient.swift:586 | no |
 | `brain` | — (nothing gates it) | no |
