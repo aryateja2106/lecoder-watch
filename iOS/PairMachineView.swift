@@ -320,6 +320,8 @@ struct NoMachinesView: View {
         } actions: {
             Button("Pair a machine", action: pair)
                 .buttonStyle(.borderedProminent)
+            NavigationLink("How it all fits together") { GuidesView() }
+                .buttonStyle(.bordered)
         }
     }
 }

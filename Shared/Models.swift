@@ -1170,6 +1170,12 @@ struct MeshApp: Codable, Hashable, Identifiable {
     /// wireless install works from this machine (`mesh apps ota --enable`). Absent means
     /// the only route is the machine's own devicectl push (cable or same Wi-Fi).
     var install: String?
+    /// Where a build runs — iphone, ipad, watch, mac, vision, web — as the daemon read it off
+    /// the bundle. Absent on an older daemon or a build it could not open.
+    var platforms: [String]?
+    /// The app's own URL scheme when it declares one: the phone can launch it, and a
+    /// successful launch is the only proof iOS gives that the app is installed here.
+    var scheme: String?
     var updated: String
 }
 

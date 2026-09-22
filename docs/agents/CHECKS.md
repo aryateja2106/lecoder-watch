@@ -15,6 +15,7 @@
 | `check-approve-path.sh` | the phone's Approve reaches the agent: /agents rows carry the agent's own sessionId (the id-first match in… |
 | `check-apps-ota.sh` | Wireless (OTA) install self-check: `mesh apps add --app` on a device build packages a valid .ipa… |
 | `check-apps-serve.sh` | apps.ts self-check: a registered web app is served token-free at /a/<slug>-<key>/ with the right content… |
+| `check-attention-hostname.swift` | an event from a machine the phone adopted under another name ("pi" from a fleet file, "arya-pi" from its own… |
 | `check-brain.sh` | every machine has a local model that answers with a tool call, and meshd knows it |
 | `check-brand.sh` | the product reads "LeSearch AI" everywhere a person sees it, and the identifiers Apple, the Keychain, the App… |
 | `check-bridge-auth.sh` | rmux-bridge auth self-check. The bridge can type into any tmux/rmux session, and until 0.6 it answered anyone… |

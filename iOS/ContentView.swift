@@ -81,8 +81,13 @@ private struct AppsTab: View {
         NavigationStack {
             Group {
                 if store.machines.isEmpty {
-                    ContentUnavailableView("No machines yet", systemImage: "square.grid.2x2",
-                                           description: Text("Pair a machine on the Machines tab. Every app an agent builds there shows up here."))
+                    ContentUnavailableView {
+                        Label("No machines yet", systemImage: "square.grid.2x2")
+                    } description: {
+                        Text("Pair a machine on the Machines tab. Every app an agent builds there shows up here.")
+                    } actions: {
+                        NavigationLink("Guides") { GuidesView() }.buttonStyle(.bordered)
+                    }
                 } else {
                     AppsLibraryView()
                 }
@@ -1304,6 +1309,9 @@ private struct SettingsTab: View {
             List {
                 Section("App") {
                     buildRow
+                    NavigationLink { GuidesView() } label: {
+                        Label("Guides — pairing, Developer Mode, permissions", systemImage: "book")
+                    }
                 }
                 Section("Machines") {
                     ForEach($store.machines) { $m in

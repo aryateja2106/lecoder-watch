@@ -280,9 +280,11 @@ private struct MeshAppsScreen: View {
         }
     }
 
-    private func install(_ app: MeshApp) async {
+    private func install(_ app: MeshApp) async -> Bool {
         installMessage = nil
-        installMessage = await MeshAppRow.install(app, on: machine, via: store)
+        let result = await MeshAppRow.install(app, on: machine, via: store)
+        installMessage = result.message
+        return result.ok
     }
 }
 

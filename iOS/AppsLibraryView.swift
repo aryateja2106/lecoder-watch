@@ -96,8 +96,10 @@ struct AppsLibraryView: View {
         unreachable = down.sorted()
     }
 
-    private func install(_ entry: Entry) async {
-        installMessage = await MeshAppRow.install(entry.app, on: entry.machine, via: store)
+    private func install(_ entry: Entry) async -> Bool {
+        let result = await MeshAppRow.install(entry.app, on: entry.machine, via: store)
+        installMessage = result.message
+        return result.ok
     }
 }
 
@@ -106,26 +108,84 @@ struct MeshAppRow: View {
     let app: MeshApp
     let host: String
     var showHost: Bool = false
-    let install: () async -> Void
+    /// Runs the install and says whether it took; only then is the app remembered as here.
+    let install: () async -> Bool
+    /// Slugs this phone has launched or installed — the only record iOS lets an app keep
+    /// of what else is on the device. Comma-joined because @AppStorage stores strings.
+    @AppStorage("installedAppSlugs") private var installedSlugs = ""
+    @State private var openFailed = false
+
+    private var installedHere: Bool { installedSlugs.split(separator: ",").contains(Substring(app.slug)) }
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: app.kind == "native" ? "iphone.badge.play" : "globe")
                 .foregroundStyle(app.kind == "native" ? Color.blue : Color.green)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(app.name).font(.headline)
                 Text([kindLabel, showHost ? host : nil, updatedLabel].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    // Which devices this build is for — the glance that sends someone to the
+                    // right one. Nothing is drawn when the daemon could not read the bundle.
+                    ForEach(app.platforms ?? [], id: \.self) { platform in
+                        Image(systemName: Self.symbol(for: platform))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(platform)
+                    }
+                    if installedHere {
+                        Label("on this iPhone", systemImage: "checkmark.circle.fill")
+                            .font(.caption2).foregroundStyle(.green)
+                    } else if openFailed {
+                        Text("not installed here").font(.caption2).foregroundStyle(.orange)
+                    }
+                }
             }
             Spacer()
             if app.kind == "native" {
-                Button("Install") { Task { await install() } }
+                if let scheme = app.scheme, installedHere {
+                    Button("Open") { launch(scheme) }
+                        .buttonStyle(.borderedProminent).controlSize(.small)
+                } else {
+                    Button(app.scheme != nil && !openFailed ? "Open" : "Install") {
+                        if let scheme = app.scheme, !openFailed { launch(scheme) }
+                        else { Task { if await install() { markInstalled() } } }
+                    }
                     .buttonStyle(.bordered).controlSize(.small)
+                }
             } else {
                 Button("Open") { Self.open(app) }
                     .buttonStyle(.bordered).controlSize(.small)
             }
+        }
+    }
+
+    /// Launch by the app's own scheme. iOS answers false when nothing owns it — that is
+    /// "not installed here", and the button becomes Install.
+    private func launch(_ scheme: String) {
+        guard let url = URL(string: "\(scheme)://") else { return }
+        UIApplication.shared.open(url) { ok in
+            if ok { markInstalled() } else { openFailed = true }
+        }
+    }
+
+    private func markInstalled() {
+        guard !installedHere else { return }
+        installedSlugs = (installedSlugs.split(separator: ",").map(String.init) + [app.slug]).joined(separator: ",")
+        openFailed = false
+    }
+
+    static func symbol(for platform: String) -> String {
+        switch platform {
+        case "iphone": "iphone"
+        case "ipad": "ipad"
+        case "watch": "applewatch"
+        case "mac": "macbook"
+        case "vision": "visionpro"
+        case "web": "globe"
+        default: "questionmark.square"
         }
     }
 
@@ -149,16 +209,16 @@ struct MeshAppRow: View {
     /// Wireless when the machine serves an .ipa over HTTPS (`install` is the itms-services
     /// URL iOS handles itself); otherwise the machine's own devicectl push, which needs the
     /// phone paired and reachable from it. Returns the one line to show the user.
-    static func install(_ app: MeshApp, on machine: Machine, via store: MeshStore) async -> String {
+    static func install(_ app: MeshApp, on machine: Machine, via store: MeshStore) async -> (ok: Bool, message: String) {
         if let raw = app.install, let url = URL(string: raw) {
             let opened = await UIApplication.shared.open(url)
-            return opened ? "iOS is asking to install \(app.name)." : "Couldn't open the installer link."
+            return (opened, opened ? "iOS is asking to install \(app.name)." : "Couldn't open the installer link.")
         }
         do {
             let result = try await store.client(for: machine).installMeshApp(slug: app.slug, target: "device")
-            return result.ok ? "\(app.name) installed." : (result.error ?? "Install failed.")
+            return (result.ok, result.ok ? "\(app.name) installed." : (result.error ?? "Install failed."))
         } catch {
-            return "Couldn't reach \(machine.host) to install."
+            return (false, "Couldn't reach \(machine.host) to install.")
         }
     }
 }
