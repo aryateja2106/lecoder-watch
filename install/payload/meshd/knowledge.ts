@@ -5,7 +5,13 @@
 //   POST /knowledge      { path, speak? } | { audio }       -> { id, title, spoken }
 //   POST /knowledge/:id  { body } | { audio, speak? }       -> { id, title, body, spoken? }
 //   GET  /knowledge                                     -> { notes: [{ id, title }] }
+//   GET  /knowledge?q=text                              -> { id, title } for a title or body match
 //   GET  /knowledge/:id                                 -> { id, title, body }
+//
+// q is local text, matched without case. A remote URL, a scheme, a
+// protocol-relative value, or any string containing :// is refused and is
+// not opened. The list stays titles only either way. No match is an empty
+// list. A missing or empty q returns every note.
 //
 // Posting an existing id replaces that one note's body. A missing id does
 // not create a note. A remote URL, a scheme, or a protocol-relative path
@@ -185,7 +191,7 @@ export async function readNote(id: string): Promise<{ id: string; title: string;
   }
 }
 
-export async function listNotes(): Promise<NoteSummary[]> {
+export async function listNotes(needle = ""): Promise<NoteSummary[]> {
   let names: string[];
   try { names = await readdir(knowledgeDir()); } catch { return []; }
   const notes: NoteSummary[] = [];
@@ -193,9 +199,15 @@ export async function listNotes(): Promise<NoteSummary[]> {
     if (!name.endsWith(".json")) continue;
     try {
       const raw = JSON.parse(await readFile(join(knowledgeDir(), name), "utf8"));
-      if (typeof raw?.id === "string" && typeof raw?.title === "string") {
-        notes.push({ id: raw.id, title: raw.title });
+      if (typeof raw?.id !== "string" || typeof raw?.title !== "string") continue;
+      const body = typeof raw.body === "string" ? raw.body : "";
+      if (needle) {
+        const titleHit = raw.title.toLowerCase().includes(needle);
+        const bodyHit = body.toLowerCase().includes(needle);
+        if (!titleHit && !bodyHit) continue;
       }
+      // The body can select a note. It is not part of the list.
+      notes.push({ id: raw.id, title: raw.title });
     } catch { /* a torn write is not a note */ }
   }
   notes.sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
@@ -212,6 +224,16 @@ function isRemote(path: string): boolean {
 function refusesRemote(value: string): boolean {
   const text = value.trim();
   return isRemote(text) || text.startsWith("//") || text.includes("://");
+}
+
+// A search is text, not an address. null means the query is refused.
+// An empty string means there is nothing to filter.
+function titleNeedle(raw: string | null): string | null {
+  if (raw === null) return "";
+  const text = raw.trim();
+  if (!text) return "";
+  if (refusesRemote(text) || /^[a-z][a-z0-9+.-]*:/i.test(text)) return null;
+  return text.toLowerCase();
 }
 
 async function readCapped(stream: ReadableStream<Uint8Array<ArrayBuffer>>, max: number): Promise<string> {
@@ -460,7 +482,11 @@ export async function handleKnowledge(req: Request, url: URL): Promise<Response 
     return json({ error: "method not allowed" }, 405);
   }
   if (url.pathname !== "/knowledge") return null;
-  if (req.method === "GET") return json({ notes: await listNotes() });
+  if (req.method === "GET") {
+    const needle = titleNeedle(url.searchParams.get("q"));
+    if (needle === null) return json({ error: "query must be local text" }, 400);
+    return json({ notes: await listNotes(needle) });
+  }
   if (req.method === "POST") return ingest(req);
   return json({ error: "method not allowed" }, 405);
 }
