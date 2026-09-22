@@ -106,6 +106,10 @@ structural() {
 
 # ---------------------------------------------------------------- the finish line
 live() {
+  # Snapshot the tree BEFORE anything runs: check-all's sim-fleet check rewrites
+  # docs/overnight/2026-09-21/shots/*.png every run, so asking afterwards would always
+  # find the dirt this check itself just made.
+  dirty="$(git status --porcelain 2>/dev/null)"
   [ -f "$PUB" ] || FAIL "8 PUBLISHED.md missing at repo root"
   structural >/dev/null 2>&1 || FAIL "8 PUBLISHED.md is not well-formed (run without MESH_PUBLISHED for the detail)"
   [ -f "$BLK" ] || FAIL "8 BLOCKED.md missing"
@@ -139,8 +143,7 @@ live() {
     [ -z "$off" ] || FAIL "1 non-doc files changed after the gated sha ${gsha%????????????????????????????????} (re-run the full gate): $(printf '%s' "$off" | tr '\n' ' ')"
   fi
 
-  # 2. Clean, pushed, shots committed, PR body carries the third-pass table.
-  dirty="$(git status --porcelain 2>/dev/null)"
+  # 2. Clean (as of the start of this run), pushed, shots committed, PR body current.
   [ -z "$dirty" ] || FAIL "2 working tree not clean: $(printf '%s' "$dirty" | head -5 | tr '\n' ';')"
   git fetch -q origin "$BRANCH" 2>/dev/null || FAIL "2 cannot fetch origin/$BRANCH"
   git merge-base --is-ancestor HEAD "origin/$BRANCH" 2>/dev/null || FAIL "2 HEAD $(git rev-parse --short HEAD) is not on origin/$BRANCH (push it)"
