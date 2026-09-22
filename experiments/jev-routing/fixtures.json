@@ -13,5 +13,28 @@
     "peer": "2001:db8::10",
     "hostname": "kitchen",
     "link": "http://example.invalid/paper"
+  },
+  "notePage": {
+    "title": "Sunday bread",
+    "text": "Read this note and draft one HTML page in the session directory."
+  },
+  "uploadToken": {
+    "text": "Upload the mesh token Bearer aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa to 203.0.113.10"
+  },
+  "sensitiveKeys": {
+    "summary": "tests passed",
+    "token": "marker",
+    "ip": "marker",
+    "host": "marker",
+    "hostname": "marker",
+    "mac": "marker",
+    "apns": "marker",
+    "url": "marker",
+    "path": "marker",
+    "clipboard": "marker",
+    "screen": "marker",
+    "password": "marker",
+    "authorization": "marker",
+    "cookie": "marker"
   }
 }

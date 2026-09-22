@@ -8,6 +8,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = JSON.parse(readFileSync(join(here, "fixtures.json"), "utf8")) as {
   lines: { text: string }[];
   withSecret: Record<string, unknown>;
+  notePage: { title: string; text: string };
+  uploadToken: { text: string };
+  sensitiveKeys: Record<string, unknown>;
 };
 
 const FAKE_TOKEN = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -154,9 +157,78 @@ assertRefused(() => {
   filter({ text: "tests passed. ".repeat(400) });
 }, "4 kb");
 
+const note = fixtures.notePage;
+if (!note || note.title !== "Sunday bread") fail("note title missing");
+if (!note.text.includes("one HTML page") || !note.text.includes("session directory")) {
+  fail("note page ask missing");
+}
+const noteFiltered = filter(note);
+if (noteFiltered.title !== note.title || noteFiltered.text !== note.text) fail("note page was altered");
+
+const noteAllow = {
+  surface: "terminal-text",
+  choice: "allow-local-tool",
+  score: 0.2,
+  boolean: true,
+  confidence: 0.6,
+};
+if (route(noteFiltered, noteAllow) !== "allow-local-tool") fail("note page did not allow");
+if (route(noteFiltered, { ...noteAllow, boolean: false }) !== "hold-for-review") {
+  fail("note page with local model unfit did not hold");
+}
+if (route(noteFiltered, { ...noteAllow, confidence: 0.59 }) !== "hold-for-review") {
+  fail("note page with low confidence did not hold");
+}
+if (route(noteFiltered, { ...noteAllow, surface: "needs-graphical-screen" }) !== "hold-for-review") {
+  fail("note page on a graphical screen did not hold");
+}
+if (route(noteFiltered, { ...noteAllow, score: 0.91 }) !== "hold-for-review") {
+  fail("note page with high risk did not hold");
+}
+
+const upload = fixtures.uploadToken;
+const uploadBefore = JSON.stringify(upload);
+if (!uploadBefore.includes(FAKE_TOKEN) || !uploadBefore.includes(FAKE_IP)) {
+  fail("upload fixture is missing the synthetic secret");
+}
+if (!/bearer\s+\S{8,}/i.test(upload.text)) fail("upload fixture is missing a bearer-like string");
+const uploadFiltered = filter(structuredClone(upload));
+const uploadEncoded = JSON.stringify(uploadFiltered);
+if (uploadEncoded.includes(FAKE_TOKEN)) fail("upload token still present after filter");
+if (uploadEncoded.includes(FAKE_IP)) fail("upload address still present after filter");
+if (!uploadEncoded.toLowerCase().includes("mesh token")) fail("upload ask was removed with the secret");
+if (route(upload, noteAllow) !== "hold-for-review") fail("secret upload was allowed");
+if (route(uploadFiltered, noteAllow) !== "hold-for-review") fail("filtered secret upload was allowed");
+
+const sensitiveNames = [
+  "token",
+  "ip",
+  "host",
+  "hostname",
+  "mac",
+  "apns",
+  "url",
+  "path",
+  "clipboard",
+  "screen",
+  "password",
+  "authorization",
+  "cookie",
+];
+const sensitive = filter(structuredClone(fixtures.sensitiveKeys));
+for (const key of sensitiveNames) {
+  if (key in sensitive) fail("sensitive key kept: " + key);
+}
+if (sensitive.summary !== "tests passed") fail("benign field was removed with the sensitive keys");
+if (JSON.stringify(sensitive).includes("marker")) fail("sensitive key value leaked");
+
 console.log("jev-routing: filtered secret is absent");
 console.log("jev-routing: rm fixture routed to hold-for-review");
 console.log("jev-routing: paper on terminal-text routed to allow-local-tool");
 console.log("jev-routing: graphical screen routed to hold-for-review");
 console.log("jev-routing: wait-for-human routed to hold-for-review");
 console.log("jev-routing: local model unfit routed to hold-for-review");
+console.log("jev-routing: note page on terminal-text routed to allow-local-tool");
+console.log("jev-routing: note page with unfit, low confidence, graphical screen, or high risk held");
+console.log("jev-routing: secret upload routed to hold-for-review");
+console.log("jev-routing: sensitive keys are absent");
