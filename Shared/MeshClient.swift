@@ -282,7 +282,8 @@ struct MeshClient {
         if query.isEmpty {
             path = "/knowledge"
         } else {
-            let enc = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
+            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+            let enc = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
             path = "/knowledge?q=\(enc)"
         }
         let data = try await request(path, method: "GET")
