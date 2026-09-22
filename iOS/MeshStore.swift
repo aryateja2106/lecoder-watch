@@ -33,6 +33,8 @@ final class MeshStore: ObservableObject {
     @Published var lastError: StoreError?
     /// The knowledge note this phone is asking. Empty until the user names one.
     @Published var currentKnowledgeNote = ""
+    /// Titles from the reachable machine. Empty until they load.
+    @Published var knowledgeNotes: [KnowledgeNoteSummary] = []
     /// The last ask's draft, or a short status when the daemon held it.
     @Published var knowledgeAskLine: String?
     @Published var polling = false
@@ -692,6 +694,24 @@ final class MeshStore: ObservableObject {
         }
         await refresh()
         return failure
+    }
+
+    /// Load titles for a reachable machine. A tap later copies one into the note field.
+    func loadKnowledgeNotes(host: String) {
+        knowledgeNotes = []
+        guard let machine = machineMatching(host, in: machines),
+              let snap = snapshot?.machines.first(where: { $0.host == machine.host }),
+              snap.reachable, snap.authError == nil else {
+            return
+        }
+        let c = client(for: machine)
+        Task {
+            do {
+                knowledgeNotes = try await c.listKnowledgeNotes()
+            } catch {
+                knowledgeNotes = []
+            }
+        }
     }
 
     /// Ask the current knowledge note. Nothing is posted until the user confirms.
