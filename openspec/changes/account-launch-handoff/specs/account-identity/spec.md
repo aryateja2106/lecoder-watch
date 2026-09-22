@@ -43,13 +43,14 @@ Installing the daemon and pairing a phone with the 8-character code SHALL work w
 
 ### Requirement: The website does not render machine IPs
 
-The website SHALL NOT render a machine IP, hostname, port, or tailnet address, including for the signed-in owner. A device row on the website shows a label. The empty state says pairing still happens on the machine.
+The website SHALL NOT render a machine IP, hostname, port, or tailnet address, including for the signed-in owner. A device row on the website shows a label and a platform, and nothing else. The empty state is "Pairing still happens on the machine. This page lists labels only." Pull request 177 is that page. `account.js` was not edited there. Do not rebuild it.
 
 #### Scenario: Devices are listed for the signed-in owner
 
 - **WHEN** a signed-in person opens the website devices view
-- **THEN** each row shows the user-typed label
+- **THEN** each row shows the user-typed label and the platform
 - **AND** the page shows no IP address
+- **AND** the empty state, before any device, is "Pairing still happens on the machine. This page lists labels only."
 
 #### Scenario: A bad client uploaded an address
 
@@ -59,12 +60,13 @@ The website SHALL NOT render a machine IP, hostname, port, or tailnet address, i
 
 ### Requirement: Password reset does not grant mailbox plaintext
 
-Resetting a password SHALL set a new password and SHALL NOT grant mailbox plaintext. The reset flow MUST NOT read or write devices or the mailbox.
+Resetting a password SHALL set a new password and SHALL NOT grant mailbox plaintext. The reset flow MUST NOT read or write devices or the mailbox. Pull request 172 is that proof. The old password does not sign in. Do not rebuild it.
 
 #### Scenario: A person sets a new password
 
 - **WHEN** a person completes password reset from the recovery email
 - **THEN** the next sign-in uses the new password
+- **AND** the old password does not sign in
 - **AND** mailbox ciphertext stays sealed
 - **AND** the reset response contains no device secret and no mailbox plaintext
 
