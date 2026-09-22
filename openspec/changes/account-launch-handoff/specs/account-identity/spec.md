@@ -47,6 +47,31 @@ When email confirmation is required before the first sign-in, sign-up SHALL retu
 - **THEN** that selection is refused
 - **AND** the first user's profile stays tied to the first auth user
 
+### Requirement: The confirmation message omits sealed material
+
+The local confirmation message, the sign-up response, and the confirmation redirect SHALL omit mailbox ciphertext, the device public key, and a mesh-token sentinel. Sign-in SHALL write `{id, username}`. A second signed-in user MUST NOT select the first user's profile, device, or mailbox. The owner reads ciphertext from the database. Pull request 184 (https://github.com/aryateja2106/lecoder-watch/pull/184) is that proof. It adds only `experiments/local-auth/prove-confirm-mail.sh`. `account.js` and `001_identity.sql` were not edited. Identity SQL sha256 stays `cd47695328f67abb077b62e48b670ed7cf78d6f4a916348958229d1862445253`. The stack run is on the draft. Do not rebuild it. This proof is not the hosted Supabase project.
+
+#### Scenario: Confirmation surfaces are rendered
+
+- **WHEN** local auth sends the confirmation message, returns the sign-up response, and redirects after confirmation
+- **THEN** those three surfaces omit mailbox ciphertext, the device public key, and a mesh-token sentinel
+
+#### Scenario: Sign-in writes the profile
+
+- **WHEN** the person signs in after confirmation
+- **THEN** the profile write is `{id, username}`
+
+#### Scenario: Another user tries to select the first user's rows
+
+- **WHEN** a second signed-in user attempts to select the first user's profile, device, or mailbox
+- **THEN** that selection is refused
+
+#### Scenario: The owner reads the mailbox
+
+- **WHEN** the owner reads the mailbox ciphertext
+- **THEN** the ciphertext comes from the database
+- **AND** it is not taken from the confirmation message
+
 ### Requirement: Install and pairing work logged out
 
 Installing the daemon and pairing a phone with the 8-character code SHALL work when nobody is signed in. An account MUST NOT be required to install. Until a later native change lands, signing in on the website SHALL NOT move a mesh token, a tailnet address, or a host list onto a second device.
