@@ -34,8 +34,20 @@ every 10 min) using the Mac's own `gh` login, which is broader than issues-only.
 fine-grained PAT on LeSearch-AI/mesh with Issues: read/write, `supabase secrets set
 GITHUB_ISSUES_TOKEN=…`, and the same script can move into an edge function on a cron.
 
-## Which files may go to the public LeSearch-AI/mesh repo
-The public repo is a curated snapshot at 0.4.x; the landing's Changelog / Roadmap / issues
-links point at it. Publishing 0.8.0 there means choosing what of this tree is public
-(docs/overnight, docs/factory/runs, references/ and memory notes are not). Decide the file
-list; the push itself is a branch, never a force-push.
+## Repo consolidation under LeSearch-AI — confirm the archive list and the transfer
+Today the source of truth is `aryateja2106/lecoder-watch` (public, this branch), while the
+landing links point at `LeSearch-AI/mesh` (a curated 0.4.x snapshot, 2026-08-21) and the
+installer at `LeSearch-AI/mesh-install` (kept: the install.sh URL contract). Proposed final
+layout, recorded in PUBLISHED.md; nothing below was done unattended:
+
+1. Transfer `aryateja2106/lecoder-watch` into the LeSearch-AI org (GitHub transfer keeps
+   history and redirects the old URL; reversible) and make it the monorepo home — then
+   either rename it `mesh` after archiving the snapshot, or keep both names with the
+   snapshot archived. Your call.
+2. Archive (reversible, never delete): `LeSearch-AI/meshwatch` (private clean-slate
+   from 2026-06-17, superseded), `LeSearch-AI/lesearch` (Rust control-plane spike,
+   2026-04), `LeSearch-AI/lesearch-protocol` (spec superseded by docs/agents/CONTRACTS.md),
+   `LeSearch-AI/lesearch-factory` (superseded by the in-repo factory),
+   `aryateja2106/lecoder-mconnect` (the old CLI the lesearch.ai waitlist page linked).
+3. Keep: `LeSearch-AI/mesh-install`, `LeSearch-AI/.github`.
+Reply with the list you approve and the archives get applied in one pass.
