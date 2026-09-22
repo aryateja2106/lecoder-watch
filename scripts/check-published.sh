@@ -138,12 +138,17 @@ live() {
     echo "note: check-published: check-all.sh skipped by MESH_PUBLISHED_CHECKALL=0 (dev iteration only — the Stop hook never sets it)"
   else
     CA="/tmp/check-published-check-all.$$.log"
-    if MESH_PUBLISHED_INNER=1 sh "$ROOT/scripts/check-all.sh" >"$CA" 2>&1 && ! grep -Eq '^FAIL' "$CA"; then
+    # Send the simulator captures somewhere else for this run. check-all reaches
+    # check-overnight, whose sim-fleet check rewrites the four committed PNGs under
+    # docs/overnight/2026-09-21/shots — so verifying "the tree is clean" would leave the
+    # tree dirty, every time, for the next run to trip over.
+    SHOTS_TMP="$(mktemp -d)"
+    if MESH_PUBLISHED_INNER=1 MESH_SHOTS_DIR="$SHOTS_TMP" sh "$ROOT/scripts/check-all.sh" >"$CA" 2>&1 && ! grep -Eq '^FAIL' "$CA"; then
       ok "1 check-all.sh: $(tail -1 "$CA")"
     else
       FAIL "1 check-all.sh red: $(grep -E '^FAIL' "$CA" | head -5 | tr '\n' ';')"
     fi
-    rm -f "$CA"
+    rm -f "$CA"; rm -rf "$SHOTS_TMP"
   fi
 
   # 1b. The gate line must describe THIS tree: only documentation may land after the sha
