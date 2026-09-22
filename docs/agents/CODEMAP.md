@@ -24,7 +24,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `install/payload/bin/` | 9 | ~3,500 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
-| `web/` | 4 | ~1,800 | Landing page (mesh.lesearch.ai) and the privacy page |
+| `web/` | 4 | ~1,300 | Landing page (mesh.lesearch.ai) and the privacy page |
 | `scripts/` | 118 | ~11,400 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
@@ -183,5 +183,5 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 |---|---|---|---|
 | `brand/index.html` | L | — | — |
 | `getting-started.html` | S | — | check-web-docs |
-| `index.html` | L | — | check-brand, check-web-docs |
+| `index.html` | M | — | check-brand, check-web-docs |
 | `privacy.html` | M | — | check-web-docs |

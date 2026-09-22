@@ -18,39 +18,49 @@ surfaces. The web landing page is the one place real CSS custom-property tokens 
 
 ### Web (`web/index.html`) — the one real token system
 
-Defined once, in the `:root` block, `web/index.html:22-30`:
+Defined once, in the `:root` block, `web/index.html:20-27`. The landing page was
+relaunched on 2026-09-22 (watch-first, four sections, 432 words); the palette went
+darker and gained a single accent, and the type moved from all-mono to a system sans
+for reading with mono kept for anything that is a fact — kickers, captions, the
+install line, code.
 
 | Token | Value | Defined at |
 | --- | --- | --- |
-| `--bg` | `#191919` | web/index.html:23 |
-| `--bg-2` | `#202020` | web/index.html:23 |
-| `--panel` | `#1f1f1f` | web/index.html:23 |
-| `--elev` | `#252525` | web/index.html:23 |
-| `--hover` | `#2a2a2a` | web/index.html:23 |
-| `--line` | `#2a2a2a` | web/index.html:24 |
-| `--line-2` | `#373737` | web/index.html:24 |
-| `--line-h` | `#525252` | web/index.html:24 |
-| `--ink` | `#e9e9e7` | web/index.html:25 |
-| `--ink-2` | `#9b9b9b` | web/index.html:25 |
-| `--ink-3` | `#6b6b6b` | web/index.html:25 |
-| `--ok` | `#4ade80` | web/index.html:26 |
-| `--danger` | `#ef4444` | web/index.html:26 |
-| `--mono` | `'JetBrains Mono','Fira Code','SF Mono',SFMono-Regular,Menlo,Consolas,monospace` | web/index.html:27 |
-| `--radius` | `8px` | web/index.html:28 |
-| `--wrap` | `1040px` | web/index.html:28 |
+| `--bg` | `#0c0c0d` | web/index.html:21 |
+| `--panel` | `#141416` | web/index.html:21 |
+| `--elev` | `#1a1a1d` | web/index.html:21 |
+| `--line` | `#232327` | web/index.html:21 |
+| `--line-2` | `#2f2f35` | web/index.html:21 |
+| `--ink` | `#f2f2f0` | web/index.html:22 |
+| `--ink-2` | `#a4a4a0` | web/index.html:22 |
+| `--ink-3` | `#6e6e72` | web/index.html:22 |
+| `--accent` | `#ff7a1a` | web/index.html:23 |
+| `--ok` | `#4ade80` | web/index.html:23 |
+| `--sans` | `-apple-system,BlinkMacSystemFont,'Inter','SF Pro Display',system-ui,sans-serif` | web/index.html:24 |
+| `--mono` | `'JetBrains Mono','SF Mono',SFMono-Regular,Menlo,Consolas,monospace` | web/index.html:25 |
+| `--wrap` | `1060px` | web/index.html:26 |
+| `--radius` | `14px` | web/index.html:26 |
 
-Body copy: `font-size:15.5px; line-height:1.65` (web/index.html:34-35). The header
-comment names the rule directly: "Accent color is reserved for actions: green =
-affirmative, red = destructive" (web/index.html:20-21) — `--ok` and `--danger` are the
-only two colors with meaning; everything else is grayscale.
+Rules the page keeps: `--accent` is the only colour that is not greyscale, and it is
+reserved for the one action a reader can take (both CTAs, the section kickers, the `$`
+of the install line); `--ok` appears once, as the green dot that says the version is
+live. Body copy is `font-size:17px; line-height:1.6` in `--sans`; every heading is
+sentence case; captions and kickers are `--mono` at 12px. Each media element declares
+its own `aspect-ratio` so the page does not reflow while a clip loads, and the three
+device frames are the only rounded-rectangle shapes on the page (52px on the watch,
+30px on the phone, 12px on a wide screen capture).
 
-`web/privacy.html:16-23` defines the **identical** token block (same names, same
-values, `--wrap:720px` instead of `1040px` — it is a prose page). `web/brand/index.html`
-defines a parallel, prefixed set (`--lw-bg`, `--lw-ink`, …) at `web/brand/index.html:13-31`,
-light by default with a dark override under `:root:not([data-theme="light"])` and an
-explicit `:root[data-theme="dark"]` — this is the brand board's own copy, not shared
-with the other two pages. None of the three files `@import` or otherwise share a single
-source; a token changed in `index.html` has to be changed by hand in the other two.
+Media it ships: `web/video/wrist.mp4` and `web/video/pi-desktop.mp4` (real captures,
+muted, looping, played only while on screen by an IntersectionObserver), and the
+stills under `web/shots/`, all regenerated from the current build by
+`scripts/product-shots.sh` plus the simulator drive recorded in
+`docs/factory/runs/2026-09-22T140000Z-landing-relaunch.md`.
+
+`web/privacy.html:16-23` and `web/brand/index.html:13-31` still carry the **older**
+token block (the `#191919` greyscale set above it in git history). Nothing imports
+anything: a token changed in `index.html` has to be changed by hand in the other two,
+and as of 2026-09-22 they have deliberately not been changed — the prose pages kept
+the calmer grey while the landing page moved.
 
 ### Where there are no tokens (iOS / Watch / MeshDesktop)
 
