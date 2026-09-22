@@ -63,4 +63,8 @@ fi
 # is worthless then, and silently so.
 dupes="$(md5 -q "$OUT"/iphone-*.png | sort | uniq -d | wc -l | tr -d ' ')"
 [ "$dupes" -eq 0 ] || { echo "FAIL: product-shots: $dupes iPhone screens are identical — a sheet stayed open, or a tab never switched"; exit 1; }
+# Leave the device as this script found it. A paired, polling app makes XCUITest's
+# "wait for idle" time out, which is how check-ios-smoke's first test hung for ten
+# minutes after a capture run (2026-09-22); the smoke installs its own build anyway.
+xcrun simctl uninstall "$IPHONE" com.lecoder.meshwatch >/dev/null 2>&1 || true
 ls -la "$OUT"/*.png | awk '{print $5, $NF}'
