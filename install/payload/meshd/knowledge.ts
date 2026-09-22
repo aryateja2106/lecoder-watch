@@ -3,7 +3,7 @@
 // opens a socket: no Supabase client, no model call, no download.
 //
 //   POST /knowledge      { path, speak? } | { audio }  -> { id, title, spoken }
-//   POST /knowledge/:id  { body }                      -> { id, title, body }
+//   POST /knowledge/:id  { body } | { audio }          -> { id, title, body }
 //   GET  /knowledge                        -> { notes: [{ id, title }] }
 //   GET  /knowledge/:id                    -> { id, title, body }
 //
@@ -340,6 +340,26 @@ async function replaceNoteBody(id: string, req: Request): Promise<Response> {
     if (typeof value === "string" && refusesRemote(value)) {
       return json({ error: "body must be local text" }, 400);
     }
+  }
+  if (payload && typeof payload.audio === "string" && payload.audio.trim()) {
+    const audioPath = resolve(payload.audio.trim());
+    const audioInfo = await stat(audioPath).catch(() => null);
+    if (!audioInfo) return json({ error: "not found" }, 404);
+    if (!audioInfo.isFile()) return json({ error: "not a file" }, 400);
+    if (audioInfo.size > MAX_PDF_BYTES) return json({ error: "audio too large" }, 400);
+    const bin = (process.env.MESH_STT ?? "").trim();
+    if (!bin || refusesRemote(bin)) return json({ error: "stt must be a local binary" }, 400);
+    const binPath = resolve(bin);
+    const binInfo = await stat(binPath).catch(() => null);
+    if (!binInfo?.isFile()) return json({ error: "stt unavailable" }, 400);
+    const transcript = await runStt(binPath, audioPath);
+    if (transcript === null) return json({ error: "stt failed" }, 400);
+    raw.body = transcript;
+    await ensureDir(dir);
+    await writeFile(file, `${JSON.stringify(raw)}\n`, { mode: FILE_MODE });
+    await chmod(file, FILE_MODE);
+    await chmod(dir, DIR_MODE);
+    return json({ id: decoded, title: raw.title, body: transcript });
   }
   if (!payload || typeof payload.body !== "string") return json({ error: "body required" }, 400);
   const next = clip(payload.body.replace(/\u0000/g, ""), MAX_BODY);
