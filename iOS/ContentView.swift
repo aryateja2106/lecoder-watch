@@ -482,7 +482,11 @@ struct KnowledgeNoteAskView: View {
                 Button("Ask") { confirming = true }
                     .disabled(namedNote.isEmpty || question.isEmpty)
             }
-            if let line = store.knowledgeAskLine {
+            if let answer = store.knowledgeAnswer, !answer.isEmpty {
+                Section("Answer") {
+                    Text(answer).font(.caption)
+                }
+            } else if let line = store.knowledgeAskLine {
                 Section("Answer") {
                     Text(line).font(.caption)
                 }
