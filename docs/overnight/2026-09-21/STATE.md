@@ -22,6 +22,9 @@ Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.s
 | M2 approve path + Linux desktop (76fb865) | DONE — deployed to mac/pi/jetson | check-approve-path.sh, check-linux-desktop.sh (live pi+jetson) | ok; Needs-you → Continue → file written on the Pi |
 | M3 usability (2395c0e): tabs, bell, machine page, terminal, composer, watch Continue gate, shared power list, KillMode=process, mesh pair -H | DONE | check-attention-hostname.swift + fast gate | GREEN; Pi session survived an upgrade |
 | M4 apps facts + Guides (9add399), console reload fix + fx (6a288d3) | DONE | check-product-spec, check-codemap, fast gate | GREEN |
+| M5 menus as buttons, 4 tabs + thumbnails, harnesses.md, hook fixes (63487c0 → 25f5ef4) | DONE | check-agent-menu.swift; full gate GREEN run 4 | trust prompt on the Pi answered from the phone's Choose card |
+| M6 keyboard = the machine's, floating capsule, Linux absolute pointer, ordered input (473eafa) | DONE — deployed mac/pi/jetson | check-remote-screen-gestures, check-mesh-chords; full gate GREEN run 5 | 54 chars letter-perfect on the Pi; sticky ⌘+q closed an app |
+| M7 FileViewer + platform-shape ADR (9e16793) | DONE | check-product-spec, fast gate | REPORT.md rendered on the sim off the Pi |
 | S12 ship | DONE — fleet on the branch build (Mac backup ~/.mesh/backups/meshd-0.6.0-1790020360); draft PR https://github.com/aryateja2106/lecoder-watch/pull/133; files sent (Telegram unavailable — no token vars on this Mac) | | |
 
 ## Log
