@@ -77,9 +77,9 @@ structural() {
   if printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
     git cat-file -e "$sha^{commit}" 2>/dev/null || FAIL "8 Gate SHA $sha is not a commit in this repo"
     git merge-base --is-ancestor "$sha" HEAD 2>/dev/null || FAIL "8 Gate SHA $sha is not an ancestor of HEAD"
-    # Only documentation may land after the gate without a re-gate.
-    off="$(git diff --name-only "$sha" HEAD 2>/dev/null | grep -Ev '^(PUBLISHED\.md|BLOCKED\.md|docs/|.*\.md$)' || true)"
-    [ -z "$off" ] || FAIL "1 non-doc files changed after the gated sha $sha (re-run the full gate): $(printf '%s' "$off" | tr '\n' ' ')"
+    # Whether code landed after the gated sha is the live half's business, not this one.
+    # This half runs inside check-all, which is what the re-gate itself runs: failing here
+    # would make the gate red for the very staleness that running it resolves.
   fi
   log="$(field 'Gate log')"
   if [ -n "$log" ] && [ -f "$ROOT/$log" ]; then
@@ -129,6 +129,14 @@ live() {
       FAIL "1 check-all.sh red: $(grep -E '^FAIL' "$CA" | head -5 | tr '\n' ';')"
     fi
     rm -f "$CA"
+  fi
+
+  # 1b. The gate line must describe THIS tree: only documentation may land after the sha
+  # it ran on. Anything else means the quoted line is about code that is no longer here.
+  gsha="$(field 'Gate SHA')"
+  if printf '%s' "$gsha" | grep -Eq '^[0-9a-f]{40}$'; then
+    off="$(git diff --name-only "$gsha" HEAD 2>/dev/null | grep -Ev '^(PUBLISHED\.md|BLOCKED\.md|docs/|.*\.md$)' || true)"
+    [ -z "$off" ] || FAIL "1 non-doc files changed after the gated sha ${gsha%????????????????????????????????} (re-run the full gate): $(printf '%s' "$off" | tr '\n' ' ')"
   fi
 
   # 2. Clean, pushed, shots committed, PR body carries the third-pass table.
