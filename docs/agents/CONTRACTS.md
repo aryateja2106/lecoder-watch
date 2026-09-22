@@ -107,16 +107,16 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `doctor` | — (nothing gates it) | no |
 | `wake` | MeshStore.swift:892 | no |
 | `screenRegion` | MeshClient.swift:219, RemoteView.swift:323, RemoteScreenView.swift:110 | yes |
-| `openUrl` | MeshClient.swift:526 | yes |
-| `power` | MeshClient.swift:509, ContentView.swift:693 | yes |
-| `laPush` | MeshClient.swift:544 | yes |
+| `openUrl` | MeshClient.swift:533 | yes |
+| `power` | MeshClient.swift:516, ContentView.swift:693 | yes |
+| `laPush` | MeshClient.swift:551 | yes |
 | `sessionStatus` | — (nothing gates it) | yes |
 | `paste` | MeshClient.swift:300, RemoteScreenView.swift:111 | yes |
 | `captureJoin` | MeshClient.swift:280, WatchMeshStore.swift:552 | yes |
 | `redact` | ExposedSecretsScreen.swift:43, ExposedSecretsScreen.swift:84 | no |
 | `chat` | TerminalView.swift:1125 | no |
 | `apps` | TerminalView.swift:120 | no |
-| `handoff` | MeshClient.swift:565, MeshClient.swift:574, MeshClient.swift:586 | no |
+| `handoff` | MeshClient.swift:572, MeshClient.swift:581, MeshClient.swift:593 | no |
 | `brain` | — (nothing gates it) | no |
 
 ## Watch → phone relay commands

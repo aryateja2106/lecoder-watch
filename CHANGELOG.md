@@ -12,6 +12,7 @@ each entry as you ship the slice, not at release time.
 - Screen & control types like the machine's own keyboard: every key goes straight through, modifiers stick for chords (⌘q, ⌘w, ⌘tab…), and the controls are one small floating capsule instead of a bar. Taps land where you point on Linux too.
 - Four tabs: Machines · Terminal · Apps · Settings. Monitor is the bell on every tab; each machine row carries a live thumbnail of its screen that opens Screen & control, where a drag to the right no longer closes the screen.
 - Terminal: output first, pinned to the bottom, zoom and pan inside the black box; multi-line composer with paste; Enter, Esc, arrows, ⇧Tab and newline as keys. The watch gets the same arrows and Esc, and Continue only inside a coding agent.
+- Files: tap a file to read it on the phone — Markdown rendered, HTML shown, code sized by pinch. Reading what an agent wrote no longer needs the Mac.
 - Apps show their icon and the devices each build is for (iPhone, iPad, Watch, Mac, Vision); Open proves an app is on this iPhone. Guides explain pairing, Developer Mode, Mac permissions and a Linux desktop.
 - Linux machines: running apps, clipboard, sleep/screen saver, screenshot to clipboard, sized screen frames; sessions survive a daemon upgrade.
 - Antigravity's Stop hook is wired by `mesh hooks install`; Claude Code's non-actionable notifications (sign-in, quota) no longer buzz as "needs attention"; a finished turn's card carries the agent's last words.

@@ -332,6 +332,13 @@ struct MeshClient {
         return try JSONDecoder().decode(FsListing.self, from: data)
     }
 
+    /// Read a text file off the machine, capped at `max` bytes (the daemon says when it cut).
+    func fsRead(path: String, max: Int = 65536) async throws -> FsFile {
+        let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+        let data = try await request("/fs/read?path=\(encoded)&max=\(max)")
+        return try JSONDecoder().decode(FsFile.self, from: data)
+    }
+
     /// Create a directory (recursively, like `mkdir -p`) on the machine.
     func fsMkdir(path: String) async throws {
         let body = try JSONSerialization.data(withJSONObject: ["path": path])

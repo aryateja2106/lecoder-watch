@@ -456,6 +456,13 @@ struct PaneList: Codable, Hashable {
 
 /// One row of `GET /fs`. Field names match `Entry` in meshd's files.ts exactly —
 /// that file is the schema; this is its Swift shadow.
+/// `GET /fs/read` — a text file's contents, and whether the daemon stopped at `max`.
+struct FsFile: Codable, Hashable {
+    var path: String
+    var text: String
+    var truncated: Bool?
+}
+
 struct FsEntry: Codable, Hashable, Identifiable {
     var id: String { path }
     var name: String
