@@ -24,6 +24,8 @@ final class WatchMeshStore: ObservableObject {
     @Published var loadedKnowledgeNote: KnowledgeNote?
     /// The last ask's draft, or a short status when the daemon held it.
     @Published var knowledgeAskLine: String?
+    /// Body of the saved answer when one note title is the question.
+    @Published var knowledgeAnswer: String?
     @Published var phoneReachable = false
     @Published var lastError: String?
     @Published var screenHost: String?
@@ -998,11 +1000,27 @@ final class WatchMeshStore: ObservableObject {
                 knowledgeAskLine = Self.knowledgeAskLine(reply)
                 if !reply.held {
                     loadKnowledgeNotes(host: host)
+                    let titled = String(question.prefix(200))
+                    do {
+                        let listed = try await c.listKnowledgeNotes()
+                        let matches = listed.filter { $0.title == titled }
+                        if matches.count == 1 {
+                            let loaded = try await c.readKnowledgeNote(id: matches[0].id)
+                            knowledgeAnswer = loaded.title == titled ? loaded.body : nil
+                        } else {
+                            knowledgeAnswer = nil
+                        }
+                    } catch {
+                        knowledgeAnswer = nil
+                    }
+                } else {
+                    knowledgeAnswer = nil
                 }
                 WKInterfaceDevice.current().play(.success)
             } catch {
                 lastError = "ask failed"
                 knowledgeAskLine = nil
+                knowledgeAnswer = nil
                 WKInterfaceDevice.current().play(.failure)
             }
         }
