@@ -8,6 +8,7 @@ export type DispatchRoute = "hold-for-review" | "allow-local-tool";
 
 export type EvaluateResult = {
   choice?: string;
+  surface?: string;
   score?: number;
   boolean?: boolean;
   confidence?: number;
@@ -58,16 +59,35 @@ function riskIsHigh(score: number): boolean {
   return score >= HIGH_RUNG;
 }
 
+function resolveEvaluation(evaluation: EvaluateResult): EvaluateResult {
+  const record = evaluation as Record<string, unknown>;
+  if (
+    isRecord(record.answers) ||
+    isRecord(record.surface) ||
+    isRecord(record.dispatch) ||
+    isRecord(record.risk) ||
+    isRecord(record.localModelFit)
+  ) {
+    return evaluationFromPayload(evaluation);
+  }
+  return evaluation;
+}
+
 export function route(state: unknown, evaluation: EvaluateResult): DispatchRoute {
   if (state === null || typeof state !== "object") return "hold-for-review";
-  const score = evaluation.score;
-  const confidence = evaluation.confidence;
-  void evaluation.boolean;
+  const decision = resolveEvaluation(evaluation);
+  const score = decision.score;
+  const confidence = decision.confidence;
   if (typeof score !== "number" || !Number.isFinite(score) || riskIsHigh(score)) return "hold-for-review";
   if (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence < LOW_CONFIDENCE_BELOW) {
     return "hold-for-review";
   }
-  if (evaluation.choice === "allow-local-tool") return "allow-local-tool";
+  if (decision.surface === "wait-for-human" || decision.surface === "needs-graphical-screen") {
+    return "hold-for-review";
+  }
+  if (decision.boolean !== true) return "hold-for-review";
+  if (decision.surface !== "terminal-text") return "hold-for-review";
+  if (decision.choice === "allow-local-tool") return "allow-local-tool";
   return "hold-for-review";
 }
 
@@ -78,7 +98,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function answersOf(payload: unknown): Record<string, unknown> | undefined {
   if (!isRecord(payload)) return undefined;
   if (isRecord(payload.answers)) return payload.answers;
-  if (isRecord(payload.dispatch) || isRecord(payload.risk)) return payload;
+  if (
+    isRecord(payload.dispatch) ||
+    isRecord(payload.risk) ||
+    isRecord(payload.surface) ||
+    isRecord(payload.localModelFit)
+  ) {
+    return payload;
+  }
   return undefined;
 }
 
@@ -93,8 +120,9 @@ function lowestConfidence(payload: unknown, dispatchProbability: number | undefi
     const typesafe = payload.providerMetadata.typesafe;
     if (isRecord(typesafe) && isRecord(typesafe.confidence)) {
       const confidence = typesafe.confidence;
-      if (typeof confidence.dispatch === "number") values.push(confidence.dispatch);
-      if (typeof confidence.risk === "number") values.push(confidence.risk);
+      for (const key of ["surface", "dispatch", "risk", "localModelFit"]) {
+        if (typeof confidence[key] === "number") values.push(confidence[key]);
+      }
     }
   }
   if (values.length === 0 && typeof dispatchProbability === "number") values.push(dispatchProbability);
@@ -105,9 +133,11 @@ function lowestConfidence(payload: unknown, dispatchProbability: number | undefi
 function evaluationFromPayload(payload: unknown): EvaluateResult {
   const answers = answersOf(payload);
   if (!answers) return {};
+  const surfaceAnswer = isRecord(answers.surface) ? answers.surface : undefined;
   const dispatch = isRecord(answers.dispatch) ? answers.dispatch : undefined;
   const risk = isRecord(answers.risk) ? answers.risk : undefined;
   const fit = isRecord(answers.localModelFit) ? answers.localModelFit : undefined;
+  const surface = surfaceAnswer && typeof surfaceAnswer.choice === "string" ? surfaceAnswer.choice : undefined;
   const choice = dispatch && typeof dispatch.choice === "string" ? dispatch.choice : undefined;
   let dispatchProbability: number | undefined;
   if (dispatch && choice && isRecord(dispatch.probabilities)) {
@@ -116,9 +146,10 @@ function evaluationFromPayload(payload: unknown): EvaluateResult {
   }
   const probability = fit && typeof fit.probability === "number" ? fit.probability : undefined;
   return {
+    surface,
     choice,
     score: unitRisk(risk?.score),
-    boolean: typeof probability === "number" ? probability >= 0.5 : undefined,
+    boolean: typeof probability === "number" && Number.isFinite(probability) ? probability >= 0.5 : undefined,
     confidence: lowestConfidence(payload, dispatchProbability),
   };
 }
