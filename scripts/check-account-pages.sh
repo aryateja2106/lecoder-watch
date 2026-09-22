@@ -11,7 +11,7 @@ ACC="$ROOT/web/account"
 ok=1
 bad() { echo "FAIL: check-account-pages.sh: $1"; ok=0; }
 
-for page in sign-up sign-in forgot reset; do
+for page in sign-up sign-in forgot reset home; do
   [ -f "$ACC/$page.html" ] || bad "web/account/$page.html is missing"
 done
 
@@ -21,6 +21,13 @@ grep -q 'name="email"' "$SU" || bad "sign-up is missing an email field"
 grep -q 'type="password"' "$SU" || bad "sign-up is missing a password field"
 grep -q 'name="email"' "$ACC/forgot.html" || bad "forgot is missing an email field"
 grep -q 'name="new-password"' "$ACC/reset.html" || bad "reset is missing a new-password field"
+
+HOME="$ACC/home.html"
+grep -q 'id="delete-account"' "$HOME" || bad "home is missing the delete control"
+grep -q 'Delete account' "$HOME" || bad "home is missing a Delete account control"
+grep -q 'does not rotate mesh tokens' "$HOME" || bad "home does not say deletion leaves mesh tokens alone"
+grep -q 'does not reach a machine' "$HOME" || bad "home does not say deletion does not reach a machine"
+grep -q 'token rotation locally' "$HOME" || bad "home does not say machines stay paired until local token rotation"
 
 EX="$ACC/config.example.js"
 [ -f "$EX" ] || bad "web/account/config.example.js is missing"
@@ -51,7 +58,7 @@ if grep -q '<h2>No accounts</h2>' "$ROOT/web/privacy.html"; then
 fi
 
 SETUP="Account setup is not finished on this deploy"
-for page in sign-up sign-in forgot reset; do
+for page in sign-up sign-in forgot reset home; do
   grep -q "$SETUP" "$ACC/$page.html" || bad "$page.html is missing the setup message"
   grep -q 'fetch(' "$ACC/$page.html" && bad "$page.html calls fetch" || true
 done
@@ -61,17 +68,47 @@ JS="$ACC/account.js"
 grep -q "$SETUP" "$JS" || bad "account.js is missing the setup message"
 # The only fetch must sit after the missing-config return.
 awk '
-  /function meshAccountCall/ { infn = 1 }
-  infn && /if \(!cfg\)/ { guard = 1 }
-  infn && guard && /return Promise\.resolve\(null\)/ { ret = 1 }
-  infn && /fetch\(/ {
-    if (!(guard && ret)) bad = 1
+  /function meshAccountCall/ { infn = "call"; callguard = 0; callret = 0 }
+  /function deleteAccount/ { infn = "del"; delguard = 0; delret = 0 }
+  infn == "call" && /if \(!cfg\)/ { callguard = 1 }
+  infn == "call" && callguard && /return Promise\.resolve\(null\)/ { callret = 1 }
+  infn == "del" && /if \(!cfg\)/ { delguard = 1 }
+  infn == "del" && delguard && /return Promise\.resolve\(null\)/ { delret = 1 }
+  /fetch\(/ {
     fetches++
+    if (infn == "call") {
+      if (!(callguard && callret)) bad = 1
+      callfetch = 1
+    } else if (infn == "del") {
+      if (!(delguard && delret)) bad = 1
+      delfetch = 1
+    } else bad = 1
   }
   END {
-    if (fetches != 1 || bad) exit 1
+    if (fetches != 2 || bad || !callfetch || !delfetch) exit 1
   }
-' "$JS" || bad "account.js must refuse the network when config is missing, before its one fetch"
+' "$JS" || bad "account.js must refuse the network when config is missing, before each fetch"
+
+grep -q '/api/delete-account' "$JS" || bad "account.js does not call /api/delete-account"
+grep -q 'Authorization: "Bearer " + session.token' "$JS" \
+  || bad "account.js does not send the session access token"
+
+API="$ROOT/web/api/delete-account.js"
+[ -f "$API" ] || bad "web/api/delete-account.js is missing"
+if [ -f "$API" ]; then
+  grep -q 'SUPABASE_URL' "$API" || bad "delete-account.js does not read SUPABASE_URL"
+  grep -q 'SUPABASE_ANON_KEY' "$API" || bad "delete-account.js does not read SUPABASE_ANON_KEY"
+  grep -q 'SUPABASE_SERVICE_ROLE_KEY' "$API" || bad "delete-account.js does not read SUPABASE_SERVICE_ROLE_KEY"
+  grep -q '/auth/v1/user' "$API" || bad "delete-account.js does not verify the caller"
+  grep -q '/auth/v1/admin/users/' "$API" || bad "delete-account.js does not delete the auth user"
+  grep -q '401' "$API" || bad "delete-account.js does not return 401"
+  grep -q '200' "$API" || bad "delete-account.js does not return 200"
+  grep -q '500' "$API" || bad "delete-account.js does not return 500"
+  grep -F -q 'eyJ' "$API" && bad "delete-account.js contains an eyJ string" || true
+  grep -E -q 'console\.' "$API" && bad "delete-account.js logs" || true
+  grep -E -q "['\"]service_role['\"]" "$API" && bad "delete-account.js contains service_role as a value" || true
+  grep -E -q "['\"][A-Za-z0-9_-]{40,}['\"]" "$API" && bad "delete-account.js contains a literal key" || true
+fi
 
 if ! command -v python3 >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
   bad "python3 and curl are required to serve the four account pages"
@@ -113,12 +150,19 @@ PY
     i=$((i + 1))
     sleep 0.05
   done
-  for page in sign-up sign-in forgot reset; do
+  for page in sign-up sign-in forgot reset home; do
     body="$TMP/$page.body"
     code="$(curl -sS -o "$body" -w '%{http_code}' "http://127.0.0.1:$PORT/account/$page" || true)"
     [ "$code" = "200" ] || bad "/account/$page returned $code"
     grep -q "$SETUP" "$body" || bad "/account/$page HTML is missing the setup message"
   done
+  body="$TMP/home-file.body"
+  code="$(curl -sS -o "$body" -w '%{http_code}' "http://127.0.0.1:$PORT/account/home.html" || true)"
+  [ "$code" = "200" ] || bad "/account/home.html returned $code"
+  grep -q "$SETUP" "$body" || bad "/account/home.html HTML is missing the setup message"
+  grep -q "does not rotate mesh tokens" "$body" || bad "/account/home.html does not say deletion leaves mesh tokens alone"
+  grep -q "does not reach a machine" "$body" || bad "/account/home.html does not say deletion does not reach a machine"
+  grep -q "token rotation locally" "$body" || bad "/account/home.html does not say machines stay paired until local token rotation"
   kill "$PID" 2>/dev/null || true
   wait "$PID" 2>/dev/null || true
   trap - EXIT

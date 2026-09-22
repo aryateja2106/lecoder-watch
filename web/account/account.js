@@ -2,7 +2,9 @@
    A missing or empty config.js shows the setup message and returns
    before fetch, so this file does not call the network.
    Password reset reads the recovery session from the URL hash and
-   writes a new password. It does not read or write devices or a mailbox. */
+   writes a new password. It does not read or write devices or a mailbox.
+   Deleting an account removes that identity. It does not rotate mesh
+   tokens and does not reach a machine. */
 (function () {
   var SETUP = "Account setup is not finished on this deploy";
 
@@ -184,13 +186,14 @@
           return;
         }
         var session = sessionOf(res.data);
+        if (session) saveSession(session);
         var profile = session ? saveProfile(session, session.username) : Promise.resolve(null);
         return profile.then(function (saved) {
           if (saved && saved.ok === false) {
             setStatus("Signed in, but the username was not saved on your profile. " + errorText(saved.data), "error");
             return;
           }
-          setStatus("Signed in. This account does not copy your machines onto this device.", "ok");
+          window.location.assign("/account/home");
         });
       });
     });
@@ -269,12 +272,99 @@
     });
   }
 
+  var SESSION_KEY = "mesh.account.session";
+
+  function loadSession() {
+    try {
+      var raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      var data = JSON.parse(raw);
+      if (!data || typeof data.token !== "string" || !data.token) return null;
+      return { token: data.token, id: data.id || "", username: data.username || "" };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveSession(session) {
+    if (!session || !session.token) return;
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        token: session.token,
+        id: session.id || "",
+        username: session.username || ""
+      }));
+    } catch (e) {}
+  }
+
+  function clearSession() {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+  }
+
+  function deleteAccount() {
+    var cfg = meshAccountConfig();
+    if (!cfg) {
+      meshAccountShowSetup();
+      return Promise.resolve(null);
+    }
+    var session = loadSession();
+    if (!session) {
+      setStatus("Sign in before deleting an account.", "error");
+      return Promise.resolve(null);
+    }
+    if (!window.confirm("Delete this website account? Machines stay paired until token rotation is run locally.")) {
+      return Promise.resolve(null);
+    }
+    var button = document.getElementById("delete-account");
+    if (button) button.disabled = true;
+    setStatus("Deleting the account…");
+    return fetch("/api/delete-account", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer " + session.token
+      }
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        if (res.status === 401) {
+          clearSession();
+          setStatus("Sign in again before deleting an account.", "error");
+          if (button) button.disabled = false;
+          return;
+        }
+        if (!res.ok) {
+          setStatus("The account could not be deleted.", "error");
+          if (button) button.disabled = false;
+          return;
+        }
+        clearSession();
+        setStatus("Account deleted. The next sign-in fails. Machines were not changed.", "ok");
+      });
+    }, function () {
+      setStatus("The account could not be deleted.", "error");
+      if (button) button.disabled = false;
+    });
+  }
+
   var page = document.body.getAttribute("data-account");
   if (meshAccountConfig()) meshAccountHideSetup();
   else meshAccountShowSetup();
 
   if (page === "sign-in" && new URLSearchParams(window.location.search).get("reset") === "1") {
     setStatus("Password updated. Sign in with the new one. This did not change anything on your machines.", "ok");
+  }
+
+  if (page === "home") {
+    var signedIn = loadSession();
+    if (meshAccountConfig() && signedIn) {
+      var who = signedIn.username ? "Signed in as " + signedIn.username + "." : "Signed in.";
+      setStatus(who + " Deleting this account does not change your machines.", "ok");
+    } else if (meshAccountConfig()) {
+      setStatus("Sign in before deleting an account.", "error");
+    }
+    var del = document.getElementById("delete-account");
+    if (del) del.addEventListener("click", function () { deleteAccount(); });
   }
 
   var form = document.getElementById("form");
