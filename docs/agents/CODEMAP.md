@@ -15,7 +15,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | area | files | lines | what it is |
 |---|---|---|---|
 | `Shared/` | 15 | ~3,500 | Wire types and pure logic both apps compile; the self-checks link against these |
-| `iOS/` | 19 | ~10,100 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
+| `iOS/` | 20 | ~10,200 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
 | `Watch/` | 7 | ~4,500 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
@@ -60,6 +60,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `ContentView.swift` | XL | the phone's tab shell: Machines, attention rows, machine detail, Settings, the daemon-update and Local Network banners | — |
 | `ExposedSecretsScreen.swift` | S | Settings → Exposed secrets. meshd 0.6+ ("redact") replaces a token, key or password in event and output text before it ever leaves the machine — but printing… | — |
 | `FileBrowserView.swift` | M | browse a machine's filesystem over /files and /fs, open links, read text files | — |
+| `GuidesView.swift` | S | the short how-tos a new owner needs: pairing, letting agents install apps on this phone and watch, granting a Mac, a Linux desktop, overnight agents | — |
 | `LiveActivityController.swift` | M | Runs the live card for whichever session currently deserves one | — |
 | `MeshRelayApp.swift` | S | Receives the APNs device token and hands it to whoever registered interest | check-phone-input-and-wake |
 | `MeshStore.swift` | XL | the phone brain: polls every machine, holds the machine list and tokens, relays snapshots to the watch, and executes the watch's WatchCommands (`handle(_:)`) | check-inspect-crop, check-relay-receiver, check-watch-scrollback, check-watch-terminal-wiring |
