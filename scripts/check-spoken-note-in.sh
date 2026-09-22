@@ -36,7 +36,7 @@ grep -q 'MESH_TTS' "$ROOT/install/payload/meshd/knowledge.ts" || {
 grep -q 'handleKnowledge' "$ROOT/install/payload/meshd/server.ts" || {
   echo "FAIL: server.ts does not route knowledge"
   exit 1
-fi
+}
 
 TH="$(mktemp -d)"
 HOME_DIR="$TH/home"
@@ -576,14 +576,17 @@ PY
 [ "$(json_notes "$OK_STATE")" -eq 2 ] || { echo "FAIL: pdf note was not written"; exit 1; }
 echo "check-spoken-note-in: speak-out still hands the note to MESH_TTS"
 
+# Loopback skips the bearer, which is the existing rule. A browser Origin is
+# still rejected before that exemption, so this request must not write or spawn.
 code="$(curl --connect-timeout 1 --max-time 5 -sS -o "$TH/anon.json" -w '%{http_code}' \
   -H 'content-type: application/json' \
+  -H 'origin: https://evil.example' \
   --data "$AUDIO_JSON" \
   "http://127.0.0.1:$PORT/knowledge" || true)"
-[ "$code" = "401" ] || { echo "FAIL: missing bearer -> ${code}"; cat "$TH/anon.json"; echo; exit 1; }
-[ "$(json_notes "$OK_STATE")" -eq 2 ] || { echo "FAIL: unauthorized request wrote a note"; exit 1; }
-[ "$(wc -l < "$TH/stt-args" | tr -d ' ')" -eq 1 ] || { echo "FAIL: unauthorized request spawned"; exit 1; }
-echo "check-spoken-note-in: unauthorized wrote no note"
+[ "$code" = "401" ] || { echo "FAIL: cross-site request -> ${code}"; cat "$TH/anon.json"; echo; exit 1; }
+[ "$(json_notes "$OK_STATE")" -eq 2 ] || { echo "FAIL: cross-site request wrote a note"; exit 1; }
+[ "$(wc -l < "$TH/stt-args" | tr -d ' ')" -eq 1 ] || { echo "FAIL: cross-site request spawned"; exit 1; }
+echo "check-spoken-note-in: cross-site request wrote no note"
 
 assert_quiet
 hits_ok
