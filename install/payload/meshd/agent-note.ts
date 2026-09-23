@@ -42,8 +42,9 @@
 // with the same local-text refusal as knowledge search and the listNotes
 // needle. One match continues this draft path. A note that names a pairing
 // code, hosts.json, a mesh token, or .mesh/token is held before any model
-// call. No match is 404. Several matches are 409 and are not guessed. An
-// empty q is 400.
+// call. That hold runs when the body already has an id, and when q finds
+// the note, before a drafts directory is created. No match is 404. Several
+// matches are 409 and are not guessed. An empty q is 400.
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { constants as fsConstants } from "node:fs";
 import { chmod, lstat, mkdir, open, realpath, stat } from "node:fs/promises";
@@ -452,6 +453,13 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
     const note = await readNote(id);
     if (!note) return json({ error: "note not found" }, 404);
     if (heldByRoute(note)) {
+      if (!model.trim()) return json({ error: "model required" }, 400);
+      return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true });
+    }
+  }
+  if (givenId) {
+    const note = await readNote(id);
+    if (note && heldByRoute(note)) {
       if (!model.trim()) return json({ error: "model required" }, 400);
       return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true });
     }
