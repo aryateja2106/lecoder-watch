@@ -196,7 +196,14 @@ live() {
     src="$(printf '%s' "$inst" | sed -n 's/^MESH_SRC_DEFAULT="\(.*\)"$/\1/p' | head -1)"
     [ -n "$src" ] || src="https://github.com/LeSearch-AI/mesh-install/releases/latest/download"
     tgz="/tmp/check-published-mesh-install.$$.tgz"
-    if curl -fsSL --max-time 120 -o "$tgz" "$src/mesh-install.tgz" 2>/dev/null; then
+    # Same rule as every other probe here: one dropped request is not evidence that the
+    # release is gone. Three tries (this one writes a file, so it cannot use retry()).
+    _dl=1; _i=1
+    while [ "$_i" -le 3 ]; do
+      curl -fsSL --max-time 120 -o "$tgz" "$src/mesh-install.tgz" 2>/dev/null && [ -s "$tgz" ] && { _dl=0; break; }
+      _i=$((_i + 1)); sleep 2
+    done
+    if [ "$_dl" -eq 0 ]; then
       got="$(tar xzf "$tgz" -O install/payload/meshd/server.ts 2>/dev/null | sed -n 's/^[[:space:]]*const VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
       [ "$got" = "$v" ] || FAIL "3 the installer at $installer fetches a daemon $got, not $v ($src/mesh-install.tgz)"
     else
