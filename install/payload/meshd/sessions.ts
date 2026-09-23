@@ -40,9 +40,11 @@
 // happens on the machine that wrote the transcript, so a secret never crosses the tailnet.
 import { homedir, networkInterfaces } from "node:os";
 import { join, basename, dirname } from "node:path";
-import { mkdir, readdir, readFile, rename, stat, writeFile, chmod, appendFile, truncate } from "node:fs/promises";
-import { createReadStream } from "node:fs";
-import { gzipSync, gunzipSync } from "node:zlib";
+import { mkdir, readdir, readFile, rename, stat, writeFile, chmod, truncate, unlink } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
+import { gunzipSync, createGzip, createGunzip } from "node:zlib";
 import { randomUUID, randomBytes } from "node:crypto";
 import { redact, addKnownSecrets } from "./redact";
 import { isAuthorized } from "./auth";
@@ -89,10 +91,19 @@ function describe(bytes: Uint8Array): { cwd: string | null; title: string | null
     let o: any; try { o = JSON.parse(line); } catch { continue; }
     cwd ??= o.cwd ?? o.payload?.cwd ?? null;
     if (!title) {
-      const c = o.type === "user" ? o.message?.content : o.payload?.type === "user_message" ? o.payload?.message : null;
-      const text = typeof c === "string" ? c : Array.isArray(c) ? c.find((p: any) => p?.type === "text")?.text : null;
-      // Hook and system wrappers are not what the person typed.
-      if (typeof text === "string" && text.trim() && !text.startsWith("<")) title = text.trim().replace(/\s+/g, " ").slice(0, 120);
+      const p = o.payload;
+      const c = o.type === "user" ? o.message?.content
+        : p?.type === "user_message" ? p.message
+        : p?.type === "message" && p.role === "user" ? p.content : null;
+      const parts: string[] = typeof c === "string" ? [c] : Array.isArray(c) ? c.map((x: any) => x?.text).filter((t: any) => typeof t === "string") : [];
+      for (let text of parts) {
+        // Codex's desktop app puts attached files first and the ask after this heading.
+        const ask = text.indexOf("## My request for Codex:");
+        if (ask >= 0) text = text.slice(ask + 24);
+        text = text.trim();
+        // Hook, system and instruction wrappers are not what the person typed.
+        if (text && !text.startsWith("<") && !text.startsWith("# AGENTS.md") && !text.startsWith("# Files mentioned")) { title = text.replace(/\s+/g, " ").slice(0, 120); break; }
+      }
     }
     if (cwd && title) break;
   }
@@ -105,6 +116,8 @@ const inflight = new Map<string, Promise<Outcome>>();
 /// the same file queue behind each other: the Stop-event trigger and the sweep can land
 /// together, and two writers picking the same v<N> would break every later version.
 export function snapshot(path: string): Promise<Outcome> {
+  // The one switch for every caller: the sweep, the Stop-event trigger, anything later.
+  if (process.env.MESH_SESSIONS === "off") return Promise.resolve("skipped");
   const next = (inflight.get(path) ?? Promise.resolve("skipped" as Outcome)).catch(() => "skipped" as Outcome).then(() => take(path));
   inflight.set(path, next);
   next.finally(() => { if (inflight.get(path) === next) inflight.delete(path); }).catch(() => {});
@@ -120,41 +133,56 @@ async function take(path: string): Promise<Outcome> {
   const last = index.versions.at(-1);
   if (last && last.size === st.size && last.mtimeMs === st.mtimeMs) return "unchanged";
 
-  // The common case, a turn appended to the file: hash the old prefix in chunks and read
-  // only the new bytes, so a 139 MB transcript costs its delta in memory, not a full copy
-  // per turn (measured: 593 MB RSS reading it whole, every turn).
-  if (last && last.size > 0 && st.size > last.size) {
-    const h = new Bun.CryptoHasher("sha256");
-    // node:fs, not Bun.file().slice().stream(): on bun 1.3.14 that stream never ends when
-    // the slice stops mid-file past its first chunk (reproduced with 200 KB of 400 KB).
-    for await (const chunk of createReadStream(path, { start: 0, end: last.size - 1 })) h.update(chunk);
-    if (h.copy().digest("hex") === last.sha256) {
-      const delta = new Uint8Array(await Bun.file(path).slice(last.size).arrayBuffer());
-      return record(index, path, st.mtimeMs, "append", delta, last.size + delta.length, h.update(delta).digest("hex"));
-    }
-  }
-  // First sight, or the runtime rewrote the file (compaction): a new full base.
-  // ponytail: reads the whole file (~2.5x its size in RSS, once per session and per
-  // compaction); stream it through createGzip if a base ever has to fit a tight box.
-  const bytes = new Uint8Array(await Bun.file(path).arrayBuffer());
-  const full = sha(bytes);
-  if (last && last.sha256 === full) return "unchanged";
-  return record(index, path, st.mtimeMs, "base", bytes, bytes.length, full);
-}
-
-async function record(index: Index, path: string, mtimeMs: number, kind: Version["kind"], bytes: Uint8Array, size: number, sha256: string) {
-  const n = (index.versions.at(-1)?.n ?? 0) + 1;
-  const dir = dirOf(index.runtime, index.id);
+  // Nothing below holds a transcript in memory: bytes stream from the file through the
+  // hasher and gzip into the store (a 139 MB first sweep pushed meshd to 1.3 GB RSS when
+  // bases were read whole, and Bun does not hand that memory back).
+  const dir = dirOf(who.runtime, who.id);
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await chmod(STORE, 0o700).catch(() => {});
-  await writePrivate(join(dir, `v${n}.gz`), gzipSync(bytes));
+  const tmp = join(dir, `.incoming-${randomUUID()}.gz`);
+  try {
+    // The common case, a turn appended to the file: hash the old prefix, store only the rest.
+    if (last && last.size > 0 && st.size > last.size) {
+      const h = new Bun.CryptoHasher("sha256");
+      // node:fs, not Bun.file().slice().stream(): on bun 1.3.14 that stream never ends when
+      // the slice stops mid-file past its first chunk (reproduced with 200 KB of 400 KB).
+      for await (const chunk of createReadStream(path, { start: 0, end: last.size - 1 })) h.update(chunk);
+      if (h.copy().digest("hex") === last.sha256) {
+        const added = await gzipFrom(path, last.size, h, tmp);
+        if (!added) return "unchanged";
+        return await record(index, path, st.mtimeMs, "append", tmp, last.size + added, h.digest("hex"));
+      }
+    }
+    // First sight, or the runtime rewrote the file (compaction): a new full base.
+    const h = new Bun.CryptoHasher("sha256");
+    const size = await gzipFrom(path, 0, h, tmp);
+    const full = h.digest("hex");
+    if (last && last.sha256 === full) return "unchanged";
+    return await record(index, path, st.mtimeMs, "base", tmp, size, full);
+  } finally {
+    await unlink(tmp).catch(() => {});  // gone already when it became a version
+  }
+}
+
+/// Stream bytes [start, EOF) of `path` through `h` into a gzip file. Returns the count.
+async function gzipFrom(path: string, start: number, h: InstanceType<typeof Bun.CryptoHasher>, dest: string): Promise<number> {
+  let n = 0;
+  await pipeline(createReadStream(path, { start }), async function* (src: AsyncIterable<Buffer>) {
+    for await (const c of src) { h.update(c); n += c.length; yield c; }
+  }, createGzip(), createWriteStream(dest, { mode: 0o600 }));
+  return n;
+}
+
+async function record(index: Index, path: string, mtimeMs: number, kind: Version["kind"], gz: string, size: number, sha256: string) {
+  const n = (index.versions.at(-1)?.n ?? 0) + 1;
+  await rename(gz, join(dirOf(index.runtime, index.id), `v${n}.gz`));
   if (!index.cwd || !index.title) {
-    const head = kind === "base" ? bytes : new Uint8Array(await Bun.file(path).slice(0, 262144).arrayBuffer());
-    const d = describe(head); index.cwd ??= d.cwd; index.title ??= d.title;
+    const d = describe(new Uint8Array(await Bun.file(path).slice(0, 262144).arrayBuffer()));
+    index.cwd ??= d.cwd; index.title ??= d.title;
   }
   index.source = path;
   index.versions.push({ n, kind, size, sha256, mtimeMs, ts: new Date().toISOString() });
-  await writePrivate(join(dir, "index.json"), JSON.stringify(index, null, 1));
+  await writePrivate(join(dirOf(index.runtime, index.id), "index.json"), JSON.stringify(index, null, 1));
   return kind;
 }
 
@@ -230,24 +258,40 @@ async function list(limit: number) {
   return rows.sort((a, b) => b.lastTs.localeCompare(a.lastTs)).slice(0, limit);
 }
 
-/// Version n's own chunk, redacted in ~1 MB batches cut at newlines, so a 139 MB base never
-/// becomes one giant string.
+/// Version n's own chunk, redacted in ~1 MB batches cut at newlines and streamed, so a
+/// 139 MB base never sits in memory whole or becomes one giant string.
 async function redactedChunk(runtime: Runtime, id: string, n: number): Promise<{ kind: Version["kind"]; body: ReadableStream } | null> {
   const v = (await readIndex(runtime, id))?.versions.find((x) => x.n === n);
-  if (!v) return null;
-  const raw = gunzipSync(await readFile(join(dirOf(runtime, id), `v${n}.gz`)));
-  const dec = new TextDecoder(), enc = new TextEncoder();
-  let at = 0;
+  const file = join(dirOf(runtime, id), `v${n}.gz`);
+  if (!v || !(await stat(file).catch(() => null))) return null;
+  const it = redactBatches(createReadStream(file).pipe(createGunzip()));
+  const enc = new TextEncoder();
   const body = new ReadableStream({
-    pull(ctrl) {
-      if (at >= raw.length) return ctrl.close();
-      const nl = raw.indexOf(10, Math.min(raw.length - 1, at + (1 << 20)));
-      const end = nl < 0 ? raw.length : nl + 1;
-      ctrl.enqueue(enc.encode(redact(dec.decode(raw.subarray(at, end))).text));
-      at = end;
-    },
+    async pull(ctrl) { const { value, done } = await it.next(); if (done) ctrl.close(); else ctrl.enqueue(enc.encode(value)); },
+    async cancel() { await it.return(undefined); },
   });
   return { kind: v.kind, body };
+}
+
+async function* redactBatches(src: AsyncIterable<Buffer>): AsyncGenerator<string> {
+  const dec = new TextDecoder();
+  let pending = "";
+  for await (const c of src) {
+    pending += dec.decode(c, { stream: true });
+    const cut = pending.length >= 1 << 20 ? pending.lastIndexOf("\n") + 1 : 0;
+    if (cut > 0) { yield redact(pending.slice(0, cut)).text; pending = pending.slice(cut); }
+  }
+  pending += dec.decode();
+  if (pending) yield redact(pending).text;
+}
+
+/// Write a response body to a file without buffering it; "a" appends. Returns the count.
+async function streamTo(body: ReadableStream, dest: string, flags: "w" | "a"): Promise<number> {
+  let n = 0;
+  await pipeline(Readable.fromWeb(body as any), async function* (src: AsyncIterable<Buffer>) {
+    for await (const c of src) { n += c.length; yield c; }
+  }, createWriteStream(dest, { flags, mode: 0o600 }));
+  return n;
 }
 
 const MIRROR_TOKEN = join(HOME, ".mesh", "mirror-token");
@@ -301,17 +345,21 @@ async function mirrorPeer(name: string, base: string, token: string): Promise<nu
     await mkdir(dirname(file), { recursive: true, mode: 0o700 });
     for (const v of up.versions.filter((x) => x.n > have.n)) {
       const r = await get(`/sessions/${key}/chunk?v=${v.n}`).catch(() => null);
-      if (!r?.ok) break;
-      const chunk = new Uint8Array(await r.arrayBuffer());
+      if (!r?.ok || !r.body) break;
       if (v.kind === "base") {
-        if (have.size > 0) await writePrivate(join(dir, s.runtime, `${s.id}.v${have.n}.jsonl.gz`), gzipSync(await readFile(file)));
-        await writePrivate(file, chunk);
-        have.size = chunk.length;
+        const incoming = `${file}.incoming`;
+        const size = await streamTo(r.body, incoming, "w");
+        if (have.size > 0) {
+          const kept = join(dir, s.runtime, `${s.id}.v${have.n}.jsonl.gz`);
+          await pipeline(createReadStream(file), createGzip(), createWriteStream(`${kept}.tmp`, { mode: 0o600 }));
+          await rename(`${kept}.tmp`, kept);
+        }
+        await rename(incoming, file);
+        have.size = size;
       } else {
         // Undo a half-written append from an interrupted pull before adding this one.
         if (((await stat(file).catch(() => null))?.size ?? 0) > have.size) await truncate(file, have.size);
-        await appendFile(file, chunk, { mode: 0o600 });
-        have.size += chunk.length;
+        have.size += await streamTo(r.body, file, "a");
       }
       have.n = v.n; have.ts = v.ts; have.cwd ??= up.cwd; have.title ??= up.title;
       index[key] = have;

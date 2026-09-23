@@ -474,22 +474,24 @@ async function cmdSessions(pos: string[], flags: Record<string, string>, bools: 
     return out(() => {
       if (!sessions.length) { console.log(`(${h.name} mirrors nothing yet — run: mesh sessions mirror-to ${h.name})`); return; }
       for (const s of sessions.slice(0, Number(flags.n || flags.limit) || 30)) {
-        console.log(`${String(s.host).padEnd(10)} ${s.id.slice(0, 8)}  ${s.runtime.padEnd(6)} v${String(s.n).padEnd(4)} ${(s.title ?? s.cwd ?? "").slice(0, 60)}`);
+        console.log(`${String(s.host).padEnd(10)} ${short(s.id).slice(0, 8)}  ${s.runtime.padEnd(6)} v${String(s.n).padEnd(4)} ${(s.title ?? s.cwd ?? "").slice(0, 60)}`);
       }
     }, sessions);
   }
   const { sessions } = await api(h, "GET", "/sessions?limit=500");
   const size = (b: number) => b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`;
+  // A Codex id is rollout-<timestamp>-<uuid>; the uuid is the part a person can type.
+  const short = (id: string) => id.replace(/^rollout-.*?-(?=[0-9a-f]{8}-[0-9a-f]{4}-)/, "");
   if (!sub || sub === "ls" || sub === "list") {
     return out(() => {
       if (!sessions.length) { console.log(`(no snapshots on ${h.name} yet — the first sweep runs 30 s after meshd starts)`); return; }
       for (const s of sessions.slice(0, Number(flags.n || flags.limit) || 30)) {
-        console.log(`${s.id.slice(0, 8)}  ${s.runtime.padEnd(6)} v${String(s.versions).padEnd(4)} ${size(s.size).padStart(8)}  ${s.live ? " " : "†"} ${(s.title ?? s.cwd ?? "").slice(0, 70)}`);
+        console.log(`${short(s.id).slice(0, 8)}  ${s.runtime.padEnd(6)} v${String(s.versions).padEnd(4)} ${size(s.size).padStart(8)}  ${s.live ? " " : "†"} ${(s.title ?? s.cwd ?? "").slice(0, 70)}`);
       }
       console.log("† = the runtime has deleted its own copy; only mesh still has it");
     }, sessions);
   }
-  const hits = sessions.filter((s: any) => want && s.id.startsWith(want));
+  const hits = sessions.filter((s: any) => want && (s.id.startsWith(want) || short(s.id).startsWith(want)));
   if (hits.length !== 1) die(hits.length ? `ambiguous id ${want}: ${hits.map((s: any) => s.id).join(", ")}` : `usage: mesh sessions ${sub} <id> [--at N] [-H host]`);
   const s = hits[0];
   if (sub === "log") {

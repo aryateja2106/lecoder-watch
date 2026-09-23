@@ -58,9 +58,9 @@
 | POST | `/push/test` | token | push.ts:494 |
 | GET | `/resumable` | token | handoff.ts:275 |
 | GET | `/screen.jpg` | token | input.ts:507 |
-| GET | `/sessions` | token | sessions.ts:385 |
-| POST | `/sessions/mirror-peers` | token | sessions.ts:370 |
-| GET | `/sessions/mirror-token` | token | sessions.ts:367 |
+| GET | `/sessions` | token | sessions.ts:433 |
+| POST | `/sessions/mirror-peers` | token | sessions.ts:418 |
+| GET | `/sessions/mirror-token` | token | sessions.ts:415 |
 | ANY | `/stats` | token | server.ts:1420 |
 | POST | `/system` | token | input.ts:557 |
 | ANY | `/tailnet` | token | server.ts:1421 |

@@ -7,6 +7,7 @@
 #   - every version rebuilds byte-exact, and a tampered chunk is refused, not served
 #   - the store is 0700, every file in it 0600 (transcripts carry pasted secrets)
 #   - subagent transcripts (agent-*.jsonl) are not sessions; Codex rollouts are
+#   - MESH_SESSIONS=off stops every snapshot, not only the sweep
 #   - a second sweep over unchanged files records nothing; concurrent snapshots of one
 #     file never share a version number
 #   - a mirror pulls every version over HTTP: the latest file, the base a compaction
@@ -90,8 +91,15 @@ writeFileSync(join(proj, "agent-abc.jsonl"), line({ type: "user", message: { con
 ok(await snapshot(join(proj, "agent-abc.jsonl")) === "skipped", "a subagent transcript was recorded as a session");
 const cx = join(HOME, ".codex/sessions/2026/09/23");
 mkdirSync(cx, { recursive: true });
-writeFileSync(join(cx, "rollout-2026-09-23T10-00-00-abc.jsonl"), line({ type: "session_meta", payload: { cwd: "/tmp/cx" } }));
+writeFileSync(join(cx, "rollout-2026-09-23T10-00-00-abc.jsonl"), line({ type: "session_meta", payload: { cwd: "/tmp/cx" } })
+  + line({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "<environment_context>x</environment_context>" }, { type: "input_text", text: "# AGENTS.md instructions\nbe nice" }] } })
+  + line({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "# Files mentioned by the user:\n\n## a.pdf: /x\n\n## My request for Codex:\nsummarise the screener" }] } }));
 
+process.env.MESH_SESSIONS = "off";
+appendFileSync(race, line({ off: true }));
+ok(await snapshot(race) === "skipped", "MESH_SESSIONS=off did not stop a direct snapshot (the Stop-event path)");
+delete process.env.MESH_SESSIONS;
+await snapshot(race);
 const first = await sweep();
 ok(first.recorded === 1, `first sweep recorded ${first.recorded}, expected only the new Codex rollout`);
 const again = await sweep();
@@ -102,6 +110,8 @@ const list = await (await req("GET", "/sessions"))!.json();
 ok(list.sessions.length === 3, `GET /sessions listed ${list.sessions.length}, expected 3`);
 const claudeRow = list.sessions.find((s: any) => s.id === id);
 ok(claudeRow?.title === "fix the flaky test" && claudeRow?.cwd === "/tmp/demo", "title/cwd not read from the transcript head");
+const codexRow = list.sessions.find((s: any) => s.runtime === "codex");
+ok(codexRow?.title === "summarise the screener" && codexRow?.cwd === "/tmp/cx", `Codex title/cwd wrong: ${codexRow?.title} / ${codexRow?.cwd}`);
 ok(eq(new Uint8Array(await (await req("GET", `/sessions/claude/${id}/raw?v=2`))!.arrayBuffer()), v2), "GET raw?v=2 is not byte-exact");
 
 const r = await req("POST", `/sessions/claude/${id}/restore?v=2`);
