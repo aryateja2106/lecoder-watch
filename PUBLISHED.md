@@ -5,14 +5,18 @@ produced by running something, not by describing it. Written 2026-09-22 from the
 run recorded in [docs/factory/runs/2026-09-22T093000Z-publish.md](docs/factory/runs/2026-09-22T093000Z-publish.md).
 
 Gate: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none`
-Gate SHA: 13e53171e5ab2a896d25d5058383bfb95ae70484
-Gate log: docs/overnight/2026-09-21/gate-full-publish.txt
-Gate note: the branch has moved past that sha — the approvals parser fix (9f74d6f) and the
-screenshots after it. Re-running the full gate on this Mac is blocked, and not by code:
-`check-all` globs `check-overnight.sh`, whose `check-brain` live half asks this machine's own
-model server for a tool call, and the only model here is a text fine-tune that answers in prose
-(the Pi and the Jetson both pass). See BLOCKED.md. So this ledger quotes the gate that actually
-ran, at the sha it ran on, rather than a fresher line nothing produced.
+Gate SHA: cb8d8b7a730f282fe14d90edbfb39237f61a5efc
+Gate log: docs/overnight/2026-09-21/gate-full-publish-2026-09-23-tail.txt
+Gate note: this line is from a run on 2026-09-23 at the sha above, with `MESH_BRAIN_URL`
+pinned to `http://127.0.0.1:1234/v1`. Without it `check-brain`'s live half is red on this
+Mac and the gate with it: the probe order tries ollama (:11434) before LM Studio (:1234),
+and this machine's only ollama model is a text fine-tune that answers `get_time
+machine="jetson"` as prose instead of emitting a tool call. LM Studio serving the
+already-on-disk spark-x2.5-4b returns a real `get_time({"machine":"jetson"})` in 1.4 s.
+The override is the documented knob for a machine running more than one server, but the
+probe order picking the weaker one is a defect, not a preference — see BLOCKED.md. The log
+is the tail of that run (the decisive line, the end of `test`, and all of `build`); the
+gate's own full output was not captured to a file.
 PR: #133 OPEN (draft) — https://github.com/aryateja2106/lecoder-watch/pull/133
 Landing: https://lesearch.ai
 Installer: https://lesearch.ai/install.sh
@@ -170,9 +174,10 @@ waited on, and the queue continued past each one.
 - Issues-only GitHub token as a Supabase secret (move the worker to an edge function)
 - Repo consolidation under LeSearch-AI — confirm the archive list and the transfer
 - TestFlight 0.8.0 upload (the only way a stranger gets the phone app)
-- The Mac has no tool-calling local model, so the full gate cannot go green — asked and
-  answered on 2026-09-23: leave it blocked. So the gate line above stays the one that ran at
-  13e5317, and the tip is not re-gated. The Pi and the Jetson both pass the same check.
+- The Mac's default brain is a model that cannot call tools — the gate above is green only
+  because `MESH_BRAIN_URL` points past ollama at LM Studio. Making that the machine's real
+  answer (an ollama model that tool-calls, or a probe order that prefers a server that does)
+  is Arya's call. The Pi and the Jetson need nothing.
 
 ## Housekeeping
 

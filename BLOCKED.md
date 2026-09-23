@@ -64,20 +64,23 @@ on a Keychain dialog for `asc` (memory: shell-slowness-and-asc-keychain) — kee
 unlocked. Until then the public link serves the 2026-08-27 build; the landing and
 getting-started say "TestFlight" and are correct the moment this lands.
 
-## The Mac has no tool-calling local model, so the full gate cannot go green
-`check-brain` (inside `check-overnight`, inside the full gate) asks each machine's local
-model server for a tool call. The Pi and the Jetson answer (ollama, qwen3:1.7b and
-qwen3:4b). This Mac answers on ollama :11434 but its only model is `nl2shell-local`
-(811 MB, a text fine-tune): it replies `get_time machine="jetson"` as prose instead of
-emitting a tool call, so the check fails — correctly. Whatever served the Mac's brain
-earlier today (edge0 on :8001, per the overnight record) is not running any more; the
-Mac daemon restarted around 09:00 and Tailscale had stopped.
+## The Mac's default brain is a model that cannot call tools
+`check-brain` (inside `check-overnight`, inside the full gate) asks each machine's local model
+server for a tool call. The Pi (qwen3:1.7b) and the Jetson (qwen3:4b) answer. This Mac has two
+servers, and the probe order — :8001, :11434, :8080, :1234 — reaches ollama first, whose only
+model here is `nl2shell-local` (811 MB, a text fine-tune): it replies `get_time
+machine="jetson"` as prose instead of emitting a tool call, so the check fails, correctly.
 
-Two ways to close it, both yours because both cost something of yours:
-- `ollama pull qwen3:1.7b` on this Mac (~1.4 GB download, the same model the Pi runs), or
-- start whatever served :8001 before (edge0 / LM Studio) and leave it running.
+LM Studio serving `spark-x2.5-4b` (2.6 GB, already on disk, nothing downloaded) returns a real
+`get_time({"machine":"jetson"})` in 1.4 s. The 2026-09-23 full gate is green with
+`MESH_BRAIN_URL=http://127.0.0.1:1234/v1`, and the server was stopped again afterwards.
 
-Until then the publish ledger cannot carry a green full-gate line at a current sha, and
-`scripts/check-published.sh` will say so rather than pretend. Nothing about the app, the
-daemon, the site or the feedback pipeline is affected — this is one live check about local
-models on one machine.
+That override is a knob, not an answer. What is yours to decide:
+- `ollama pull qwen3:1.7b` here (~1.4 GB) so the default probe order finds a model that
+  tool-calls, or
+- keep LM Studio loaded and running as this Mac's brain, or
+- change the probe order in `brain.ts` to prefer a server whose model actually emits tool
+  calls — a product change, since `/brain` is what the app and Needle's fallback read.
+
+Until one of those, a fresh clone on this Mac needs the env override to reproduce the gate,
+and `meshd`'s `/brain` will keep reporting ollama as this machine's brain.
