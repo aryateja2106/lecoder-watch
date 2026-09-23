@@ -520,6 +520,12 @@ async function restoreClaude(ix: Index, v?: number): Promise<{ id: string; path:
   }
 }
 
+/// Which transcript a resumed pane is showing, by the pane's name, until its first hook
+/// event says so itself: before that the chat view guessed "the newest transcript in this
+/// folder", which is whatever else was running there (seen in the simulator).
+const resumedTranscripts = new Map<string, string>();
+export const resumedTranscript = (name: string) => resumedTranscripts.get(name);
+
 const UUID_RE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 /// How to start a stored session again, without starting it. The uuid is validated here —
 /// it goes into a shell command line — and a Claude transcript the runtime already deleted
@@ -534,17 +540,18 @@ async function resumePlan(runtime: Runtime, id: string): Promise<Response> {
   // from April and no codex): say so, instead of a pane that dies before anyone sees it.
   const bin = runtime === "claude" ? "claude" : "codex";
   if (!Bun.which(bin, { PATH: process.env.PATH ?? "" })) return Response.json({ error: `${bin} is not installed on this machine` }, { status: 424 });
-  let resumeId = uuid, restoredFrom: string | undefined;
+  let resumeId = uuid, restoredFrom: string | undefined, restoredPath: string | undefined;
   if (!(await stat(ix.source).catch(() => null))) {
     // Codex finds a rollout by its uuid anywhere under ~/.codex/sessions; restoring one is not built.
     if (runtime !== "claude") return Response.json({ error: "Codex deleted this rollout, and restore is Claude Code only" }, { status: 410 });
     const r = await restoreClaude(ix);
     if (!r) return Response.json({ error: "no stored version rebuilds cleanly" }, { status: 404 });
     // Named only when this call wrote the copy; a later resume reuses it silently.
-    resumeId = r.id; if (!r.reused) restoredFrom = id;
+    resumeId = r.id; restoredPath = r.path; if (!r.reused) restoredFrom = id;
   }
   // The folder it was started in: Claude looks a session up by that folder's project slug.
   const ok = !!ix.cwd && !!(await stat(ix.cwd).catch(() => null))?.isDirectory();
+  resumedTranscripts.set(`resume-${resumeId.slice(-8)}`, restoredPath ?? ix.source);
   return Response.json({
     // The END of the uuid: Codex ids are UUIDv7, whose first 8 hex are a timestamp that
     // sessions started in the same minute share.

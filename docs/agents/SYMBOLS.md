@@ -71,8 +71,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | ChatSearchHit | struct | Shared/Models.swift:1243 |
 | ChatSearchResults | struct | Shared/Models.swift:1264 |
 | ChatSearchView | struct | iOS/ChatSearchView.swift:15 |
-| chatSubtitle | func | iOS/ChatSearchView.swift:286 |
-| chatTitle | func | iOS/ChatSearchView.swift:281 |
+| chatSubtitle | func | iOS/ChatSearchView.swift:296 |
+| chatTitle | func | iOS/ChatSearchView.swift:291 |
 | ChatToolInfo | struct | Shared/Models.swift:1115 |
 | CheckAgentMenu | struct | scripts/check-agent-menu.swift:8 |
 | CheckAgentNotifications | struct | scripts/check-agent-notifications.swift:8 |
@@ -226,7 +226,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | firstPairedIphoneUdid | function | install/payload/bin/mesh:2108 |
 | fittedSize | func | Shared/ScreenZoom.swift:16 |
 | fleetLine | func | Shared/Models.swift:803 |
-| FlowButtons | struct | iOS/TerminalView.swift:977 |
+| FlowButtons | struct | iOS/TerminalView.swift:978 |
 | FollowsTail | struct | Watch/WatchViews.swift:877 |
 | FoundChat | struct | iOS/ChatSearchView.swift:7 |
 | frameTransform | func | Shared/MeshClient.swift:684 |
@@ -319,7 +319,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | LaunchSheet | struct | iOS/RemoteScreenView.swift:1383 |
 | LeSearchCloud | enum | iOS/LeSearchCloud.swift:26 |
 | LevelMeter | struct | iOS/VoiceInput.swift:165 |
-| LimitHandoffBanner | struct | iOS/TerminalView.swift:1001 |
+| LimitHandoffBanner | struct | iOS/TerminalView.swift:1002 |
 | LimitHelpers | enum | Shared/LimitHelpers.swift:18 |
 | LimitRow | struct | iOS/ContentView.swift:1174 |
 | LimitStatus | enum | Shared/LimitHelpers.swift:4 |
@@ -375,7 +375,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | magicPacket | function | install/payload/meshd/wol.ts:24 |
 | main | function | install/payload/bin/mesh:2556 |
 | MarkdownDocument | struct | iOS/FileViewer.swift:126 |
-| markedExcerpt | func | iOS/ChatSearchView.swift:309 |
+| markedExcerpt | func | iOS/ChatSearchView.swift:319 |
 | matchingAgent | func | Shared/Models.swift:728 |
 | MemInfo | struct | Shared/Models.swift:250 |
 | MenuCard | struct | iOS/AgentChatView.swift:630 |
@@ -457,7 +457,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | passesPushGate | function | install/payload/meshd/push.ts:240 |
 | peerDetail | func | iOS/ContentView.swift:1036 |
 | PermissionsView | struct | MeshDesktop/PermissionsView.swift:13 |
-| phoneClipboardText | func | iOS/TerminalView.swift:972 |
+| phoneClipboardText | func | iOS/TerminalView.swift:973 |
 | PhoneConnectivity | class | iOS/PhoneConnectivity.swift:7 |
 | pickPane | function | install/payload/meshd/handoff.ts:207 |
 | PinnedLimitEditor | struct | iOS/ContentView.swift:1542 |
@@ -499,7 +499,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | record | function | install/payload/meshd/redact.ts:206 |
 | redact | function | install/payload/meshd/redact.ts:113 |
 | redactAndRecord | function | install/payload/meshd/redact.ts:234 |
-| relative | func | iOS/ChatSearchView.swift:303 |
+| relative | func | iOS/ChatSearchView.swift:313 |
 | RelayReply | enum | Shared/Models.swift:1392 |
 | RemoteAppsView | struct | Watch/RemoteView.swift:1552 |
 | RemoteClipboardView | struct | Watch/RemoteView.swift:1400 |
@@ -524,13 +524,14 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | ResumableItem | struct | Shared/Models.swift:1211 |
 | ResumableKind | type | install/payload/meshd/handoff.ts:18 |
 | ResumableList | struct | Shared/Models.swift:1219 |
+| resumedTranscript | export | install/payload/meshd/sessions.ts:527 |
 | resumeFor | function | install/payload/meshd/handoff.ts:71 |
 | RiskVerdict | struct | Shared/RiskClassifier.swift:21 |
 | run | function | install/payload/bin/mesh:739 |
 | runError | function | install/payload/meshd/herdr.ts:71 |
 | runOk | function | install/payload/bin/mesh:860 |
-| runtimeLabel | func | iOS/ChatSearchView.swift:291 |
-| runtimeSymbol | func | iOS/ChatSearchView.swift:299 |
+| runtimeLabel | func | iOS/ChatSearchView.swift:301 |
+| runtimeSymbol | func | iOS/ChatSearchView.swift:309 |
 | SafariView | struct | iOS/FileBrowserView.swift:358 |
 | saveAppsConfig | function | install/payload/bin/mesh:1846 |
 | saveConfig | function | install/payload/bin/mesh:47 |
@@ -554,7 +555,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | SessionLimitsBanner | struct | iOS/ContentView.swift:1102 |
 | SessionLiveActivity | struct | MeshWatchWidgets/SessionLiveActivity.swift:8 |
 | SessionLockScreenView | struct | MeshWatchWidgets/SessionLockScreenView.swift:11 |
-| SessionPeekScreen | struct | iOS/TerminalView.swift:507 |
+| SessionPeekScreen | struct | iOS/TerminalView.swift:508 |
 | SessionRoute | struct | Watch/WatchViews.swift:576 |
 | sessionsNeedingAttention | func | Shared/Models.swift:735 |
 | SessionState | extension | Shared/Models.swift:1577 |

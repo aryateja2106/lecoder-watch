@@ -191,6 +191,7 @@ ok(rows(B) === 1 && find("billing").length === 0 && find("pineapple")[0]?.id ===
 const plan = async (p: string) => { const r = await req("POST", p); return { status: r!.status, body: await r!.json() as any }; };
 let p = await plan(`/sessions/claude/${A}/resume`);
 ok(p.status === 200 && p.body.cmd.startsWith(`claude --resume ${A} || `) && p.body.cwd === cwdA && p.body.cwdMissing === false && p.body.name === `resume-${A.slice(-8)}` && !("restoredFrom" in p.body), `Claude plan wrong: ${JSON.stringify(p)}`);
+ok((await import(`${M}/sessions.ts`)).resumedTranscript(p.body.name) === join(proj, `${A}.jsonl`), "the plan did not tell the chat view which transcript the pane resumes");
 p = await plan(`/sessions/codex/${DID}/resume`);
 ok(p.status === 200 && p.body.cmd.startsWith(`codex resume ${DU} || `) && p.body.cwd === cwdD && p.body.name === `resume-${DU.slice(-8)}`, `Codex plan wrong: ${JSON.stringify(p)}`);
 rmSync(cwdB, { recursive: true });

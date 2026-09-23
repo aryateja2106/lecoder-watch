@@ -161,6 +161,10 @@ private struct ChatHitDetail: View {
     /// A session that started but not as the original was (another folder, a new
     /// conversation): it waits for a tap so `note` is read before it is covered.
     @State private var started: MeshStore.SessionTarget?
+    /// The session to push. Set on this screen, not as the root's deep link: two
+    /// NavigationLinks deep, SwiftUI ignored `deepLinkSession` (seen in the simulator —
+    /// the session started on the Mac and the phone stayed on this screen).
+    @State private var opened: MeshStore.SessionTarget?
 
     private var hit: ChatSearchHit { found.hit }
 
@@ -218,7 +222,7 @@ private struct ChatHitDetail: View {
                 }
                 if let started {
                     Button {
-                        store.deepLinkSession = started
+                        opened = started
                     } label: {
                         Label("Open session", systemImage: "terminal")
                     }
@@ -229,6 +233,12 @@ private struct ChatHitDetail: View {
         }
         .navigationTitle(chatTitle(hit))
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $opened) { target in
+            SessionPeekScreen(machine: found.machine,
+                              session: store.snapshot?.machines.first { $0.host == target.host }?
+                                  .agents.first { $0.name == target.session }
+                                  ?? Agent(name: target.session, windows: 1, attached: false))
+        }
     }
 
     /// What will differ from the original, said before the tap rather than after.
@@ -267,7 +277,7 @@ private struct ChatHitDetail: View {
             if plan.cwdMissing == true { said.append("Started in \(plan.cwd) — the recorded folder is gone.") }
             if plan.restoredFrom != nil { said.append("Restored from meshd's history as a new conversation.") }
             if said.isEmpty {
-                store.deepLinkSession = target
+                opened = target
             } else {
                 note = said.joined(separator: " ")
                 started = target

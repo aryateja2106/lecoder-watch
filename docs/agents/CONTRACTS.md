@@ -119,7 +119,7 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `paste` | MeshClient.swift:320, RemoteScreenView.swift:111 | yes |
 | `captureJoin` | MeshClient.swift:300, WatchMeshStore.swift:552 | yes |
 | `redact` | ExposedSecretsScreen.swift:43, ExposedSecretsScreen.swift:84 | no |
-| `chat` | TerminalView.swift:874 | no |
+| `chat` | TerminalView.swift:875 | no |
 | `apps` | TerminalView.swift:111 | no |
 | `handoff` | MeshClient.swift:611, MeshClient.swift:620, MeshClient.swift:632 | no |
 | `brain` | — (nothing gates it) | no |

@@ -504,7 +504,8 @@ struct NewSessionSheet: View {
 /// Clean mobile control surface for one rmux session. The default state is read-only:
 /// show the latest output and high-signal controls, then open the full terminal only
 /// when Arya explicitly taps "Open terminal".
-private struct SessionPeekScreen: View {
+/// Internal, not private: chat search pushes it from its own detail screen.
+struct SessionPeekScreen: View {
     @EnvironmentObject var store: MeshStore
     @Environment(\.dismiss) private var dismiss
     let machine: Machine

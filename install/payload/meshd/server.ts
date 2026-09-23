@@ -21,7 +21,7 @@ import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
 import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount } from "./herdr";
 import { handlePtyUpgrade, ptyWebSocket } from "./pty";
-import { handleSessions, mirrorReadAllowed, snapshot as snapshotTranscript, startSessionMirror, startSessionSweep } from "./sessions";
+import { handleSessions, mirrorReadAllowed, resumedTranscript, snapshot as snapshotTranscript, startSessionMirror, startSessionSweep } from "./sessions";
 import { findClaudeTranscript, findCodexRollout } from "./chat";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
@@ -1030,7 +1030,7 @@ function subtreePids(root: number, table: Map<number, { ppid: number }>): number
 }
 async function agentChat(name: string, since: string | null, limit: number | null) {
   const structured = await chatFor(name, since, limit, {
-    transcriptHint: (s) => transcriptBySession.get(s),
+    transcriptHint: (s) => transcriptBySession.get(s) ?? resumedTranscript(s),
     cwdOf: paneCwd,
     agentTypeOf: paneAgentType,
   }).catch(() => null);
@@ -1377,7 +1377,7 @@ Bun.serve({
       // Hand a task to another agent, or list what can be resumed (see handoff.ts).
       const handed = await handleHandoff(req, url, {
         cwdOf: paneCwd,
-        transcriptHint: (s) => transcriptBySession.get(s),
+        transcriptHint: (s) => transcriptBySession.get(s) ?? resumedTranscript(s),
         chat: (s) => agentChat(s, null, 60),
         send: (s, text, key, pane) => agentSend(s, text, key, pane),
         which: (bin) => Bun.which(bin),
