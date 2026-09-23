@@ -144,9 +144,16 @@ def check_store(label, path, guard_line):
         bad("%s saveShownReply does not pass the on-screen answer" % label)
     if guard_line not in action or guard_line not in drafted:
         bad("%s saveShownReply does not use the draftShownAnswer host guard" % label)
-    for name in ("knowledgeAnswer", "loadedKnowledgeNote", "currentKnowledgeNote", "knowledgeAskLine"):
+    for name in ("knowledgeAnswer", "currentKnowledgeNote", "knowledgeAskLine"):
         if re.search(r"%s\s*=" % name, action):
             bad("%s saveShownReply assigns %s" % (label, name))
+    saved_title = "saved.title == titled"
+    title_at = action.find(saved_title)
+    loaded_assigns = [m.start() for m in re.finditer(r"loadedKnowledgeNote\s*=", action)]
+    if title_at < 0 or not loaded_assigns or any(at < title_at for at in loaded_assigns):
+        bad("%s saveShownReply assigns loadedKnowledgeNote before the saved title matches" % label)
+    elif "loadedKnowledgeNote = saved" not in action[title_at:]:
+        bad("%s saveShownReply does not assign the saved note after the title matches" % label)
     caught = action.rfind("} catch {")
     if caught < 0:
         bad("%s saveShownReply has no catch" % label)
