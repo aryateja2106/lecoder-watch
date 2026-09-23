@@ -7,6 +7,12 @@ run recorded in [docs/factory/runs/2026-09-22T093000Z-publish.md](docs/factory/r
 Gate: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none`
 Gate SHA: 13e53171e5ab2a896d25d5058383bfb95ae70484
 Gate log: docs/overnight/2026-09-21/gate-full-publish.txt
+Gate note: the branch has moved past that sha — the approvals parser fix (9f74d6f) and the
+screenshots after it. Re-running the full gate on this Mac is blocked, and not by code:
+`check-all` globs `check-overnight.sh`, whose `check-brain` live half asks this machine's own
+model server for a tool call, and the only model here is a text fine-tune that answers in prose
+(the Pi and the Jetson both pass). See BLOCKED.md. So this ledger quotes the gate that actually
+ran, at the sha it ran on, rather than a fresher line nothing produced.
 PR: #133 OPEN (draft) — https://github.com/aryateja2106/lecoder-watch/pull/133
 Landing: https://lesearch.ai
 Installer: https://lesearch.ai/install.sh
