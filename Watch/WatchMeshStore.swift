@@ -1001,6 +1001,7 @@ final class WatchMeshStore: ObservableObject {
             do {
                 let reply = try await c.askAgentNote(q: q, ask: question, confirm: true)
                 knowledgeDraftFile = nil
+                knowledgeSpokenTitle = nil
                 knowledgeAskLine = Self.knowledgeAskLine(reply)
                 if !reply.held {
                     loadKnowledgeNotes(host: host)
@@ -1026,6 +1027,7 @@ final class WatchMeshStore: ObservableObject {
                 knowledgeAskLine = nil
                 knowledgeAnswer = nil
                 knowledgeDraftFile = nil
+                knowledgeSpokenTitle = nil
                 WKInterfaceDevice.current().play(.failure)
             }
         }
@@ -1101,6 +1103,7 @@ final class WatchMeshStore: ObservableObject {
                 let drafted = try await c.draftAgentNote(id: read.id, confirm: true)
                 guard !drafted.held, let reply = drafted.reply, !reply.isEmpty else { return }
                 knowledgeAnswer = reply
+                knowledgeSpokenTitle = nil
                 knowledgeDraftFile = Self.heldDraftFile(drafted.draft)
             } catch {
                 return
@@ -1151,6 +1154,7 @@ final class WatchMeshStore: ObservableObject {
                 let drafted = try await c.draftAgentNote(id: loaded.id, confirm: true)
                 guard !drafted.held, let reply = drafted.reply, !reply.isEmpty else { return }
                 knowledgeAnswer = reply
+                knowledgeSpokenTitle = nil
                 knowledgeDraftFile = Self.heldDraftFile(drafted.draft)
             } catch {
                 return
