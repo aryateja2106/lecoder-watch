@@ -172,10 +172,9 @@ waited on, and the queue continued past each one.
 - Issues-only GitHub token as a Supabase secret (move the worker to an edge function)
 - Repo consolidation under LeSearch-AI — confirm the archive list and the transfer
 - TestFlight 0.8.0 upload (the only way a stranger gets the phone app)
-- The Mac's brain is now LM Studio, because ollama was stopped — decide whether that is the
-  permanent arrangement, or whether ollama should come back with a model that tool-calls.
-  Separately, `brain.ts` probes ollama before LM Studio regardless of which can answer; that
-  probe order is a product fix and wants its own slice, since `/brain` is what the app reads.
+- The Mac's brain is LM Studio now, and brain.ts still prefers ollama — decide whether that is
+  the permanent arrangement, or whether ollama comes back with a model that tool-calls; and the
+  probe order itself is a product fix with its own slice, since `/brain` is what the app reads.
 
 ## Housekeeping
 
