@@ -927,6 +927,9 @@ struct KnowledgeNoteAskView: View {
                         .disabled(store.knowledgeDraftFile?.isEmpty != false)
                     Button("Speak kept") { confirmingSpeakKept = true }
                         .disabled(keptTitle.isEmpty || store.loadedKnowledgeNote?.title != keptTitle)
+                    if store.knowledgeSpokenTitle == keptTitle, !keptTitle.isEmpty {
+                        Text("Spoken \(keptTitle)").font(.caption2)
+                    }
                 }
             } else if let line = store.knowledgeAskLine {
                 Section("Answer") {

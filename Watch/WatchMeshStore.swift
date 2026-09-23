@@ -28,6 +28,7 @@ final class WatchMeshStore: ObservableObject {
     @Published var knowledgeAnswer: String?
     /// Relative draft file from the last draft. Absolute paths and URLs stay off the screen.
     @Published var knowledgeDraftFile: String?
+    @Published var knowledgeSpokenTitle: String?
     @Published var phoneReachable = false
     @Published var lastError: String?
     @Published var screenHost: String?
@@ -1042,7 +1043,12 @@ final class WatchMeshStore: ObservableObject {
         lastError = nil
         Task {
             do {
-                _ = try await c.speakKnowledgeNote(id: loaded.id)
+                let spoken = try await c.speakKnowledgeNote(id: loaded.id)
+                if spoken.spoken, spoken.title == named {
+                    knowledgeSpokenTitle = spoken.title
+                } else {
+                    knowledgeSpokenTitle = nil
+                }
             } catch {
                 lastError = "speak failed"
             }
