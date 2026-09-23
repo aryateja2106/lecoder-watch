@@ -103,34 +103,43 @@ real watch capture.
 Where generated imagery does fit later: environment and lighting only, with our real
 screens composited in afterwards — or brand work that never depicts the UI.
 
-## The Choose screenshot was NOT re-shot, and why
+## The Choose card: a bug found by recapturing, then the recapture
 
 The parallel session changed the Choose card on 2026-09-23 so it carries the question the
-agent asked (before, the watch showed "Yes / No" with no subject). The landing page's
-`shots/iphone-choose.png` is therefore one build stale, and the plan was to recapture it.
-
-Recapturing found a bug instead. On a real Claude Code **trust-folder prompt** — the first
-thing Claude Code asks in any folder it has not seen — the new card reads:
+agent asked (before, the watch and phone showed "No, exit / Yes, I trust this folder" with
+no subject). Recapturing the landing page's `shots/iphone-choose.png` on that build found a
+bug first. On a real Claude Code **trust-folder prompt** — the first thing Claude Code asks
+in any folder it has not seen — the new card read:
 
     Choose
     Security guide
-    › No, exit
+    > No, exit
       Yes, I trust this folder
 
 "Security guide" is the link label Claude Code prints above the options; the question
 ("Quick safety check: Is this a project you created or one you trust?") is three lines
-higher. The parser takes the last line before the options, which is right for a Bash
+higher. The parser took the last line before the options, which is right for a Bash
 permission menu and wrong here. Evidence:
 `docs/overnight/2026-09-21/shots/choose-card-trust-prompt-wrong-question.png`, captured on
-9bbf8c6 against a live session on the Mac daemon.
+9bbf8c6 against a live session on the Mac daemon. The page kept the older capture until the
+parser handled the shape — putting the words "Security guide" on the front page as the thing
+a user is approving would have been shipping the bug as the pitch.
 
-So the page keeps the older capture — a genuine Claude Code trust prompt, card without the
-question line — until the parser handles this shape. Swapping now would put the word
-"Security guide" on the front page as the thing a user is approving. Recapture takes five
-minutes once it is fixed.
+The parallel session fixed it in 9f74d6f, and this is the recapture on that build: a fresh
+`mesh new shot5 --cmd claude --cwd /tmp/ls-shot5` parked at its trust prompt, the simulator
+paired to the live fleet over loopback, and the card now reads
 
-One thing the attempt did prove, end to end: tapping *Yes, I trust this folder* on the
-phone's card advanced the real pane on the Mac. The answer path works.
+    Choose
+    Quick safety check: Is this a project you created or one you trust?
+    No, exit
+    Yes, I trust this folder
+
+which is the whole claim of that section — the question and the options, on the phone,
+without reading the pane. `web/shots/iphone-choose.png` and
+`docs/product/shots/iphone-choose.png` are that capture.
+
+One thing the first attempt proved end to end, and it still holds: tapping *Yes, I trust
+this folder* on the phone's card advanced the real pane on the Mac. The answer path works.
 
 ## Gate
 

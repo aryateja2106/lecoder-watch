@@ -63,3 +63,21 @@ human) already names the decision and the hatch:
 on a Keychain dialog for `asc` (memory: shell-slowness-and-asc-keychain) — keep the Mac
 unlocked. Until then the public link serves the 2026-08-27 build; the landing and
 getting-started say "TestFlight" and are correct the moment this lands.
+
+## The Mac has no tool-calling local model, so the full gate cannot go green
+`check-brain` (inside `check-overnight`, inside the full gate) asks each machine's local
+model server for a tool call. The Pi and the Jetson answer (ollama, qwen3:1.7b and
+qwen3:4b). This Mac answers on ollama :11434 but its only model is `nl2shell-local`
+(811 MB, a text fine-tune): it replies `get_time machine="jetson"` as prose instead of
+emitting a tool call, so the check fails — correctly. Whatever served the Mac's brain
+earlier today (edge0 on :8001, per the overnight record) is not running any more; the
+Mac daemon restarted around 09:00 and Tailscale had stopped.
+
+Two ways to close it, both yours because both cost something of yours:
+- `ollama pull qwen3:1.7b` on this Mac (~1.4 GB download, the same model the Pi runs), or
+- start whatever served :8001 before (edge0 / LM Studio) and leave it running.
+
+Until then the publish ledger cannot carry a green full-gate line at a current sha, and
+`scripts/check-published.sh` will say so rather than pretend. Nothing about the app, the
+daemon, the site or the feedback pipeline is affected — this is one live check about local
+models on one machine.
