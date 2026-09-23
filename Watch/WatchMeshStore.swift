@@ -1152,6 +1152,31 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Keep the draft on screen as a new note. Nothing is posted until the user confirms.
+    /// The title is the reply's first line. This does not replace an existing note.
+    func keepShownDraft(host: String, confirmed: Bool) {
+        guard confirmed else { return }
+        guard let shown = knowledgeAnswer, !shown.isEmpty else { return }
+        guard knowledgeDraftFile?.isEmpty == false else { return }
+        let text = shown.trimmingCharacters(in: .whitespacesAndNewlines)
+        let line = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
+        let titled = String(line.prefix(200))
+        guard !titled.isEmpty else { return }
+        guard directReachable(host), let c = client(for: host) else {
+            lastError = "Keep needs a direct link to this Mac"
+            return
+        }
+        lastError = nil
+        Task {
+            do {
+                _ = try await c.createKnowledgeNote(title: titled, body: text)
+                loadKnowledgeNotes(host: host)
+            } catch {
+                lastError = "keep failed"
+            }
+        }
+    }
+
     /// Save a typed knowledge note. Nothing is posted until the user confirms.
     func saveKnowledgeNote(host: String, title: String, body: String, confirmed: Bool) {
         guard confirmed else { return }
