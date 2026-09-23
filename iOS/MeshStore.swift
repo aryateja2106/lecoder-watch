@@ -954,7 +954,10 @@ final class MeshStore: ObservableObject {
         let c = client(for: machine)
         Task {
             do {
-                _ = try await c.createKnowledgeNote(title: titled, body: text)
+                let saved = try await c.createKnowledgeNote(title: titled, body: text)
+                if saved.title == titled {
+                    loadedKnowledgeNote = KnowledgeNote(id: saved.id, title: saved.title, body: text)
+                }
                 loadKnowledgeNotes(host: host)
             } catch {
                 fail("keep failed")
