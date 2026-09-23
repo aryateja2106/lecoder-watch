@@ -26,6 +26,8 @@ final class WatchMeshStore: ObservableObject {
     @Published var knowledgeAskLine: String?
     /// Body of the saved answer when one note title is the question.
     @Published var knowledgeAnswer: String?
+    /// Relative draft file from the last draft. Absolute paths and URLs stay off the screen.
+    @Published var knowledgeDraftFile: String?
     @Published var phoneReachable = false
     @Published var lastError: String?
     @Published var screenHost: String?
@@ -997,6 +999,7 @@ final class WatchMeshStore: ObservableObject {
         Task {
             do {
                 let reply = try await c.askAgentNote(q: q, ask: question, confirm: true)
+                knowledgeDraftFile = nil
                 knowledgeAskLine = Self.knowledgeAskLine(reply)
                 if !reply.held {
                     loadKnowledgeNotes(host: host)
@@ -1021,6 +1024,7 @@ final class WatchMeshStore: ObservableObject {
                 lastError = "ask failed"
                 knowledgeAskLine = nil
                 knowledgeAnswer = nil
+                knowledgeDraftFile = nil
                 WKInterfaceDevice.current().play(.failure)
             }
         }
@@ -1091,6 +1095,7 @@ final class WatchMeshStore: ObservableObject {
                 let drafted = try await c.draftAgentNote(id: read.id, confirm: true)
                 guard !drafted.held, let reply = drafted.reply, !reply.isEmpty else { return }
                 knowledgeAnswer = reply
+                knowledgeDraftFile = Self.heldDraftFile(drafted.draft)
             } catch {
                 return
             }
@@ -1140,6 +1145,7 @@ final class WatchMeshStore: ObservableObject {
                 let drafted = try await c.draftAgentNote(id: loaded.id, confirm: true)
                 guard !drafted.held, let reply = drafted.reply, !reply.isEmpty else { return }
                 knowledgeAnswer = reply
+                knowledgeDraftFile = Self.heldDraftFile(drafted.draft)
             } catch {
                 return
             }
@@ -1171,6 +1177,13 @@ final class WatchMeshStore: ObservableObject {
                 WKInterfaceDevice.current().play(.failure)
             }
         }
+    }
+
+    /// A draft path the screen may show. Absolute paths and URLs stay off the screen.
+    static func heldDraftFile(_ path: String?) -> String? {
+        let name = (path ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !name.contains("://"), !name.hasPrefix("/"), !name.contains("..") else { return nil }
+        return name
     }
 
     private static func knowledgeAskLine(_ reply: AgentNoteAsk) -> String {

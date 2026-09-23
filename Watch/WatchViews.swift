@@ -910,6 +910,9 @@ struct KnowledgeNoteAskView: View {
             if let answer = store.knowledgeAnswer, !answer.isEmpty {
                 Section("Answer") {
                     Text(answer).font(.caption)
+                    if let file = store.knowledgeDraftFile, !file.isEmpty {
+                        Text("Draft file \(file)").font(.caption2)
+                    }
                     Button("Draft") { confirmingDraft = true }
                     Button("Save reply") { confirmingSaveReply = true }
                 }
