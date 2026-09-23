@@ -21,7 +21,7 @@ import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
 import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount } from "./herdr";
 import { handlePtyUpgrade, ptyWebSocket } from "./pty";
-import { handleSessions, snapshot as snapshotTranscript, startSessionSweep } from "./sessions";
+import { handleSessions, snapshot as snapshotTranscript, startSessionMirror, startSessionSweep } from "./sessions";
 import { findClaudeTranscript, findCodexRollout } from "./chat";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
@@ -1567,6 +1567,7 @@ chmod(EVENTS_PATH, 0o600).catch(() => {});
 console.log(`meshd ${VERSION} on http://${HOST}:${PORT}  (host=${os.hostname()} platform=${process.platform})`);
 initTelemetry(VERSION);
 startSessionSweep();
+startSessionMirror();
 // Warm the per-session status index from the stored tail, and settle the capture-pane
 // -J question once, before the first client asks. Both are best-effort: an empty
 // index just means rows start as idle/working until events arrive.

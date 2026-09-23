@@ -9,6 +9,8 @@
 #   - subagent transcripts (agent-*.jsonl) are not sessions; Codex rollouts are
 #   - a second sweep over unchanged files records nothing; concurrent snapshots of one
 #     file never share a version number
+#   - a mirror pulls every version over HTTP: the latest file, the base a compaction
+#     replaced, secrets masked at the source, nothing twice, a half-written append undone
 #   - restore writes a NEW session file next to the original with every sessionId
 #     rewritten, leaves the original alone, and is refused for Codex
 # Plus the wiring in server.ts: route, capability, boot sweep, Stop-event trigger.
@@ -22,6 +24,7 @@ bad() { echo "FAIL: $1"; fail=1; }
 grep -q 'from "./sessions"' "$SERVER" || bad "server.ts does not import sessions.ts"
 grep -q 'await handleSessions(req, url)' "$SERVER" || bad "/sessions routes are not dispatched"
 grep -q '^startSessionSweep();' "$SERVER" || bad "the background sweep never starts"
+grep -q '^startSessionMirror();' "$SERVER" || bad "the mirror never starts on a machine that asks for it"
 grep -q '"pty", "sessions"\]' "$SERVER" || bad "capability sessions is not advertised"
 grep -q 'snapshotTranscript(p!)' "$SERVER" || bad "a finished turn no longer snapshots its session"
 grep -q 'case "sessions": return cmdSessions' "$MESH" || bad "mesh sessions is not wired"
@@ -33,6 +36,7 @@ trap 'rm -rf "$T"' EXIT
 cat > "$T/run.ts" <<'TS'
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync, statSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { gzipSync, gunzipSync } from "node:zlib";
 const HOME = process.env.HOME!;
 const { snapshot, reconstruct, sweep, handleSessions } = await import(process.env.MODULE!);
 let bad = 0;
@@ -106,9 +110,36 @@ ok(Buffer.compare(readFileSync(file), v3) === 0, "restore touched the original t
 const cxId = list.sessions.find((s: any) => s.runtime === "codex").id;
 ok((await req("POST", `/sessions/codex/${cxId}/restore`))!.status === 400, "Codex restore was not refused");
 
+// Mirror: a second machine pulls every version over HTTP, redacted at the source.
+const { mirrorOnce } = await import(process.env.MODULE!);
+const secret = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+const leaky = join(proj, "33333333-2222-4333-8444-555555555555.jsonl");
+writeFileSync(leaky, line({ type: "user", message: { content: `use ${secret} to push` } }));
+await snapshot(leaky);
+const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: async (q) => (await handleSessions(q, new URL(q.url))) ?? new Response("no", { status: 404 }) });
+writeFileSync(join(HOME, ".mesh/hosts.json"), JSON.stringify({ hosts: { peer1: { ip: "localhost", port: server.port } } }));
+const m1 = await mirrorOnce();
+ok(m1.peers === 1 && m1.fetched > 0, `mirror pulled nothing: ${JSON.stringify(m1)}`);
+const mdir = join(HOME, ".mesh/sessions-mirror/peer1/claude");
+ok(Buffer.compare(readFileSync(join(mdir, `${id}.jsonl`)), v3) === 0, "the mirror's copy is not the latest version");
+ok(Buffer.compare(Buffer.from(gunzipSync(readFileSync(join(mdir, `${id}.v2.jsonl.gz`)))), v2) === 0, "the mirror dropped the version a compaction replaced");
+const mirroredLeak = readFileSync(join(mdir, "33333333-2222-4333-8444-555555555555.jsonl"), "utf8");
+ok(!mirroredLeak.includes(secret) && mirroredLeak.includes("ghp_••••••"), "a secret crossed to the mirror unredacted");
+ok((await mirrorOnce()).fetched === 0, "a second pull with nothing new fetched something");
+const raceFile = join(mdir, "22222222-2222-4333-8444-555555555555.jsonl");
+appendFileSync(raceFile, "half-written junk");            // an interrupted earlier pull
+appendFileSync(race, line({ late: true }));
+await snapshot(race);
+ok((await mirrorOnce()).fetched === 1, "a new append was not pulled exactly once");
+ok(Buffer.compare(readFileSync(raceFile), readFileSync(race)) === 0, "an append after an interrupted pull left the mirror wrong");
+ok((statSync(join(HOME, ".mesh/sessions-mirror")).mode & 0o777) === 0o700, "the mirror is not 0700");
+const ml = await (await req("GET", "/sessions?mirror=1"))!.json();
+ok(ml.sessions.length === 4 && ml.sessions.every((r: any) => r.host === "peer1"), `GET /sessions?mirror=1 listed ${ml.sessions.length}`);
+ok((await req("GET", "/sessions/claude/../raw")) === null && (await req("GET", "/sessions/claude/..%2Findex.json/raw")) === null, "a dot-dot id reached the store");
+server.stop(true);
+
 // Tamper: flip a byte inside the stored append — reconstruct must refuse, not serve it.
 const p2 = join(dir, "v2.gz");
-const { gzipSync, gunzipSync } = await import("node:zlib");
 const raw = gunzipSync(readFileSync(p2)); raw[10] ^= 1; writeFileSync(p2, gzipSync(raw));
 ok(await reconstruct("claude", id, 2) === null, "a tampered version was served");
 ok((await req("GET", `/sessions/claude/${id}/raw?v=2`))!.status === 404, "GET raw served a tampered version");

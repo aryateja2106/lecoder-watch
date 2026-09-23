@@ -22,17 +22,28 @@
 //   POST /sessions/:runtime/:id/restore?v=N Claude only: version N as a NEW session in the
 //                                           same project, so `claude --resume <new id>` picks
 //                                           it up without touching the original
-import { homedir } from "node:os";
+//   GET  /sessions/:runtime/:id/chunk?v=N   version N's own bytes (a base: the file; an
+//                                           append: what it added), REDACTED — what a mirror pulls
+//   GET  /sessions?mirror=1                 the sessions this machine mirrors from its peers
+//
+// Mirror (MESH_SESSIONS_MIRROR=on, meant for the always-on machine): every ten minutes, pull
+// each peer's new versions from hosts.json into ~/.mesh/sessions-mirror/<host>/<runtime>/
+// <id>.jsonl — plain redacted JSONL an agent there can grep or hand off. An append is
+// appended; a new base (compaction) keeps the previous file as <id>.v<N>.jsonl.gz. Redaction
+// happens on the machine that wrote the transcript, so a secret never crosses the tailnet.
+import { homedir, networkInterfaces } from "node:os";
 import { join, basename, dirname } from "node:path";
-import { mkdir, readdir, readFile, rename, stat, writeFile, chmod } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile, chmod, appendFile, truncate } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
+import { redact } from "./redact";
 
 const HOME = homedir();
 const STORE = process.env.MESH_SESSIONS_DIR || join(HOME, ".mesh", "sessions");
 const CLAUDE_PROJECTS = join(HOME, ".claude", "projects");
 const CODEX_SESSIONS = join(HOME, ".codex", "sessions");
+const MIRROR = process.env.MESH_SESSIONS_MIRROR_DIR || join(HOME, ".mesh", "sessions-mirror");
 
 type Runtime = "claude" | "codex";
 type Version = { n: number; kind: "base" | "append"; size: number; sha256: string; mtimeMs: number; ts: string };
@@ -211,12 +222,113 @@ async function list(limit: number) {
   return rows.sort((a, b) => b.lastTs.localeCompare(a.lastTs)).slice(0, limit);
 }
 
+/// Version n's own chunk, redacted in ~1 MB batches cut at newlines, so a 139 MB base never
+/// becomes one giant string.
+async function redactedChunk(runtime: Runtime, id: string, n: number): Promise<{ kind: Version["kind"]; body: ReadableStream } | null> {
+  const v = (await readIndex(runtime, id))?.versions.find((x) => x.n === n);
+  if (!v) return null;
+  const raw = gunzipSync(await readFile(join(dirOf(runtime, id), `v${n}.gz`)));
+  const dec = new TextDecoder(), enc = new TextEncoder();
+  let at = 0;
+  const body = new ReadableStream({
+    pull(ctrl) {
+      if (at >= raw.length) return ctrl.close();
+      const nl = raw.indexOf(10, Math.min(raw.length - 1, at + (1 << 20)));
+      const end = nl < 0 ? raw.length : nl + 1;
+      ctrl.enqueue(enc.encode(redact(dec.decode(raw.subarray(at, end))).text));
+      at = end;
+    },
+  });
+  return { kind: v.kind, body };
+}
+
+type MirrorEntry = { runtime: Runtime; id: string; n: number; size: number; cwd: string | null; title: string | null; ts: string };
+
+/// Pull one peer's new versions. Versions are applied in order and the index is written
+/// after each, so an interrupted pull resumes where it stopped.
+async function mirrorPeer(name: string, base: string, token: string): Promise<number> {
+  const get = (p: string) => fetch(base + p, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(120_000) });
+  const res = await get("/sessions?limit=500");
+  if (!res.ok) return 0;
+  const { sessions } = await res.json() as { sessions: any[] };
+  const dir = join(MIRROR, name);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await chmod(MIRROR, 0o700).catch(() => {});
+  const ixPath = join(dir, "index.json");
+  const index: Record<string, MirrorEntry> = await readFile(ixPath, "utf8").then(JSON.parse, () => ({}));
+  let fetched = 0;
+  for (const s of sessions) {
+    if (s.runtime !== "claude" && s.runtime !== "codex") continue;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(s.id))) continue;  // it names a file here
+    const key = `${s.runtime}/${s.id}`;
+    const have: MirrorEntry = index[key] ?? { runtime: s.runtime, id: s.id, n: 0, size: 0, cwd: s.cwd ?? null, title: s.title ?? null, ts: "" };
+    if (have.n >= s.versions) continue;
+    const up = await get(`/sessions/${key}`).then((r) => (r.ok ? r.json() : null), () => null) as Index | null;
+    if (!up) continue;
+    const file = join(dir, s.runtime, `${s.id}.jsonl`);
+    await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+    for (const v of up.versions.filter((x) => x.n > have.n)) {
+      const r = await get(`/sessions/${key}/chunk?v=${v.n}`).catch(() => null);
+      if (!r?.ok) break;
+      const chunk = new Uint8Array(await r.arrayBuffer());
+      if (v.kind === "base") {
+        if (have.size > 0) await writePrivate(join(dir, s.runtime, `${s.id}.v${have.n}.jsonl.gz`), gzipSync(await readFile(file)));
+        await writePrivate(file, chunk);
+        have.size = chunk.length;
+      } else {
+        // Undo a half-written append from an interrupted pull before adding this one.
+        if (((await stat(file).catch(() => null))?.size ?? 0) > have.size) await truncate(file, have.size);
+        await appendFile(file, chunk, { mode: 0o600 });
+        have.size += chunk.length;
+      }
+      have.n = v.n; have.ts = v.ts; have.cwd ??= up.cwd; have.title ??= up.title;
+      index[key] = have;
+      await writePrivate(ixPath, JSON.stringify(index, null, 1));
+      fetched++;
+    }
+  }
+  return fetched;
+}
+
+let mirroring = false;
+export async function mirrorOnce(): Promise<{ peers: number; fetched: number }> {
+  if (mirroring) return { peers: 0, fetched: 0 };
+  mirroring = true;
+  let peers = 0, fetched = 0;
+  try {
+    const cfg = await readFile(join(HOME, ".mesh", "hosts.json"), "utf8").then(JSON.parse, () => ({}));
+    const mine = new Set(Object.values(networkInterfaces()).flat().map((i) => i?.address));
+    for (const [name, h] of Object.entries<any>(cfg?.hosts ?? {})) {
+      if (!h?.ip || mine.has(h.ip) || h.ip === "127.0.0.1" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) continue;
+      peers++;
+      // A peer that is asleep or predates `sessions` is simply tried again next round.
+      fetched += await mirrorPeer(name, `http://${h.ip}:${h.port || 8899}`, h.token ? String(h.token) : "").catch(() => 0);
+    }
+  } finally { mirroring = false; }
+  return { peers, fetched };
+}
+
+export function startSessionMirror(): void {
+  if (process.env.MESH_SESSIONS_MIRROR !== "on") return;
+  setTimeout(() => { mirrorOnce().catch(() => {}); setInterval(() => mirrorOnce().catch(() => {}), 10 * 60_000); }, 60_000);
+}
+
+async function mirrorList() {
+  const rows: any[] = [];
+  for (const host of await readdir(MIRROR).catch(() => [] as string[])) {
+    const index: Record<string, MirrorEntry> = await readFile(join(MIRROR, host, "index.json"), "utf8").then(JSON.parse, () => ({}));
+    for (const e of Object.values(index)) rows.push({ host, ...e, path: join(MIRROR, host, e.runtime, `${e.id}.jsonl`) });
+  }
+  return rows.sort((a, b) => b.ts.localeCompare(a.ts));
+}
+
 /// Mirrors handleInput's contract: null = not our route. Auth has already passed.
 export async function handleSessions(req: Request, url: URL): Promise<Response | null> {
   if (url.pathname === "/sessions" && req.method === "GET") {
+    if (url.searchParams.get("mirror") === "1") return Response.json({ sessions: await mirrorList() });
     return Response.json({ sessions: await list(Math.min(500, Number(url.searchParams.get("limit") ?? 50) || 50)) });
   }
-  const m = url.pathname.match(/^\/sessions\/(claude|codex)\/([A-Za-z0-9._-]+)(\/raw|\/restore)?$/);
+  const m = url.pathname.match(/^\/sessions\/(claude|codex)\/([A-Za-z0-9][A-Za-z0-9._-]*)(\/raw|\/restore|\/chunk)?$/);
   if (!m) return null;
   const [, runtime, id, tail] = m as unknown as [string, Runtime, string, string | undefined];
   const v = url.searchParams.has("v") ? Number(url.searchParams.get("v")) : undefined;
@@ -228,6 +340,11 @@ export async function handleSessions(req: Request, url: URL): Promise<Response |
     const bytes = await reconstruct(runtime, id, v);
     return bytes ? new Response(bytes, { headers: { "content-type": "application/x-ndjson" } })
                  : Response.json({ error: "no such version, or it no longer matches its recorded hash" }, { status: 404 });
+  }
+  if (tail === "/chunk" && req.method === "GET") {
+    const c = v ? await redactedChunk(runtime, id, v) : null;
+    return c ? new Response(c.body, { headers: { "content-type": "application/x-ndjson", "x-mesh-kind": c.kind } })
+             : Response.json({ error: "no such version" }, { status: 404 });
   }
   if (tail === "/restore" && req.method === "POST") {
     if (runtime !== "claude") return Response.json({ error: "restore is Claude Code only for now" }, { status: 400 });

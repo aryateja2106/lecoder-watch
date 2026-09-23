@@ -446,9 +446,18 @@ async function cmdStatus(cfg: Config) {
 // is shown once, under its name.
 // Lossless history of this machine's agent transcripts (meshd sessions.ts). An id may be
 // a prefix; `log` lists versions, `restore` writes version N back as a new resumable session.
-async function cmdSessions(pos: string[], flags: Record<string, string>, cfg: Config) {
+async function cmdSessions(pos: string[], flags: Record<string, string>, bools: Set<string>, cfg: Config) {
   const h = resolveHost(hostOf(flags), cfg);
   const [sub, want] = pos;
+  if (bools.has("mirror")) {
+    const { sessions } = await api(h, "GET", "/sessions?mirror=1");
+    return out(() => {
+      if (!sessions.length) { console.log(`(${h.name} mirrors nothing — set MESH_SESSIONS_MIRROR=on in its meshd.env)`); return; }
+      for (const s of sessions.slice(0, Number(flags.n || flags.limit) || 30)) {
+        console.log(`${String(s.host).padEnd(10)} ${s.id.slice(0, 8)}  ${s.runtime.padEnd(6)} v${String(s.n).padEnd(4)} ${(s.title ?? s.cwd ?? "").slice(0, 60)}`);
+      }
+    }, sessions);
+  }
   const { sessions } = await api(h, "GET", "/sessions?limit=500");
   const size = (b: number) => b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`;
   if (!sub || sub === "ls" || sub === "list") {
@@ -2234,7 +2243,7 @@ STATUS
                               load, agent CLIs, local models, role   [--json for agents]
                               Agents: read "mesh fleet --json" before choosing where to run.
   sessions                    every agent conversation this machine kept, with versions
-                              [log <id> | restore <id> --at N]  survives compaction + cleanup
+                              [log <id> | restore <id> --at N | --mirror]  survives compaction + cleanup
   usage                       usage/limits per provider     (alias: limits)
   health                      is meshd up?
   doctor                      what actually works on a machine  [--fix shows the permission dialogs]
@@ -2503,7 +2512,7 @@ async function main() {
     case "health": return cmdHealth(flags, cfg);
     case "status": return cmdStatus(cfg);
     case "fleet": case "where": return cmdFleet(cfg);
-    case "sessions": return cmdSessions(pos, flags, cfg);
+    case "sessions": return cmdSessions(pos, flags, bools, cfg);
     case "upgrade": case "update": return cmdUpgrade(flags, bools, cfg);
     case "doctor": return cmdDoctor(flags, cfg, bools);
     case "events": return cmdEvents(flags, cfg);

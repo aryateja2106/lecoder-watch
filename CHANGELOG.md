@@ -14,7 +14,11 @@ each entry as you ship the slice, not at release time.
   cleanup deletes it. Growth is stored as the new bytes only, so a 138 MB session costs the
   size of what was added per turn, not a copy per turn. `mesh sessions` lists them,
   `mesh sessions restore <id> --at N` brings any version back as a new session you resume with
-  `claude --resume`. Nothing leaves the machine and nothing needs an account.
+  `claude --resume`. Nothing needs an account.
+- **One machine can hold everyone's history.** Set `MESH_SESSIONS_MIRROR=on` on the machine
+  that is always on and it pulls every other machine's sessions every ten minutes, redacted
+  on the machine that wrote them, as plain files an agent there can search or pick up.
+  `mesh sessions --mirror -H <host>` lists them.
 - **`mesh fleet`** — what each machine is and has right now (hardware, accelerator, free RAM,
   load, sessions, agent CLIs, local models, the role you gave it), for agents deciding where
   to run. `/stats` gains `hw`.
