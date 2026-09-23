@@ -1124,6 +1124,28 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Draft the note loaded on screen. Nothing is posted until the user confirms.
+    /// A title that is not the loaded note does not draft.
+    func draftLoadedNote(host: String, title: String, confirmed: Bool) {
+        guard confirmed else { return }
+        let named = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let loaded = loadedKnowledgeNote, loaded.title == named else { return }
+        guard directReachable(host), let c = client(for: host) else {
+            lastError = "Draft needs a direct link to this Mac"
+            return
+        }
+        lastError = nil
+        Task {
+            do {
+                let drafted = try await c.draftAgentNote(id: loaded.id, confirm: true)
+                guard !drafted.held, let reply = drafted.reply, !reply.isEmpty else { return }
+                knowledgeAnswer = reply
+            } catch {
+                return
+            }
+        }
+    }
+
     /// Save a typed knowledge note. Nothing is posted until the user confirms.
     func saveKnowledgeNote(host: String, title: String, body: String, confirmed: Bool) {
         guard confirmed else { return }
