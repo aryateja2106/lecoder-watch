@@ -871,6 +871,12 @@ struct KnowledgeNoteAskView: View {
         ask.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var keptTitle: String {
+        let text = (store.knowledgeAnswer ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let line = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
+        return String(line.prefix(200))
+    }
+
     var body: some View {
         List {
             Section("Notes") {
@@ -938,6 +944,9 @@ struct KnowledgeNoteAskView: View {
             if loaded.title == namedNote {
                 noteBody = loaded.body
             } else if loaded.title == question {
+                note = loaded.title
+                noteBody = loaded.body
+            } else if loaded.title == keptTitle {
                 note = loaded.title
                 noteBody = loaded.body
             }

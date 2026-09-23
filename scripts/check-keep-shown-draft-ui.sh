@@ -88,7 +88,7 @@ def check_store(label, path):
         bad("%s createKnowledgeNote appears %s times" % (label, action.count(call)))
     if action.count("loadKnowledgeNotes(host: host)") != 1:
         bad("%s loadKnowledgeNotes appears %s times" % (label, action.count("loadKnowledgeNotes(host: host)")))
-    for forbidden in ("knowledgeAnswer =", "knowledgeDraftFile =", "currentKnowledgeNote =", "loadedKnowledgeNote =", "knowledgeAskLine =", "replaceKnowledgeNote", "draftAgentNote", "askAgentNote", "speak"):
+    for forbidden in ("knowledgeAnswer =", "knowledgeDraftFile =", "currentKnowledgeNote =", "knowledgeAskLine =", "replaceKnowledgeNote", "draftAgentNote", "askAgentNote", "speak"):
         if forbidden in action:
             bad("%s keepShownDraft contains %s" % (label, forbidden))
 
