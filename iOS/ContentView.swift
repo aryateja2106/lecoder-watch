@@ -505,8 +505,13 @@ struct KnowledgeNoteAskView: View {
             store.currentKnowledgeNote = value
         }
         .onChange(of: store.loadedKnowledgeNote) { _, loaded in
-            guard let loaded, loaded.title == namedNote else { return }
-            noteBody = loaded.body
+            guard let loaded else { return }
+            if loaded.title == namedNote {
+                noteBody = loaded.body
+            } else if loaded.title == question {
+                note = loaded.title
+                noteBody = loaded.body
+            }
         }
         .confirmationDialog("Ask this note?", isPresented: $confirming, titleVisibility: .visible) {
             Button("Ask") {
