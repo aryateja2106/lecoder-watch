@@ -300,7 +300,7 @@ import json, os, stat, sys
 res_path, draft, assistant, marker, state, paper_id = sys.argv[1:7]
 raw = open(res_path).read()
 data = json.loads(raw)
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: ask keys are %r" % (sorted(data),))
 if data.get("modelClass") != "local" or data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: ask result is %r" % (data,))
@@ -308,6 +308,8 @@ if data.get("draft") != "reader.txt" or os.path.isabs(str(data.get("draft"))):
     raise SystemExit("FAIL: draft is %r" % (data.get("draft"),))
 if open(draft).read() != open(assistant).read():
     raise SystemExit("FAIL: held file is not the stub reply")
+if data.get("reply") != open(draft).read():
+    raise SystemExit("FAIL: reply is not the held file")
 mode = stat.S_IMODE(os.stat(draft).st_mode)
 if mode != 0o600 or mode & 0o111:
     raise SystemExit("FAIL: held file mode is %o" % mode)
@@ -489,9 +491,9 @@ code="$(post_json "$TH/held.out" "$TH/held.json" "/agent-note")"
 python3 - "$TH/held.out" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: held reply keys are %r" % (sorted(data),))
-if data.get("draft") is not None or data.get("commandRan") is not False or data.get("held") is not True:
+if data.get("reply") is not None or data.get("draft") is not None or data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: held reply was stored: %r" % (data,))
 PY
 [ "$(stub_hits)" = "$((before_hits + 1))" ] || { echo "FAIL: held reply did not call the model"; exit 1; }
