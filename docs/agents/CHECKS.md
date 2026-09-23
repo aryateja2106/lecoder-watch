@@ -38,6 +38,7 @@
 | `check-feedback-pipeline.sh` | the feedback worker files the right issues: a report that matches an open from-users issue becomes a comment… |
 | `check-feedback-redact.swift` | the problem report never carries a secret: every key shape the daemon's redactor knows is replaced by its… |
 | `check-file-browser-filter.swift` | Run via `sh scripts/check-all.sh`, which compiles every check-*.swift against the full Shared/ dependency set |
+| `check-fleet-map.sh` | `mesh fleet` is what an agent reads before deciding which machine to run on, so the fields it depends on have… |
 | `check-fleet.sh` | every machine in ~/.mesh/hosts.json runs THIS tree's meshd and is usable |
 | `check-glance.swift` | A complication is the most-seen and least-interactive surface in the product: it is on the watch face all day… |
 | `check-handoff.sh` | handoff.ts self-check: HANDOFF.md carries the last assistant message, the recent turns and the tool activity |
