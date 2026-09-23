@@ -1097,6 +1097,31 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Save the reply on screen into the note whose title is the question.
+    /// Nothing is posted until the user confirms. A missing or ambiguous title does not write.
+    func saveShownReply(host: String, question: String, confirmed: Bool) {
+        guard confirmed else { return }
+        guard let shown = knowledgeAnswer, !shown.isEmpty else { return }
+        let titled = String(question.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        guard directReachable(host), let c = client(for: host) else {
+            lastError = "Save needs a direct link to this Mac"
+            return
+        }
+        lastError = nil
+        Task {
+            do {
+                let listed = try await c.listKnowledgeNotes()
+                let matches = listed.filter { $0.title == titled }
+                guard matches.count == 1 else { return }
+                let read = try await c.readKnowledgeNote(id: matches[0].id)
+                guard read.title == titled else { return }
+                _ = try await c.replaceKnowledgeNote(id: read.id, body: shown)
+            } catch {
+                return
+            }
+        }
+    }
+
     /// Save a typed knowledge note. Nothing is posted until the user confirms.
     func saveKnowledgeNote(host: String, title: String, body: String, confirmed: Bool) {
         guard confirmed else { return }
