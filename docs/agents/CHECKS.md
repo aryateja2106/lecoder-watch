@@ -55,6 +55,7 @@
 | `check-linux-desktop.sh` | a Linux machine is a full Remote peer: running apps listed and activatable (xprop/xdotool), clipboard writes… |
 | `check-live-card.swift` | The live card is the one thing on the Lock Screen and the watch Smart Stack, so picking the wrong session is… |
 | `check-machine-dedupe.swift` | Run via `sh scripts/check-all.sh`, which compiles every check-*.swift against the full Shared/ dependency set… |
+| `check-menu-prompt.swift` | a Choose card must carry the question, not just the answers |
 | `check-mesh-apps.sh` | `mesh apps` is what both app-building skills end on: publish a PWA, register a native build, install it |
 | `check-mesh-auth.sh` | auth.ts self-check: this gate is the only thing between a request and RCE, so it fails closed |
 | `check-mesh-chords.sh` | Self-check for simultaneous modifier chords — issue #109 |

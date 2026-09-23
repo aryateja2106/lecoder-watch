@@ -40,8 +40,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | AppsLibraryView | struct | iOS/AppsLibraryView.swift:11 |
 | appsOk | function | install/payload/bin/mesh:1654 |
 | AppsTab | struct | iOS/ContentView.swift:79 |
-| ArtifactCardView | struct | iOS/AgentChatView.swift:971 |
-| ArtifactDetailSheet | struct | iOS/AgentChatView.swift:1008 |
+| ArtifactCardView | struct | iOS/AgentChatView.swift:1006 |
+| ArtifactDetailSheet | struct | iOS/AgentChatView.swift:1043 |
 | ArtifactKind | enum | iOS/AgentChatView.swift:61 |
 | ArtifactSentinel | enum | iOS/AgentChatView.swift:77 |
 | AttentionRow | struct | Watch/WatchViews.swift:365 |
@@ -56,7 +56,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | cardState | func | Shared/SessionCard.swift:48 |
 | cardStateForLevel | func | Shared/Models.swift:818 |
 | Channel | type | install/payload/meshd/redact.ts:26 |
-| ChatBubble | struct | iOS/AgentChatView.swift:733 |
+| ChatBubble | struct | iOS/AgentChatView.swift:764 |
 | ChatDeps | type | install/payload/meshd/chat.ts:236 |
 | ChatFeed | struct | Shared/Models.swift:1136 |
 | chatFor | function | install/payload/meshd/chat.ts:275 |
@@ -80,6 +80,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | CheckLimitHelpers | struct | scripts/check-limit-helpers.swift:6 |
 | CheckLiveCard | struct | scripts/check-live-card.swift:7 |
 | CheckMachineDedupe | struct | scripts/check-machine-dedupe.swift:19 |
+| CheckMenuPrompt | struct | scripts/check-menu-prompt.swift:8 |
 | CheckPairing | struct | scripts/check-pairing.swift:7 |
 | CheckPointerGain | struct | scripts/check-pointer-gain.swift:6 |
 | CheckPreviewMapping | struct | scripts/check-preview-mapping.swift:7 |
@@ -161,7 +162,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | DaemonGap | struct | Shared/DaemonCapabilities.swift:25 |
 | DaemonUpdateSection | struct | iOS/ContentView.swift:746 |
 | DaemonWatch | class | MeshDesktop/MeshDesktopApp.swift:91 |
-| DecisionCard | struct | iOS/AgentChatView.swift:660 |
+| DecisionCard | struct | iOS/AgentChatView.swift:691 |
 | DEDUPE_WINDOW_MS | export | install/payload/meshd/push.ts:199 |
 | derivedSessionDisplayState | func | Shared/Models.swift:864 |
 | describe | func | install/payload/bin/mesh-input.swift:186 |
@@ -188,7 +189,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | EventsView | struct | Watch/WatchViews.swift:489 |
 | eventTime | func | iOS/ContentView.swift:1759 |
 | eventToArgs | function | install/payload/meshd/input-linux.ts:152 |
-| ExpandedDetailBlock | struct | iOS/AgentChatView.swift:907 |
+| ExpandedDetailBlock | struct | iOS/AgentChatView.swift:942 |
 | ExposedSecretsScreen | struct | iOS/ExposedSecretsScreen.swift:8 |
 | Exposure | type | install/payload/meshd/redact.ts:29 |
 | ExposureList | struct | Shared/Models.swift:1157 |
@@ -361,7 +362,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MarkdownDocument | struct | iOS/FileViewer.swift:126 |
 | matchingAgent | func | Shared/Models.swift:728 |
 | MemInfo | struct | Shared/Models.swift:250 |
-| MenuCard | struct | iOS/AgentChatView.swift:599 |
+| MenuCard | struct | iOS/AgentChatView.swift:630 |
 | MenuContent | struct | MeshDesktop/MeshDesktopApp.swift:48 |
 | MenuOptionRow | struct | Watch/WatchViews.swift:1711 |
 | mergeDuplicateMachineRows | func | Shared/Models.swift:538 |
@@ -519,7 +520,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | SectionLabel | struct | iOS/ContentView.swift:1743 |
 | SecureStore | enum | Shared/SecureStore.swift:17 |
 | sendWake | function | install/payload/meshd/wol.ts:53 |
-| SentDecisionLine | struct | iOS/AgentChatView.swift:715 |
+| SentDecisionLine | struct | iOS/AgentChatView.swift:746 |
 | serveApp | function | install/payload/meshd/apps.ts:224 |
 | ServiceStatusRow | struct | iOS/ContentView.swift:1726 |
 | SessionActivityAttributes | struct | Shared/SessionActivity.swift:13 |
@@ -561,7 +562,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | StoreError | struct | iOS/MeshStore.swift:10 |
 | String | extension | iOS/ShellSafeText.swift:20 |
 | stripRcLines | function | install/payload/bin/mesh:2008 |
-| SuggestionChip | struct | iOS/AgentChatView.swift:1137 |
+| SuggestionChip | struct | iOS/AgentChatView.swift:1172 |
 | swapInMeshd | function | install/payload/bin/mesh:776 |
 | SwiftTermView | struct | iOS/NativeTerminalScreen.swift:464 |
 | SwiftUI | extension | iOS/NativeTerminalScreen.swift:384 |
@@ -575,15 +576,15 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | tailscaleBin | function | install/payload/bin/mesh:1702 |
 | terminalActiveFirst | func | iOS/TerminalView.swift:172 |
 | TerminalController | class | iOS/NativeTerminalScreen.swift:396 |
-| TerminalFallbackBlock | struct | iOS/AgentChatView.swift:938 |
+| TerminalFallbackBlock | struct | iOS/AgentChatView.swift:973 |
 | TerminalKeyRouter | enum | Shared/TerminalKeyRouter.swift:8 |
 | terminalReady | func | iOS/TerminalView.swift:180 |
 | TerminalTab | struct | iOS/TerminalView.swift:9 |
 | TerminalTheme | struct | iOS/NativeTerminalScreen.swift:354 |
-| ThinkingDisclosure | struct | iOS/AgentChatView.swift:795 |
+| ThinkingDisclosure | struct | iOS/AgentChatView.swift:826 |
 | tokens | function | scripts/feedback-to-issues.ts:109 |
 | tokenWeakness | function | install/payload/meshd/doctor.ts:35 |
-| ToolResultCard | struct | iOS/AgentChatView.swift:835 |
+| ToolResultCard | struct | iOS/AgentChatView.swift:866 |
 | TrackpadSurface | struct | iOS/RemoteScreenView.swift:656 |
 | TrackpadView | class | iOS/RemoteScreenView.swift:1279 |
 | treeVersion | function | install/payload/bin/mesh:663 |
