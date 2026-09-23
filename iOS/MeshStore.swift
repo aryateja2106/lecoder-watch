@@ -42,6 +42,7 @@ final class MeshStore: ObservableObject {
     @Published var knowledgeAnswer: String?
     /// Relative draft file from the last draft. Absolute paths and URLs stay off the screen.
     @Published var knowledgeDraftFile: String?
+    @Published var knowledgeSpokenTitle: String?
     @Published var polling = false
     /// False until the very first poll has finished. "No machines online" and "we have
     /// not looked yet" are different sentences, and showing the first one during launch
@@ -812,7 +813,12 @@ final class MeshStore: ObservableObject {
         let c = client(for: machine)
         Task {
             do {
-                _ = try await c.speakKnowledgeNote(id: loaded.id)
+                let spoken = try await c.speakKnowledgeNote(id: loaded.id)
+                if spoken.spoken, spoken.title == named {
+                    knowledgeSpokenTitle = spoken.title
+                } else {
+                    knowledgeSpokenTitle = nil
+                }
             } catch {
                 fail("speak failed")
             }
