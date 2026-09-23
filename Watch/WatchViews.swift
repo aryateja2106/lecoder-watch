@@ -906,6 +906,10 @@ struct KnowledgeNoteAskView: View {
                     .disabled(namedNote.isEmpty || written.isEmpty)
                 Button("Speak") { confirmingSpeak = true }
                     .disabled(namedNote.isEmpty || store.loadedKnowledgeNote?.title != namedNote)
+                if store.knowledgeAnswer?.isEmpty != false,
+                    store.knowledgeSpokenTitle == namedNote, !namedNote.isEmpty {
+                    Text("Spoken \(namedNote)").font(.caption2)
+                }
                 Button("Draft") { confirmingDraftNote = true }
                     .disabled(namedNote.isEmpty || store.loadedKnowledgeNote?.title != namedNote)
             }
