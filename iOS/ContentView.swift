@@ -433,6 +433,7 @@ struct KnowledgeNoteAskView: View {
     @State private var confirming = false
     @State private var confirmingSave = false
     @State private var confirmingSpeak = false
+    @State private var confirmingDraft = false
     @State private var search = ""
 
     private var namedNote: String {
@@ -485,6 +486,7 @@ struct KnowledgeNoteAskView: View {
             if let answer = store.knowledgeAnswer, !answer.isEmpty {
                 Section("Answer") {
                     Text(answer).font(.caption)
+                    Button("Draft") { confirmingDraft = true }
                 }
             } else if let line = store.knowledgeAskLine {
                 Section("Answer") {
@@ -536,6 +538,14 @@ struct KnowledgeNoteAskView: View {
             } else {
                 Text(namedNote)
             }
+        }
+        .confirmationDialog("Draft this answer?", isPresented: $confirmingDraft, titleVisibility: .visible) {
+            Button("Draft") {
+                store.draftShownAnswer(host: host, question: ask, confirmed: true)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(question)
         }
     }
 }

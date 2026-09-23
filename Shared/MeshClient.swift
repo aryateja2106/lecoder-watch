@@ -272,6 +272,15 @@ struct MeshClient {
         return try JSONDecoder().decode(AgentNoteAsk.self, from: data)
     }
 
+    /// Hand one saved note back as a draft file. The body is only the id and confirm.
+    func draftAgentNote(id: String, confirm: Bool) async throws -> AgentNoteAsk {
+        guard confirm else { throw URLError(.cancelled) }
+        let payload: [String: Any] = ["id": id, "confirm": true]
+        let body = try JSONSerialization.data(withJSONObject: payload)
+        let data = try await request("/agent-note", method: "POST", body: body)
+        return try JSONDecoder().decode(AgentNoteAsk.self, from: data)
+    }
+
     /// Titles on this machine. `GET /knowledge` returns `{ notes: [{ id, title }] }`.
     /// A non-empty `query` is sent as `q`, percent-encoded.
     func listKnowledgeNotes(query: String = "") async throws -> [KnowledgeNoteSummary] {
