@@ -1707,12 +1707,23 @@ struct AgentMenu: Equatable {
 
     private static func isFooter(_ s: String) -> Bool { footerWords.contains { s.contains($0) } }
 
-    /// The question above a menu: the nearest non-empty line that is not itself an option,
-    /// a footer, a rule or a box edge. Looks at most four lines up — further than that and
-    /// it is the output the agent was working on, not what it is asking.
+    /// The question above a menu.
+    ///
+    /// "Nearest line above the options" is right for a permission list, where the question
+    /// sits immediately above them, and wrong for Claude Code's trust prompt, where the
+    /// line immediately above is the "Security guide" link — the card then asked the owner
+    /// to approve a *link label*, which is the same defect as approving nothing, with a
+    /// wrong noun instead of a missing one (found on a live trust prompt, 2026-09-23).
+    ///
+    /// So: a real question wins over proximity. Within eight lines above the list, take the
+    /// nearest line containing "?" and cut it at the question mark — the trust prompt wraps
+    /// its question mid-line and the rest is guidance, not the question. Failing that, the
+    /// nearest line that ends like a sentence. Failing that, the nearest line at all.
     private static func promptLine(in tail: [String], above line: Int) -> String? {
         guard line > 0 else { return nil }
-        for s in tail[max(0, line - 4)..<line].reversed() {
+        var sentence: String? = nil
+        var nearest: String? = nil
+        for s in tail[max(0, line - 8)..<line].reversed() {
             var body = s.trimmingCharacters(in: .whitespaces)
             // Strip a TUI's box edges: "│ Do you want to proceed?  │".
             body = body.trimmingCharacters(in: CharacterSet(charactersIn: "│|╭╮╰╯─═ "))
@@ -1720,9 +1731,13 @@ struct AgentMenu: Equatable {
             guard numbered.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)) == nil,
                   marked.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)) == nil,
                   !body.allSatisfy({ "─-═•· ".contains($0) }) else { continue }
-            return String(body.prefix(200))
+            if let mark = body.firstIndex(of: "?") {
+                return String(body[...mark].prefix(200))
+            }
+            if sentence == nil, let last = body.last, ".!:".contains(last) { sentence = body }
+            if nearest == nil { nearest = body }
         }
-        return nil
+        return (sentence ?? nearest).map { String($0.prefix(200)) }
     }
 
     private static func footerLine(in tail: [String], after line: Int) -> String? {

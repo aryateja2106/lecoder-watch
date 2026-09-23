@@ -44,6 +44,35 @@ import Foundation
         expect(trustMenu.prompt?.hasPrefix("Claude Code") == true,
                "the trust sentence is the prompt, got \(trustMenu.prompt ?? "nil")")
 
+        // Claude Code's real trust prompt, captured verbatim from a pane on 2026-09-23.
+        // The line immediately above the options is a LINK ("Security guide"); the question
+        // is six lines up and wraps mid-sentence. Taking the nearest line put "Security
+        // guide" on the card, so the owner was approving a link label.
+        let realTrust = """
+        ────────────────────────────────────────────────────────────────────────────────
+         Accessing workspace:
+
+         /private/tmp/trust-probe-77843
+
+         Quick safety check: Is this a project you created or one you trust? (Like your
+         own code, a well-known open source project, or work from your team). If not,
+         take a moment to review what's in this folder first.
+
+         Claude Code'll be able to read, edit, and execute files here.
+
+         Security guide
+
+         ❯ No, exit
+           Yes, I trust this folder
+
+         Enter to confirm · Esc to cancel
+        """.components(separatedBy: "\n")
+        guard let realMenu = AgentMenu.parse(lines: realTrust) else { fail("the real trust prompt is not recognised") }
+        expect(realMenu.prompt == "Quick safety check: Is this a project you created or one you trust?",
+               "the question wins over the nearer link label, cut at the question mark, got \(realMenu.prompt ?? "nil")")
+        expect(realMenu.options.count == 2 && realMenu.options[1].label == "Yes, I trust this folder",
+               "both trust options survive, got \(realMenu.options.map(\.label))")
+
         // No question printed: nil, never a stray option or footer masquerading as one.
         let bare = """
          ❯ 1. Yes
@@ -53,7 +82,7 @@ import Foundation
         if let bareMenu = AgentMenu.parse(lines: bare) {
             expect(bareMenu.prompt == nil, "no line above the list means no prompt, got \(bareMenu.prompt ?? "nil")")
         }
-        print("check-menu-prompt: ok (4 fixtures)")
+        print("check-menu-prompt: ok (5 fixtures)")
     }
 
     static func expect(_ ok: Bool, _ what: String) { if !ok { print("FAIL: \(what)"); exit(1) } }
