@@ -103,6 +103,35 @@ real watch capture.
 Where generated imagery does fit later: environment and lighting only, with our real
 screens composited in afterwards — or brand work that never depicts the UI.
 
+## The Choose screenshot was NOT re-shot, and why
+
+The parallel session changed the Choose card on 2026-09-23 so it carries the question the
+agent asked (before, the watch showed "Yes / No" with no subject). The landing page's
+`shots/iphone-choose.png` is therefore one build stale, and the plan was to recapture it.
+
+Recapturing found a bug instead. On a real Claude Code **trust-folder prompt** — the first
+thing Claude Code asks in any folder it has not seen — the new card reads:
+
+    Choose
+    Security guide
+    › No, exit
+      Yes, I trust this folder
+
+"Security guide" is the link label Claude Code prints above the options; the question
+("Quick safety check: Is this a project you created or one you trust?") is three lines
+higher. The parser takes the last line before the options, which is right for a Bash
+permission menu and wrong here. Evidence:
+`docs/overnight/2026-09-21/shots/choose-card-trust-prompt-wrong-question.png`, captured on
+9bbf8c6 against a live session on the Mac daemon.
+
+So the page keeps the older capture — a genuine Claude Code trust prompt, card without the
+question line — until the parser handles this shape. Swapping now would put the word
+"Security guide" on the front page as the thing a user is approving. Recapture takes five
+minutes once it is fixed.
+
+One thing the attempt did prove, end to end: tapping *Yes, I trust this folder* on the
+phone's card advanced the real pane on the Mac. The answer path works.
+
 ## Gate
 
 ```
