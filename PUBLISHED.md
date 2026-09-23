@@ -5,7 +5,7 @@ produced by running something, not by describing it. Written 2026-09-22 from the
 run recorded in [docs/factory/runs/2026-09-22T093000Z-publish.md](docs/factory/runs/2026-09-22T093000Z-publish.md).
 
 Gate: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none`
-Gate SHA: cb8d8b7a730f282fe14d90edbfb39237f61a5efc
+Gate SHA: b6b319097f97d02029fb838195f7c41051887eff
 Gate log: docs/overnight/2026-09-21/gate-full-publish-2026-09-23-tail.txt
 Gate note: this line is from a run on 2026-09-23 at the sha above, with `MESH_BRAIN_URL`
 pinned to `http://127.0.0.1:1234/v1`. Without it `check-brain`'s live half is red on this
