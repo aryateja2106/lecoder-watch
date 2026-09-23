@@ -58,9 +58,11 @@
 | POST | `/push/test` | token | push.ts:494 |
 | GET | `/resumable` | token | handoff.ts:275 |
 | GET | `/screen.jpg` | token | input.ts:507 |
-| GET | `/sessions` | token | sessions.ts:433 |
-| POST | `/sessions/mirror-peers` | token | sessions.ts:418 |
-| GET | `/sessions/mirror-token` | token | sessions.ts:415 |
+| GET | `/sessions` | token | sessions.ts:444 |
+| POST | `/sessions/:x/:x/resume` | token | sessions.ts:443 |
+| POST | `/sessions/mirror-peers` | token | sessions.ts:426 |
+| GET | `/sessions/mirror-token` | token | sessions.ts:423 |
+| GET | `/sessions/search` | token | sessions.ts:441 |
 | ANY | `/stats` | token | server.ts:1420 |
 | POST | `/system` | token | input.ts:557 |
 | ANY | `/tailnet` | token | server.ts:1421 |
@@ -109,19 +111,20 @@ The daemon advertises these strings on `/health`; the phone and watch gate featu
 | `pair` | — (nothing gates it) | no |
 | `doctor` | — (nothing gates it) | no |
 | `wake` | MeshStore.swift:953 | no |
-| `screenRegion` | MeshClient.swift:219, RemoteView.swift:323, RemoteScreenView.swift:110 | yes |
-| `openUrl` | MeshClient.swift:554 | yes |
-| `power` | MeshClient.swift:537, ContentView.swift:668 | yes |
-| `laPush` | MeshClient.swift:572 | yes |
+| `screenRegion` | MeshClient.swift:237, RemoteView.swift:323, RemoteScreenView.swift:110 | yes |
+| `openUrl` | MeshClient.swift:572 | yes |
+| `power` | MeshClient.swift:555, ContentView.swift:668 | yes |
+| `laPush` | MeshClient.swift:590 | yes |
 | `sessionStatus` | — (nothing gates it) | yes |
-| `paste` | MeshClient.swift:302, RemoteScreenView.swift:111 | yes |
-| `captureJoin` | MeshClient.swift:282, WatchMeshStore.swift:552 | yes |
+| `paste` | MeshClient.swift:320, RemoteScreenView.swift:111 | yes |
+| `captureJoin` | MeshClient.swift:300, WatchMeshStore.swift:552 | yes |
 | `redact` | ExposedSecretsScreen.swift:43, ExposedSecretsScreen.swift:84 | no |
-| `chat` | TerminalView.swift:869 | no |
+| `chat` | TerminalView.swift:874 | no |
 | `apps` | TerminalView.swift:111 | no |
-| `handoff` | MeshClient.swift:593, MeshClient.swift:602, MeshClient.swift:614 | no |
+| `handoff` | MeshClient.swift:611, MeshClient.swift:620, MeshClient.swift:632 | no |
 | `brain` | — (nothing gates it) | no |
-| `captureAnsi` | MeshClient.swift:277 | no |
+| `captureAnsi` | MeshClient.swift:295 | no |
+| `chatSearch` | MeshClient.swift:651, MeshClient.swift:660 | no |
 | `pty` | NativeTerminalScreen.swift:146 | no |
 | `sessions` | — (nothing gates it) | no |
 

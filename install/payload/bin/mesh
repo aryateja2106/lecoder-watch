@@ -74,10 +74,12 @@ function resolveHost(name: string | undefined, cfg: Config): { name: string; ip:
 
 // Throws on any failure (so callers like `hosts` can catch and mark a host down);
 // single-target commands let it bubble to the top-level handler, which prints + exits.
-async function api(host: ReturnType<typeof resolveHost>, method: string, path: string, body?: unknown): Promise<any> {
+// `timeoutMs` is for the rare call that does real work before answering (a resume that
+// restores a large deleted transcript); everything else keeps the 5 s "is it up" budget.
+async function api(host: ReturnType<typeof resolveHost>, method: string, path: string, body?: unknown, timeoutMs = TIMEOUT_MS): Promise<any> {
   const url = `http://${host.ip}:${host.port}${path}`;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -91,12 +93,17 @@ async function api(host: ReturnType<typeof resolveHost>, method: string, path: s
     });
   } catch (e: any) {
     clearTimeout(t);
-    if (e?.name === "AbortError") throw new Error(`timeout after ${TIMEOUT_MS}ms → ${host.name} (${host.ip}:${host.port}) unreachable`);
+    if (e?.name === "AbortError") throw new Error(`timeout after ${timeoutMs}ms → ${host.name} (${host.ip}:${host.port}) unreachable`);
     if (e?.code === "ConnectionRefused" || /refused|ECONNREFUSED/.test(String(e?.code || e))) throw new Error(`connection refused → meshd not running on ${host.name} (${host.ip}:${host.port})`);
     throw new Error(String(e?.message || e));
   }
   clearTimeout(t);
-  if (!res.ok) throw new Error(`${method} ${path} → HTTP ${res.status} on ${host.name} (${host.ip}:${host.port})`);
+  if (!res.ok) {
+    // The daemon's own reason, when it gave one, is the useful half of the error — and it is
+    // how a caller tells "this route does not exist here" (a bare 404) from a real refusal.
+    const why = await res.json().then((j: any) => typeof j?.error === "string" ? j.error : undefined, () => undefined);
+    throw Object.assign(new Error(`${method} ${path} → HTTP ${res.status} on ${host.name} (${host.ip}:${host.port})${why ? `: ${why}` : ""}`), { status: res.status, why });
+  }
   const text = await res.text();
   return text ? JSON.parse(text) : {};
 }
@@ -445,13 +452,23 @@ async function cmdStatus(cfg: Config) {
 // empty. The same machine listed twice — "local" and a named entry both on 127.0.0.1 —
 // is shown once, under its name.
 // Lossless history of this machine's agent transcripts (meshd sessions.ts). An id may be
-// a prefix; `log` lists versions, `restore` writes version N back as a new resumable session.
+// a prefix; `log` lists versions, `restore` writes version N back as a new resumable session,
+// `search` finds a conversation by what was said, `resume` starts it again as a mesh session.
 async function cmdSessions(pos: string[], flags: Record<string, string>, bools: Set<string>, cfg: Config) {
   const h = resolveHost(hostOf(flags), cfg);
   const [sub, want] = pos;
   const size = (b: number) => b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`;
   // A Codex id is rollout-<timestamp>-<uuid>; the uuid is the part a person can type.
   const short = (id: string) => id.replace(/^rollout-.*?-(?=[0-9a-f]{8}-[0-9a-f]{4}-)/, "");
+  // What every listing prints: the uuid's LAST 12 hex. Codex uuids are v7, so their first
+  // 8 hex are a timestamp that sessions started the same day share; the tail is random.
+  const tag = (id: string) => short(id).slice(-12);
+  // A daemon from before chat search answers these routes with its generic 404; a current
+  // one says why (say, no stored version rebuilds cleanly), and that reason is what to show.
+  const predates = (e: any): never => {
+    if (e?.status === 404 && (!e.why || e.why === "not found")) die(`meshd on ${h.name} predates chat search — upgrade it: mesh upgrade -H ${h.name}`);
+    throw e;
+  };
   if (sub === "mirror-to") {
     // Register every machine this one knows (itself included) with the mirror, each with
     // its own mirror token — the mirror never receives a machine's full token.
@@ -477,22 +494,51 @@ async function cmdSessions(pos: string[], flags: Record<string, string>, bools: 
     return out(() => {
       if (!sessions.length) { console.log(`(${h.name} mirrors nothing yet — run: mesh sessions mirror-to ${h.name})`); return; }
       for (const s of sessions.slice(0, Number(flags.n || flags.limit) || 30)) {
-        console.log(`${String(s.host).padEnd(10)} ${short(s.id).slice(0, 8)}  ${s.runtime.padEnd(6)} v${String(s.n).padEnd(4)} ${(s.title ?? s.cwd ?? "").slice(0, 60)}`);
+        console.log(`${String(s.host).padEnd(10)} ${tag(s.id)}  ${s.runtime.padEnd(6)} v${String(s.n).padEnd(4)} ${(s.title ?? s.cwd ?? "").slice(0, 60)}`);
       }
     }, sessions);
   }
-  const { sessions } = await api(h, "GET", "/sessions?limit=500");
+  if (sub === "search") {
+    // Full-text over what every machine kept (meshd chats.ts); the daemon asked fans out
+    // to its peers unless --local, and names the ones that did not answer.
+    const query = pos.slice(1).join(" ");
+    if (!query) die('usage: mesh sessions search "<query>" [--local] [--all] [-n N] [-H host] [--json]');
+    const qs = new URLSearchParams({ q: query, limit: String(Number(flags.n || flags.limit) || 20), federate: bools.has("local") ? "0" : "1" });
+    if (bools.has("all")) qs.set("all", "1");
+    const r = await api(h, "GET", `/sessions/search?${qs}`).catch(predates);
+    const ago = (ts: unknown) => {
+      const t = typeof ts === "number" ? (ts < 1e12 ? ts * 1000 : ts) : Date.parse(String(ts));
+      if (!t) return "?";
+      const m = Math.max(0, (Date.now() - t) / 60000);
+      return m < 60 ? `${Math.round(m)}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
+    };
+    return out(() => {
+      const hits = r?.results ?? [];
+      // stderr, like kb search: stdout stays a pure result stream.
+      if (!hits.length) console.error(`no conversation matches "${query}"${bools.has("local") ? ` on ${h.name}` : " on any machine that answered"}`);
+      for (const s of hits) {
+        console.log(`${String(s.host ?? h.name).padEnd(10)} ${tag(String(s.id))}  ${String(s.runtime).padEnd(6)} ${ago(s.lastTs).padStart(4)}  ${String(s.title ?? s.cwd ?? "").slice(0, 70)}`);
+        for (const x of (s.excerpts ?? []).slice(0, 2)) console.log(`      ${x.role === "user" ? "you" : "ai "}  ${String(x.text ?? "").replace(/\s+/g, " ").slice(0, 110)}`);
+      }
+      const down = (r?.peers ?? []).filter((p: any) => !p.ok).map((p: any) => p.host);
+      if (down.length) console.error(`did not answer: ${down.join(", ")}`);
+    }, r);
+  }
+  const { sessions } = await api(h, "GET", "/sessions?limit=5000").catch(predates);
   if (!sub || sub === "ls" || sub === "list") {
     return out(() => {
       if (!sessions.length) { console.log(`(no snapshots on ${h.name} yet — the first sweep runs 30 s after meshd starts)`); return; }
       for (const s of sessions.slice(0, Number(flags.n || flags.limit) || 30)) {
-        console.log(`${short(s.id).slice(0, 8)}  ${s.runtime.padEnd(6)} v${String(s.versions).padEnd(4)} ${size(s.size).padStart(8)}  ${s.live ? " " : "†"} ${(s.title ?? s.cwd ?? "").slice(0, 70)}`);
+        console.log(`${tag(s.id)}  ${s.runtime.padEnd(6)} v${String(s.versions).padEnd(4)} ${size(s.size).padStart(8)}  ${s.live ? " " : "†"} ${(s.title ?? s.cwd ?? "").slice(0, 70)}`);
       }
       console.log("† = the runtime has deleted its own copy; only mesh still has it");
     }, sessions);
   }
-  const hits = sessions.filter((s: any) => want && (s.id.startsWith(want) || short(s.id).startsWith(want)));
-  if (hits.length !== 1) die(hits.length ? `ambiguous id ${want}: ${hits.map((s: any) => s.id).join(", ")}` : `usage: mesh sessions ${sub} <id> [--at N] [-H host]`);
+  // A full id, a prefix of it or of its uuid, or the printed tag (the uuid's tail) — a
+  // prefix or a suffix, never the middle, so a short input cannot match a stranger by chance.
+  const hits = sessions.filter((s: any) => want && (s.id.startsWith(want) || short(s.id).startsWith(want) || (want.length >= 6 && s.id.endsWith(want))));
+  if (hits.length !== 1) die(hits.length ? `ambiguous id ${want}: ${hits.map((s: any) => s.id).join(", ")}`
+    : want ? `no session ${want} on ${h.name}  (mesh sessions ls -H ${h.name})` : `usage: mesh sessions ${sub} <id>${sub === "restore" ? " [--at N]" : ""} [-H host]`);
   const s = hits[0];
   if (sub === "log") {
     const ix = await api(h, "GET", `/sessions/${s.runtime}/${s.id}`);
@@ -502,10 +548,25 @@ async function cmdSessions(pos: string[], flags: Record<string, string>, bools: 
     }, ix);
   }
   if (sub === "restore") {
-    const r = await api(h, "POST", `/sessions/${s.runtime}/${s.id}/restore${flags.at ? `?v=${Number(flags.at)}` : ""}`);
+    const r = await api(h, "POST", `/sessions/${s.runtime}/${s.id}/restore${flags.at ? `?v=${Number(flags.at)}` : ""}`, undefined, 60_000);
     return out(() => console.log(`restored as ${r.id}\n  cd ${r.cwd} && ${r.resume}`), r);
   }
-  die("usage: mesh sessions [ls|log <id>|restore <id> [--at N]] [-H host]");
+  if (sub === "resume") {
+    // The daemon only plans (validated uuid, a folder that exists, restore if the runtime
+    // deleted its copy); starting it is the ordinary /agents/new, so it shows up everywhere.
+    const plan = await api(h, "POST", `/sessions/${s.runtime}/${s.id}/resume`, undefined, 60_000).catch(predates);
+    const tg = tag(s.id), peek = `mesh peek ${plan.name} -H ${h.name}`;
+    let running = false;
+    try { await api(h, "POST", "/agents/new", { name: plan.name, cmd: plan.cmd, cwd: plan.cwd }); }
+    catch (e: any) { if (!/HTTP 409/.test(String(e?.message ?? e))) throw e; running = true; }
+    return out(() => {
+      console.log(running ? `${tg} is already running on ${h.name} as ${plan.name} — watch it: ${peek}`
+        : `resumed ${tg} on ${h.name} as ${plan.name} — watch it: ${peek}`);
+      if (plan.restoredFrom) console.log(`  the runtime had deleted this conversation; restored mesh's copy first (from ${plan.restoredFrom})`);
+      if (plan.cwdMissing) console.log(`  its folder ${s.cwd ?? ""} is gone; started in ${plan.cwd}`);
+    }, { ...plan, host: h.name, alreadyRunning: running });
+  }
+  die("usage: mesh sessions [ls|search <query>|log <id>|restore <id> [--at N]|resume <id>] [-H host]");
 }
 
 async function cmdFleet(cfg: Config) {
@@ -2267,6 +2328,8 @@ STATUS
   sessions                    every agent conversation this machine kept, with versions
                               [log <id> | restore <id> --at N | --mirror]  survives compaction + cleanup
                               mirror-to <host>: that machine keeps everyone's history, redacted
+  sessions search "<query>"   find a past conversation on every machine  [--local] [--all] [-n N]
+  sessions resume <id>        start it again where it lives, then: mesh peek <name> -H <host>
   usage                       usage/limits per provider     (alias: limits)
   health                      is meshd up?
   doctor                      what actually works on a machine  [--fix shows the permission dialogs]

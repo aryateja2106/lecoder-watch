@@ -77,6 +77,8 @@ enum DaemonCapabilities {
     // literal 0.5.0 capability snapshot: anything added here accuses every daemon in that
     // snapshot of being stale. The terminal already degrades on its own (stream → colour
     // polls → the old text path), so there is nothing for the row to warn about.
+    // `chatSearch` stays out for the same reason: ChatSearchView asks only machines that
+    // advertise it, and when none do it shows `upgradeCommand` itself.
 
     /// The gaps for a machine, given what its daemon advertised.
     ///

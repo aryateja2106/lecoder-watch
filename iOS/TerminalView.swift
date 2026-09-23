@@ -136,6 +136,11 @@ struct TerminalTab: View {
             }
             .navigationTitle("Terminal")
             .toolbar {
+                NavigationLink {
+                    ChatSearchView()
+                } label: {
+                    Label("Search chats", systemImage: "magnifyingglass")
+                }
                 MonitorBell()
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")

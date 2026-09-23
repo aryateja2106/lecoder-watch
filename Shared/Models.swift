@@ -1235,6 +1235,47 @@ struct HandoffResult: Codable, Hashable {
     var error: String?
 }
 
+// MARK: - Chat search (capability "chatSearch")
+
+/// One conversation that matched `GET /sessions/search`. Title and excerpts arrive
+/// already redacted by the daemon; the matched words inside an excerpt sit between « ».
+/// `score` is bm25, so lower is better.
+struct ChatSearchHit: Codable, Hashable {
+    var runtime: String   // claude | codex
+    var id: String
+    var shortId: String?
+    var title: String?
+    var cwd: String?
+    var cwdExists: Bool?
+    /// false: the runtime's own transcript file is gone and only meshd's copy remains.
+    var live: Bool?
+    var lastTs: String?   // ISO 8601
+    var kind: String?
+    var score: Double?
+    var excerpts: [Excerpt]?
+
+    struct Excerpt: Codable, Hashable {
+        var role: String?
+        var ts: String?
+        var text: String
+    }
+}
+
+struct ChatSearchResults: Codable, Hashable {
+    var results: [ChatSearchHit]
+}
+
+/// The answer to `POST /sessions/:runtime/:id/resume` — a plan, not a launch: the
+/// caller starts it with `/agents/new`. `restoredFrom` is set when the transcript had
+/// to be rebuilt from meshd's history first, which gives the conversation a new id.
+struct ChatResumePlan: Codable, Hashable {
+    var name: String
+    var cmd: String
+    var cwd: String
+    var cwdMissing: Bool?
+    var restoredFrom: String?
+}
+
 struct VolumeState: Codable, Hashable {
     var ok: Bool
     var level: Int?

@@ -9,6 +9,13 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+- **Find any past agent conversation, and pick it up.** Search every Claude Code and Codex
+  conversation on every machine by what was said in it — from the phone (Terminal → the
+  magnifying glass), from the CLI (`mesh sessions search "voice input"`), or from an agent
+  (`/seek`). Only what you typed and what the agent answered is indexed, so a hit is a
+  conversation, not a tool dump. **Resume** starts it again in its original CLI on the machine
+  that has it, even when Claude Code already deleted the transcript. Everything stays on your
+  machines; no model is involved.
 - **No conversation is lost any more.** meshd keeps every version of every Claude Code and
   Codex transcript on the machine that wrote it, before compaction rewrites it or the 30-day
   cleanup deletes it. Growth is stored as the new bytes only, so a 138 MB session costs the

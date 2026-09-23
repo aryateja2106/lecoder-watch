@@ -48,7 +48,7 @@ const VERSION = "0.8.0";
 // "handoff": POST /agents/<s>/handoff {to} writes HANDOFF.md from the conversation and
 // relaunches the pane under another CLI agent; GET /resumable?cwd= and
 // GET /agents/<s>/resumable list the conversations each CLI can reopen, with the command.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain", "captureAnsi", "pty", "sessions"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain", "captureAnsi", "chatSearch", "pty", "sessions"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");

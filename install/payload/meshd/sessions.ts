@@ -24,6 +24,11 @@
 //                                           it up without touching the original
 //   GET  /sessions/:runtime/:id/chunk?v=N   version N's own bytes (a base: the file; an
 //                                           append: what it added), REDACTED — what a mirror pulls
+//   GET  /sessions/search?q=                full-text over what was said in them (chats.ts),
+//                                           on this machine and every hosts.json peer
+//   POST /sessions/:runtime/:id/resume      the plan to start one again — {name, cmd, cwd,
+//                                           cwdMissing, restoredFrom?}; starts nothing (the
+//                                           caller hands it to /agents/new)
 //   GET  /sessions?mirror=1                 the sessions this machine mirrors from its peers
 //   GET  /sessions/mirror-token             this machine's MIRROR token (created on first ask)
 //   POST /sessions/mirror-peers             on the mirror: {name, ip?, port, token} to pull from
@@ -48,6 +53,7 @@ import { gunzipSync, createGzip, createGunzip } from "node:zlib";
 import { randomUUID, randomBytes } from "node:crypto";
 import { redact, addKnownSecrets } from "./redact";
 import { isAuthorized } from "./auth";
+import { indexSession, catchUp, searchRoute } from "./chats";
 
 const HOME = homedir();
 const STORE = process.env.MESH_SESSIONS_DIR || join(HOME, ".mesh", "sessions");
@@ -183,6 +189,7 @@ async function record(index: Index, path: string, mtimeMs: number, kind: Version
   index.source = path;
   index.versions.push({ n, kind, size, sha256, mtimeMs, ts: new Date().toISOString() });
   await writePrivate(join(dirOf(index.runtime, index.id), "index.json"), JSON.stringify(index, null, 1));
+  indexSession(index.runtime, index.id).catch(() => {});  // search follows the store
   return kind;
 }
 
@@ -241,7 +248,8 @@ export async function sweep(): Promise<{ scanned: number; recorded: number }> {
 /// ends between sweeps is caught earlier by the Stop-event trigger in server.ts.
 export function startSessionSweep(): void {
   if (process.env.MESH_SESSIONS === "off") return;
-  setTimeout(() => { sweep().catch(() => {}); setInterval(() => sweep().catch(() => {}), 10 * 60_000); }, 30_000);
+  // After the first sweep, index whatever was stored before chats.ts existed.
+  setTimeout(() => { sweep().then(() => catchUp()).catch(() => {}); setInterval(() => sweep().catch(() => {}), 10 * 60_000); }, 30_000);
 }
 
 async function list(limit: number) {
@@ -324,7 +332,7 @@ type MirrorEntry = { runtime: Runtime; id: string; n: number; size: number; cwd:
 /// after each, so an interrupted pull resumes where it stopped.
 async function mirrorPeer(name: string, base: string, token: string): Promise<number> {
   const get = (p: string) => fetch(base + p, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(120_000) });
-  const res = await get("/sessions?limit=500");
+  const res = await get("/sessions?limit=5000");
   if (!res.ok) return 0;
   const { sessions } = await res.json() as { sessions: any[] };
   const dir = join(MIRROR, name);
@@ -430,9 +438,12 @@ export async function handleSessions(req: Request, url: URL, server?: any): Prom
     if (on) mirrorOnce().catch(() => {});  // start pulling now, not at the next ten-minute tick
     return Response.json({ ok: true, name: b.name, ip, mirroring: on }, { status: 201 });
   }
+  if (url.pathname === "/sessions/search" && req.method === "GET") return Response.json(await searchRoute(url.searchParams));
+  const rs = url.pathname.match(/^\/sessions\/(claude|codex)\/([^/]+)\/resume$/);
+  if (rs && req.method === "POST") return resumePlan(rs[1] as Runtime, rs[2]);
   if (url.pathname === "/sessions" && req.method === "GET") {
     if (url.searchParams.get("mirror") === "1") return Response.json({ sessions: await mirrorList() });
-    return Response.json({ sessions: await list(Math.min(500, Number(url.searchParams.get("limit") ?? 50) || 50)) });
+    return Response.json({ sessions: await list(Math.min(5000, Number(url.searchParams.get("limit") ?? 50) || 50)) });
   }
   const m = url.pathname.match(/^\/sessions\/(claude|codex)\/([A-Za-z0-9][A-Za-z0-9._-]*)(\/raw|\/restore|\/chunk)?$/);
   if (!m) return null;
@@ -455,17 +466,86 @@ export async function handleSessions(req: Request, url: URL, server?: any): Prom
   if (tail === "/restore" && req.method === "POST") {
     if (runtime !== "claude") return Response.json({ error: "restore is Claude Code only for now" }, { status: 400 });
     const ix = await readIndex(runtime, id);
-    const bytes = await reconstruct(runtime, id, v);
-    if (!ix || !bytes) return Response.json({ error: "no such version" }, { status: 404 });
-    // A new id, in the same project folder: Claude finds a session by its file name, and
-    // the lines inside carry the id they were written under, so both are rewritten —
-    // the original transcript is never touched.
-    const newId = randomUUID();
-    const text = new TextDecoder().decode(bytes).replaceAll(`"sessionId":"${id}"`, `"sessionId":"${newId}"`);
-    const dest = join(dirname(ix.source), `${newId}.jsonl`);
-    await mkdir(dirname(dest), { recursive: true });
-    await writeFile(dest, text, { mode: 0o600 });
-    return Response.json({ ok: true, id: newId, path: dest, cwd: ix.cwd, resume: `claude --resume ${newId}` }, { status: 201 });
+    const r = ix ? await restoreClaude(ix, v) : null;
+    if (!r) return Response.json({ error: "no such version" }, { status: 404 });
+    return Response.json({ ok: true, id: r.id, path: r.path, cwd: ix!.cwd, resume: `claude --resume ${r.id}` }, { status: 201 });
   }
   return null;
+}
+
+/// Version v (default: latest) of a Claude session written back as a NEW session. A new
+/// id, in the same project folder: Claude finds a session by its file name, and the lines
+/// inside carry the id they were written under, so both are rewritten — the original
+/// transcript is never touched.
+/// Version `v` (default: latest) written back as a Claude session under a new id, streamed
+/// chunk by chunk — never the whole transcript in memory (a 122 MB restore took meshd to
+/// 1.08 GB). The new id is derived from the session and version, so restoring the same
+/// version again reuses the copy instead of writing another one.
+async function restoreClaude(ix: Index, v?: number): Promise<{ id: string; path: string; reused?: boolean } | null> {
+  const target = v ?? ix.versions.at(-1)?.n;
+  const upto = ix.versions.filter((x) => x.n <= (target ?? 0));
+  const baseAt = upto.map((x) => x.kind).lastIndexOf("base");
+  if (!upto.length || upto.at(-1)!.n !== target || baseAt < 0) return null;
+  const h = sha(new TextEncoder().encode(`${ix.id}:${upto.at(-1)!.sha256}`));
+  const newId = `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${"89ab"[parseInt(h[16], 16) & 3]}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+  const dest = join(dirname(ix.source), `${newId}.jsonl`);
+  if ((await stat(dest).catch(() => null))?.size) return { id: newId, path: dest, reused: true };
+  await mkdir(dirname(dest), { recursive: true });
+  const tmp = `${dest}.${randomUUID()}.tmp`;
+  const hasher = new Bun.CryptoHasher("sha256");
+  const from = `"sessionId":"${ix.id}"`, to = `"sessionId":"${newId}"`;
+  let carry = Buffer.alloc(0);
+  // Whole lines only, so an id split across two chunks is still found; latin1 maps each
+  // byte to one character, so the rest of the line passes through byte for byte.
+  const rewrite = (b: Buffer) => Buffer.from(b.toString("latin1").split(from).join(to), "latin1");
+  try {
+    await pipeline(async function* () {
+      for (const x of upto.slice(baseAt)) {
+        for await (const c of createReadStream(join(dirOf("claude", ix.id), `v${x.n}.gz`)).pipe(createGunzip())) {
+          hasher.update(c);
+          const buf = carry.length ? Buffer.concat([carry, c]) : c;
+          const cut = buf.lastIndexOf(10) + 1;
+          carry = buf.subarray(cut);
+          if (cut) yield rewrite(buf.subarray(0, cut));
+        }
+      }
+      if (carry.length) yield rewrite(carry);
+    }, createWriteStream(tmp, { mode: 0o600 }));
+    if (hasher.digest("hex") !== upto.at(-1)!.sha256) throw new Error("does not match its recorded hash");
+    await rename(tmp, dest);
+    return { id: newId, path: dest };
+  } catch {
+    await unlink(tmp).catch(() => {});
+    return null;
+  }
+}
+
+const UUID_RE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+/// How to start a stored session again, without starting it. The uuid is validated here —
+/// it goes into a shell command line — and a Claude transcript the runtime already deleted
+/// is restored first, so the plan resumes the restored copy under its new id.
+async function resumePlan(runtime: Runtime, id: string): Promise<Response> {
+  const uuid = runtime === "claude" ? id.match(new RegExp(`^${UUID_RE}$`, "i"))?.[0]
+    : id.match(new RegExp(`^rollout-[0-9T:-]+-(${UUID_RE})$`, "i"))?.[1];
+  if (!uuid) return Response.json({ error: "not a resumable session id" }, { status: 400 });
+  const ix = await readIndex(runtime, id);
+  if (!ix) return Response.json({ error: "no such session" }, { status: 404 });
+  let resumeId = uuid, restoredFrom: string | undefined;
+  if (!(await stat(ix.source).catch(() => null))) {
+    // Codex finds a rollout by its uuid anywhere under ~/.codex/sessions; restoring one is not built.
+    if (runtime !== "claude") return Response.json({ error: "Codex deleted this rollout, and restore is Claude Code only" }, { status: 410 });
+    const r = await restoreClaude(ix);
+    if (!r) return Response.json({ error: "no stored version rebuilds cleanly" }, { status: 404 });
+    // Named only when this call wrote the copy; a later resume reuses it silently.
+    resumeId = r.id; if (!r.reused) restoredFrom = id;
+  }
+  // The folder it was started in: Claude looks a session up by that folder's project slug.
+  const ok = !!ix.cwd && !!(await stat(ix.cwd).catch(() => null))?.isDirectory();
+  return Response.json({
+    // The END of the uuid: Codex ids are UUIDv7, whose first 8 hex are a timestamp that
+    // sessions started in the same minute share.
+    name: `resume-${resumeId.slice(-8)}`,
+    cmd: runtime === "claude" ? `claude --resume ${resumeId}` : `codex resume ${resumeId}`,
+    cwd: ok ? ix.cwd : HOME, cwdMissing: !ok, ...(restoredFrom ? { restoredFrom } : {}),
+  });
 }

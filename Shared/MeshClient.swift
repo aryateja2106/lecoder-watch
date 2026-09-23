@@ -83,11 +83,20 @@ struct MeshClient {
     /// could not tell a cropped frame from a whole display — and the watch answered by
     /// zooming a crop that was already the zoom, which is why text got *worse* the
     /// further you zoomed in.
+    ///
+    /// Every address reaches the same daemon, so the next one is only worth trying
+    /// when this one got no answer out of it. A 4xx IS its answer — 401 bad token, 404
+    /// no such session, 409 already running — and trying on used to re-send every
+    /// refused POST and then throw the LAST error: on a phone without MagicDNS that is
+    /// "hostname could not be found" from the bare-name address, in place of the
+    /// daemon's own refusal. Transport failures and 5xx still move on, and if every
+    /// address fails a daemon's 5xx outranks a later transport error for the same reason.
     private func requestFrame(_ path: String, method: String = "GET",
                               body: Data? = nil) async throws -> (data: Data, response: HTTPURLResponse?) {
         guard !machine.baseURLs.isEmpty else {
             throw MeshError.badURL
         }
+        var answered: Error?
         var lastError: Error?
         for base in machine.baseURLs {
             guard let url = URL(string: path, relativeTo: base) else { continue }
@@ -99,21 +108,30 @@ struct MeshClient {
                 req.httpBody = body
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             }
+            let data: Data, resp: URLResponse
             do {
-                let (data, resp) = try await URLSession.shared.data(for: req)
-                if let http = resp as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                    // The daemon puts its reason in the body of every refusal it
-                    // authors. Throwing the status alone reduced "herdr pane not
-                    // found" and "unsupported key" to an indistinguishable 400.
-                    throw Self.daemonReason(in: data)
-                        .map { MeshError.refused(http.statusCode, $0) } ?? MeshError.http(http.statusCode)
-                }
-                return (data, resp as? HTTPURLResponse)
+                (data, resp) = try await URLSession.shared.data(for: req)
             } catch {
+                // Cancelled (a newer search, a deadline, a closed screen) is not this
+                // address failing, and the next one would only be cancelled too.
+                if Task.isCancelled { throw error }
                 lastError = error
+                continue
             }
+            guard let http = resp as? HTTPURLResponse, !(200...299).contains(http.statusCode) else {
+                return (data, resp as? HTTPURLResponse)
+            }
+            // The daemon puts its reason in the body of every refusal it authors.
+            // Throwing the status alone reduced "herdr pane not found" and
+            // "unsupported key" to an indistinguishable 400.
+            let refusal = Self.daemonReason(in: data)
+                .map { MeshError.refused(http.statusCode, $0) } ?? MeshError.http(http.statusCode)
+            // 421 is the Host guard refusing the NAME this address was dialled by, not the
+            // request: another address (the ip vs the bare name) can be accepted.
+            if (400...499).contains(http.statusCode) && http.statusCode != 421 { throw refusal }
+            answered = refusal
         }
-        throw lastError ?? MeshError.badURL
+        throw answered ?? lastError ?? MeshError.badURL
     }
 
     /// Redeem a one-time pairing code (`mesh pair` on the machine) for its real
@@ -615,6 +633,35 @@ struct MeshClient {
         let body = try JSONSerialization.data(withJSONObject: ["to": to])
         let data = try await request("/agents/\(Self.pathSegment(agent))/handoff", method: "POST", body: body)
         return try JSONDecoder().decode(HandoffResult.self, from: data)
+    }
+
+    // MARK: - Chat search (capability "chatSearch")
+
+    /// `.urlQueryAllowed` keeps `&`, `=` and `+`, which is right for a whole query and
+    /// wrong for one value: "c++" would arrive as "c  " and "a&b" as "a".
+    private static let queryValueAllowed: CharacterSet = {
+        var set = CharacterSet.urlQueryAllowed
+        set.remove(charactersIn: "&=+#")
+        return set
+    }()
+
+    /// This machine's own matches. `federate=0` because the phone asks every machine
+    /// itself; letting each one fan out too would list every peer's hits twice.
+    func searchChats(_ q: String, limit: Int = 20) async throws -> [ChatSearchHit] {
+        guard supports("chatSearch") else { throw MeshError.unsupported("chatSearch") }
+        let enc = q.addingPercentEncoding(withAllowedCharacters: Self.queryValueAllowed) ?? q
+        let data = try await request("/sessions/search?q=\(enc)&limit=\(limit)&federate=0")
+        return try JSONDecoder().decode(ChatSearchResults.self, from: data).results
+    }
+
+    /// How meshd would reopen a stored conversation. Starts nothing — hand the plan to
+    /// `newSession(name:cmd:cwd:)`.
+    func resumeChat(runtime: String, id: String) async throws -> ChatResumePlan {
+        guard supports("chatSearch") else { throw MeshError.unsupported("chatSearch") }
+        let body = try JSONSerialization.data(withJSONObject: [:])
+        let data = try await request("/sessions/\(Self.pathSegment(runtime))/\(Self.pathSegment(id))/resume",
+                                     method: "POST", body: body)
+        return try JSONDecoder().decode(ChatResumePlan.self, from: data)
     }
 }
 
