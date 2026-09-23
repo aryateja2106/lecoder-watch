@@ -530,6 +530,10 @@ async function resumePlan(runtime: Runtime, id: string): Promise<Response> {
   if (!uuid) return Response.json({ error: "not a resumable session id" }, { status: 400 });
   const ix = await readIndex(runtime, id);
   if (!ix) return Response.json({ error: "no such session" }, { status: 404 });
+  // A machine can hold transcripts of a CLI it no longer has (the Pi keeps Codex rollouts
+  // from April and no codex): say so, instead of a pane that dies before anyone sees it.
+  const bin = runtime === "claude" ? "claude" : "codex";
+  if (!Bun.which(bin, { PATH: process.env.PATH ?? "" })) return Response.json({ error: `${bin} is not installed on this machine` }, { status: 424 });
   let resumeId = uuid, restoredFrom: string | undefined;
   if (!(await stat(ix.source).catch(() => null))) {
     // Codex finds a rollout by its uuid anywhere under ~/.codex/sessions; restoring one is not built.
@@ -545,7 +549,9 @@ async function resumePlan(runtime: Runtime, id: string): Promise<Response> {
     // The END of the uuid: Codex ids are UUIDv7, whose first 8 hex are a timestamp that
     // sessions started in the same minute share.
     name: `resume-${resumeId.slice(-8)}`,
-    cmd: runtime === "claude" ? `claude --resume ${resumeId}` : `codex resume ${resumeId}`,
+    // A CLI that fails (logged out, a session it cannot open) leaves a shell saying so,
+    // rather than a pane that closes before the phone gets to show it.
+    cmd: `${runtime === "claude" ? `claude --resume ${resumeId}` : `codex resume ${resumeId}`} || { s=$?; echo; echo "[mesh] ${bin} exited with status $s"; exec "\${SHELL:-/bin/sh}"; }`,
     cwd: ok ? ix.cwd : HOME, cwdMissing: !ok, ...(restoredFrom ? { restoredFrom } : {}),
   });
 }

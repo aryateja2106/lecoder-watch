@@ -15,17 +15,17 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | area | files | lines | what it is |
 |---|---|---|---|
 | `Shared/` | 17 | ~4,000 | Wire types and pure logic both apps compile; the self-checks link against these |
-| `iOS/` | 26 | ~11,800 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
+| `iOS/` | 27 | ~12,100 | iPhone app: machine list, terminal, remote screen, pairing, relay to the watch |
 | `Watch/` | 7 | ~4,700 | Watch app: attention list, terminal, remote control; talks to meshd or via the phone |
 | `MeshDesktop/` | 4 | ~800 | Mac menu-bar app: daemon status, permissions window, pairing QR. Copies its wire types |
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |
-| `install/payload/meshd/` | 25 | ~7,600 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
+| `install/payload/meshd/` | 26 | ~7,900 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
 | `install/payload/bin/` | 9 | ~3,700 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 4 | ~1,300 | Landing page (mesh.lesearch.ai) and the privacy page |
-| `scripts/` | 123 | ~11,800 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
+| `scripts/` | 124 | ~12,100 | Self-checks (check-*), gates (gate-*), release and map tooling — see [CHECKS.md](CHECKS.md) |
 
 Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `Shared/MeshClient.swift`, `install/payload/meshd/server.ts`, `install/payload/meshd/auth.ts`, `install/payload/meshd/pair.ts`, `project.yml`.
 
@@ -60,6 +60,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `AppLock.swift` | S | Biometric gate in front of the app | — |
 | `AppsLibraryView.swift` | M | every app an agent built for you, across every machine, in one list | — |
 | `BackgroundRefresh.swift` | S | Periodic usage/limit polling while the app is closed | — |
+| `ChatSearchView.swift` | M | search every paired machine's stored Claude Code and Codex conversations (meshd "chatSearch") and resume one as a new session | — |
 | `ContentView.swift` | XL | the phone's tab shell: Machines, attention rows, machine detail, Settings, the daemon-update and Local Network banners | check-event-dismissal |
 | `ExposedSecretsScreen.swift` | S | Settings → Exposed secrets. meshd 0.6+ ("redact") replaces a token, key or password in event and output text before it ever leaves the machine — but printing… | — |
 | `FeedbackView.swift` | M | report a problem from the phone: kind, title, what happened in your words, an optional screenshot or recording you pick, an optional contact email, and a… | check-feedback-cloud, check-feedback-redact |
@@ -125,6 +126,7 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `auth.ts` | S | Auth gate for meshd — this daemon executes shell commands, so the gate is the only thing between a request and RCE *[serialized — auth]* | — |
 | `brain.ts` | S | The local brain for meshd — which model server is running on this machine, which model it has loaded, and what it can actually do | check-brain |
 | `chat.ts` | M | the structured view of an agent session, read from the agent's own transcript | — |
+| `chats.ts` | M | full-text search over every agent conversation this machine kept: the user and assistant text of the transcripts sessions.ts stores, indexed version by… | — |
 | `cmux-bridge.ts` | S | user-session proxy for cmux CLI (meshd LaunchAgent cannot call cmux directly) | — |
 | `codex-state.ts` | S | read why a Codex session stopped, and when its limit resets | check-codex-state |
 | `desktop.html` | M | — | — |
@@ -142,8 +144,8 @@ Serialized files (one agent at a time, per AGENTS.md): `Shared/Models.swift`, `S
 | `push.ts` | M | APNs push — meshd notifies the phone directly (no cloud relay, local-first) | check-alert-gating, check-mesh-push |
 | `qr.ts` | L | a QR encoder with no dependencies, because the payload ships as plain .ts files that bun runs in place: an npm package here would mean an install step on every… | check-pair-qr |
 | `redact.ts` | M | every string that leaves this Mac for a phone, a watch, Apple's push servers or the events file passes through redact() first | check-redact |
-| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-approve-path, check-apps-ota, check-apps-serve, check-brain, check-brand, check-clean-install, check-cross-host-cp, check-daemon-050, check-daemon-gaps, check-fleet, check-fleet-map, check-harness-picker, check-host-guard, check-install-idempotent, check-kb-federation, check-linux-desktop, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-native-terminal-keys, check-package-mesh-install, check-pair-auth, check-paste-epipe, check-product-spec, check-pty-route, check-published, check-roundtrip, check-session-snapshots, check-watch-terminal-wiring, check-wol |
-| `sessions.ts` | M | lossless version history for agent transcripts on this machine: every Claude Code and Codex session is snapshotted before compaction or cleanup can destroy it,… | check-session-snapshots |
+| `server.ts` | XL | meshd — one per machine. System stats + agent (rmux) control + OpenUsage, over Tailscale. bun + TypeScript. Auth: Bearer <MESHD_TOKEN>. Bind… *[serialized — the route table]* | check-agent-new-latency, check-approve-path, check-apps-ota, check-apps-serve, check-brain, check-brand, check-chat-search, check-clean-install, check-cross-host-cp, check-daemon-050, check-daemon-gaps, check-fleet, check-fleet-map, check-harness-picker, check-host-guard, check-install-idempotent, check-kb-federation, check-linux-desktop, check-mesh-auth, check-mesh-doctor, check-mesh-upgrade, check-mesh-version, check-native-terminal-keys, check-package-mesh-install, check-pair-auth, check-paste-epipe, check-product-spec, check-pty-route, check-published, check-roundtrip, check-session-snapshots, check-watch-terminal-wiring, check-wol |
+| `sessions.ts` | M | lossless version history for agent transcripts on this machine: every Claude Code and Codex session is snapshotted before compaction or cleanup can destroy it,… | check-chat-search, check-session-snapshots |
 | `telemetry.ts` | S | one anonymized heartbeat a day, and nothing else, ever | check-feedback-cloud |
 | `wol.ts` | S | Wake-on-LAN, so "power that machine back on" works from the wrist | — |
 

@@ -22,6 +22,7 @@
 | `check-brand.sh` | the product reads "LeSearch AI" everywhere a person sees it, and the identifiers Apple, the Keychain, the App… |
 | `check-bridge-auth.sh` | rmux-bridge auth self-check. The bridge can type into any tmux/rmux session, and until 0.6 it answered anyone… |
 | `check-bridge-kill-scope.sh` | nothing shipped in the payload may enumerate processes by port without restricting to the LISTENING one |
+| `check-chat-search.sh` | Chat search (meshd chats.ts) finds a past conversation by what was said in it, on this machine and every… |
 | `check-clean-install.sh` | the published app installs and launches on a device that has never seen it: a brand-new simulator is created,… |
 | `check-codemap.sh` | the committed codebase map matches the tree, and every code file says what it is |
 | `check-codex-state.sh` | the rollout reader, against fixtures that encode the exact traps measured on a real stalled session… |

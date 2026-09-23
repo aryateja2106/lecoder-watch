@@ -506,6 +506,10 @@ async function cmdSessions(pos: string[], flags: Record<string, string>, bools: 
     const qs = new URLSearchParams({ q: query, limit: String(Number(flags.n || flags.limit) || 20), federate: bools.has("local") ? "0" : "1" });
     if (bools.has("all")) qs.set("all", "1");
     const r = await api(h, "GET", `/sessions/search?${qs}`).catch(predates);
+    // A row the queried machine answered for itself carries whatever it calls itself; print
+    // the name this CLI reached it by, so the column can go straight back into -H.
+    const peerNames = new Set((r?.peers ?? []).map((p: any) => p.host));
+    for (const row of r?.results ?? []) if (!peerNames.has(row.host)) row.host = h.name;
     const ago = (ts: unknown) => {
       const t = typeof ts === "number" ? (ts < 1e12 ? ts * 1000 : ts) : Date.parse(String(ts));
       if (!t) return "?";

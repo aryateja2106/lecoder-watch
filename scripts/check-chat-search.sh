@@ -190,20 +190,25 @@ ok(rows(B) === 1 && find("billing").length === 0 && find("pineapple")[0]?.id ===
 // ---- resume plans
 const plan = async (p: string) => { const r = await req("POST", p); return { status: r!.status, body: await r!.json() as any }; };
 let p = await plan(`/sessions/claude/${A}/resume`);
-ok(p.status === 200 && p.body.cmd === `claude --resume ${A}` && p.body.cwd === cwdA && p.body.cwdMissing === false && p.body.name === `resume-${A.slice(-8)}` && !("restoredFrom" in p.body), `Claude plan wrong: ${JSON.stringify(p)}`);
+ok(p.status === 200 && p.body.cmd.startsWith(`claude --resume ${A} || `) && p.body.cwd === cwdA && p.body.cwdMissing === false && p.body.name === `resume-${A.slice(-8)}` && !("restoredFrom" in p.body), `Claude plan wrong: ${JSON.stringify(p)}`);
 p = await plan(`/sessions/codex/${DID}/resume`);
-ok(p.status === 200 && p.body.cmd === `codex resume ${DU}` && p.body.cwd === cwdD && p.body.name === `resume-${DU.slice(-8)}`, `Codex plan wrong: ${JSON.stringify(p)}`);
+ok(p.status === 200 && p.body.cmd.startsWith(`codex resume ${DU} || `) && p.body.cwd === cwdD && p.body.name === `resume-${DU.slice(-8)}`, `Codex plan wrong: ${JSON.stringify(p)}`);
 rmSync(cwdB, { recursive: true });
 p = await plan(`/sessions/claude/${B}/resume`);
 ok(p.body.cwd === HOME && p.body.cwdMissing === true, `a missing folder did not fall back to HOME: ${JSON.stringify(p.body)}`);
 ok(find("pineapple")[0]?.cwdExists === false, "cwdExists still true for a deleted folder");
+ok(p.body.cmd.endsWith('exec "${SHELL:-/bin/sh}"; }'), `a failing CLI would close its pane: ${p.body.cmd}`);
+const savedPath = process.env.PATH; process.env.PATH = "/nonexistent";
+const noCli = await plan(`/sessions/codex/${DID}/resume`);
+process.env.PATH = savedPath;
+ok(noCli.status === 424 && /codex is not installed/.test(noCli.body.error ?? ""), `a machine without codex still planned a resume: ${JSON.stringify(noCli)}`);
 for (const bogus of ["/sessions/claude/not-a-uuid/resume", `/sessions/claude/${A}%3Brm%20-rf/resume`, "/sessions/codex/rollout-2026-09-20T10-00-00-abc/resume", `/sessions/codex/${DU}/resume`])
   ok((await plan(bogus)).status === 400, `a malformed id was not refused: ${bogus}`);
 ok((await plan(`/sessions/claude/${"e".repeat(8)}-1111-4111-8111-111111111111/resume`)).status === 404, "an unknown session did not 404");
 unlinkSync(join(proj, `${C}.jsonl`));
 ok(find("tour")[0]?.live === false, "live still true after the runtime deleted the transcript");
 p = await plan(`/sessions/claude/${C}/resume`);
-const newId = /^claude --resume ([0-9a-f-]{36})$/.exec(p.body.cmd ?? "")?.[1];
+const newId = /^claude --resume ([0-9a-f-]{36}) \|\| /.exec(p.body.cmd ?? "")?.[1];
 ok(p.status === 200 && p.body.restoredFrom === C && !!newId && newId !== C && p.body.name === `resume-${newId!.slice(-8)}`, `restore-then-plan wrong: ${JSON.stringify(p.body)}`);
 ok(!!newId && readFileSync(join(proj, `${newId}.jsonl`), "utf8").includes(`"sessionId":"${newId}"`), "the restored transcript is not where claude --resume looks");
 const again = await plan(`/sessions/claude/${C}/resume`);
