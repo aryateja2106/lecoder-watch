@@ -170,6 +170,9 @@ waited on, and the queue continued past each one.
 - Issues-only GitHub token as a Supabase secret (move the worker to an edge function)
 - Repo consolidation under LeSearch-AI — confirm the archive list and the transfer
 - TestFlight 0.8.0 upload (the only way a stranger gets the phone app)
+- The Mac has no tool-calling local model, so the full gate cannot go green — asked and
+  answered on 2026-09-23: leave it blocked. So the gate line above stays the one that ran at
+  13e5317, and the tip is not re-gated. The Pi and the Jetson both pass the same check.
 
 ## Housekeeping
 
