@@ -495,7 +495,7 @@ if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 1 response contains the host or the key")
 obj = json.loads(raw)
 keys = set(obj.keys())
-if keys != {"modelClass", "draft", "commandRan", "held"}:
+if keys != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 1 keys %s" % sorted(keys))
 if obj["modelClass"] != "user-subscription":
     raise SystemExit("case 1 modelClass %r" % obj["modelClass"])
@@ -573,7 +573,7 @@ if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 2 response contains the host or the key")
 obj = json.loads(raw)
 keys = set(obj.keys())
-if keys != {"modelClass", "draft", "commandRan", "held"}:
+if keys != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 2 keys %s" % sorted(keys))
 if obj["modelClass"] != "user-subscription":
     raise SystemExit("case 2 modelClass %r" % obj["modelClass"])
@@ -648,7 +648,7 @@ if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 3 response contains the host or the key")
 obj = json.loads(raw)
 keys = set(obj.keys())
-if keys != {"modelClass", "draft", "commandRan", "held"}:
+if keys != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 3 keys %s" % sorted(keys))
 if obj["modelClass"] != "user-subscription":
     raise SystemExit("case 3 modelClass %r" % obj["modelClass"])
@@ -718,7 +718,7 @@ raw = open(body_path, encoding="utf-8").read()
 if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 6 response contains the host or the key")
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 6 keys %s" % sorted(obj.keys()))
 if obj["modelClass"] != "user-subscription" or obj["commandRan"] is not False or obj["held"] is not True:
     raise SystemExit("case 6 ran or was not held: %r" % obj)
@@ -788,7 +788,7 @@ raw = open(body_path, encoding="utf-8").read()
 if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 7 response contains the host or the key")
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 7 keys %s" % sorted(obj.keys()))
 if obj["modelClass"] != "user-subscription" or obj["commandRan"] is not True or obj["held"] is not False:
     raise SystemExit("case 7 did not run: %r" % obj)
@@ -856,7 +856,7 @@ raw = open(body_path, encoding="utf-8").read()
 if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 8 response contains the host or the key")
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 8 keys %s" % sorted(obj.keys()))
 if obj["modelClass"] != "user-subscription" or obj["commandRan"] is not False or obj["held"] is not True:
     raise SystemExit("case 8 ran or was not held: %r" % obj)
@@ -949,7 +949,7 @@ raw = open(body_path, encoding="utf-8").read()
 if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 9 response contains the host or the key")
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 9 keys %s" % sorted(obj.keys()))
 if obj["modelClass"] != "user-subscription" or obj["commandRan"] is not True or obj["held"] is not False:
     raise SystemExit("case 9 did not run: %r" % obj)
@@ -1021,7 +1021,7 @@ raw = open(body_path, encoding="utf-8").read()
 if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 10 response contains the host or the key")
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 10 keys %s" % sorted(obj.keys()))
 if obj["modelClass"] != "user-subscription" or obj["commandRan"] is not False or obj["held"] is not True:
     raise SystemExit("case 10 ran or was not held: %r" % obj)
@@ -1094,7 +1094,7 @@ raw = open(body_path, encoding="utf-8").read()
 if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 11 response contains the host or the key")
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 11 keys %s" % sorted(obj.keys()))
 if obj["modelClass"] != "user-subscription" or obj["commandRan"] is not True or obj["held"] is not False:
     raise SystemExit("case 11 did not run: %r" % obj)
@@ -1167,7 +1167,7 @@ raw = open(body_path, encoding="utf-8").read()
 if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 12 response contains the host or the key")
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 12 keys %s" % sorted(obj.keys()))
 if obj["modelClass"] != "user-subscription" or obj["commandRan"] is not False or obj["held"] is not True:
     raise SystemExit("case 12 ran or was not held: %r" % obj)
@@ -1261,7 +1261,7 @@ raw = open(body_path, encoding="utf-8").read()
 if "sk-secret" in raw or "llm.example" in raw:
     raise SystemExit("case 13 response contains the host or the key")
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 13 keys %s" % sorted(obj.keys()))
 if obj["modelClass"] != "user-subscription" or obj["commandRan"] is not True or obj["held"] is not False:
     raise SystemExit("case 13 did not run: %r" % obj)
@@ -1339,7 +1339,7 @@ raw = open(body_path, encoding="utf-8").read()
 if "sk-secret" in raw or "llm.example" in raw or "pairing code" in raw:
     raise SystemExit("case 14 response contains a secret or the host")
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 14 keys %s" % sorted(obj.keys()))
 if obj["modelClass"] != "user-subscription" or obj["draft"] is not None or obj["commandRan"] is not False or obj["held"] is not True:
     raise SystemExit("case 14 was not held: %r" % obj)

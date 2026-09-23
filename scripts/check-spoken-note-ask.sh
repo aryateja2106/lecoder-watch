@@ -506,7 +506,7 @@ sentence = os.environ["SENTENCE"]
 ask = os.environ["ASK"]
 raw = open(res_path).read()
 data = json.loads(raw)
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: ask keys are %r" % (sorted(data),))
 if data.get("modelClass") != "local" or data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: ask result is %r" % (data,))
@@ -577,7 +577,7 @@ code="$(curl --connect-timeout 1 --max-time 12 -sS -o "$TH/pair-res.json" -w '%{
 python3 - "$TH/pair-res.json" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: pairing keys are %r" % (sorted(data),))
 if data.get("modelClass") != "local" or data.get("draft") is not None or data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: pairing ask was not held: %r" % (data,))

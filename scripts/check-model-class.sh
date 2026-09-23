@@ -283,7 +283,7 @@ if "sk-secret" in raw:
     raise SystemExit("case 1 response contains sk-secret: " + raw)
 obj = json.loads(raw)
 keys = set(obj.keys())
-if keys != {"modelClass", "draft", "commandRan", "held"}:
+if keys != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 1 keys %s" % sorted(keys))
 if obj["modelClass"] != "local":
     raise SystemExit("case 1 modelClass %r" % obj["modelClass"])
@@ -326,7 +326,7 @@ import json, sys
 raw = open(sys.argv[1], encoding="utf-8").read()
 obj = json.loads(raw)
 keys = set(obj.keys())
-if keys != {"modelClass", "draft", "commandRan", "held"}:
+if keys != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 2 keys %s body %s" % (sorted(keys), raw))
 if obj["modelClass"] != "user-subscription":
     raise SystemExit("case 2 modelClass %r" % obj["modelClass"])
@@ -361,7 +361,7 @@ if "sk-secret" in raw:
     raise SystemExit("case 3 response contains sk-secret")
 obj = json.loads(raw)
 keys = set(obj.keys())
-if keys != {"modelClass", "draft", "commandRan", "held"}:
+if keys != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 3 keys %s" % sorted(keys))
 if obj["modelClass"] != "local":
     raise SystemExit("case 3 modelClass %r" % obj["modelClass"])

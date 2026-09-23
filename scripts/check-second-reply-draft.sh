@@ -329,7 +329,7 @@ ask = os.environ["FIRST_ASK"]
 want = ask[:200]
 raw = open(res_path).read()
 data = json.loads(raw)
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: ask keys are %r" % (sorted(data),))
 if data.get("modelClass") != "local" or data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: ask result is %r" % (data,))
@@ -433,7 +433,7 @@ ask = os.environ["SECOND_ASK"]
 raw = open(res_path).read()
 data = json.loads(raw)
 note = json.load(open(note_path))
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: reply query keys are %r" % (sorted(data),))
 if data.get("modelClass") != "local" or data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: reply query result is %r" % (data,))
@@ -533,7 +533,7 @@ data = json.loads(raw)
 note = json.load(open(note_path))
 first = open(first_path).read()
 paper = json.load(open(paper_path))
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: second reply keys are %r" % (sorted(data),))
 if data.get("modelClass") != "local" or data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: second reply result is %r" % (data,))

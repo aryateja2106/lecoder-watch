@@ -1088,7 +1088,9 @@ final class WatchMeshStore: ObservableObject {
                 guard matches.count == 1 else { return }
                 let read = try await c.readKnowledgeNote(id: matches[0].id)
                 guard read.title == titled else { return }
-                _ = try await c.draftAgentNote(id: read.id, confirm: true)
+                let drafted = try await c.draftAgentNote(id: read.id, confirm: true)
+                guard !drafted.held, let reply = drafted.reply, !reply.isEmpty else { return }
+                knowledgeAnswer = reply
             } catch {
                 return
             }

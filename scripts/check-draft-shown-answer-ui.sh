@@ -149,8 +149,16 @@ def check_store(label, path):
         bad("%s draftShownAnswer assigns loadedKnowledgeNote" % label)
     if re.search(r"currentKnowledgeNote\s*=", action):
         bad("%s draftShownAnswer assigns currentKnowledgeNote" % label)
-    if re.search(r"knowledgeAnswer\s*=", action):
-        bad("%s draftShownAnswer assigns knowledgeAnswer" % label)
+    held = "guard !drafted.held, let reply = drafted.reply, !reply.isEmpty else { return }"
+    assign = "knowledgeAnswer = reply"
+    held_at = action.find(held)
+    assign_at = action.find(assign)
+    if held_at < 0:
+        bad("%s draftShownAnswer does not return when the reply is held or empty" % label)
+    if action.count(assign) != 1:
+        bad("%s knowledgeAnswer = reply appears %s times" % (label, action.count(assign)))
+    elif held_at >= 0 and assign_at < held_at:
+        bad("%s assigns knowledgeAnswer before the held return" % label)
     if re.search(r"knowledgeAskLine\s*=", action):
         bad("%s draftShownAnswer assigns knowledgeAskLine" % label)
     caught = action.rfind("catch")

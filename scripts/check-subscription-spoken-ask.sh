@@ -314,7 +314,7 @@ for needle in forbidden:
     if needle and needle in raw:
         raise SystemExit("%s response contains %s" % (label, needle))
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("%s keys %s" % (label, sorted(obj.keys())))
 if obj["modelClass"] != "user-subscription":
     raise SystemExit("%s modelClass %r" % (label, obj["modelClass"]))
@@ -394,7 +394,7 @@ for needle in ("sk-secret", "user:sk-secret", "llm.example", model_url, "pairing
     if needle and needle in raw:
         raise SystemExit("%s response contains %s" % (label, needle))
 obj = json.loads(raw)
-if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held"}:
+if set(obj.keys()) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("%s keys %s" % (label, sorted(obj.keys())))
 if obj["modelClass"] != "user-subscription" or obj["draft"] is not None or obj["commandRan"] is not False or obj["held"] is not True:
     raise SystemExit("%s was not held: %r" % (label, obj))
