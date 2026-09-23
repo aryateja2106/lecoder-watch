@@ -934,6 +934,34 @@ final class MeshStore: ObservableObject {
         }
     }
 
+    /// Keep the draft on screen as a new note. Nothing is posted until the user confirms.
+    /// The title is the reply's first line. This does not replace an existing note.
+    func keepShownDraft(host: String, confirmed: Bool) {
+        guard confirmed else { return }
+        guard let shown = knowledgeAnswer, !shown.isEmpty else { return }
+        guard knowledgeDraftFile?.isEmpty == false else { return }
+        let text = shown.trimmingCharacters(in: .whitespacesAndNewlines)
+        let line = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
+        let titled = String(line.prefix(200))
+        guard !titled.isEmpty else { return }
+        guard let machine = machineMatching(host, in: machines),
+              let snap = snapshot?.machines.first(where: { $0.host == machine.host }),
+              snap.reachable, snap.authError == nil else {
+            fail("Keep needs a direct link to this Mac")
+            return
+        }
+        lastError = nil
+        let c = client(for: machine)
+        Task {
+            do {
+                _ = try await c.createKnowledgeNote(title: titled, body: text)
+                loadKnowledgeNotes(host: host)
+            } catch {
+                fail("keep failed")
+            }
+        }
+    }
+
     /// Save a typed note on this machine. Nothing is posted until the user confirms.
     func saveKnowledgeNote(host: String, title: String, body: String, confirmed: Bool) {
         guard confirmed else { return }

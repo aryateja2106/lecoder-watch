@@ -436,6 +436,7 @@ struct KnowledgeNoteAskView: View {
     @State private var confirmingDraft = false
     @State private var confirmingSaveReply = false
     @State private var confirmingDraftNote = false
+    @State private var confirmingKeep = false
     @State private var search = ""
 
     private var namedNote: String {
@@ -495,6 +496,8 @@ struct KnowledgeNoteAskView: View {
                     }
                     Button("Draft") { confirmingDraft = true }
                     Button("Save reply") { confirmingSaveReply = true }
+                    Button("Keep") { confirmingKeep = true }
+                        .disabled(store.knowledgeDraftFile?.isEmpty != false)
                 }
             } else if let line = store.knowledgeAskLine {
                 Section("Answer") {
@@ -567,6 +570,14 @@ struct KnowledgeNoteAskView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text(question)
+        }
+        .confirmationDialog("Keep this draft?", isPresented: $confirmingKeep, titleVisibility: .visible) {
+            Button("Keep") {
+                store.keepShownDraft(host: host, confirmed: true)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(store.knowledgeDraftFile ?? "")
         }
         .confirmationDialog("Draft this note?", isPresented: $confirmingDraftNote, titleVisibility: .visible) {
             Button("Draft") {
