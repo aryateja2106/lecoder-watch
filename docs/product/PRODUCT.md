@@ -127,7 +127,7 @@ string, and when a capability is missing they name the symptom the user sees
 `events` `newPane` `paneTarget` `usage` `agents` `cmux` `herdr` `tailscale` `kb`
 `screenPeek` `input` `files` `push` `pair` `doctor` `wake` `screenRegion` `openUrl`
 `power` `laPush` `sessionStatus` `paste` `captureJoin` `redact` `chat` `apps` `handoff` `brain`
-`captureAnsi` `pty`
+`captureAnsi` `pty` `sessions`
 
 ### 5.2 Modules (`install/payload/meshd/`)
 
@@ -149,6 +149,7 @@ route line). That is the rule for adding anything.
 | `handoff.ts` | **0.6** Hand a session to a different agent CLI via `HANDOFF.md` in the working directory. |
 | `brain.ts` | **0.7** `GET /brain`: which local model server answers on this machine (edge0 :8001, mference :8080, ollama :11434, LM Studio :1234, or `MESHD_BRAIN_URL`), its model, and measured capabilities. Never starts or stops one. Ported from PR #119. |
 | `pty.ts` | **0.8** `GET /agents/:name/pty` (WebSocket): the session attached in a real pty (`Bun.Terminal`) sized to the client; binary frames are raw bytes both ways, text frames are `resize`/`ping`; output is redacted like every other path; closing detaches, never kills. The phone's native terminal streams from here; `/output` polling stays for the watch and older phones. |
+| `sessions.ts` | **0.8** Lossless history of every Claude Code and Codex transcript on this machine, kept under `~/.mesh/sessions/<runtime>/<id>/` (0700, files 0600) so compaction and the runtime's own 30-day cleanup lose nothing. A version is a full base or, when the file only grew, a gzip of just the new bytes; each is checked against its sha256 before it is served. Snapshots on every Stop/Notification event and in a sweep every ten minutes (`MESH_SESSIONS=off` disables it). `GET /sessions`, `GET /sessions/:runtime/:id[/raw?v=N]`, `POST /sessions/claude/:id/restore?v=N` writes that version as a new session beside the original for `claude --resume`. Local only: nothing is uploaded, no account. Replaces what agent-git does through its hosted hub. |
 | `redact.ts` | **0.6** Every line leaving the machine is redacted; exposures are counted by fingerprint, never by value. |
 | `codex-state.ts` | Reads why Codex stopped and when its window resets. |
 | `cmux-bridge.ts` / `herdr.ts` | Multiplexer adapters. |
@@ -167,6 +168,11 @@ reads before choosing a machine: per host its hardware, free RAM, CPU and load, 
 sessions, installed agent CLIs, the local model servers that answer and their models, and
 the owner's `role` note (`mesh host role <name> "<what it is for>"` — intent is written
 down, not inferred). `--json` is the agent form. It only reports; it never chooses.
+
+**Sessions (0.8).** `mesh sessions` lists every agent conversation the machine kept (a † marks
+one the runtime already deleted), `mesh sessions log <id>` its versions, and
+`mesh sessions restore <id> --at N` brings version N back as a new Claude session and prints
+the `claude --resume` line. An id may be a prefix; `-H host` reads another machine.
 
 ### 5.4 Security rules that are not negotiable
 

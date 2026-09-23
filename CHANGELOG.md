@@ -9,7 +9,15 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
-_Nothing yet since 0.8.0._
+- **No conversation is lost any more.** meshd keeps every version of every Claude Code and
+  Codex transcript on the machine that wrote it, before compaction rewrites it or the 30-day
+  cleanup deletes it. Growth is stored as the new bytes only, so a 138 MB session costs the
+  size of what was added per turn, not a copy per turn. `mesh sessions` lists them,
+  `mesh sessions restore <id> --at N` brings any version back as a new session you resume with
+  `claude --resume`. Nothing leaves the machine and nothing needs an account.
+- **`mesh fleet`** — what each machine is and has right now (hardware, accelerator, free RAM,
+  load, sessions, agent CLIs, local models, the role you gave it), for agents deciding where
+  to run. `/stats` gains `hw`.
 
 ## [0.8.0] — 2026-09-22
 

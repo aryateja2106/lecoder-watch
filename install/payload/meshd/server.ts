@@ -21,6 +21,8 @@ import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
 import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount } from "./herdr";
 import { handlePtyUpgrade, ptyWebSocket } from "./pty";
+import { handleSessions, snapshot as snapshotTranscript, startSessionSweep } from "./sessions";
+import { findClaudeTranscript, findCodexRollout } from "./chat";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
@@ -46,7 +48,7 @@ const VERSION = "0.8.0";
 // "handoff": POST /agents/<s>/handoff {to} writes HANDOFF.md from the conversation and
 // relaunches the pane under another CLI agent; GET /resumable?cwd= and
 // GET /agents/<s>/resumable list the conversations each CLI can reopen, with the command.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain", "captureAnsi", "pty"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain", "captureAnsi", "pty", "sessions"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -1359,6 +1361,9 @@ Bun.serve({
       // A terminal emulator's byte stream: the session attached in a pty over a WebSocket.
       const pty = await handlePtyUpgrade(req, url, server, { mux: MUX, shq });
       if (pty !== null) return pty;
+      // Lossless version history of this machine's agent transcripts.
+      const sessions = await handleSessions(req, url);
+      if (sessions) return sessions;
       // Secrets seen in agent/terminal text — fingerprints and counts, never values.
       const exposures = await handleExposures(req, url);
       if (exposures) return exposures;
@@ -1419,6 +1424,13 @@ Bun.serve({
         // real session; its Stop hooks doubled the Monitor list with "Claude stopped" rows nobody
         // asked for. Nothing a person can act on ever comes from that cwd.
         if (typeof input.cwd === "string" && input.cwd.includes("/.claude-mem/")) return json({ ok: true, ignored: "observer" }, 202);
+        // A turn just ended: snapshot that session now, before the next turn can compact it.
+        // Fire-and-forget; the ten-minute sweep catches anything this misses.
+        if (typeof input.cwd === "string" && input.cwd) {
+          Promise.all([findClaudeTranscript(input.cwd), findCodexRollout(input.cwd)])
+            .then((paths) => Promise.all(paths.filter(Boolean).map((p) => snapshotTranscript(p!))))
+            .catch(() => {});
+        }
         return json(await addEvent(input), 201);
       }
       if (path === "/kb" && (req.method === "PUT" || req.method === "POST")) {
@@ -1554,6 +1566,7 @@ peerHosts().then((peers) => addKnownSecrets([...peers.values()].flatMap((h) => (
 chmod(EVENTS_PATH, 0o600).catch(() => {});
 console.log(`meshd ${VERSION} on http://${HOST}:${PORT}  (host=${os.hostname()} platform=${process.platform})`);
 initTelemetry(VERSION);
+startSessionSweep();
 // Warm the per-session status index from the stored tail, and settle the capture-pane
 // -J question once, before the first client asks. Both are best-effort: an empty
 // index just means rows start as idle/working until events arrive.
