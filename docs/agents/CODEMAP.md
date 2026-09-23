@@ -21,7 +21,7 @@ A file's purpose is its own first comment line; a missing one is a defect in the
 | `MeshWatchWidgets/` | 3 | ~200 | iOS Live Activity: Lock Screen, Dynamic Island, Smart Stack |
 | `WatchWidgets/` | 1 | ~100 | Watch complication reading the shared App Group glance |
 | `install/payload/meshd/` | 24 | ~7,000 | The daemon (bun + TypeScript). The ONE shipping copy; server.ts is the route table |
-| `install/payload/bin/` | 9 | ~3,500 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
+| `install/payload/bin/` | 9 | ~3,600 | The mesh CLI and the helper binaries installed to ~/.mesh/bin |
 | `install/payload/rmux-bridge/` | 4 | ~1,000 | Second daemon on :7820 serving the phone's xterm.js terminal |
 | `install/` | 3 | ~1,000 | The installer the one-liner fetches; runs on macOS and Linux |
 | `web/` | 4 | ~1,300 | Landing page (mesh.lesearch.ai) and the privacy page |

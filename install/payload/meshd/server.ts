@@ -146,8 +146,40 @@ async function topProcs(): Promise<any[]> {
     return { pid, cmd: cmdName, cpuPct, memMB: rssKB / 1024, memPct: (rssKB / 1024 / (os.totalmem() / 1048576)) * 100 };
   }).filter((p) => p.pid > 0);
 }
+/// What this machine IS, for an agent choosing where to run something: the board or chip,
+/// cores, total RAM, and the accelerator — Apple unified memory, CUDA (Jetson shares its RAM
+/// with the GPU), or none. It never changes while the daemon runs, so it is read once.
+/// Measured 2026-09-23: Mac "Apple M4 Pro" 12 cores; Pi "Raspberry Pi 5 Model B Rev 1.0";
+/// Jetson "NVIDIA Jetson Orin Nano … Super", L4T R36, CUDA 12.6 (nvcc is not on PATH there,
+/// so the version comes from /usr/local/cuda/version.json, not from running it).
+type Hardware = { board: string; cores: number; ramMB: number; arch: string; accel: { kind: "apple" | "cuda" | "none"; name?: string; version?: string; memory: "unified" | "shared" | "dedicated" | "none" } };
+let hardwareCache: Hardware | null = null;
+async function hardware(): Promise<Hardware> {
+  if (hardwareCache) return hardwareCache;
+  const cpus = os.cpus();
+  const read = (p: string) => readFile(p, "utf8").then((t) => t.replace(/\0/g, "").trim()).catch(() => "");
+  let board = cpus[0]?.model?.trim() ?? "";
+  let accel: Hardware["accel"] = { kind: "none", memory: "none" };
+  if (IS_MAC) {
+    board = (await sh("sysctl -n machdep.cpu.brand_string 2>/dev/null")).trim() || board;
+    if (process.arch === "arm64") accel = { kind: "apple", name: `${board} GPU`, memory: "unified" };
+  } else {
+    board = (await read("/proc/device-tree/model")) || board;
+    const cuda = await read("/usr/local/cuda/version.json");
+    if (cuda) {
+      let version = "";
+      try { version = JSON.parse(cuda)?.cuda?.version ?? ""; } catch { /* keep blank */ }
+      // A Jetson's GPU has no memory of its own: it takes from the same RAM the CPU uses.
+      const tegra = await read("/etc/nv_tegra_release");
+      accel = { kind: "cuda", name: tegra ? "NVIDIA Tegra (integrated)" : "NVIDIA", version, memory: tegra ? "shared" : "dedicated" };
+    }
+  }
+  hardwareCache = { board, cores: cpus.length, ramMB: Math.round(os.totalmem() / 1048576), arch: process.arch, accel };
+  return hardwareCache;
+}
+
 async function getStats() {
-  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount, herdrCount] = await Promise.all([
+  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount, herdrCount, hw] = await Promise.all([
     IS_MAC ? macCpuPct() : linuxCpuPct(),
     IS_MAC ? macMem() : linuxMem(),
     disk(),
@@ -155,8 +187,9 @@ async function getStats() {
     rmuxSessions().then((s) => s.length).catch(() => 0),
     cmuxSessions().then((s) => s.length).catch(() => 0),
     herdrPaneCount().catch(() => 0),
+    hardware(),
   ]);
-  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount + herdrCount };
+  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount + herdrCount, hw };
 }
 
 // ---------- agents (rmux) ----------

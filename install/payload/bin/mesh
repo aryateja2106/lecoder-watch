@@ -29,7 +29,9 @@ const VERSION =
 
 // ---------- config ----------
 
-type Host = { ip: string; port: number; token: string };
+// `role` is the owner's own words for what a machine is for ("24/7, CUDA — long jobs
+// here"). Hardware is discoverable; intent is not, so it is written down, not guessed.
+type Host = { ip: string; port: number; token: string; role?: string };
 type Config = { default?: string; hosts: Record<string, Host> };
 
 function loadConfig(): Config {
@@ -275,6 +277,16 @@ function cmdHostAdd(pos: string[], flags: Record<string, string>, cfg: Config) {
   out(() => console.log(`added ${name} → ${ip}:${cfg.hosts[name].port}${cfg.default === name ? " (default)" : ""}`), cfg.hosts[name]);
 }
 
+function cmdHostRole(pos: string[], cfg: Config) {
+  const [name, ...words] = pos;
+  if (!name) die('usage: mesh host role <name> "<what this machine is for>"   (empty text clears it)');
+  if (!cfg.hosts[name]) die(`unknown host: ${name}`);
+  const role = words.join(" ").trim();
+  if (role) cfg.hosts[name].role = role; else delete cfg.hosts[name].role;
+  saveConfig(cfg);
+  out(() => console.log(role ? `${name}: ${role}` : `${name}: role cleared`), { host: name, role: role || null });
+}
+
 function cmdHostRm(pos: string[], cfg: Config) {
   const name = pos[0];
   if (!name) die("usage: mesh host rm <name>");
@@ -418,6 +430,68 @@ async function cmdStatus(cfg: Config) {
       const up = humanUptime(r.uptimeSec);
       const doc = r.doctor ? `  doctor: ${r.doctor.ok}/${r.doctor.total} ok` : "";
       console.log(`${String(r.name).padEnd(16)} ${String(r.address).padEnd(22)} meshd ${String(r.meshdVersion || "?").padEnd(8)} ${up ? `up ${up}` : ""}${doc}`);
+    }
+  }, rows);
+}
+
+// One view of every machine an agent can run on: what it is (board, cores, RAM, GPU or
+// Apple unified memory), how busy it is right now (free RAM, CPU, load, sessions), which
+// agent CLIs are installed, which local model servers answer and with what models, and
+// the owner's own note on what the machine is for. `--json` is the form an agent reads
+// before deciding where to start work; nothing here chooses for it.
+//
+// Every field comes from a route the daemon already serves (/health, /stats, /doctor,
+// /brain), fetched in parallel; a daemon too old for one of them just leaves that field
+// empty. The same machine listed twice — "local" and a named entry both on 127.0.0.1 —
+// is shown once, under its name.
+async function cmdFleet(cfg: Config) {
+  const named = Object.keys(cfg.hosts).map((n) => resolveHost(n, cfg));
+  const local = resolveHost("local", cfg);
+  const targets = named.some((h) => h.ip === local.ip && h.port === local.port) ? named : [local, ...named];
+  const get = async (h: ReturnType<typeof resolveHost>, path: string) => {
+    try { return await api(h, "GET", path); } catch { return null; }
+  };
+  const rows = await Promise.all(targets.map(async (h) => {
+    const health = await get(h, "/health");
+    const base = { host: h.name, address: `${h.ip}:${h.port}`, role: cfg.hosts[h.name]?.role ?? null };
+    if (!health?.ok) return { ...base, reachable: false };
+    const [stats, doctor, brain] = await Promise.all([get(h, "/stats"), get(h, "/doctor"), get(h, "/brain")]);
+    const mem = stats?.mem;
+    const endpoints: any[] = brain?.endpoints ?? [];
+    return {
+      ...base,
+      reachable: true,
+      meshd: health.meshdVersion ?? null,
+      platform: health.platform ?? stats?.platform ?? null,
+      arch: health.arch ?? stats?.hw?.arch ?? null,
+      hardware: stats?.hw ?? null,
+      memFreeMB: mem ? Math.round(mem.totalMB - mem.usedMB) : null,
+      memTotalMB: mem ? Math.round(mem.totalMB) : null,
+      memUsedPct: mem ? Math.round(mem.pct) : null,
+      cpuPct: typeof stats?.cpuPct === "number" ? Math.round(stats.cpuPct) : null,
+      load1: Array.isArray(stats?.load) ? Number(stats.load[0].toFixed(2)) : null,
+      diskFreeGB: stats?.disk ? Math.round(stats.disk.totalGB - stats.disk.usedGB) : null,
+      sessions: stats?.agentsCount ?? null,
+      agents: (doctor?.agents ?? []).map((a: any) => a.name),
+      models: endpoints.filter((e) => e.reachable).map((e) => ({ server: e.source, endpoint: e.endpoint, models: e.models ?? (e.model ? [e.model] : []) })),
+      pty: Array.isArray(health.capabilities) ? health.capabilities.includes("pty") : false,
+    };
+  }));
+  out(() => {
+    for (const r of rows as any[]) {
+      const head = `${String(r.host).padEnd(10)} ${String(r.address).padEnd(22)}`;
+      if (!r.reachable) { console.log(`${head} unreachable`); continue; }
+      const hw = r.hardware;
+      const accel = !hw ? "?" : hw.accel.kind === "apple" ? "Apple GPU, unified memory"
+        : hw.accel.kind === "cuda" ? `CUDA ${hw.accel.version || "?"}${hw.accel.memory === "shared" ? ", RAM shared with GPU" : ""}` : "no GPU";
+      const gb = (mb: number | null) => (mb == null ? "?" : (mb / 1024).toFixed(1));
+      console.log(`${head} ${hw?.board ?? r.platform}`);
+      console.log(`${"".padEnd(34)}${hw ? `${hw.cores} cores · ${gb(hw.ramMB)} GB · ` : ""}${accel}`);
+      console.log(`${"".padEnd(34)}now: ${gb(r.memFreeMB)} GB free of ${gb(r.memTotalMB)} (${r.memUsedPct ?? "?"}% used) · cpu ${r.cpuPct ?? "?"}% · load ${r.load1 ?? "?"} · ${r.sessions ?? "?"} session(s)`);
+      console.log(`${"".padEnd(34)}agents: ${r.agents.length ? r.agents.join(", ") : "none"}`);
+      const models = r.models.map((m: any) => `${m.server}: ${m.models.join(", ") || "(none loaded)"}`);
+      console.log(`${"".padEnd(34)}models: ${models.length ? models.join(" · ") : "no local model server answering"}`);
+      if (r.role) console.log(`${"".padEnd(34)}role: ${r.role}`);
     }
   }, rows);
 }
@@ -2106,6 +2180,7 @@ HOSTS
   hooks [status|install|remove]  wire agent alerts into Claude Code on this machine
   hosts                       list configured hosts + reachability
   host add <name> <ip>        add a host   [--port N] [--token T]
+  host role <name> "<text>"   note what a machine is for (shown by fleet)
   host rm <name>              remove a host
   host default <name>         set the default host
 
@@ -2122,6 +2197,9 @@ SESSIONS  (default host, or -H <name>)
 
 STATUS
   status                      every machine on one line: version, uptime, doctor score
+  fleet                       what each machine is and has right now — hardware, free RAM,
+                              load, agent CLIs, local models, role   [--json for agents]
+                              Agents: read "mesh fleet --json" before choosing where to run.
   usage                       usage/limits per provider     (alias: limits)
   health                      is meshd up?
   doctor                      what actually works on a machine  [--fix shows the permission dialogs]
@@ -2376,7 +2454,8 @@ async function main() {
       if (sub === "add") return cmdHostAdd(pos, flags, cfg);
       if (sub === "rm" || sub === "remove") return cmdHostRm(pos, cfg);
       if (sub === "default") return cmdHostDefault(pos, cfg);
-      return die("usage: mesh host <add|rm|default> ...");
+      if (sub === "role") return cmdHostRole(pos, cfg);
+      return die("usage: mesh host <add|rm|default|role> ...");
     }
     case "cp": return cmdCp(pos, bools, cfg);
     case "ls": case "agents": return cmdLs(flags, cfg);
@@ -2388,6 +2467,7 @@ async function main() {
     case "usage": case "limits": return cmdUsage(flags, cfg);
     case "health": return cmdHealth(flags, cfg);
     case "status": return cmdStatus(cfg);
+    case "fleet": case "where": return cmdFleet(cfg);
     case "upgrade": case "update": return cmdUpgrade(flags, bools, cfg);
     case "doctor": return cmdDoctor(flags, cfg, bools);
     case "events": return cmdEvents(flags, cfg);

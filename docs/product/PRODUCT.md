@@ -136,7 +136,7 @@ route line). That is the rule for adding anything.
 
 | File | Owns |
 | --- | --- |
-| `server.ts` | Routing, the capability list, the Origin/Host guard that runs before auth, sessions and stats. |
+| `server.ts` | Routing, the capability list, the Origin/Host guard that runs before auth, sessions and stats. `/stats` carries `hw` (**0.8**): board or chip, cores, total RAM and the accelerator — Apple unified memory, CUDA with its version (a Jetson's GPU shares system RAM), or none — read once from what the OS already records. |
 | `auth.ts` / `loopback-trust.ts` | Fail-closed bearer check, constant-time. Loopback is exempt only after the browser guard has passed and while `MESHD_TRUST_LOOPBACK` permits it. |
 | `doctor.ts` | `GET /doctor` and `POST /doctor/fix`. Every check exercises the real path (a green row means it works now). Checks: `token`, `input`, `screen`, `mux`, `push`, `exposures`, `agents`. |
 | `input.ts` / `input-linux.ts` | Pointer, keyboard, media, windows, power, clipboard, screen capture and regions. Linux uses xdotool/xclip and screen capture via scrot. |
@@ -161,6 +161,12 @@ route line). That is the rule for adding anything.
 `mesh` (the CLI), `mesh-input.swift` (the HID helper), `mesh-event`, `mesh-hook`,
 `mesh-agent-run`, `mesh-codex-notify` (the four ways an agent tells the daemon
 something happened), `mesh-kb`, `mesh-self-check`, `start-cmux-bridge`.
+
+**Where to run (0.8).** `mesh fleet` (alias `mesh where`) is the capability map an agent
+reads before choosing a machine: per host its hardware, free RAM, CPU and load, running
+sessions, installed agent CLIs, the local model servers that answer and their models, and
+the owner's `role` note (`mesh host role <name> "<what it is for>"` — intent is written
+down, not inferred). `--json` is the agent form. It only reports; it never chooses.
 
 ### 5.4 Security rules that are not negotiable
 
