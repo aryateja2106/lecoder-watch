@@ -2,13 +2,13 @@
 run_id: 2026-09-23T070000Z-session-snapshots
 stage: implement
 started_at: 2026-09-23T06:40:00Z
-finished_at: null
-status: in-progress
+finished_at: 2026-09-23T14:10:00Z
+status: succeeded
 issue: none (Arya's choice in-session, 2026-09-23: agent-git → "Build it into mesh")
 pull_request: https://github.com/aryateja2106/lecoder-watch/pull/133
 gate_level: fast
 gate_status: GREEN (FACTORY_GATES: level=fast status=GREEN passed=2 failed=0 failing=none skipped=none misconfigured=none)
-verifier: running (oh-my-claudecode:verifier, fresh context, incl. a throwaway side-port daemon)
+verifier: oh-my-claudecode:verifier (fresh context, throwaway side-port daemon) — PASS with one medium defect (MESH_SESSIONS=off did not stop the Stop-event trigger), fixed in ef0e0cf
 human_required: false
 ---
 
@@ -56,12 +56,31 @@ no telemetry.
 - Without the per-file lock, the Stop-event trigger and the sweep could both write
   `v<N>` and leave every later version unreadable.
 
+## Slice B, same run: the Jetson mirrors everyone, redacted
+
+- The source serves each version's own chunk redacted (`GET /sessions/:runtime/:id/chunk?v=N`),
+  so a secret never crosses the tailnet. The mirror appends appends and keeps a replaced base
+  as `<id>.v<N>.jsonl.gz`, in plain JSONL an agent there can grep.
+- The mirror pulls with a **mirror token** per machine: a second bearer that opens the
+  list, an index and redacted chunks, nothing else. `mesh sessions mirror-to jetson`
+  registers every machine. Registering is what turns the mirror on: an env flag in the
+  unit would be dropped by the next upgrade.
+- Git was not used: a 139 MB append-only file is a new blob every commit until a gc.
+
+## Live fleet
+
+| What | Result |
+|---|---|
+| mac, pi, jetson `/health` | all advertise `sessions` (VERSION stays 0.8.0; deployed with `install.sh --upgrade --src` from a copied tgz, Mac with `mesh upgrade --src`) |
+| `mesh sessions mirror-to jetson` | `jetson will mirror: pi, mac` (dataflow offline, skipped) |
+| First day on the Jetson | 234 sessions mirrored (mac 211, pi 23), 1.3 GB |
+| 6 mirrored files (3 mac, 3 pi) vs the source's redacted chunk | byte-identical, 6 of 6 |
+| Secret-shape scan of the mirror | every hit was `AKIA…` inside a longer base64 run (Codex encrypted reasoning, images): no key boundary, not a key |
+| Mac meshd RSS | first build: 1.36 GB during the first sweep plus the Jetson pull. After streaming every path (ef0e0cf): peak 105 MB, idle 49 MB |
+
 ## Not yet
 
-- Deploy to the fleet and a live `mesh sessions -H jetson`. Held: a peer session asked
-  for a code freeze on the branch while it gates.
-- Slice B: redacted replication of every machine's sessions to the Jetson (always on).
-- A base still reads the whole file (about 2.5x its size in RSS, once per session and
-  once per compaction). It is marked `ponytail:` in the code.
+- `~/.claude/archived_projects`, `~/.codex/archived_sessions` and OpenCode are not swept yet.
+- Search over all of it, with resume: next, modelled on Chat Seek.
 - Restore covers Claude Code only. Codex resumes by rollout path, not by id; add
   restore for Codex when someone asks for it.
