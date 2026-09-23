@@ -25,6 +25,12 @@
 //   GET  /sessions/:runtime/:id/chunk?v=N   version N's own bytes (a base: the file; an
 //                                           append: what it added), REDACTED — what a mirror pulls
 //   GET  /sessions?mirror=1                 the sessions this machine mirrors from its peers
+//   GET  /sessions/mirror-token             this machine's MIRROR token (created on first ask)
+//   POST /sessions/mirror-peers             on the mirror: {name, ip?, port, token} to pull from
+//
+// A mirror token is a second bearer that opens only the list, a session's index and its
+// redacted chunks — never /raw, /restore or anything else on the machine — so the
+// always-on machine holds one per peer instead of each peer's full token.
 //
 // Mirror (MESH_SESSIONS_MIRROR=on, meant for the always-on machine): every ten minutes, pull
 // each peer's new versions from hosts.json into ~/.mesh/sessions-mirror/<host>/<runtime>/
@@ -36,8 +42,9 @@ import { join, basename, dirname } from "node:path";
 import { mkdir, readdir, readFile, rename, stat, writeFile, chmod, appendFile, truncate } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { gzipSync, gunzipSync } from "node:zlib";
-import { randomUUID } from "node:crypto";
-import { redact } from "./redact";
+import { randomUUID, randomBytes } from "node:crypto";
+import { redact, addKnownSecrets } from "./redact";
+import { isAuthorized } from "./auth";
 
 const HOME = homedir();
 const STORE = process.env.MESH_SESSIONS_DIR || join(HOME, ".mesh", "sessions");
@@ -242,6 +249,30 @@ async function redactedChunk(runtime: Runtime, id: string, n: number): Promise<{
   return { kind: v.kind, body };
 }
 
+const MIRROR_TOKEN = join(HOME, ".mesh", "mirror-token");
+const MIRROR_PEERS = join(MIRROR, "peers.json");
+let mirrorToken: string | null = null;
+async function ownMirrorToken(create: boolean): Promise<string | null> {
+  mirrorToken ??= await readFile(MIRROR_TOKEN, "utf8").then((t) => t.trim() || null, () => null);
+  if (!mirrorToken && create) {
+    mirrorToken = randomBytes(32).toString("base64url");
+    await mkdir(dirname(MIRROR_TOKEN), { recursive: true, mode: 0o700 });
+    await writePrivate(MIRROR_TOKEN, mirrorToken + "\n");
+  }
+  if (mirrorToken) addKnownSecrets([["mirror-token", mirrorToken]]);
+  return mirrorToken;
+}
+
+/// Called only when the full token was refused: does this request carry the mirror
+/// token, for one of the three read routes a mirror needs?
+export async function mirrorReadAllowed(req: Request, url: URL): Promise<boolean> {
+  if (req.method !== "GET") return false;
+  const readable = (url.pathname === "/sessions" && !url.searchParams.has("mirror"))
+    || /^\/sessions\/(claude|codex)\/[A-Za-z0-9][A-Za-z0-9._-]*(\/chunk)?$/.test(url.pathname);
+  const token = readable ? await ownMirrorToken(false) : null;
+  return !!token && isAuthorized(token, req.headers.get("authorization") ?? "");
+}
+
 type MirrorEntry = { runtime: Runtime; id: string; n: number; size: number; cwd: string | null; title: string | null; ts: string };
 
 /// Pull one peer's new versions. Versions are applied in order and the index is written
@@ -296,9 +327,11 @@ export async function mirrorOnce(): Promise<{ peers: number; fetched: number }> 
   mirroring = true;
   let peers = 0, fetched = 0;
   try {
+    // Peers registered with a mirror token win over a full token in hosts.json.
     const cfg = await readFile(join(HOME, ".mesh", "hosts.json"), "utf8").then(JSON.parse, () => ({}));
+    const registered = await readFile(MIRROR_PEERS, "utf8").then(JSON.parse, () => ({}));
     const mine = new Set(Object.values(networkInterfaces()).flat().map((i) => i?.address));
-    for (const [name, h] of Object.entries<any>(cfg?.hosts ?? {})) {
+    for (const [name, h] of Object.entries<any>({ ...(cfg?.hosts ?? {}), ...registered })) {
       if (!h?.ip || mine.has(h.ip) || h.ip === "127.0.0.1" || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) continue;
       peers++;
       // A peer that is asleep or predates `sessions` is simply tried again next round.
@@ -323,7 +356,23 @@ async function mirrorList() {
 }
 
 /// Mirrors handleInput's contract: null = not our route. Auth has already passed.
-export async function handleSessions(req: Request, url: URL): Promise<Response | null> {
+export async function handleSessions(req: Request, url: URL, server?: any): Promise<Response | null> {
+  if (url.pathname === "/sessions/mirror-token" && req.method === "GET") {
+    return Response.json({ token: await ownMirrorToken(true) });
+  }
+  if (url.pathname === "/sessions/mirror-peers" && req.method === "POST") {
+    const b = await req.json().catch(() => null) as any;
+    const ip = b?.ip || (server?.requestIP?.(req)?.address ?? "").replace(/^::ffff:/, "");
+    if (!b || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(String(b.name ?? "")) || !ip || typeof b.token !== "string" || b.token.length < 32) {
+      return Response.json({ error: "need name, token (a mirror token), and ip unless it is the caller" }, { status: 400 });
+    }
+    const peers = await readFile(MIRROR_PEERS, "utf8").then(JSON.parse, () => ({}));
+    peers[b.name] = { ip, port: Number(b.port) || 8899, token: b.token };
+    await mkdir(MIRROR, { recursive: true, mode: 0o700 });
+    await writePrivate(MIRROR_PEERS, JSON.stringify(peers, null, 1));
+    addKnownSecrets([[`mirror-token:${b.name}`, b.token]]);
+    return Response.json({ ok: true, name: b.name, ip, mirroring: process.env.MESH_SESSIONS_MIRROR === "on" }, { status: 201 });
+  }
   if (url.pathname === "/sessions" && req.method === "GET") {
     if (url.searchParams.get("mirror") === "1") return Response.json({ sessions: await mirrorList() });
     return Response.json({ sessions: await list(Math.min(500, Number(url.searchParams.get("limit") ?? 50) || 50)) });

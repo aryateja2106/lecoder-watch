@@ -11,6 +11,8 @@
 #     file never share a version number
 #   - a mirror pulls every version over HTTP: the latest file, the base a compaction
 #     replaced, secrets masked at the source, nothing twice, a half-written append undone
+#   - a mirror token reads the list, an index and redacted chunks, and nothing else; a
+#     peer that accepts only that token can still be mirrored
 #   - restore writes a NEW session file next to the original with every sessionId
 #     rewritten, leaves the original alone, and is refused for Codex
 # Plus the wiring in server.ts: route, capability, boot sweep, Stop-event trigger.
@@ -22,12 +24,15 @@ fail=0
 bad() { echo "FAIL: $1"; fail=1; }
 
 grep -q 'from "./sessions"' "$SERVER" || bad "server.ts does not import sessions.ts"
-grep -q 'await handleSessions(req, url)' "$SERVER" || bad "/sessions routes are not dispatched"
+grep -q 'await handleSessions(req, url, server)' "$SERVER" || bad "/sessions routes are not dispatched"
+grep -q 'if (await mirrorReadAllowed(req, url))' "$SERVER" || bad "a mirror token is no longer honoured after the full token is refused"
 grep -q '^startSessionSweep();' "$SERVER" || bad "the background sweep never starts"
 grep -q '^startSessionMirror();' "$SERVER" || bad "the mirror never starts on a machine that asks for it"
 grep -q '"pty", "sessions"\]' "$SERVER" || bad "capability sessions is not advertised"
 grep -q 'snapshotTranscript(p!)' "$SERVER" || bad "a finished turn no longer snapshots its session"
 grep -q 'case "sessions": return cmdSessions' "$MESH" || bad "mesh sessions is not wired"
+grep -q '"/sessions/mirror-token"' "$MESH" || bad "mesh sessions mirror-to no longer hands the mirror a mirror token"
+grep -q 'GET", "/sessions/mirror-token"' "$MESH" && ! grep -n 'mirror-peers", { name: as, ip: .*token: src.token' "$MESH" >/dev/null || bad "mesh sessions mirror-to would send a full token"
 
 command -v bun >/dev/null 2>&1 || { echo "check-session-snapshots: SKIP (no bun)"; [ "$fail" = 0 ] && exit 0 || exit 1; }
 
@@ -137,6 +142,32 @@ const ml = await (await req("GET", "/sessions?mirror=1"))!.json();
 ok(ml.sessions.length === 4 && ml.sessions.every((r: any) => r.host === "peer1"), `GET /sessions?mirror=1 listed ${ml.sessions.length}`);
 ok((await req("GET", "/sessions/claude/../raw")) === null && (await req("GET", "/sessions/claude/..%2Findex.json/raw")) === null, "a dot-dot id reached the store");
 server.stop(true);
+
+// Mirror token: opens the list, an index and redacted chunks — nothing else.
+const { mirrorReadAllowed } = await import(process.env.MODULE!);
+const tok = (await (await req("GET", "/sessions/mirror-token"))!.json()).token as string;
+ok(typeof tok === "string" && tok.length >= 32, "no mirror token was minted");
+ok((statSync(join(HOME, ".mesh/mirror-token")).mode & 0o777) === 0o600, "the mirror token file is not 0600");
+ok((await (await req("GET", "/sessions/mirror-token"))!.json()).token === tok, "asking again minted a different mirror token");
+const asMirror = (m: string, p: string, t = tok) => mirrorReadAllowed(new Request("http://x" + p, { method: m, headers: { authorization: `Bearer ${t}` } }), new URL("http://x" + p));
+for (const p of ["/sessions", `/sessions/claude/${id}`, `/sessions/claude/${id}/chunk?v=1`]) ok(await asMirror("GET", p), `the mirror token cannot read ${p}`);
+for (const [m, p] of [["GET", `/sessions/claude/${id}/raw`], ["POST", `/sessions/claude/${id}/restore`], ["GET", "/sessions?mirror=1"], ["GET", "/sessions/mirror-token"], ["POST", "/sessions/mirror-peers"], ["GET", "/agents"], ["GET", "/fs/read?path=/etc/hosts"]])
+  ok(!(await asMirror(m, p)), `the mirror token opened ${m} ${p}`);
+ok(!(await asMirror("GET", "/sessions", tok.slice(0, -1) + (tok.endsWith("A") ? "B" : "A"))), "a wrong mirror token was accepted");
+
+// A strict peer that honours ONLY the mirror token: registering it and pulling must work.
+const strict = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: async (q) => {
+  const u = new URL(q.url);
+  return (await mirrorReadAllowed(q, u)) ? ((await handleSessions(q, u)) ?? new Response("no", { status: 404 })) : new Response("unauthorized", { status: 401 });
+} });
+const reg = await handleSessions(new Request("http://x/sessions/mirror-peers", { method: "POST", body: JSON.stringify({ name: "peer2", ip: "localhost", port: strict.port, token: tok }) }), new URL("http://x/sessions/mirror-peers"));
+ok(reg!.status === 201, `registering a mirror peer answered ${reg!.status}`);
+ok((statSync(join(HOME, ".mesh/sessions-mirror/peers.json")).mode & 0o777) === 0o600, "peers.json is not 0600");
+const bad1 = await handleSessions(new Request("http://x/sessions/mirror-peers", { method: "POST", body: JSON.stringify({ name: "../x", ip: "localhost", token: tok }) }), new URL("http://x/sessions/mirror-peers"));
+ok(bad1!.status === 400, "a mirror peer named ../x was accepted");
+await mirrorOnce();
+ok(Buffer.compare(readFileSync(join(HOME, ".mesh/sessions-mirror/peer2/claude", `${id}.jsonl`)), v3) === 0, "pulling with only a mirror token did not work");
+strict.stop(true);
 
 // Tamper: flip a byte inside the stored append — reconstruct must refuse, not serve it.
 const p2 = join(dir, "v2.gz");

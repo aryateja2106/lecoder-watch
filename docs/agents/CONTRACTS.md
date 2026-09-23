@@ -9,17 +9,17 @@
 | method | path | auth | where |
 |---|---|---|---|
 | GET | `/a/*` | none | server.ts:1346 |
-| ANY | `/agents` | token | server.ts:1418 |
-| DELETE | `/agents/:x` | token | server.ts:1498 |
-| GET | `/agents/:x/chat` | token | server.ts:1468 |
+| ANY | `/agents` | token | server.ts:1422 |
+| DELETE | `/agents/:x` | token | server.ts:1502 |
+| GET | `/agents/:x/chat` | token | server.ts:1472 |
 | POST | `/agents/:x/handoff` | token | handoff.ts:287 |
-| GET | `/agents/:x/output` | token | server.ts:1475 |
-| GET | `/agents/:x/panes` | token | server.ts:1455 |
-| POST | `/agents/:x/panes` | token | server.ts:1459 |
-| DELETE | `/agents/:x/panes/:x` | token | server.ts:1493 |
+| GET | `/agents/:x/output` | token | server.ts:1479 |
+| GET | `/agents/:x/panes` | token | server.ts:1459 |
+| POST | `/agents/:x/panes` | token | server.ts:1463 |
+| DELETE | `/agents/:x/panes/:x` | token | server.ts:1497 |
 | GET | `/agents/:x/resumable` | token | handoff.ts:281 |
-| POST | `/agents/:x/send` | token | server.ts:1487 |
-| POST | `/agents/new` | token | server.ts:1502 |
+| POST | `/agents/:x/send` | token | server.ts:1491 |
+| POST | `/agents/new` | token | server.ts:1506 |
 | GET | `/apps` | token | input.ts:530 |
 | POST | `/apps` | token | input.ts:534 |
 | GET | `/built-apps` | token | apps.ts:281 |
@@ -31,8 +31,8 @@
 | GET | `/displays` | token | input.ts:501 |
 | GET | `/doctor` | token | doctor.ts:123 |
 | POST | `/doctor/fix` | token | doctor.ts:124 |
-| GET | `/events` | token | server.ts:1420 |
-| POST | `/events` | token | server.ts:1421 |
+| GET | `/events` | token | server.ts:1424 |
+| POST | `/events` | token | server.ts:1425 |
 | GET | `/exposures` | token | redact.ts:264 |
 | POST | `/exposures/:x` | token | redact.ts:274 |
 | POST | `/exposures/record` | token | redact.ts:265 |
@@ -45,10 +45,10 @@
 | ANY | `/health` | none | server.ts:1334 |
 | GET | `/input` | token | input.ts:474 |
 | POST | `/input` | token | input.ts:477 |
-| POST | `/kb` | token | server.ts:1436 |
-| PUT | `/kb` | token | server.ts:1436 |
-| GET | `/kb/:x/:x` | token | server.ts:1450 |
-| GET | `/kb/search` | token | server.ts:1440 |
+| POST | `/kb` | token | server.ts:1440 |
+| PUT | `/kb` | token | server.ts:1440 |
+| GET | `/kb/:x/:x` | token | server.ts:1454 |
+| GET | `/kb/search` | token | server.ts:1444 |
 | POST | `/la/token` | token | push.ts:458 |
 | POST | `/open` | token | input.ts:519 |
 | POST | `/pair/claim` | none | pair.ts:109 |
@@ -58,14 +58,16 @@
 | POST | `/push/test` | token | push.ts:494 |
 | GET | `/resumable` | token | handoff.ts:275 |
 | GET | `/screen.jpg` | token | input.ts:507 |
-| GET | `/sessions` | token | sessions.ts:327 |
-| ANY | `/stats` | token | server.ts:1416 |
+| GET | `/sessions` | token | sessions.ts:376 |
+| POST | `/sessions/mirror-peers` | token | sessions.ts:363 |
+| GET | `/sessions/mirror-token` | token | sessions.ts:360 |
+| ANY | `/stats` | token | server.ts:1420 |
 | POST | `/system` | token | input.ts:557 |
-| ANY | `/tailnet` | token | server.ts:1417 |
-| ANY | `/usage` | token | server.ts:1419 |
+| ANY | `/tailnet` | token | server.ts:1421 |
+| ANY | `/usage` | token | server.ts:1423 |
 | GET | `/volume` | token | input.ts:562 |
 | POST | `/volume` | token | input.ts:562 |
-| POST | `/wake` | token | server.ts:1406 |
+| POST | `/wake` | token | server.ts:1410 |
 
 ### `meshd/cmux-bridge.ts` (its own listener)
 

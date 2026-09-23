@@ -21,7 +21,7 @@ import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
 import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount } from "./herdr";
 import { handlePtyUpgrade, ptyWebSocket } from "./pty";
-import { handleSessions, snapshot as snapshotTranscript, startSessionMirror, startSessionSweep } from "./sessions";
+import { handleSessions, mirrorReadAllowed, snapshot as snapshotTranscript, startSessionMirror, startSessionSweep } from "./sessions";
 import { findClaudeTranscript, findCodexRollout } from "./chat";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
@@ -1356,13 +1356,17 @@ Bun.serve({
     if (path === "/pair/new" && !authed(req, server)) return json({ error: "unauthorized" }, 401);
     const paired = await handlePair(req, url, server, { port: PORT, token: TOKEN });
     if (paired) return paired;
-    if (!authed(req, server)) return json({ error: "unauthorized" }, 401);
+    if (!authed(req, server)) {
+      // The always-on machine's mirror token: session list, index and redacted chunks only.
+      if (await mirrorReadAllowed(req, url)) return (await handleSessions(req, url, server)) ?? json({ error: "not found" }, 404);
+      return json({ error: "unauthorized" }, 401);
+    }
     try {
       // A terminal emulator's byte stream: the session attached in a pty over a WebSocket.
       const pty = await handlePtyUpgrade(req, url, server, { mux: MUX, shq });
       if (pty !== null) return pty;
       // Lossless version history of this machine's agent transcripts.
-      const sessions = await handleSessions(req, url);
+      const sessions = await handleSessions(req, url, server);
       if (sessions) return sessions;
       // Secrets seen in agent/terminal text — fingerprints and counts, never values.
       const exposures = await handleExposures(req, url);
