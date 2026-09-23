@@ -1,6 +1,6 @@
 ---
 name: mesh-knowledge
-description: Search the shared mesh knowledge base or remember durable notes when the user asks to search, recall, save, or remember information.
+description: Search the shared mesh knowledge base, remember durable notes, or find and resume a past agent conversation on any machine, when the user asks to search, recall, save, remember, or pick up where an earlier chat left off.
 ---
 
 # Mesh knowledge
@@ -36,3 +36,31 @@ mesh kb put "project/<cwd-basename>" "<title-slug>-<YYYY-MM-DD>" "<title>" "<bod
 If `mesh` is unavailable, retry with `~/.mesh/bin/mesh`. Report the stored scope/key.
 The note is stored on this machine's daemon and searches from other online mesh machines
 can find it.
+
+## `/seek <what you remember about a past conversation>`
+
+Every Claude Code and Codex conversation on every mesh machine is indexed (what the person
+typed and what the agent answered, not tool output). Run:
+
+```sh
+mesh sessions search "<query>" --json
+```
+
+Read `results`, best first. Each row names its `host`, `runtime`, `shortId`, `title`,
+`cwd`, `lastTs` and up to three `excerpts` with the matched words between « and ». Answer
+with the best few: title, machine, how long ago, and the excerpt that matched. Machines in
+`peers` with `ok: false` did not answer (asleep or older meshd), so say that when nothing is
+found. `--all` also searches subagent and automation threads; `--local` searches only this
+machine.
+
+Resume only when the user asks to pick a conversation up:
+
+```sh
+mesh sessions resume <shortId> -H <host> --json
+```
+
+It starts the original CLI (`claude --resume` or `codex resume`) in a mesh session on the
+machine that holds the conversation, restoring a Claude transcript the runtime already
+deleted. Tell the user the session name and that they can watch it with
+`mesh peek <name> -H <host>` or open it in the LeSearch AI app. If `mesh` is unavailable,
+retry with `~/.mesh/bin/mesh`.

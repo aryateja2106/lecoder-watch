@@ -4,7 +4,7 @@ set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CLI="$ROOT/install/payload/bin/mesh"
-SKILL="$ROOT/install/payload/share/skills-staged/mesh-knowledge/SKILL.md"
+SKILL="$ROOT/install/payload/share/skills/mesh-knowledge/SKILL.md"
 command -v bun >/dev/null 2>&1 || { echo "check-kb-federation: SKIP (no bun)"; exit 0; }
 command -v curl >/dev/null 2>&1 || { echo "check-kb-federation: SKIP (no curl)"; exit 0; }
 
