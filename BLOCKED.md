@@ -64,23 +64,23 @@ on a Keychain dialog for `asc` (memory: shell-slowness-and-asc-keychain) — kee
 unlocked. Until then the public link serves the 2026-08-27 build; the landing and
 getting-started say "TestFlight" and are correct the moment this lands.
 
-## The Mac's default brain is a model that cannot call tools
-`check-brain` (inside `check-overnight`, inside the full gate) asks each machine's local model
-server for a tool call. The Pi (qwen3:1.7b) and the Jetson (qwen3:4b) answer. This Mac has two
-servers, and the probe order — :8001, :11434, :8080, :1234 — reaches ollama first, whose only
-model here is `nl2shell-local` (811 MB, a text fine-tune): it replies `get_time
-machine="jetson"` as prose instead of emitting a tool call, so the check fails, correctly.
+## The Mac's brain is LM Studio now, and brain.ts still prefers ollama
+`check-brain` asks each machine's local model server for a tool call. The Pi (qwen3:1.7b) and
+the Jetson (qwen3:4b) always answered. This Mac did not: the probe order — :8001, :11434,
+:8080, :1234 — reached ollama first, and the only model installed there is `nl2shell-local`
+(811 MB, a text fine-tune) which replies `get_time machine="jetson"` as prose instead of
+emitting a tool call. That, and nothing about the code, is what kept the full gate red.
 
-LM Studio serving `spark-x2.5-4b` (2.6 GB, already on disk, nothing downloaded) returns a real
-`get_time({"machine":"jetson"})` in 1.4 s. The 2026-09-23 full gate is green with
-`MESH_BRAIN_URL=http://127.0.0.1:1234/v1`, and the server was stopped again afterwards.
+Closed on 2026-09-23 the way you chose: ollama stopped (the app is still installed — reopen it
+to bring :11434 back), LM Studio left running with `spark-x2.5-4b` (2.6 GB, already on disk;
+nothing was downloaded). It answers `get_time({"machine":"jetson"})` in 1.4 s, and the full
+gate is green with no environment overrides.
 
-That override is a knob, not an answer. What is yours to decide:
-- `ollama pull qwen3:1.7b` here (~1.4 GB) so the default probe order finds a model that
-  tool-calls, or
-- keep LM Studio loaded and running as this Mac's brain, or
-- change the probe order in `brain.ts` to prefer a server whose model actually emits tool
-  calls — a product change, since `/brain` is what the app and Needle's fallback read.
-
-Until one of those, a fresh clone on this Mac needs the env override to reproduce the gate,
-and `meshd`'s `/brain` will keep reporting ollama as this machine's brain.
+Two things left for you, neither blocking:
+- Is LM Studio the Mac's permanent brain? If ollama should come back, it needs a model that
+  emits tool calls (`ollama pull qwen3:1.7b`, ~1.4 GB, the model the Pi runs) or it will
+  shadow LM Studio again the moment it starts.
+- `brain.ts` probes in a fixed order and reports the first server that answers, not the first
+  that can call a tool. That is why a working brain was invisible behind a broken one. Fixing
+  it changes what `/brain` reports to the app and to Needle's fallback, so it is its own slice,
+  not a gate fix.

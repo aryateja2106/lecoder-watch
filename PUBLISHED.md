@@ -5,18 +5,16 @@ produced by running something, not by describing it. Written 2026-09-22 from the
 run recorded in [docs/factory/runs/2026-09-22T093000Z-publish.md](docs/factory/runs/2026-09-22T093000Z-publish.md).
 
 Gate: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none`
-Gate SHA: b6b319097f97d02029fb838195f7c41051887eff
+Gate SHA: ae30715196a6accd1542dc0a299939aec8355540
 Gate log: docs/overnight/2026-09-21/gate-full-publish-2026-09-23-tail.txt
-Gate note: this line is from a run on 2026-09-23 at the sha above, with `MESH_BRAIN_URL`
-pinned to `http://127.0.0.1:1234/v1`. Without it `check-brain`'s live half is red on this
-Mac and the gate with it: the probe order tries ollama (:11434) before LM Studio (:1234),
-and this machine's only ollama model is a text fine-tune that answers `get_time
-machine="jetson"` as prose instead of emitting a tool call. LM Studio serving the
-already-on-disk spark-x2.5-4b returns a real `get_time({"machine":"jetson"})` in 1.4 s.
-The override is the documented knob for a machine running more than one server, but the
-probe order picking the weaker one is a defect, not a preference — see BLOCKED.md. The log
-is the tail of that run (the decisive line, the end of `test`, and all of `build`); the
-gate's own full output was not captured to a file.
+Gate note: run on 2026-09-23 at the sha above, with no environment overrides. Getting there
+took fixing the machine rather than the check: `check-brain` asks this Mac's own model server
+for a tool call, the probe order reached ollama (:11434) first, and the only ollama model here
+was `nl2shell-local`, a text fine-tune that answers `get_time machine="jetson"` as prose. On
+Arya's say-so ollama was stopped and LM Studio left serving `spark-x2.5-4b` (2.6 GB, already on
+disk — nothing was downloaded), which returns a real `get_time({"machine":"jetson"})` in 1.4 s.
+The Mac's `/brain` now reports the server that actually works. The log is the tail of that run
+(the decisive line, the end of `test`, all of `build`).
 PR: #133 OPEN (draft) — https://github.com/aryateja2106/lecoder-watch/pull/133
 Landing: https://lesearch.ai
 Installer: https://lesearch.ai/install.sh
@@ -174,10 +172,10 @@ waited on, and the queue continued past each one.
 - Issues-only GitHub token as a Supabase secret (move the worker to an edge function)
 - Repo consolidation under LeSearch-AI — confirm the archive list and the transfer
 - TestFlight 0.8.0 upload (the only way a stranger gets the phone app)
-- The Mac's default brain is a model that cannot call tools — the gate above is green only
-  because `MESH_BRAIN_URL` points past ollama at LM Studio. Making that the machine's real
-  answer (an ollama model that tool-calls, or a probe order that prefers a server that does)
-  is Arya's call. The Pi and the Jetson need nothing.
+- The Mac's brain is now LM Studio, because ollama was stopped — decide whether that is the
+  permanent arrangement, or whether ollama should come back with a model that tool-calls.
+  Separately, `brain.ts` probes ollama before LM Studio regardless of which can answer; that
+  probe order is a product fix and wants its own slice, since `/brain` is what the app reads.
 
 ## Housekeeping
 

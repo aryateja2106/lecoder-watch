@@ -1,25 +1,5 @@
-b6b319097f97d02029fb838195f7c41051887eff
-ok: ping answered
-ok: close detaches, session survives
-check-pty-route: ok
-check-published: structural OK
-check-redact: OK (17 rules, ledger, HTTP surface)
-  ✓ PhoneConnectivity has didReceiveMessage without replyHandler
-  ✓ WatchLink.acknowledge checks RelayReply.failureReason
-  ✓ MeshStore has 11 RelayReply.encodeFailure calls (≥ 8)
-check-relay-receiver: OK
-check-remote-agent-loop: OK (structural; set MESH_FLEET_LIVE=1 MESH_REMOTE_HOST=jetson to run the loop on a remote host)
-check-remote-screen-gestures: mouse buttons [middle right ] are understood by both the Mac helper and xdotool
-check-remote-screen-gestures: two fingers -> right, three fingers -> middle, three beats two
-check-remote-screen-gestures: pan and hold both run through a delegate that allows simultaneous recognition
-check-remote-screen-gestures: key bar keys [2 4 delete down escape left q return right space tab up w 2 4 q space tab w ] and modifiers [cmd option shift ] exist on both hosts
-check-remote-screen-gestures: default true selects sign -1 — identical to the direction shipped before the preference existed
-check-remote-screen-gestures: natural scrolling has a control bound to it
-check-remote-screen-gestures: the idle timer is held and released in 1 matching pair(s)
-check-remote-screen-gestures: OK
-check-roundtrip: OK
-check-shell-startup: the bridge hook returns in 90ms with no bridge running (budget 1000ms)
-check-shell-startup: a wedged bridge (accepts, never answers) costs 1109ms (budget 2500ms)
+ae30715196a6accd1542dc0a299939aec8355540
+check-shell-startup: a wedged bridge (accepts, never answers) costs 1108ms (budget 2500ms)
 check-shell-startup: OK
 check-sim-fleet: SKIP (set MESH_SIM_LIVE=1 to launch on the simulators)
 check-tmux-restart: OK (session names carry no dots, so the restart can find and replace its own session)
@@ -28,7 +8,7 @@ check-trackpad-drag: the long press fails once the finger travels (12 pt)
 check-trackpad-drag: OK
 check-usage-alert-identity: ok
 check-voice-accumulate: OK
-check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 32470 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
+check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 48669 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
 check-watch-terminal-wiring: watch reaches every key meshd accepts (except: delete, allowed)
 check-watch-terminal-wiring: cwd travels on the direct route and the phone relay
 check-watch-terminal-wiring: the watch can launch an arbitrary command
