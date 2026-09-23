@@ -1,0 +1,472 @@
+# LeSearch AI — the product, in one place
+
+**Status: canonical.** This is the only document that defines what LeSearch AI is:
+its names, surfaces, screens, daemon capabilities, commands, install contract,
+permissions and non-goals. Everything else under `docs/` is a runbook or a dated
+record. When a change adds or removes a screen, a daemon module, a `mesh` verb or a
+capability, it edits this file **in the same PR**; `scripts/check-product-spec.sh`
+fails when the inventory here and the tree disagree.
+
+Written 2026-09-06 against the `release/lesearch-mesh-0.6` tree. Where a feature is in
+flight it is marked **0.6**; where it is proposed and unbuilt it is marked **proposed**.
+Nothing unmarked is a claim that it exists, was built and was run.
+
+---
+
+## 0. How an agent uses this document
+
+1. Read sections 1–3 before touching anything. They are short.
+2. Find your surface in section 7 (screens) or section 5 (daemon) or section 6 (CLI).
+   Each entry names the file, the job, the primary action and the single source it
+   reads from. Do not invent a second source for something already listed.
+3. If the work changes the inventory, edit this file and run
+   `sh scripts/check-product-spec.sh`, then `./.claude/scripts/gates.sh fast`.
+4. Visual design (spacing, type, colour) is **not** here. Native UI taste lives in the
+   `meshwatch-ui-taste` skill; the brand in `launch/BRAND-KIT.md`; layouts to be
+   tweaked by hand are made with `/design`. This file holds structure and rules.
+5. Dated documents (`*-2026-09-03.md`, `PROGRESS.md`, `HANDOFF.md`) are archaeology.
+   Undated documents are current. `docs/README.md` says which is which.
+
+---
+
+## 1. What it is
+
+**Use your Mac from your wrist.** An AI coding agent stops to ask a question; the wrist
+buzzes; the person reads the question, answers it, and the agent carries on with the
+laptop closed. When the machine itself is needed there is a real terminal, a real
+trackpad and the screen, on the phone and on the watch.
+
+No account to pair or control anything. No cloud relay. No server of ours in the data
+path. The phone talks directly to a small daemon on a machine the user owns, over their
+own Tailscale mesh or LAN. The one thing that reaches us is a problem report the user
+sends on purpose (Settings → Report a problem), with an optional account so we can reply.
+
+**Who it is for.** People who want to use AI agents every day, whether or not they call
+themselves developers. Every other way to reach a machine from a phone assumes SSH keys,
+`known_hosts` and port forwarding. The promise here is one pasted command to install and
+one to remove; a feature that needs the user to understand networking is not finished.
+
+**Two loops, in priority order** (from `CONTEXT.md`):
+
+1. **Reach your machines from anywhere** — pointer, keyboard, screen, files, shell.
+2. **Run agents 24/7 and answer them when they get stuck** — the notification, the
+   Live Activity and the complication exist so that "an agent is waiting on you"
+   reaches the wrist and is answerable in one tap.
+
+Loop 2 is the differentiator. Every surface that shows "what needs me" reads from one
+function, `sessionsNeedingAttention(from:)` in `Shared/Models.swift`.
+
+---
+
+## 2. Names
+
+| Role | Exact form | Notes |
+| --- | --- | --- |
+| Company | **LeSearch AI** | GitHub org `LeSearch-AI`. |
+| Product | **LeSearch AI** | The only public product name. Tagline: *Less Search. More Agents.* |
+| Daemon | `meshd` | One per machine. Bun + TypeScript. Port `8899`. |
+| Command line | `mesh` | `~/.mesh/bin/mesh`. Every surface is a client of the same daemon API. |
+| Mac menu bar app | **LeSearch AI** (on disk still `MeshWatch.app`: `PRODUCT_NAME` is frozen) | Xcode target `MeshDesktop`, bundle id `com.lecoder.meshdesktop`. |
+| iPhone + Watch app | **LeSearch AI** | Xcode target `MeshWatch`, bundle prefix `com.lecoder.meshwatch`. App Store Connect app `6803438426`. TestFlight `pVYPTxc7`. |
+| Input helper | `mesh-input` | Swift binary, macOS only, owns the Accessibility grant. |
+| Local agent | `mesh-code` | **proposed** (PR #119): a local coding agent driven through the daemon. |
+| Internal lane | *Mesh Apps* | The daemon serving and installing apps the user asked an agent to build. Internal name only. |
+| Frozen legacy | `MeshWatch`, `com.lecoder.*`, `meshwatch://` | Xcode targets, bundle ids and the URL scheme. **Never change**: Apple does not let a deleted App ID be reused, and the scheme is what the pairing QR carries. Never in public copy. |
+| Reserved, retired | `lecoder`, `lesearch` (the Rust control plane), `LeCoder` | Names of earlier products. Not to be reused for anything new. |
+
+---
+
+## 3. Surfaces and the install contract
+
+| Surface | How a person gets it | Where it lives | How it is removed | Status |
+| --- | --- | --- | --- | --- |
+| Daemon, CLI, hook tools | `curl -fsSL https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh \| sh` | `~/.mesh/` (`meshd/`, `bin/`, `hooks/`, `token`, `hosts.json`, `apns/`, `apps/`); launchd `ai.lesearch.meshd` on macOS, systemd `--user` on Linux | `mesh uninstall --yes` (prints exactly what it deletes first), or `install.sh --uninstall --purge` | shipped, `mesh-install` v0.5.2 (2026-08-27); 0.6 payload in flight |
+| iPhone + Watch app | TestFlight public link | App Store | Delete the app | shipped to TestFlight; the public build lags (external testers need Beta App Review) |
+| Mac menu bar app | `mesh desktop` opens it; distribution of the `.app` itself | `/Applications/MeshWatch.app` (shows as LeSearch AI) | Drag to Trash; "Start at login" unregisters itself | **built, not distributed** |
+| Web console | Menu bar → *Open web console*, or `http://127.0.0.1:8899/desktop` | Served by the daemon | Nothing to remove | shipped |
+| Website | `https://mesh.lesearch.ai` | `web/` on Vercel (`lesearch-mesh-web`) | — | live (DNS resolves as of 2026-09-06) |
+
+**The contract.** Everything the daemon side installs is under one directory, `~/.mesh`,
+plus one service registration and one PATH line, and one command removes all three. No
+`sudo`. No global npm. The installer is idempotent (`--upgrade` reinstalls in place and
+keeps the token, so a machine stays paired across an upgrade). The install URL above is
+compiled into the phone's pairing screen, the Mac app and the daemon's own `/doctor`
+advice; **it does not change**, whatever the source repository is called.
+
+---
+
+## 4. Shape
+
+```
+Watch ──URLSession──▶ meshd ──▶ mesh-input (CGEvent/AXUIElement) ──▶ macOS
+  └── off-tailnet ──WCSession──▶ iPhone ──HTTP──┘
+                                   meshd ──APNs (direct, ES256)──▶ iPhone / Watch
+```
+
+- **meshd** owns stats, agent sessions (rmux/tmux/cmux/herdr), input injection, screen
+  capture, apps, clipboard, volume, power, push, the knowledge base, pairing, doctor,
+  redaction, chat and hand-off. Bearer auth, fail-closed, constant-time compare.
+- **iOS app** polls every machine, relays snapshots to the watch, owns the machine list
+  and the tokens (Keychain via `SecureStore.swift`).
+- **Watch app** talks to the daemon directly when it can, else through the phone. The
+  watch has no Tailscale and iOS suspends the phone app within seconds, so the watch
+  *asks* (sendMessage relaunches the phone app); it never waits to be told.
+- **Live Activity, Lock Screen, Dynamic Island, watch Smart Stack, complication** are
+  renderings of the same attention function; nothing computes its own answer.
+
+---
+
+## 5. The daemon
+
+### 5.1 Capabilities
+
+`GET /health` lists what a daemon can do. Clients gate on this list, never on a version
+string, and when a capability is missing they name the symptom the user sees
+(`Shared/DaemonCapabilities.swift`). The 0.6 list, in the daemon's own order:
+
+`events` `newPane` `paneTarget` `usage` `agents` `cmux` `herdr` `tailscale` `kb`
+`screenPeek` `input` `files` `push` `pair` `doctor` `wake` `screenRegion` `openUrl`
+`power` `laPush` `sessionStatus` `paste` `captureJoin` `redact` `chat` `apps` `handoff` `brain`
+`captureAnsi` `pty` `sessions` `chatSearch`
+
+### 5.2 Modules (`install/payload/meshd/`)
+
+One capability is one module plus a two-line patch to `server.ts` (an import and a
+route line). That is the rule for adding anything.
+
+| File | Owns |
+| --- | --- |
+| `server.ts` | Routing, the capability list, the Origin/Host guard that runs before auth, sessions and stats. `/stats` carries `hw` (**0.8**): board or chip, cores, total RAM and the accelerator — Apple unified memory, CUDA with its version (a Jetson's GPU shares system RAM), or none — read once from what the OS already records. |
+| `auth.ts` / `loopback-trust.ts` | Fail-closed bearer check, constant-time. Loopback is exempt only after the browser guard has passed and while `MESHD_TRUST_LOOPBACK` permits it. |
+| `doctor.ts` | `GET /doctor` and `POST /doctor/fix`. Every check exercises the real path (a green row means it works now). Checks: `token`, `input`, `screen`, `mux`, `push`, `exposures`, `agents`. |
+| `input.ts` / `input-linux.ts` | Pointer, keyboard, media, windows, power, clipboard, screen capture and regions. Linux uses xdotool/xclip and screen capture via scrot. |
+| `push.ts` | APNs direct from the daemon (ES256), one-buzz dedupe, Live Activity push-to-start tokens. |
+| `pair.ts` / `qr.ts` | One-use 8-character codes, ten minutes; `/pair/new` requires loopback and — with `MESHD_TRUST_LOOPBACK=0` — the bearer; `/pair/claim` uses the code as its credential. The QR carries `meshwatch://pair?h=&p=&c=`. |
+| `files.ts` / `files.html` | File browser and daemon-served file page; `/fs/write` accepts file bytes and `/fs/read?raw=1` returns them unchanged. |
+| `kb.ts` | Knowledge base: SQLite FTS5, read federation across hosts. |
+| `apps.ts` | Mesh Apps: publish a static web app, register a built native app, wireless (OTA) install links. |
+| `chat.ts` | **0.6** Transcript chat: talk to a running coding agent from the phone. |
+| `handoff.ts` | **0.6** Hand a session to a different agent CLI via `HANDOFF.md` in the working directory. |
+| `brain.ts` | **0.7** `GET /brain`: which local model server answers on this machine (edge0 :8001, mference :8080, ollama :11434, LM Studio :1234, or `MESHD_BRAIN_URL`), its model, and measured capabilities. Never starts or stops one. Ported from PR #119. |
+| `pty.ts` | **0.8** `GET /agents/:name/pty` (WebSocket): the session attached in a real pty (`Bun.Terminal`) sized to the client; binary frames are raw bytes both ways, text frames are `resize`/`ping`; output is redacted like every other path; closing detaches, never kills. The phone's native terminal streams from here; `/output` polling stays for the watch and older phones. |
+| `sessions.ts` | **0.8** Lossless history of every Claude Code and Codex transcript on this machine, kept under `~/.mesh/sessions/<runtime>/<id>/` (0700, files 0600) so compaction and the runtime's own 30-day cleanup lose nothing. A version is a full base or, when the file only grew, a gzip of just the new bytes; each is checked against its sha256 before it is served. Snapshots on every Stop/Notification event and in a sweep every ten minutes (`MESH_SESSIONS=off` disables it). `GET /sessions`, `GET /sessions/:runtime/:id[/raw?v=N]`, `POST /sessions/claude/:id/restore?v=N` writes that version as a new session beside the original for `claude --resume`. Local only: nothing is uploaded, no account. Replaces what agent-git does through its hosted hub. **Mirror:** a machine that peers were registered with (`mesh sessions mirror-to <it>`; `MESH_SESSIONS_MIRROR=on` adds every `hosts.json` peer, `=off` stops it) pulls their new versions every ten minutes via `GET /sessions/:runtime/:id/chunk?v=N`, which the source redacts before it leaves, into `~/.mesh/sessions-mirror/<host>/<runtime>/<id>.jsonl` (plain JSONL; a base a compaction replaced is kept as `<id>.v<N>.jsonl.gz`); `GET /sessions?mirror=1` lists it. The mirror pulls with each peer's **mirror token** (`~/.mesh/mirror-token`, 0600, minted on first `GET /sessions/mirror-token`), a second bearer that opens only the list, a session's index and its redacted chunks — never `/raw`, `/restore` or any other route — so the always-on machine never holds another machine's full token. `mesh sessions mirror-to <host>` registers every known machine with it (`POST /sessions/mirror-peers`, `~/.mesh/sessions-mirror/peers.json`). |
+| `chats.ts` | **0.8** Full-text search over every conversation `sessions.ts` keeps: only what the person typed and what the agent answered (no tool output, thinking, hook wrappers, `isMeta`, Codex commentary or AGENTS.md preambles), indexed version by version into `~/.mesh/chats.sqlite` (0600, bun:sqlite FTS5, bm25). Each stored version is streamed once; an append adds only its lines, a base (compaction) replaces the session's rows, a cut-off line waits as bytes until the append that completes it, and a rebuilt store is detected by hash and re-indexed. Subagent and automation threads (Codex `thread_spawn`/`guardian_review`/`exec`, Claude SDK runs) are hidden unless `all=1`. `GET /sessions/search?q=` returns one row per session with up to three redacted excerpts (the match between « »), and by default also asks every `hosts.json` peer (`federate=0`, 2.5 s, each peer's own token), each row named by its `hosts.json` name. `POST /sessions/:runtime/:id/resume` returns the plan — `claude --resume <uuid>` or `codex resume <uuid>`, the recorded folder or HOME when it is gone, a deterministic restore of a Claude transcript the runtime deleted — and the caller starts it with `/agents/new`. No reranker: keywords only (owner's call, 2026-09-23). Modelled on Chat Seek. |
+| `redact.ts` | **0.6** Every line leaving the machine is redacted; exposures are counted by fingerprint, never by value. |
+| `codex-state.ts` | Reads why Codex stopped and when its window resets. |
+| `cmux-bridge.ts` / `herdr.ts` | Multiplexer adapters. |
+| `wol.ts` | Wake-on-LAN. |
+| `telemetry.ts` | One anonymous heartbeat a day at most; `MESHD_TELEMETRY=off` silences it. |
+| `desktop.html` | The web console: capture plus input in a browser on the Mac itself. |
+
+### 5.3 Helpers (`install/payload/bin/`)
+
+`mesh` (the CLI), `mesh-input.swift` (the HID helper), `mesh-event`, `mesh-hook`,
+`mesh-agent-run`, `mesh-codex-notify` (the four ways an agent tells the daemon
+something happened), `mesh-kb`, `mesh-self-check`, `start-cmux-bridge`.
+
+**Where to run (0.8).** `mesh fleet` (alias `mesh where`) is the capability map an agent
+reads before choosing a machine: per host its hardware, free RAM, CPU and load, running
+sessions, installed agent CLIs, the local model servers that answer and their models, and
+the owner's `role` note (`mesh host role <name> "<what it is for>"` — intent is written
+down, not inferred). `--json` is the agent form. It only reports; it never chooses.
+
+**Sessions (0.8).** `mesh sessions` lists every agent conversation the machine kept (a † marks
+one the runtime already deleted), `mesh sessions log <id>` its versions, and
+`mesh sessions restore <id> --at N` brings version N back as a new Claude session and prints
+the `claude --resume` line. An id may be a prefix; `-H host` reads another machine;
+`mesh sessions --mirror -H jetson` lists what the always-on machine holds from the others.
+`mesh sessions search "<what you remember>"` finds a conversation on any machine (`--local`,
+`--all`, `--json`), and `mesh sessions resume <id> -H <host>` starts it again there.
+
+### 5.4 Security rules that are not negotiable
+
+- Auth is fail-closed. No token configured means off-box requests are refused.
+- Loopback skips the bearer by default; `MESHD_TRUST_LOOPBACK=0` disables that exemption everywhere, pair-code minting included (SEC-03; flipping the default is an open decision because `check-token-rotate.sh` and a fresh box's `mesh pair` rely on it).
+- A request with an `Origin` header or a cross-site `Sec-Fetch-Site` is rejected before
+  the loopback exemption; the `Host` header is validated against known addresses. This
+  is the DNS-rebinding defence and it runs before auth.
+- Machine tokens live in `~/.mesh/token` and `~/.mesh/hosts.json`; on the phone, in
+  the Keychain. They are never printed and never committed.
+- The terminal bridge on `7820` requires the same token as the daemon (**0.6**).
+- Secrets an agent prints are redacted before they reach APNs, the events file or the
+  watch (**0.6**).
+
+---
+
+## 6. The command line (`mesh` 0.6.0)
+
+| Group | Verbs |
+| --- | --- |
+| Getting started | `setup` (daemon → doctor → pair → status), `desktop`, `shellenv` |
+| Hosts | `pair`, `hooks [status\|install\|remove]`, `hosts`, `host add\|rm\|default` |
+| Files | `cp <src> <dst> [--force] [--mkdirs]` |
+| Sessions | `ls`, `peek`, `send`, `key`, `new`, `kill` |
+| Status | `status`, `usage`, `health`, `doctor [--fix]`, `events`, `exposures` |
+| Knowledge | `kb put\|search\|get` |
+| Maintenance | `upgrade`, `token rotate`, `uninstall` |
+| Apps and skills | `skills` (five, including `mesh-knowledge`: `/search`, `/remember`, and `/seek` to find and resume a past conversation), `apps config\|publish\|add\|list\|install\|ota\|remove` |
+| Global | `-H <host>`, `--json`, `version` |
+
+`--json` exists so that agents and scripts read the same answers people do.
+
+---
+
+## 7. Screens
+
+Each entry: **file** · job · primary action · what it reads. Anything shown in two
+places comes from one function.
+
+### 7.1 iPhone (target `MeshWatch`, iOS 26)
+
+**App shell** — `MeshRelayApp.swift`, `ContentView.swift`. Five tabs: Machines,
+Monitor, Terminal, Remote, Settings. `MeshStore.swift` is the single store: the machine
+list, polling, snapshots relayed to the watch. `AppLock.swift` locks the app behind
+Face ID. `BackgroundRefresh.swift` keeps snapshots warm. `PhoneConnectivity.swift` is
+the watch relay (WCSession). `NotificationManager.swift` registers for APNs, wires the
+notification actions from `Shared/AgentNotifications.swift`, and starts Live Activities
+through `LiveActivityController.swift`.
+
+| Screen | Job | Primary action | Reads |
+| --- | --- | --- | --- |
+| Machines tab | Every machine on one list with live stats and a **live thumbnail of its screen** (**0.6**; tap it to control — the Remote tab folded in here); an offline machine is shown honestly, not hidden | Open a machine / control its screen | `MeshStore.refresh` (progressive), `/screen.jpg?width=320` every 5 s while visible |
+| No machines | The first-run state | *Pair a machine* | — |
+| Machine detail — `MachineStatsView.swift` | Screen & control, Files, then **load at a glance** (memory / disk / CPU gauges and "N more agents fit", tap for the last minute as a chart, the heaviest processes) (**0.6**); sessions; Setup as one line; Diagnostics folded; power | Open / fix what `/doctor` says is wrong | `/stats` every 3 s while the charts are up, `/doctor`, `/health`, `DaemonCapabilities.swift` |
+| Pair machine — `PairMachineView.swift`, `PairingScanner.swift` | Turn a code or a QR into a paired fleet | Scan / enter code | `/pair/claim` (returns the token **and every host in `hosts.json`**) |
+| Manual bridge | Add a host by address when there is no code | Save | user input |
+| Monitor — the bell in every tab's top bar (**0.6**; it left the tab bar so Apps could have the slot) | Usage and limits per provider at the top, then events newest first; a row opens its session, a read-only row says the agent ran outside a LeSearch session; dismiss one or clear all | Read / open | `/usage`, `/events`, `Shared/LimitHelpers.swift` |
+| Sessions and new session | List sessions per machine; start one with a chosen CLI, working directory and task; resume a previous conversation (**0.6**). The agent list comes from `/doctor`'s `agents`. | *New session* | `/agents`, `/agents/new`, `/doctor` |
+| Session limit → hand-off | When the agent's session limit blocks it mid-task and another installed agent has room, a banner in the session offers "continue with…" (same `/agents/:s/handoff` as the ⋯ menu) (**0.6**) | Pick an agent | `/usage`, `/agents/:s/resumable`, `LimitHelpers.swift` |
+| Session peek | Recent output of one session; the attention row when it is waiting | Answer / type | `sessionsNeedingAttention` |
+| Agent chat — `AgentChatView.swift` | A conversation with a running agent: bubbles, decision cards, tool-result cards, artifacts, thinking disclosure, quick-command pills (**0.6**). A menu the TUI is waiting on (Claude Code's numbered permission list, the trust prompt, a y/N question) is read off the pane and shown as buttons — Choose card — with Enter/Esc/arrows/⇧Tab in the key strip; multi-line composer with paste | Send / decide / pick | `/chat`, `Shared/RiskClassifier.swift` for the decision cards, `AgentMenu` in `Shared/Models.swift` for the choices |
+| Terminal tab — `TerminalView.swift` | Every machine with its live sessions; a row opens the session screen: **Chat** (the transcript) or **Terminal** (the native terminal below, full screen, tab bar hidden); the ⋯ menu holds the pane picker, Control screen, VNC, paste, new/kill pane, kill session. The xterm.js bridge page is gone from the phone (**0.8**) | Open / type | `/agents`, `/agents/:s/pty` |
+| Native terminal — `NativeTerminalScreen.swift` (**0.8**) | The pane as a terminal: SwiftTerm paints colour, cursor and alt-screen; a fixed key bar (Ctrl/Alt: tap for one key, tap again to lock; Esc, Tab, ↑ — hold ↑ for the d-pad row with arrows, Enter, Backspace, paging; dictate; keyboard) under it; the system keyboard types straight into the pane; pinch sets the font; four themes (Moshi, Dracula, Nord, Paper) from the palette menu. On a `pty` daemon the pane is attached over a WebSocket (`Shared/PtyClient.swift`): sized to the phone, raw bytes each way, 2000 lines of scrollback replayed, reconnects with backoff. On a `captureAnsi` daemon it repaints from `/output?ansi=1` polls and sends through `/send`; wider panes scroll sideways | Type / dictate | `/agents/:s/pty`, `/output?ansi=1`, `/send` (ctrl-/alt-letter keys), `Shared/TerminalKeyRouter.swift`, SwiftTerm 1.18 (SPM) |
+| Screen & control — `RemoteScreenView.swift` | Screen, trackpad gestures, zoom to a region that arrives sharp; frames back-to-back; the edge back-swipe waits for the trackpad. One floating capsule (pointer/pan, zoom, keyboard, open-an-app, ⋯). **The keyboard is the machine's**: the system keyboard types straight through; the bar above it shows the machine's own modifiers (⌘⌥⌃⇧ on a Mac, Ctrl/Alt/Super on Linux) with a held key filled orange, escapes and arrows, the machine's launcher and a terminal one tap each, and the chords. Two monitors are two pictures with chips to switch (**0.6**) | Tap / drag / zoom / type | `/screen.jpg`, `screenRegion`, `/input` (moveTo absolute on Linux too), `/apps` (`terminal`, `launcher`, activate-or-launch by name; Linux lists .desktop apps; `MESH_LAUNCHER`) |
+| Chat search — `ChatSearchView.swift` (**0.8**) | Find a past Claude Code or Codex conversation on any machine by what was said in it; each machine answers for itself and results arrive as each one does; open a hit to read its excerpts and **Resume** it in its original CLI on the machine that has it | Search / resume | `/sessions/search?federate=0`, `/sessions/:runtime/:id/resume`, `/agents/new`; gated on `chatSearch` |
+| Files — `FileBrowserView.swift`, `FileViewer.swift` | Browse a machine's files; tap one to read it on the phone — Markdown rendered (headings, lists, code, tables), HTML shown, code and text sized by pinch; copy or share (**0.6**) | Open / read | `/fs`, `/fs/read` |
+| Apps tab — `AppsLibraryView.swift` | Every app an agent built, across every paired machine, grouped by name, newest first; "Less Search. More Agents." as the header line. Its own tab (**0.6**). Each build shows the devices it runs on (iPhone, iPad, Watch, Mac, Vision — read off the bundle by the daemon) and whether it is on this iPhone (proven by opening its URL scheme) | Open / Install | `/built-apps` (`platforms`, `scheme`) on each machine |
+| Report a problem — `FeedbackView.swift`, `LeSearchCloud.swift` | Kind (bug / idea / other), title, your words, an optional screenshot or recording you pick, an optional contact e-mail, and a redacted bundle (app build, machines, daemon versions, last 50 events, the last error, Live Activity state) you read before it goes anywhere. **Send to LeSearch AI** writes one insert-only row to Supabase (`public.feedback`) that `scripts/feedback-to-issues.ts` turns into a deduped GitHub issue labeled `from-users` on LeSearch-AI/mesh; or share it, or save it on a machine under `~/.mesh/feedback/` for an agent to read (**0.6**, sent to us in **0.8**) | Send / share / save | `/fs/write`; `check-feedback-redact.swift` pins the secret patterns; `check-feedback-cloud.sh` pins the contract; `check-feedback-pipeline.sh` the worker |
+| Account — `AccountView.swift`, `LeSearchCloud.swift` | Optional. E-mail + password (Supabase Auth, session in the Keychain via `SecureStore.swift`) so a report can carry the reporter and we can reply. Never needed to pair or control a machine; `Sign out` removes the session (**0.8**) | Create / sign in / sign out | `check-feedback-cloud.sh` |
+| Guides — `GuidesView.swift` | The steps no app can do for the owner: pairing, Developer Mode on iPhone and Watch, signing team, Mac permissions, a Linux desktop, running an agent overnight (**0.6**) | Read | static; linked from Settings and the empty states |
+| Exposed secrets — `ExposedSecretsScreen.swift` | **0.6** What the daemon redacted, by kind and fingerprint; mark rotated | Mark rotated | `/exposures` |
+| Mesh Apps | Apps published or added on a machine; install one on this phone, with or without a cable | Install | `/apps` |
+| Voice — `VoiceInput.swift`, `VoiceTranscriber.swift` | One sheet: live editable transcript, Stop/Resume, Send; recordings kept (last five) with *Transcribe again* (**0.6**) | Send | Speech framework, `Shared/VoiceSegments.swift` |
+| Settings tab | Quick commands, pinned limits, app lock, the wireless-install guide | — | UserDefaults |
+
+`ShellSafeText.swift` is the one place text typed on the phone is made safe for a shell.
+
+### 7.2 Apple Watch (target watchOS 10)
+
+**App shell** — `MeshWatchApp.swift`, `WatchViews.swift` (root, machines, sessions,
+events, usage, type sheet), `WatchMeshStore.swift` (the store), `WatchLink.swift` and
+`WatchLinks.swift` (reach the daemon directly, else via the phone; the connection phase
+has a grace window so `isReachable` flapping does not read as "offline"),
+`WatchNotifications.swift`.
+
+| Screen | Job | Primary action | Reads |
+| --- | --- | --- | --- |
+| Root | Machines, then sessions | Open | store |
+| Machines list | Each machine, reached directly when possible | Open | `/health`, `/stats` |
+| Sessions | State chip per session; the attention row first | Answer | `sessionsNeedingAttention` |
+| Agent live | Follow one session's output; crown-scrollable | Type / dictate | `/agents`, `peek` |
+| Type sheet + dictation | Text into a session, or the system dictation | Send | `paste` / `send` |
+| Events | Recent agent events | Read | `/events` |
+| Usage | Limits per provider as gauges | Read | `/usage` |
+| Remote hub — `RemoteView.swift` | Screen peek, keyboard, keys, media, system, apps, windows, clipboard | Act | `input` routes |
+| Open on Mac | Push the current thing to the Mac's screen | Open | `openUrl` |
+
+The watch ships **no Speech framework**; dictation is the system text field. That is why
+on-device intent (section 9) takes text, not audio.
+
+### 7.3 Mac menu bar (target `MeshDesktop`, macOS 14)
+
+`MeshDesktopApp.swift` — three jobs and no fourth: show whether this Mac's daemon is up
+(a filled dot when it answered in the last 25 seconds, hollow otherwise), put every
+permission behind one button, print a pairing QR. `LSUIElement`, no Dock icon, no
+settings. `LocalDaemon.swift` is the whole network layer: loopback only, no token.
+
+| Window | Job | Primary action | Reads |
+| --- | --- | --- | --- |
+| Menu | Status line (`meshd 0.6.0 · doctor 5/7`), *Permissions…*, *Pair iPhone…*, *Open web console*, *Start at login*, *Quit* | — | `/health`, `/doctor` |
+| Permissions — `PermissionsView.swift` | What this Mac still needs, and one button that asks for all of it in the daemon's own processes (the only place macOS will grant to) | *Grant everything* | `/doctor`, `POST /doctor/fix` |
+| Pair iPhone — `PairView.swift` | QR plus the eight characters | Scan | `/pair/new`, the Tailscale address chosen on this side |
+
+Section 8 specifies the next version of the Permissions window.
+
+### 7.4 Widgets and cards
+
+| Target | File | Job |
+| --- | --- | --- |
+| `MeshWatchWidgets` (iOS) | `MeshWatchWidgetBundle.swift`, `SessionLiveActivity.swift`, `SessionLockScreenView.swift` | The Live Activity: Lock Screen, Dynamic Island, watch Smart Stack. Starts from the phone, or by push-to-start (`laPush`). |
+| `WatchWidgets` (watchOS) | `WatchGlanceWidget.swift` | The watch-face complication. Data through the App Group from `Shared/WatchGlance.swift`. |
+
+### 7.5 Shared (`Shared/`)
+
+`Models.swift` (wire types, pairing, attention, live-card selection), `MeshClient.swift`,
+`AgentNotifications.swift` (the notification-action contract, grepped against the
+TypeScript by `check-mesh-push.sh`), `AlertGating.swift` (which events buzz),
+`SessionCard.swift` (the status vocabulary), `SessionActivity.swift`,
+`LimitHelpers.swift`, `RiskClassifier.swift` (mirrored in the daemon's `risk.ts`),
+`ScreenZoom.swift`, `SecureStore.swift`, `DaemonCapabilities.swift`, `APNsEnvironment.swift`,
+`VoiceSegments.swift`, `WatchGlance.swift`, `PowerActions.swift` (the one power list both apps
+read: lock, sleep display, sleep, screen saver, screenshot to clipboard, restart, shut down),
+`TerminalKeyRouter.swift` (emulator keystroke bytes → `/send` keys; `ctrl-`/`alt-` letters),
+`PtyClient.swift` (the `/agents/:s/pty` WebSocket: bytes both ways, resize, ping, backoff).
+
+**Relay contract (watch → phone → meshd).** Commands the watch sends without a reply handler
+land in `PhoneConnectivity.session(_:didReceiveMessage:)` (added 2026-09-22; before it they
+were dropped on every physical pair). Fire-and-forget commands answer `mesh-error: <reason>`
+(`RelayReply.encodeFailure`) when the phone cannot route them or the daemon refuses; the watch
+decodes it with `RelayReply.failureReason(in:)` and shows the reason instead of a tick.
+Pinned by `check-relay-ack.swift` and `check-relay-receiver.sh`.
+
+---
+
+## 8. Permissions — the next version of the window
+
+**Today.** The Mac window is a flat list of `/doctor` rows under one *Grant everything*
+button, plus this app's own Notifications row. Push, exposures and agents are
+informational but render with the same green check as Accessibility. Nothing says
+which feature a grant is *for*, and nothing distinguishes "not granted" from "we cannot
+tell".
+
+**Target** (modelled on the better Mac utilities: a *needed for what you turned on*
+group, an *other permissions* group that is collapsed, per-row *Request* and *Open
+System Settings*, and an honest *the app can't check this one* state):
+
+1. `/doctor` grows three additive fields per check. Old clients ignore them; the phone's
+   machine-setup section and the Mac window read the same answer.
+
+   ```ts
+   type Check = {
+     ok: boolean; detail: string; fix?: string;
+     required: boolean;        // false = informational; never fails the machine
+     usedBy: string[];         // user-facing feature names, e.g. ["Remote control", "Screen peek"]
+     checkable: boolean;       // false = the daemon cannot observe this grant
+     requestable: boolean;     // true = POST /doctor/fix can make macOS ask
+   };
+   ```
+
+   | Check | required | usedBy | requestable |
+   | --- | --- | --- | --- |
+   | `input` (Accessibility) | yes | Remote control, Agent chat decisions, Type from the watch | yes |
+   | `screen` (Screen Recording) | yes on macOS | Screen peek, Zoom to text, Web console | yes |
+   | `token` | yes | Everything off this Mac | no (fix is a command) |
+   | `mux` | yes | Agent sessions | no |
+   | `push` | no | Alerts when the app is closed | no |
+   | `agents` | no | Start a session with… | no |
+   | `exposures` | no | Exposed secrets | no |
+
+2. The window groups rows: **Needed for what you use** (required, failures first) and
+   **Other permissions** (collapsed by default, with *Nothing you use needs this right
+   now* when `usedBy` is empty). Each row shows *Granted* / *Not granted* / *Can't be
+   checked*; a not-granted requestable row gets *Request*; the two TCC rows keep their
+   deep links. *Grant everything* stays at the top: it is the one button that works,
+   because the daemon's processes ask. The footer says *macOS may ask to reopen the app
+   after granting*, because it does.
+3. The Mac's own Notifications row stays app-side (it is this app's grant, not the
+   daemon's) and lands in *Other permissions* with `checkable: true`.
+
+Files: `install/payload/meshd/doctor.ts`, `MeshDesktop/LocalDaemon.swift`,
+`MeshDesktop/PermissionsView.swift`, and `scripts/check-mesh-doctor.sh` gains the
+assertion that every check carries the four fields. The phone's setup section adopts
+`usedBy` in a following slice.
+
+---
+
+## 9. On-device intent — Needle (proposed)
+
+**The problem.** A person on the watch says or types *"tell claude yes"*, *"restart the
+mac mini"*, *"paste this into the terminal"*. Today that text has to become a specific
+daemon call by the person tapping through Remote → System → Restart. The phone and watch
+should turn plain language into the call themselves, with no round trip to a large model
+and no cloud.
+
+**The tool.** [Needle 2](https://huggingface.co/Cactus-Compute/needle2) (Cactus Compute,
+Apache-2.0): a 45M-parameter tool-calling model that is one 14 MB binary and runs a
+session in about 28 MB of RAM. Text in, JSON out, constrained by a byte-level grammar
+compiled from the declared tool schemas, with a calibrated confidence score and a
+retrieval head that shows the model only the top five tools per turn from a larger
+catalogue. It ships as static libraries for `ios-arm64`, `ios-sim-arm64`,
+`watchos-arm64`, `macos-arm64` and `tvos-arm64`, plus a `macos-arm64/needle` CLI, and
+LoRA fine-tuning runs on Apple Silicon (`pip install "cactus-needle[train,metal]"`). It
+is text-only, which matches the standing decision that the local brain stays text-only.
+
+**The design.**
+
+1. **One tool catalogue**, `intent/mesh-tools.json`, generated from this document's
+   section 5 and 6: `answer_agent(session, decision)`, `send_text(session, text)`,
+   `send_key(session, key)`, `new_session(machine, cli, cwd, task)`, `kill_session`,
+   `peek`, `wake(machine)`, `power(machine, sleep|restart|shutdown)`, `volume`,
+   `media`, `paste`, `open_app`, `open_url`, `screen_peek(region)`, `switch_machine`.
+   Every tool is a daemon route that already exists; Needle adds no capability, it
+   removes taps. Enums come from live data (machine names, session names, installed
+   agent CLIs) and are compiled into the grammar per turn, so the model cannot name a
+   machine that does not exist.
+2. **Where it runs.** On the watch first (the surface with the least room for taps),
+   then the phone, then inside the daemon as the router in front of the large local
+   brain (`/brain`, PR #119). Same `.cact`, same catalogue, three hosts.
+3. **Confidence gate.** Above the threshold, act and show the one-line receipt
+   (*Sent "yes" to claude on studio*). Below it, show the top candidate as a button
+   instead of acting, and — on the phone and Mac — offer to send the text to the large
+   brain. A wrong action on a machine is worse than one extra tap.
+4. **Risk.** Every call passes through the same classifier the chat decisions use
+   (`Shared/RiskClassifier.swift`); anything the classifier marks as needing a
+   confirmation gets one, whatever the confidence.
+5. **Fine-tune.** `needle generate-data --tools intent/mesh-tools.json` seeds examples;
+   hand-written phrases from real use are the ones that matter. `needle finetune` on the
+   Mac, export a `.cact`, commit it next to the catalogue. The frozen acceptance suite
+   (`intent/cases.jsonl`: phrase → expected call) runs on the Mac with the
+   `macos-arm64/needle` CLI in `scripts/check-intent.sh`, so the gate needs no device.
+6. **Packaging.** An XCFramework from the per-platform `libneedle.a` files. There is no
+   watchOS *simulator* library in the release, so the watch simulator build compiles a
+   stub that returns "unsupported here"; the check runs on the Mac CLI, not the simulator.
+
+**Alternative considered.** Apple's Foundation Models framework gives free on-device tool
+calling on iOS 26 and macOS 26, but not on watchOS. One model on all three hosts means one
+dataset and one acceptance suite, so Needle is the default; Foundation Models stays a
+possible fallback on the phone and Mac.
+
+**Not yet true.** Needle has not been run on this Mac. The first slice is
+`pip install cactus-needle`, the bundled `wearable` environment against ten of our
+phrases, and the numbers from that run — before any code lands in the apps.
+
+---
+
+## 10. Non-goals
+
+- **A cloud relay.** If the phone cannot reach the machine, neither can we. That is the
+  design.
+- **VNC.** The daemon already serves screen and input over bearer-authed HTTP; setup never
+  asks anyone to enable Screen Sharing.
+- **An account system for access.** Pairing is a code the user's own machine printed; no login ever gates a machine. The optional account in Settings (0.8) exists only so a problem report can be answered — it is a contact detail, not a permission.
+- **Vision models on the local brain.** Text-only, by decision (2026-09-03).
+- **A second answer to "what needs me".** One function.
+
+---
+
+## 11. Rules that outrank a green build
+
+1. **Verify by running, not by building.** Three features shipped correct, compiling and
+   dead. Every claim has a `scripts/check-*` that proves it without hardware where
+   possible, and a device run where not.
+2. **Gate on capabilities, name the symptom.** Never compare version strings; when a
+   capability is missing, say what the user sees (*Zooming can't sharpen text*).
+3. **The daemon is the source of truth for setup.** `/doctor` exercises the real path.
+   A GUI never claims a grant on the daemon's behalf; macOS grants TCC to the process
+   that asks.
+4. **One module, two lines.** A daemon capability is its own file and a two-line patch to
+   `server.ts`.
+5. **Nothing leaves the machine unredacted.**
+6. **`CONSTRAINTS.md` is the floor.** Do not weaken it to make a change pass.
+
+---
+
+## 12. Open decisions (owner: Arya)
+
+1. Land 0.6 (PR #124), then the repository reset in `docs/product/RESET-2026-09-06.md`.
+2. Ship the Mac menu bar app: notarised `.app` in the `mesh-install` release, installed
+   by `mesh desktop` when absent, or a Homebrew cask. One of these.
+3. Submit the newest TestFlight build for Beta App Review so the public link stops
+   serving August.
+4. Needle: approve the first slice in section 9 (a Mac-only measurement, no app code).
+5. The permissions window in section 8: approve the four fields; then it is one slice.

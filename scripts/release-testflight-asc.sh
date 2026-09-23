@@ -81,7 +81,7 @@ VERSION="$(sed -n 's/^[[:space:]]*MARKETING_VERSION:[[:space:]]*"\{0,1\}\([^"]*\
 [ -n "$VERSION" ] || { echo "FAIL: no MARKETING_VERSION in project.yml"; exit 1; }
 BUILD="$(date -u +%Y%m%d%H%M)"    # App Store Connect refuses a reused build number
 
-echo "==> LeSearch Mesh $VERSION, build $BUILD"
+echo "==> LeSearch AI $VERSION, build $BUILD"
 
 # Going backwards is allowed by App Store Connect and punished by iOS: a tester on a
 # HIGHER pre-release version reads this one as older and may be asked to delete and
@@ -287,7 +287,7 @@ import re, sys, pathlib
 s = pathlib.Path(sys.argv[1]).read_text()
 m = re.search(r'^## \[Unreleased\]\s*$(.*?)^## \[', s, re.S | re.M)
 items = re.findall(r'^- \*\*(.+?)\*\*', m.group(1), re.M) if m else []
-print("LeSearch Mesh %s\n" % sys.argv[2])
+print("LeSearch AI %s\n" % sys.argv[2])
 print("FIRST: update the daemon on each machine too, or most of this does nothing:\n")
 print("    mesh upgrade\n")
 if items:

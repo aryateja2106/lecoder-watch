@@ -1,3 +1,4 @@
+// MeshWatchApp.swift — the watch app's entry point and root scene.
 import SwiftUI
 
 @main

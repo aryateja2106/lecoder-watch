@@ -1,0 +1,20 @@
+check-approve-path: ok — sessionId on /agents, observer dropped, shift-tab/shift-enter, bad-pane Enter retried on the session
+check-linux-desktop: ok — pi: clipboard write 65 ms, screenshot on clipboard, apps listed, screen.jpg width honoured
+check-linux-desktop: ok — jetson: clipboard write 52 ms, screenshot on clipboard, apps listed, screen.jpg width honoured
+check-fleet: ok   pi (linux) meshd 0.6.0, doctor green, input ok, screen ok
+check-fleet: ok   jetson (linux) meshd 0.6.0, doctor green, input ok, screen ok
+check-fleet: OK (live)
+ok:   fleet — check-fleet: OK (live)
+ok:   remote-agent-loop-jetson — check-remote-agent-loop: OK — session created on jetson, Started/Completed events seen, send landed, killed
+ok:   remote-agent-loop-pi — check-remote-agent-loop: OK — session created on pi, Started/Completed events seen, send landed, killed
+ok:   cross-host-cp-jetson — check-cross-host-cp: OK
+ok:   kb-federation-jetson — check-kb-federation: OK
+ok:   brand — check-brand: OK
+ok:   relay-receiver — check-relay-receiver: OK
+ok:   harness-picker — check-harness-picker: OK
+ok:   pair-auth — check-pair-auth: OK
+ok:   intent — check-intent: OK
+ok:   brain — check-brain: OK
+ok:   watch-smoke — check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 78364 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
+ok:   sim-fleet — check-sim-fleet: OK — iPhone, iPad, Watch and Mac all alive; shots in /Users/aryateja/Projects/lecoder-watch/.claude/worktrees/lesearch-ai-overnight/docs/overnight/2026-09-21/shots
+check-overnight: OK — every live check green

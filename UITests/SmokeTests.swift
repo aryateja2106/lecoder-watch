@@ -29,7 +29,11 @@ final class SmokeTests: XCTestCase {
         let app = launchedApp()
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20), "app never reached the foreground")
 
-        for name in ["Machines", "Terminal", "Remote", "Monitor", "Settings"] {
+        // The tab set as of 2026-09-22: Monitor became the bell in every tab's top bar
+        // and Remote folded into Machines (thumbnails open Screen & control). Both were
+        // Arya's calls in-session, and this test names the product's tabs, so it moved
+        // with them. The bell is exercised below so the Monitor screen still gets shown.
+        for name in ["Machines", "Terminal", "Apps", "Settings"] {
             let tab = app.tabBars.buttons[name]
             XCTAssertTrue(tab.waitForExistence(timeout: 10), "no \(name) tab")
             tab.tap()
@@ -41,6 +45,14 @@ final class SmokeTests: XCTestCase {
             XCTAssertTrue(tab.isSelected,
                           "the \(name) tab is not selected after tapping it — the app most likely crashed and relaunched")
             XCTAssertEqual(app.state, .runningForeground, "the app died on the \(name) tab")
+        }
+        // Monitor lives behind the bell now: open it once and come back.
+        app.tabBars.buttons["Machines"].tap()
+        let bell = app.buttons["Monitor"].firstMatch
+        if bell.waitForExistence(timeout: 5) {
+            bell.tap()
+            XCTAssertTrue(app.navigationBars["Monitor"].waitForExistence(timeout: 10), "the bell did not open Monitor")
+            XCTAssertEqual(app.state, .runningForeground, "the app died on Monitor")
         }
     }
 

@@ -9,7 +9,68 @@ each entry as you ship the slice, not at release time.
 
 ## [Unreleased]
 
+- **Find any past agent conversation, and pick it up.** Search every Claude Code and Codex
+  conversation on every machine by what was said in it — from the phone (Terminal → the
+  magnifying glass), from the CLI (`mesh sessions search "voice input"`), or from an agent
+  (`/seek`). Only what you typed and what the agent answered is indexed, so a hit is a
+  conversation, not a tool dump. **Resume** starts it again in its original CLI on the machine
+  that has it, even when Claude Code already deleted the transcript. Everything stays on your
+  machines; no model is involved.
+- **No conversation is lost any more.** meshd keeps every version of every Claude Code and
+  Codex transcript on the machine that wrote it, before compaction rewrites it or the 30-day
+  cleanup deletes it. Growth is stored as the new bytes only, so a 138 MB session costs the
+  size of what was added per turn, not a copy per turn. `mesh sessions` lists them,
+  `mesh sessions restore <id> --at N` brings any version back as a new session you resume with
+  `claude --resume`. Nothing needs an account.
+- **One machine can hold everyone's history.** `mesh sessions mirror-to <host>` makes the
+  machine that is always on pull every other machine's sessions every ten minutes, redacted
+  on the machine that wrote them, as plain files an agent there can search or pick up. It
+  survives upgrades and needs no restart; the mirror gets a token per
+  machine that can read session history and nothing else, never that machine's full token.
+  `mesh sessions --mirror -H <host>` lists what it holds.
+- **`mesh fleet`** — what each machine is and has right now (hardware, accelerator, free RAM,
+  load, sessions, agent CLIs, local models, the role you gave it), for agents deciding where
+  to run. `/stats` gains `hw`.
+
+## [0.8.0] — 2026-09-22
+
+_App and daemon both report 0.8.0 (app build 3). The daemon is published as
+`LeSearch-AI/mesh-install` v0.8.0, which is what `curl -fsSL https://lesearch.ai/install.sh | sh`
+installs. The iPhone app reaches testers through TestFlight._
+- **Report a problem reaches us.** Settings → Report a problem sends the report you wrote —
+  kind, title, your words, an optional screenshot or recording you pick yourself, an optional
+  contact address, and the redacted diagnostic bundle you read first — to LeSearch AI on one
+  explicit tap. Reports become public GitHub issues labeled `from-users`, deduplicated, with
+  the contact address hashed and never copied. Settings → Account is optional and exists only
+  so a report can be answered; it never gates a machine.
+- A fresh install no longer opens on the biometric lock screen: with nothing paired there is
+  no token to protect.
+- **The terminal is a terminal.** The session screen's *Terminal* mode is now the real thing, full screen: the pane attached over a live stream (`/agents/:s/pty`, a pty on the machine sized to your phone, 2000 lines of scrollback) painted by a real emulator (SwiftTerm) — colour, cursor, the agent's own layout, tmux's status line; pinch sets the font; four themes; it reconnects by itself. A fixed key bar under it: Ctrl and Alt (tap for one key, tap again to lock), Esc, Tab, ↑ (hold for arrows, Enter, Backspace, paging), dictate, keyboard — and the system keyboard types straight into the pane, in order. The pane picker, screen control, paste and pane/session actions moved to the ⋯ menu. The old xterm.js web page and the polled text card are gone. Needs a 0.8 daemon; a 0.6 one still paints from polls, in one colour.
+- **Approve reaches Claude.** A prompt on any machine shows as a *Needs you* row and a bell badge, whatever name the phone knows the machine by; Continue answers it. Every menu an agent prints — Claude Code's permission list, the trust-folder prompt, a y/N question — appears as buttons on the phone and the watch (Choose), so the answer is a tap, not a guess.
+- Screen & control knows which keyboard it is: ⌘⌥⌃⇧ on a Mac, Ctrl/Alt/Super on Linux, a held modifier filled orange; one tap opens the machine's launcher (Spotlight/Raycast, or rofi/ulauncher/`MESH_LAUNCHER` on Linux) or a terminal; a search sheet opens any running or installed app; two monitors are two pictures with chips to switch.
+- Screen & control types like the machine's own keyboard: every key goes straight through, modifiers stick for chords (⌘q, ⌘w, ⌘tab…), and the controls are one small floating capsule instead of a bar. Taps land where you point on Linux too.
+- Four tabs: Machines · Terminal · Apps · Settings. Monitor is the bell on every tab; each machine row carries a live thumbnail of its screen that opens Screen & control, where a drag to the right no longer closes the screen.
+- Terminal: output first, pinned to the bottom, zoom and pan inside the black box; multi-line composer with paste; Enter, Esc, arrows, ⇧Tab and newline as keys. The watch gets the same arrows and Esc, and Continue only inside a coding agent.
+- Machine pages show load at a glance — memory, disk and CPU gauges, "N more agents fit", a live chart and the heaviest processes.
+- When Claude hits its session limit mid-task, the session offers to continue with another installed agent.
+- Report a problem from Settings: a redacted report you read first, then share or save on a machine.
+- Live Activities show on builds without a push entitlement too (they used to fail silently); the problem report says why a push token was refused.
+- Files: tap a file to read it on the phone — Markdown rendered, HTML shown, code sized by pinch. Reading what an agent wrote no longer needs the Mac.
+- Apps show their icon and the devices each build is for (iPhone, iPad, Watch, Mac, Vision); Open proves an app is on this iPhone. Guides explain pairing, Developer Mode, Mac permissions and a Linux desktop.
+- Linux machines: running apps, clipboard, sleep/screen saver, screenshot to clipboard, sized screen frames; sessions survive a daemon upgrade.
+- Antigravity's Stop hook is wired by `mesh hooks install`; Claude Code's non-actionable notifications (sign-in, quota) no longer buzz as "needs attention"; a finished turn's card carries the agent's last words.
+- **An Apps library.** The grid button on Machines lists every app an agent built for you, across every machine — grouped by name so the same app built three ways reads as one app with three builds — with the same Open / Install actions as before.
+- Every agent can search and remember shared notes with `mesh kb` and the `/search` and `/remember` skill commands; searches reach online machines across the mesh.
+- Renamed to LeSearch AI everywhere a person reads it (bundle ids, targets and the meshwatch:// scheme stay); apps now report 0.6.0 like the daemon.
+- **Watch commands relayed through the iPhone now arrive.** Screen peek, new session, kill, split, remote-control keys and volume sent while the watch
+  could not reach the machine directly were silently dropped on a real pair; the phone now receives them, and when a command fails the
+  watch shows why instead of a tick.
+- Linux machines (Jetson, Raspberry Pi) show their screen to the phone and the watch (scrot); `mesh doctor` reports it.
+- The phone and watch now read the list of agent CLIs a machine has instead of assuming they are all there.
+
+
 ### Security
+- **A kill switch for the loopback exemption.** `MESHD_TRUST_LOOPBACK=0` makes every private route — including minting a pairing code — require the bearer even from the machine itself; forwarded-for headers never earn the exemption. The default stays on so `mesh pair` on a fresh box keeps working; the Mac menu bar app now sends the token so it works either way.
 - **The terminal bridge now asks who you are.** The live terminal on port 7820 could type
   into any session on the machine and answered anyone who could reach the port — no
   token, no origin check, on every network interface. It now requires the same token as

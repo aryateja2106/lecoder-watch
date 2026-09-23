@@ -1,3 +1,4 @@
+// AgentChatView.swift — the transcript chat for one agent session: bubbles, decision cards, artifacts, suggestion chips; reads /agents/:x/chat.
 import SwiftUI
 import UIKit
 
@@ -120,10 +121,14 @@ struct AgentChatView: View {
     let chatSource: String
     let rawLines: [String]
     let onSendText: (String) -> Void
+    let onSendPaste: (String) -> Void
     /// Named keys only (`"ctrl-c"`, `"enter"`, `"escape"`, …) — the same vocabulary
     /// `client.send(key:)` and `AgentNotification.command(for:typed:)` use. A raw
     /// control byte in a text field is not how this app tells a session to stop.
     let onSendKey: (String) -> Void
+    /// Several keys in order, awaited one after another — a menu pick is "Down, Down,
+    /// Enter" and three fire-and-forget sends can arrive as "Enter, Down, Down".
+    let onSendKeys: ([String]) -> Void
 
     @State private var inputText = ""
     @State private var selectedArtifact: AgentArtifact?
@@ -165,6 +170,11 @@ struct AgentChatView: View {
     /// Terminal tab does.
     private var showStructured: Bool { !messages.isEmpty && chatSource != "output" }
 
+    private var showsAgentKeys: Bool {
+        guard let type = session.agentType?.lowercased() else { return false }
+        return !["shell", "node", "python"].contains(type)
+    }
+
     /// The newest event this app holds for this session, matched the same tolerant
     /// way `WatchMeshStore.latestEvent` does — the daemon's name for a host is not
     /// always the name this app stored it under.
@@ -205,6 +215,10 @@ struct AgentChatView: View {
 
     private var decisionRisk: RiskVerdict { classifyRisk(decisionText) }
 
+    /// The menu the TUI is showing right now, read off the pane. Present whether or not a
+    /// hook fired: the trust-folder prompt never posts one and still needs answering.
+    private var menu: AgentMenu? { AgentMenu.parse(lines: rawLines) }
+
     var body: some View {
         VStack(spacing: 0) {
             agentBanner
@@ -219,9 +233,39 @@ struct AgentChatView: View {
                                     .id(message.id)
                             }
                         } else {
-                            TerminalFallbackBlock(lines: rawLines).id("fallback")
+                            // Say why this is a terminal and not a conversation: the daemon
+                            // either has no transcript for this session or is too old to
+                            // produce one, and a silent switch reads as the Chat tab being
+                            // broken.
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label(messages.isEmpty
+                                      ? "No conversation to show yet — this is the session's screen."
+                                      : "This agent has no structured transcript, so this is its screen.",
+                                      systemImage: "terminal")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                TerminalFallbackBlock(lines: rawLines).id("fallback")
+                            }
                         }
-                        if awaitingDecision {
+                        if let menu {
+                            MenuCard(menu: menu, risk: decisionRisk,
+                                     onPick: { k in
+                                         if let text = menu.text(toPick: k) { onSendText(text + "\n") }
+                                         else { onSendKeys(menu.keys(toPick: k)) }
+                                         hasResponded = true
+                                         respondedEventId = latestEvent?.id
+                                         // Same feedback as Allow/Deny: without it a tap
+                                         // did nothing visible and invited a second one.
+                                         showSentLine = true
+                                         Task {
+                                             try? await Task.sleep(for: .seconds(5))
+                                             showSentLine = false
+                                         }
+                                     },
+                                     onEscape: { onSendKey("escape") })
+                            .padding(.top, 14)
+                            .id("decision")
+                        } else if awaitingDecision {
                             DecisionCard(
                                 text: decisionText,
                                 risk: decisionRisk,
@@ -375,6 +419,16 @@ struct AgentChatView: View {
 
     // MARK: - Row rendering
 
+    /// The name of the tool call this result belongs to: the nearest `tool` row above it.
+    private func precedingToolName(for message: ChatMessage) -> String? {
+        guard message.role == "result", message.tool?.name == nil,
+              let index = messages.firstIndex(where: { $0.id == message.id }) else { return nil }
+        for earlier in messages[..<index].reversed() where earlier.role == "tool" {
+            return earlier.tool?.name
+        }
+        return nil
+    }
+
     @ViewBuilder
     private func messageRow(_ message: ChatMessage) -> some View {
         switch message.role {
@@ -383,7 +437,9 @@ struct AgentChatView: View {
                 ThinkingDisclosure(text: message.text, tint: agentKind.brandColor)
             }
         case "tool", "result":
-            ToolResultCard(message: message)
+            // A result row carries no tool name of its own, so four calls in a turn used to
+            // be four cards all saying "Result". Name it after the call it answers.
+            ToolResultCard(message: message, calledTool: precedingToolName(for: message))
         case "system":
             TerminalFallbackBlock(lines: [message.text])
         default:   // "user", "assistant", and anything future the daemon adds
@@ -459,71 +515,107 @@ struct AgentChatView: View {
     }
 
     private var inputBar: some View {
-        HStack(spacing: 10) {
-            TextField("Ask or command \(agentKind.rawValue)…", text: $inputText.shellSafe)
-                .textFieldStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.tertiarySystemFill))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .submitLabel(.send)
-                .focused($inputFocused)
-                .onSubmit { submit() }
+        VStack(spacing: 0) {
+            if showsAgentKeys {
+                agentKeyStrip
+            }
+            HStack(spacing: 10) {
+                TextField("Ask or command \(agentKind.rawValue)…", text: $inputText.shellSafe, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...6)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color(.tertiarySystemFill))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                    .focused($inputFocused)
 
-            if inputText.isEmpty {
-                // No bare "Y" button any more: it typed a literal y into whatever the
-                // session's own prompt actually wanted (Enter, or 1/2/3) — the
-                // approval card is the one Allow/Deny surface. Stop stays, two-step:
-                // every tap here sends Ctrl-C into a session that might already be
-                // working again, so a reader has to mean it.
                 Button {
-                    showingVoiceInput = true
+                    if let text = phoneClipboardText() { inputText += text }
                 } label: {
-                    Image(systemName: "mic.fill")
-                        .font(.subheadline)
-                        .frame(width: 34, height: 34)
-                        .background(agentKind.brandColor.opacity(0.15))
-                        .foregroundStyle(agentKind.brandColor)
-                        .clipShape(Circle())
+                    Image(systemName: "doc.on.clipboard")
                 }
+                .disabled(!UIPasteboard.general.hasStrings)
 
-                if confirmingStop {
-                    Button(action: confirmStop) {
-                        Text("Send Ctrl-C?")
-                            .font(.caption.bold())
-                            .padding(.horizontal, 10)
-                            .frame(height: 34)
-                            .background(Color.red.opacity(0.15))
-                            .foregroundStyle(.red)
-                            .clipShape(Capsule())
-                    }
-                } else {
-                    Button(action: armStopConfirm) {
-                        Image(systemName: "stop.fill")
+                if inputText.isEmpty {
+                    // No bare "Y" button any more: it typed a literal y into whatever the
+                    // session's own prompt actually wanted (Enter, or 1/2/3) — the
+                    // approval card is the one Allow/Deny surface. Stop stays, two-step:
+                    // every tap here sends Ctrl-C into a session that might already be
+                    // working again, so a reader has to mean it.
+                    Button {
+                        showingVoiceInput = true
+                    } label: {
+                        Image(systemName: "mic.fill")
                             .font(.subheadline)
                             .frame(width: 34, height: 34)
-                            .background(Color.red.opacity(0.15))
-                            .foregroundStyle(.red)
+                            .background(agentKind.brandColor.opacity(0.15))
+                            .foregroundStyle(agentKind.brandColor)
                             .clipShape(Circle())
                     }
-                }
-            } else {
-                Button { submit() } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundStyle(agentKind.brandColor)
+
+                    if confirmingStop {
+                        Button(action: confirmStop) {
+                            Text("Send Ctrl-C?")
+                                .font(.caption.bold())
+                                .padding(.horizontal, 10)
+                                .frame(height: 34)
+                                .background(Color.red.opacity(0.15))
+                                .foregroundStyle(.red)
+                                .clipShape(Capsule())
+                        }
+                    } else {
+                        Button(action: armStopConfirm) {
+                            Image(systemName: "stop.fill")
+                                .font(.subheadline)
+                                .frame(width: 34, height: 34)
+                                .background(Color.red.opacity(0.15))
+                                .foregroundStyle(.red)
+                                .clipShape(Circle())
+                        }
+                    }
+                } else {
+                    Button { submit() } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(agentKind.brandColor)
+                    }
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
         .background(Color(.secondarySystemGroupedBackground))
+    }
+
+    private var agentKeyStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                Button("⏎ Enter") { onSendKey("enter") }
+                Button("Esc") { onSendKey("escape") }
+                Button("⇧Tab") { onSendKey("shift-tab") }
+                    .accessibilityHint("mode")
+                Button("↑") { onSendKey("up") }
+                Button("↓") { onSendKey("down") }
+                Button("Tab") { onSendKey("tab") }
+                Button("⏎ newline") { onSendKey("shift-enter") }
+                Button("Ctrl‑C", role: .destructive) { onSendKey("ctrl-c") }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .font(.caption.monospaced())
     }
 
     private func submit() {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        onSendText(trimmed + "\n")
+        if trimmed.contains("\n") {
+            onSendPaste(trimmed)
+        } else {
+            onSendText(trimmed + "\n")
+        }
         inputText = ""
     }
 }
@@ -532,6 +624,69 @@ struct AgentChatView: View {
 //
 // Replaces per-message `[y/n]` / "Allow?" text matching: shown once, driven by the
 // session's own `status` field, not guessed from whatever a TUI happened to print.
+
+/// The agent's own choices as buttons. The highlighted one is what Enter would take and
+/// is drawn as such; every other row is the cursor moves plus Enter, sent in order.
+private struct MenuCard: View {
+    let menu: AgentMenu
+    let risk: RiskVerdict
+    let onPick: (Int) -> Void
+    let onEscape: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: risk.isDestructive ? "exclamationmark.triangle.fill" : "list.bullet.rectangle")
+                    .foregroundStyle(risk.isDestructive ? Color.red : Color.orange)
+                Text("Choose")
+                    .font(.subheadline.bold())
+                Spacer()
+                if let footer = menu.footer {
+                    Text(footer).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                }
+            }
+            // What the options answer. Without it the card is "Choose · Yes · No" and you
+            // are approving something you cannot see from here.
+            if let prompt = menu.prompt {
+                Text(prompt)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+            ForEach(menu.options) { option in
+                Button { onPick(option.index) } label: {
+                    HStack {
+                        Text(option.label)
+                            .font(.caption.weight(option.index == menu.highlighted ? .bold : .regular))
+                            .multilineTextAlignment(.leading)
+                        Spacer()
+                        if option.index == menu.highlighted {
+                            Image(systemName: "return").font(.caption2)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(option.index == menu.highlighted ? Color.accentColor.opacity(0.18) : Color(.tertiarySystemFill))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+            Button(action: onEscape) {
+                Text("Esc")
+                    .font(.caption.bold())
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(Color(.tertiarySystemFill))
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(14)
+        .background(Color.orange.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
 
 private struct DecisionCard: View {
     let text: String
@@ -610,100 +765,63 @@ private struct ChatBubble: View {
     let text: String
     let isUser: Bool
     let tint: Color
+    @State private var opening: LinkTarget?
+
+    /// Bare URLs an agent printed. Markdown only makes `[text](url)` tappable, and what an
+    /// agent actually prints is a naked https://… — the one thing you want off this screen.
+    private var links: [URL] { isUser ? [] : detectedLinks(in: [text]) }
 
     var body: some View {
         HStack {
             if isUser { Spacer() }
-            MarkdownBlocks(text: text)
+            VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
+                Group {
+                    // The user's own prose was typed, not authored as markdown: rendering it
+                    // as markdown would eat their line breaks.
+                    if isUser {
+                        Text(text)
+                    } else {
+                        MarkdownDocument(source: text, compact: true)
+                    }
+                }
                 .font(.subheadline)
                 .foregroundStyle(isUser ? .white : .primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(isUser ? tint : Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-            if !isUser { Spacer() }
-        }
-    }
-}
-
-// MARK: - Minimal markdown (no third-party dependency)
-
-/// Splits `text` into blocks on blank lines: a fenced ``` block renders monospace,
-/// a run of lines each starting with "- "/"* "/"N. " renders as bullets, a lone
-/// "#"-prefixed line renders as a bold headline, and everything else goes through
-/// `AttributedString(markdown:)` so **bold**, `code`, *italic* and links render.
-struct MarkdownBlocks: View {
-    let text: String
-
-    private enum Block { case code(String), bullets([String]), headline(String), paragraph(String) }
-
-    private var blocks: [Block] {
-        text.components(separatedBy: "\n\n").compactMap { raw -> Block? in
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return nil }
-            if trimmed.hasPrefix("```") {
-                var lines = trimmed.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-                lines.removeFirst()
-                if lines.last?.trimmingCharacters(in: .whitespaces).hasPrefix("```") == true { lines.removeLast() }
-                return .code(lines.joined(separator: "\n"))
-            }
-            let lines = trimmed.split(separator: "\n").map(String.init)
-            if !lines.isEmpty, lines.allSatisfy(isBullet) {
-                return .bullets(lines.map(bulletBody))
-            }
-            if lines.count == 1, lines[0].hasPrefix("#") {
-                return .headline(String(lines[0].drop { $0 == "#" || $0 == " " }))
-            }
-            return .paragraph(trimmed)
-        }
-    }
-
-    private func isBullet(_ line: String) -> Bool {
-        line.hasPrefix("- ") || line.hasPrefix("* ")
-            || line.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil
-    }
-
-    private func bulletBody(_ line: String) -> String {
-        guard let r = line.range(of: #"^(-|\*|\d+\.)\s"#, options: .regularExpression) else { return line }
-        return String(line[r.upperBound...])
-    }
-
-    private func inline(_ s: String) -> Text {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        guard let attributed = try? AttributedString(markdown: s, options: options) else { return Text(s) }
-        return Text(attributed)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .code(let code):
-                    Text(code)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.primary)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.tertiarySystemFill))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                case .bullets(let items):
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                            HStack(alignment: .top, spacing: 6) {
-                                Text("•")
-                                inline(item)
+                .textSelection(.enabled)
+                if !links.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(links, id: \.absoluteString) { url in
+                                Button { opening = LinkTarget(url: url) } label: {
+                                    Label(url.host ?? url.absoluteString, systemImage: "safari")
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                                .contextMenu {
+                                    Button {
+                                        UIPasteboard.general.string = url.absoluteString
+                                    } label: { Label("Copy link", systemImage: "link") }
+                                }
                             }
                         }
                     }
-                case .headline(let head):
-                    inline(head).bold()
-                case .paragraph(let para):
-                    inline(para)
                 }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(isUser ? tint : Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .contextMenu {
+                Button { UIPasteboard.general.string = text } label: { Label("Copy", systemImage: "doc.on.doc") }
+                ShareLink(item: text) { Label("Share", systemImage: "square.and.arrow.up") }
+            }
+            if !isUser { Spacer() }
         }
+        .sheet(item: $opening) { target in SafariView(url: target.url) }
     }
 }
+
 
 private struct ThinkingDisclosure: View {
     let text: String
@@ -747,6 +865,8 @@ private struct ThinkingDisclosure: View {
 /// full JSON blobs eating the screen before anyone had read a word of the reply.
 private struct ToolResultCard: View {
     let message: ChatMessage
+    /// The tool whose call this row answers, when the row itself does not say.
+    var calledTool: String? = nil
     @State private var expanded = false
 
     private var dotColor: Color {
@@ -758,7 +878,9 @@ private struct ToolResultCard: View {
     }
 
     private var titleText: String {
-        message.tool?.name ?? (message.role == "result" ? "Result" : "Tool")
+        message.tool?.name
+            ?? calledTool.map { message.role == "result" ? "\($0) · result" : $0 }
+            ?? (message.role == "result" ? "Result" : "Tool")
     }
 
     private var fullDetail: String {

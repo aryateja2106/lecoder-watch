@@ -7,22 +7,27 @@ import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 import { handleInput } from "./input";
 import { handleFiles } from "./files";
+import { handleBrain } from "./brain";
 import { handlePush, pushAlert, passesPushGate, notePushDecision, pushLiveActivity } from "./push";
 import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
+import { loopbackExempt } from "./loopback-trust";
 import { redact, redactAndRecord, record, addKnownSecrets, envSecrets, handleExposures, listExposures, type Finding } from "./redact";
 import { chatFor, outputPage } from "./chat";
 import { handleApps, serveApp } from "./apps";
 import { handleHandoff } from "./handoff";
-import { handleDoctor, tokenWeakness } from "./doctor";
+import { handleDoctor, tokenWeakness, AGENT_CLIS } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
 import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount } from "./herdr";
+import { handlePtyUpgrade, ptyWebSocket } from "./pty";
+import { handleSessions, mirrorReadAllowed, resumedTranscript, snapshot as snapshotTranscript, startSessionMirror, startSessionSweep } from "./sessions";
+import { findClaudeTranscript, findCodexRollout } from "./chat";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.6.0";
+const VERSION = "0.8.0";
 // 0.5.0 additions, all additive so a 0.4.x daemon and a 0.5 app (or the reverse)
 // keep working: screenRegion (rect+quality on /screen.jpg), openUrl (POST /open),
 // power (shutdown/restart on /system, results now truthful), laPush (POST /la/token
@@ -43,7 +48,7 @@ const VERSION = "0.6.0";
 // "handoff": POST /agents/<s>/handoff {to} writes HANDOFF.md from the conversation and
 // relaunches the pane under another CLI agent; GET /resumable?cwd= and
 // GET /agents/<s>/resumable list the conversations each CLI can reopen, with the command.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff"];
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain", "captureAnsi", "chatSearch", "pty", "sessions"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -143,8 +148,40 @@ async function topProcs(): Promise<any[]> {
     return { pid, cmd: cmdName, cpuPct, memMB: rssKB / 1024, memPct: (rssKB / 1024 / (os.totalmem() / 1048576)) * 100 };
   }).filter((p) => p.pid > 0);
 }
+/// What this machine IS, for an agent choosing where to run something: the board or chip,
+/// cores, total RAM, and the accelerator — Apple unified memory, CUDA (Jetson shares its RAM
+/// with the GPU), or none. It never changes while the daemon runs, so it is read once.
+/// Measured 2026-09-23: Mac "Apple M4 Pro" 12 cores; Pi "Raspberry Pi 5 Model B Rev 1.0";
+/// Jetson "NVIDIA Jetson Orin Nano … Super", L4T R36, CUDA 12.6 (nvcc is not on PATH there,
+/// so the version comes from /usr/local/cuda/version.json, not from running it).
+type Hardware = { board: string; cores: number; ramMB: number; arch: string; accel: { kind: "apple" | "cuda" | "none"; name?: string; version?: string; memory: "unified" | "shared" | "dedicated" | "none" } };
+let hardwareCache: Hardware | null = null;
+async function hardware(): Promise<Hardware> {
+  if (hardwareCache) return hardwareCache;
+  const cpus = os.cpus();
+  const read = (p: string) => readFile(p, "utf8").then((t) => t.replace(/\0/g, "").trim()).catch(() => "");
+  let board = cpus[0]?.model?.trim() ?? "";
+  let accel: Hardware["accel"] = { kind: "none", memory: "none" };
+  if (IS_MAC) {
+    board = (await sh("sysctl -n machdep.cpu.brand_string 2>/dev/null")).trim() || board;
+    if (process.arch === "arm64") accel = { kind: "apple", name: `${board} GPU`, memory: "unified" };
+  } else {
+    board = (await read("/proc/device-tree/model")) || board;
+    const cuda = await read("/usr/local/cuda/version.json");
+    if (cuda) {
+      let version = "";
+      try { version = JSON.parse(cuda)?.cuda?.version ?? ""; } catch { /* keep blank */ }
+      // A Jetson's GPU has no memory of its own: it takes from the same RAM the CPU uses.
+      const tegra = await read("/etc/nv_tegra_release");
+      accel = { kind: "cuda", name: tegra ? "NVIDIA Tegra (integrated)" : "NVIDIA", version, memory: tegra ? "shared" : "dedicated" };
+    }
+  }
+  hardwareCache = { board, cores: cpus.length, ramMB: Math.round(os.totalmem() / 1048576), arch: process.arch, accel };
+  return hardwareCache;
+}
+
 async function getStats() {
-  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount, herdrCount] = await Promise.all([
+  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount, herdrCount, hw] = await Promise.all([
     IS_MAC ? macCpuPct() : linuxCpuPct(),
     IS_MAC ? macMem() : linuxMem(),
     disk(),
@@ -152,8 +189,9 @@ async function getStats() {
     rmuxSessions().then((s) => s.length).catch(() => 0),
     cmuxSessions().then((s) => s.length).catch(() => 0),
     herdrPaneCount().catch(() => 0),
+    hardware(),
   ]);
-  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount + herdrCount };
+  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount + herdrCount, hw };
 }
 
 // ---------- agents (rmux) ----------
@@ -564,10 +602,12 @@ async function redactOutput<T extends { lines: string[] } | null>(res: T): Promi
   if (findings.length) record(findings, "output", OUTPUT_DEDUPE_MS).catch(() => {});
   return { ...res, lines };
 }
-async function agentOutput(name: string, lines: number, pane?: string, join = false, plain = false) {
-  return redactOutput(await agentOutputRaw(name, lines, pane, join, plain));
+async function agentOutput(name: string, lines: number, pane?: string, join = false, plain = false, ansi = false) {
+  return redactOutput(await agentOutputRaw(name, lines, pane, join, plain, ansi));
 }
-async function agentOutputRaw(name: string, lines: number, pane?: string, join = false, plain = false) {
+/// `ansi` keeps the pane's SGR colour escapes (`capture-pane -e`) and adds the cursor cell,
+/// so a real terminal emulator on the phone can paint the screen instead of a text blob.
+async function agentOutputRaw(name: string, lines: number, pane?: string, join = false, plain = false, ansi = false) {
   if (isHerdrAgent(name)) {
     const res = await herdrOutput(name, lines, join);
     return plain && res ? { ...res, lines: res.lines.map(plainLine) } : res;
@@ -581,10 +621,15 @@ async function agentOutputRaw(name: string, lines: number, pane?: string, join =
   if (!has.trim().endsWith("0")) return null;
   const target = pane ? shq(pane) : shq(name);
   const joinFlag = join && (await muxSupportsJoin()) ? " -J" : "";
-  const out = await sh(`${MUX} capture-pane -p${joinFlag} -t ${target} 2>/dev/null`);
+  // `ansi` also asks for history: the phone's terminal repaints from this on daemons
+  // without the pty stream, and with only the visible screen it could never scroll back.
+  const scrollback = ansi ? ` -S -${Math.min(5000, Math.max(0, lines))}` : "";
+  const out = await sh(`${MUX} capture-pane -p${ansi ? " -e" : ""}${joinFlag}${scrollback} -t ${target} 2>/dev/null`);
   let arr = out.replace(/\n+$/, "").split("\n");
   if (plain) arr = arr.map(plainLine);
-  return { name, lines: arr.slice(-lines) };
+  if (!ansi) return { name, lines: arr.slice(-lines) };
+  const cur = (await sh(`${MUX} display-message -p -t ${target} '#{cursor_x} #{cursor_y} #{pane_width} #{pane_height}' 2>/dev/null`)).trim().split(" ").map(Number);
+  return { name, lines: arr.slice(-lines), cursor: cur.length === 4 && cur.every(Number.isFinite) ? { x: cur[0], y: cur[1], cols: cur[2], rows: cur[3] } : undefined };
 }
 const INFRA = new Set(["meshd", "rmux-bridge"]); // never killable over the wire
 async function agentKill(name: string): Promise<{ ok: boolean; error?: string }> {
@@ -642,8 +687,22 @@ const KEY_SEND_KEYS: Record<string, string> = {
   end: "End",
   "page-up": "PPage",
   "page-down": "NPage",
+  "shift-tab": "BTab",
+  // Claude Code's newline-without-submit is meta+return (ESC CR); tmux spells that M-Enter.
+  "shift-enter": "M-Enter",
 };
 
+/// `ctrl-a`…`ctrl-y` / `alt-a`…`alt-z`: what the phone's sticky Ctrl/Alt keys produce.
+/// Fifty-two table rows would each demand a watch chip; a pattern says the same thing.
+///
+/// `ctrl-z` is deliberately not one of them: over this route there is no client to resume
+/// a suspended job, so it would strand whatever the pane was running. A phone attached to
+/// the pty stream can still send the raw byte — it has a terminal to resume it with.
+function modifierKey(key: string): string | undefined {
+  const m = /^(ctrl|alt)-([a-z])$/.exec(key);
+  if (!m || key === "ctrl-z") return undefined;
+  return `${m[1] === "ctrl" ? "C" : "M"}-${m[2]}`;
+}
 async function agentSend(name: string, text?: string, key?: string, pane?: string, paste?: boolean): Promise<{ ok: boolean; error?: string }> {
   // paste travels: a literal write of newline bytes IS the submit-per-line problem,
   // so herdrSend wraps multi-line pastes in bracketed-paste markers itself.
@@ -653,7 +712,7 @@ async function agentSend(name: string, text?: string, key?: string, pane?: strin
   const hasKey = typeof key === "string" && key.length > 0;
   if (!hasText && !hasKey) return { ok: false, error: "text or key required" };
 
-  const sendKey = hasKey ? KEY_SEND_KEYS[key] : undefined;
+  const sendKey = hasKey ? (KEY_SEND_KEYS[key] ?? modifierKey(key)) : undefined;
   if (hasKey && !sendKey) return { ok: false, error: `unsupported key: ${key}` };
 
   // send-keys to a name the mux cannot resolve fails on stderr we discard, so
@@ -693,7 +752,17 @@ async function agentSend(name: string, text?: string, key?: string, pane?: strin
       }
     }
   }
-  if (sendKey) await sh(`${MUX} send-keys -t ${target} ${sendKey}`);
+  if (sendKey) {
+    // A pane target the mux cannot resolve (renumbered, stale event, rmux spelling) used to
+    // vanish into sh()'s discarded stderr and still answer ok:true — "Approve" showed Sent
+    // and Claude stayed on its prompt. Retry on the session itself before giving up.
+    const r = await shChecked(`${MUX} send-keys -t ${target} ${sendKey}`).catch(() => ({ code: 1, out: "", err: "" }));
+    if (r.code !== 0) {
+      if (!pane) return { ok: false, error: `send-keys failed: ${r.err.trim() || r.code}` };
+      const again = await shChecked(`${MUX} send-keys -t ${shq(name)} ${sendKey}`).catch(() => ({ code: 1, out: "", err: "" }));
+      if (again.code !== 0) return { ok: false, error: `send-keys failed: ${again.err.trim() || again.code}` };
+    }
+  }
   return { ok: true };
 }
 
@@ -815,7 +884,7 @@ async function readEvents(since?: string | null): Promise<AgentEvent[]> {
 // row from it, so both clients read one truth over the endpoint they already poll.
 // Warmed once at boot from the tail of the JSONL so a daemon restart does not blank
 // every row to "idle".
-type LastSessionEvent = { level?: string; title: string; iso: string; atMs: number };
+type LastSessionEvent = { level?: string; title: string; iso: string; atMs: number; sessionId?: string };
 const lastEventBySession = new Map<string, LastSessionEvent>();
 // Sessions whose current wait was announced with a Live Activity push — the set that
 // still owes the Lock Screen an "end" once the wait clears.
@@ -835,7 +904,7 @@ function noteSessionEvent(event: AgentEvent) {
   if (prev && prev.atMs > atMs) return;
   // Re-insert so the Map's insertion order tracks recency; the oldest row leaves.
   lastEventBySession.delete(event.session);
-  lastEventBySession.set(event.session, { level: event.level, title: event.title, iso: event.createdISO, atMs });
+  lastEventBySession.set(event.session, { level: event.level, title: event.title, iso: event.createdISO, atMs, sessionId: event.sessionId ?? prev?.sessionId });
   while (lastEventBySession.size > MAX_TRACKED_SESSIONS) {
     const oldest = lastEventBySession.keys().next().value;
     if (oldest === undefined) break;
@@ -877,7 +946,7 @@ async function paneAgentType(name: string): Promise<string | undefined> {
 
 /// The CLI agents this daemon recognises in a process tree, by the basename of the
 /// command's first word. Order matters only for the label; one process, one agent.
-const AGENT_BINS = ["claude", "codex", "cursor-agent", "omp", "agy", "hermes", "pi", "gemini", "aider"];
+// AGENT_CLIS imported from doctor.ts
 
 /// Which agent runs under a pane, walking the pane process and its descendants.
 /// The pane's own command name is not enough: Claude Code's shows as its version
@@ -894,7 +963,7 @@ function agentFromTree(root: number, table: Map<number, { ppid: number; cmd: str
     seen.add(pid);
     const first = (table.get(pid)?.cmd ?? "").trim().split(/\s+/)[0] ?? "";
     const base = first.split("/").pop() ?? "";
-    if (AGENT_BINS.includes(base)) return base;
+    if (AGENT_CLIS.includes(base as any)) return base;
     for (const c of children.get(pid) ?? []) stack.push(c);
   }
   return undefined;
@@ -961,7 +1030,7 @@ function subtreePids(root: number, table: Map<number, { ppid: number }>): number
 }
 async function agentChat(name: string, since: string | null, limit: number | null) {
   const structured = await chatFor(name, since, limit, {
-    transcriptHint: (s) => transcriptBySession.get(s),
+    transcriptHint: (s) => transcriptBySession.get(s) ?? resumedTranscript(s),
     cwdOf: paneCwd,
     agentTypeOf: paneAgentType,
   }).catch(() => null);
@@ -978,7 +1047,7 @@ const WAITING_LEVELS = new Set(["warning", "needs-input", "needs_input", "needsi
 /// question nobody answered all morning is stale, not actionable); "working" means
 /// someone is attached or an event landed in the last five minutes; everything
 /// else — including a finished turn once its five minutes lapse — is "idle".
-function sessionStatusFields(name: string, attached: boolean, nowMs: number): { status: "working" | "waiting" | "error" | "idle"; lastEventLevel?: string; lastEventISO?: string } {
+function sessionStatusFields(name: string, attached: boolean, nowMs: number): { status: "working" | "waiting" | "error" | "idle"; lastEventLevel?: string; lastEventISO?: string; sessionId?: string } {
   const last = lastEventBySession.get(name);
   const ageMin = last ? (nowMs - last.atMs) / 60000 : Infinity;
   const level = String(last?.level ?? "").toLowerCase();
@@ -987,7 +1056,11 @@ function sessionStatusFields(name: string, attached: boolean, nowMs: number): { 
   else if (last && ageMin < 60 && (WAITING_LEVELS.has(level) || /needs[ _-](attention|input)/i.test(last.title))) status = "waiting";
   else if (attached || (last && ageMin < 5)) status = "working";
   else status = "idle";
-  return { status, lastEventLevel: last?.level, lastEventISO: last?.iso };
+  // sessionId: the agent's own conversation id from its last hook event. The phone matches
+  // a needs-attention event to a row by this id FIRST (Shared/Models.swift matchingAgent) and
+  // never falls back to the name when the event carries one — so a row without it could not
+  // own any Claude Code event, and the Monitor tab never showed an Approve for one.
+  return { status, lastEventLevel: last?.level, lastEventISO: last?.iso, ...(last?.sessionId ? { sessionId: last.sessionId } : {}) };
 }
 
 /// The Live Activity card's changing half. Keys mirror ContentState in
@@ -1116,23 +1189,25 @@ function json(data: any, status = 200) {
 // proxy stamps X-Forwarded-For, so its presence withdraws the exemption. A header can
 // only ever take the exemption away here, never grant it, so a client forging one gains
 // nothing.
-function isLoopback(server: any, req: Request): boolean {
-  if (req.headers.has("x-forwarded-for")) return false;
-  const address = server?.requestIP?.(req)?.address ?? "";
-  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
-}
 // A request a browser marks cross-site cannot be one of our clients: URLSession and
 // the mesh CLI send neither header, and the /desktop page fetches same-origin. So a
 // present Origin, or a cross-site Sec-Fetch-Site, is a page attacking the loopback
 // interface — rejected before the exemption or the token can wave it through.
 function isBrowserCrossSite(req: Request): boolean {
   const site = req.headers.get("sec-fetch-site");
-  if (site && site !== "same-origin" && site !== "none") return true;
-  return req.headers.get("origin") !== null;
+  if (site) return site !== "same-origin" && site !== "none";
+  const origin = req.headers.get("origin");
+  if (origin === null) return false;
+  // Browsers stamp Origin on every POST, same-origin included, so "any Origin" blocked
+  // the console page this daemon served itself: /desktop rendered frames and every click
+  // it posted to /input came back 401 — measured 2026-09-22 on the Mac's own browser and
+  // the phone's Web console. A page can only carry THIS origin if meshd served it.
+  const host = req.headers.get("host");
+  return !host || origin.toLowerCase() !== `${new URL(req.url).protocol}//${host}`.toLowerCase();
 }
 function authed(req: Request, server?: any): boolean {
   if (isBrowserCrossSite(req)) return false;
-  if (isLoopback(server, req)) return true;
+  if (loopbackExempt(server, req)) return true;
   return isAuthorized(TOKEN, req.headers.get("authorization") ?? "");
 }
 
@@ -1272,12 +1347,27 @@ Bun.serve({
       const served = await serveApp(path, req);
       if (served) return served;
     }
-    // Pairing is the one route that must answer without a token — it is how the
-    // phone gets one. See pair.ts for why that is safe.
+    if (isBrowserCrossSite(req)) return json({ error: "unauthorized" }, 401);
+    // Claiming is token-free because the short-lived code is the credential. Minting goes
+    // through authed(): the bearer, or the loopback exemption while MESHD_TRUST_LOOPBACK is
+    // on (the default — check-token-rotate.sh and `mesh pair` on a fresh box rely on it).
+    // With MESHD_TRUST_LOOPBACK=0 a local process can no longer mint a code without the
+    // token (SEC-03). Flipping the default is a decision + a test edit for a human.
+    if (path === "/pair/new" && !authed(req, server)) return json({ error: "unauthorized" }, 401);
     const paired = await handlePair(req, url, server, { port: PORT, token: TOKEN });
     if (paired) return paired;
-    if (!authed(req, server)) return json({ error: "unauthorized" }, 401);
+    if (!authed(req, server)) {
+      // The always-on machine's mirror token: session list, index and redacted chunks only.
+      if (await mirrorReadAllowed(req, url)) return (await handleSessions(req, url, server)) ?? json({ error: "not found" }, 404);
+      return json({ error: "unauthorized" }, 401);
+    }
     try {
+      // A terminal emulator's byte stream: the session attached in a pty over a WebSocket.
+      const pty = await handlePtyUpgrade(req, url, server, { mux: MUX, shq });
+      if (pty !== null) return pty;
+      // Lossless version history of this machine's agent transcripts.
+      const sessions = await handleSessions(req, url, server);
+      if (sessions) return sessions;
       // Secrets seen in agent/terminal text — fingerprints and counts, never values.
       const exposures = await handleExposures(req, url);
       if (exposures) return exposures;
@@ -1287,7 +1377,7 @@ Bun.serve({
       // Hand a task to another agent, or list what can be resumed (see handoff.ts).
       const handed = await handleHandoff(req, url, {
         cwdOf: paneCwd,
-        transcriptHint: (s) => transcriptBySession.get(s),
+        transcriptHint: (s) => transcriptBySession.get(s) ?? resumedTranscript(s),
         chat: (s) => agentChat(s, null, 60),
         send: (s, text, key, pane) => agentSend(s, text, key, pane),
         which: (bin) => Bun.which(bin),
@@ -1308,6 +1398,8 @@ Bun.serve({
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
       const remote = await handleInput(req, url);
       if (remote) return remote;
+      const brain = await handleBrain(req, url);
+      if (brain) return brain;
       const files = await handleFiles(req, url);
       if (files) return files;
       // APNs device registration + status + test — see push.ts.
@@ -1330,7 +1422,21 @@ Bun.serve({
       if (path === "/agents") return json(await listAgents());
       if (path === "/usage") return json(await getUsage());
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));
-      if (path === "/events" && req.method === "POST") return json(await addEvent((await req.json().catch(() => ({}))) as any), 201);
+      if (path === "/events" && req.method === "POST") {
+        const input = (await req.json().catch(() => ({}))) as any;
+        // claude-mem's observer is a background Claude that runs a turn after every turn of a
+        // real session; its Stop hooks doubled the Monitor list with "Claude stopped" rows nobody
+        // asked for. Nothing a person can act on ever comes from that cwd.
+        if (typeof input.cwd === "string" && input.cwd.includes("/.claude-mem/")) return json({ ok: true, ignored: "observer" }, 202);
+        // A turn just ended: snapshot that session now, before the next turn can compact it.
+        // Fire-and-forget; the ten-minute sweep catches anything this misses.
+        if (typeof input.cwd === "string" && input.cwd) {
+          Promise.all([findClaudeTranscript(input.cwd), findCodexRollout(input.cwd)])
+            .then((paths) => Promise.all(paths.filter(Boolean).map((p) => snapshotTranscript(p!))))
+            .catch(() => {});
+        }
+        return json(await addEvent(input), 201);
+      }
       if (path === "/kb" && (req.method === "PUT" || req.method === "POST")) {
         try { return json(kbPut((await req.json().catch(() => ({}))) as any, os.hostname()), 201); }
         catch (e: any) { return json({ error: String(e?.message ?? e) }, 400); }
@@ -1377,6 +1483,7 @@ Bun.serve({
           url.searchParams.get("pane") ?? undefined,
           url.searchParams.get("join") === "1",
           url.searchParams.get("plain") === "1",
+          url.searchParams.get("ansi") === "1",
         );
         return res ? json(res) : json({ error: "no such session" }, 404);
       }
@@ -1411,7 +1518,14 @@ Bun.serve({
         const rows = Number.isFinite(rowsN) && rowsN > 0 ? Math.min(200, Math.max(5, rowsN)) : null;
         const size = `${cols ? `-x ${cols} ` : ""}${rows ? `-y ${rows} ` : ""}`;
         const base = `new-session -d -s ${shq(name)} ${b.cwd ? `-c ${shq(b.cwd)} ` : ""}`;
-        const tail = b.cmd ? shq(b.cmd) : "";
+        // fx's default permission mode is `auto`: it reviews its own tool calls and never
+        // opens a human prompt, so a phone would have nothing to approve. Started from
+        // here it asks (FX_PERMISSION_MODE=ask, fx.sh/docs/configure-fx/permissions) unless
+        // the caller set the mode themselves.
+        const cmdText = typeof b.cmd === "string" && /^\s*fx(\s|$)/.test(b.cmd) && !/FX_PERMISSION_MODE=/.test(b.cmd)
+          ? `env FX_PERMISSION_MODE=ask ${b.cmd}`
+          : b.cmd;
+        const tail = cmdText ? shq(cmdText) : "";
         if (size) {
           // rmux's -x/-y support is unverified: try sized, and if the session never
           // appeared, create it plain and ask resize-window afterwards — whose own
@@ -1446,6 +1560,7 @@ Bun.serve({
     }
     return json({ error: "not found" }, 404);
   },
+  websocket: ptyWebSocket({ mux: MUX, shq }),
 });
 // Exact-match redaction targets: this daemon's token, every peer token in hosts.json,
 // and the process's secret-shaped env. Values stay inside redact.ts; only hints leave.
@@ -1455,6 +1570,8 @@ peerHosts().then((peers) => addKnownSecrets([...peers.values()].flatMap((h) => (
 chmod(EVENTS_PATH, 0o600).catch(() => {});
 console.log(`meshd ${VERSION} on http://${HOST}:${PORT}  (host=${os.hostname()} platform=${process.platform})`);
 initTelemetry(VERSION);
+startSessionSweep();
+startSessionMirror();
 // Warm the per-session status index from the stored tail, and settle the capture-pane
 // -J question once, before the first client asks. Both are best-effort: an empty
 // index just means rows start as idle/working until events arrive.

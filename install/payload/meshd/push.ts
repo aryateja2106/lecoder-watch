@@ -494,7 +494,7 @@ export async function handlePush(req: Request, url: URL): Promise<Response | nul
   if (url.pathname === "/push/test" && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as any;
     return json(await pushAlert(
-      String(body.title ?? "LeSearch Mesh test"),
+      String(body.title ?? "LeSearch AI test"),
       body.body ? String(body.body) : undefined,
       // force: a person testing their setup must never have the test swallowed.
       { level: body.level ? String(body.level) : undefined, session: body.session ? String(body.session) : undefined, force: true },

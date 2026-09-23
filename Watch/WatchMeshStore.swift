@@ -2,6 +2,12 @@ import Foundation
 import Combine
 import WatchKit
 
+// The daemon labels unknown agent commands by basename, so anything not a plain shell/runtime can understand "continue".
+func isCodingAgent(_ agentType: String?) -> Bool {
+    guard let agentType else { return false }
+    return !["shell", "node", "python", "bun", "sh", "zsh", "bash", "fish"].contains(agentType.lowercased())
+}
+
 /// Watch brain. Two private paths to the mesh:
 ///  1. DIRECT — talk to each machine's meshd over the tailnet. Works in the
 ///     simulator and whenever the watch can reach the host. Fast (1.5s output).
@@ -327,7 +333,7 @@ final class WatchMeshStore: ObservableObject {
     var emptyStateReason: (title: String, detail: String) {
         if let count = phoneReplyMachineCount, count == 0 {
             return ("No machines paired",
-                    "Your iPhone answered but has nothing paired yet. Open MeshWatch on your iPhone and pair a machine.")
+                    "Your iPhone answered but has nothing paired yet. Open LeSearch AI on your iPhone and pair a machine.")
         }
         if lastPhoneReplyAt != nil {
             return ("Nothing to show yet", phoneLinkNote ?? "Your iPhone answered but sent no machines.")
@@ -337,7 +343,7 @@ final class WatchMeshStore: ObservableObject {
         switch connectionState {
         case .offline:
             return ("iPhone not reachable",
-                    "Keep your iPhone nearby and unlocked, then open MeshWatch on it once. The watch reaches your machines through the phone.")
+                    "Keep your iPhone nearby and unlocked, then open LeSearch AI on it once. The watch reaches your machines through the phone.")
         default:
             return ("Connecting…", "Reaching your iPhone. Keep it nearby and unlocked.")
         }
@@ -456,9 +462,11 @@ final class WatchMeshStore: ObservableObject {
     /// same reason `sessionsNeedingAttention` does it — the daemon's name for a box
     /// is not always the name this app stored.
     func latestEvent(host: String, session: String) -> AgentEvent? {
-        events.last { event in
+        // The daemon's own hostname too ("arya-pi" for the machine this app calls "pi").
+        let reported = snaps.first { $0.host == host }?.stats?.host
+        return events.last { event in
             guard let eventHost = event.host, event.session == session else { return false }
-            return hostNamesMatch(eventHost, host)
+            return hostNamesMatch(eventHost, host) || reported.map { hostNamesMatch(eventHost, $0) } == true
         }
     }
 
@@ -618,6 +626,30 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    /// Several keys in order — a menu pick is "Down, Down, Enter", and three separate
+    /// fire-and-forget sends can land as "Enter, Down, Down". One Task, awaited in turn.
+    func sendKeys(_ keys: [String]) {
+        guard let w = watching, !keys.isEmpty else { return }
+        sending = true
+        lastError = nil
+        Task {
+            for key in keys {
+                if directReachable(w.host), let c = client(for: w.host) {
+                    do { try await c.send(agent: w.agent, key: key, pane: w.pane) }
+                    catch { lastError = "send failed"; WKInterfaceDevice.current().play(.failure); break }
+                } else {
+                    let ack = await WatchLink.shared.acknowledge(
+                        WatchCommand(kind: .agentSend, host: w.host, agent: w.agent, key: key, pane: w.pane))
+                    apply(ack, verb: "send")
+                    if lastError != nil { break }
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            await pollOutput()
+            sending = false
+        }
+    }
+
     /// Answer an agent from a notification button. The host comes from the APNs
     /// payload, so it is the name the *daemon* uses; our stored name may be the key
     /// from another machine's hosts.json, hence the tolerant match.
@@ -730,13 +762,13 @@ final class WatchMeshStore: ObservableObject {
         case .failed(let why):
             return .problem("clipboard — \(why)")
         case .queued:
-            return .problem("open MeshWatch on your iPhone once, then try again")
+            return .problem("open LeSearch AI on your iPhone once, then try again")
         case .delivered(let data):
             guard let data, let text = try? JSONDecoder().decode(String.self, from: data) else {
                 // No payload: either an older phone build that does not know this
                 // command, or one that could not read its own pasteboard from the
                 // background. Both have the same fix.
-                return .problem("open MeshWatch on your iPhone once — it can only read its clipboard while open")
+                return .problem("open LeSearch AI on your iPhone once — it can only read its clipboard while open")
             }
             if text.hasPrefix(clipboardErrorPrefix) {
                 let why = String(text.dropFirst(clipboardErrorPrefix.count))
@@ -941,5 +973,16 @@ final class WatchMeshStore: ObservableObject {
         let raw = cmd?.split(separator: " ").first.map(String.init) ?? "shell"
         let prefix = raw.replacingOccurrences(of: " ", with: "-").lowercased()
         return "watch-\(prefix)-\(Int(Date().timeIntervalSince1970) % 100000)"
+    }
+
+    func launchable(host: String) async -> [String] {
+        guard let machine = machines.first(where: { $0.host == host }) else {
+            return ["shell", "claude", "codex", "pi", "agy"]
+        }
+        let c = MeshClient(machine: machine)
+        if let report = try? await c.doctor() {
+            return report.launchable
+        }
+        return ["shell", "claude", "codex", "pi", "agy"]
     }
 }

@@ -1,0 +1,15 @@
+---
+description: Read the generated codebase map before opening or grepping source
+alwaysApply: true
+---
+
+Before you Read, Grep or Glob this repo: open `docs/agents/CODEMAP.md` (which file, ~4k
+tokens). For a route, a capability string or a watch→phone command: `docs/agents/CONTRACTS.md`.
+For a symbol: `grep -n '^| Name ' docs/agents/SYMBOLS.md`. For what a check proves:
+`docs/agents/CHECKS.md`. Then open ONE file. For callers and blast radius use the
+`codegraph` MCP tool (`codegraph_explore`) instead of a grep-and-read loop.
+
+After you add a file, change a file's first comment line, add a top-level declaration, a
+daemon route or a capability: `python3 scripts/codemap-index.py` and commit the result.
+`scripts/check-codemap.sh` is red until you do. A new code file needs a one-line header
+comment saying what it is; that line is its entry in the map.

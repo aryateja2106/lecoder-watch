@@ -1,0 +1,47 @@
+# Overnight 2026-09-21 — STATE (resume point)
+
+Plan: `~/.claude/plans/check-the-devices-we-prancy-yeti.md`. Worktree: `.claude/worktrees/lesearch-ai-overnight`, branch `feat/lesearch-ai-overnight-2026-09-21` (base `chore/codebase-map-and-regression` + cherry-pick 0a1bb66 PRODUCT.md).
+
+Rules in force: never merge / push main; never edit CHARTER, gates.conf, gates.sh, AGENTS.md, .github, existing scripts/check-*, existing tests; live meshd :8899 untouched until S12 (side port 8901); remotes: write only ~/.mesh.
+
+| Slice | Status | Check | Output / commit |
+|---|---|---|---|
+| S0 bootstrap | DONE | gates.sh fast | `FACTORY_GATES: level=fast status=GREEN passed=2 failed=0 failing=none skipped=none misconfigured=none`; sims iOS27-repro + Watch27-test + iPad27-test booted |
+| S1 fleet + Linux screen | DONE (4a2a151, verifier ACCEPT) | check-fleet.sh | `mesh status`: local/mac/pi/jetson all meshd 0.6.0 (pi 0.2.0→0.6.0 via `mesh upgrade -H pi --src https://arya-macbook-pro.tailaddf1e.ts.net:8890/mesh-install.tgz`; jetson fresh install over ssh); doctor pi 7/7, jetson 7/7; input trusted on both; units enabled, Linger=yes; pi token rotated + re-registered; Pi ~/.mesh backup `~/.mesh/backups/pre-0.6-2026-09-21.tgz`. Linux screen patch: codex run in progress |
+| S2 sims + MeshDesktop | DONE (checks in 4a2a151; screenshots after rebrand pending S3) | check-sim-fleet.sh, check-watch-smoke.sh, check-ios-smoke.sh | |
+| S3 rebrand LeSearch AI + 0.6.0 | DONE (c7a3011) | check-brand.sh | |
+| S4 remote agent loop | DONE — check green on jetson AND pi; real agy task on pi produced hello.txt + Started/Completed events; claude on both Linux boxes NOT logged in (morning: claude /login) | check-remote-agent-loop.sh | run record 2026-09-21T173000Z-overnight-S1-fleet.md |
+| S5 mesh cp + /fs/write | DONE (86ae97e) — pi hello.txt → Mac ~/Downloads and → jetson, sha-verified | check-cross-host-cp.sh | structural + live (jetson, pi) OK |
+| S6 relay receiver (ARCH-01/02) | DONE (473d40e); physical-pair proof = morning | check-relay-receiver.sh + check-relay-ack.swift | OK |
+| S7 harness picker from /doctor | DONE (b6ddc7e) | check-harness-picker.sh + check-launchable.swift | OK |
+| S8 mesh kb + /search skill | DONE (912c966); skill staged (count in check-mesh-skills.sh needs a human) | check-kb-federation.sh | structural + live (jetson note found from mac) OK |
+| S9 brains | DONE (86ae97e, 1cc9681): /brain ported; ollama qwen3:4b on jetson (12 s tool call), qwen3:1.7b on pi (23-40 s); edge0-8b on Mac :8001 tool call 3.8 s via our patch; Needle 26/28 tool, 0.7 s, 34 MB; ADR written | check-brain.sh, check-intent.sh | OK |
+| S10 bearer on /pair/new | DONE opt-in (95d6406): loopback-trust.ts + MESHD_TRUST_LOOPBACK=0 covers /pair/new; default kept because check-token-rotate.sh mints tokenless (test edit = human) | check-pair-auth.sh | OK; token-rotate/pair/csrf/host-guard/auth/daemon-050 OK |
+| S11 suite + gates full + ADR | DONE — check-overnight.sh: every live check green (run-1 log beside this file; the two loop FAILs were the first-keystroke drop, fixed in 4a17d9d, 4/4 after); `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none` | check-overnight.sh | GREEN |
+| M1 morning: Jetson claude login (snapd reinstall → Chromium), Pi Claude loop, Apps library (647235a) | DONE | check-fleet.sh live | mac/pi/jetson input+screen ok |
+| M2 approve path + Linux desktop (76fb865) | DONE — deployed to mac/pi/jetson | check-approve-path.sh, check-linux-desktop.sh (live pi+jetson) | ok; Needs-you → Continue → file written on the Pi |
+| M3 usability (2395c0e): tabs, bell, machine page, terminal, composer, watch Continue gate, shared power list, KillMode=process, mesh pair -H | DONE | check-attention-hostname.swift + fast gate | GREEN; Pi session survived an upgrade |
+| M4 apps facts + Guides (9add399), console reload fix + fx (6a288d3) | DONE | check-product-spec, check-codemap, fast gate | GREEN |
+| M5 menus as buttons, 4 tabs + thumbnails, harnesses.md, hook fixes (63487c0 → 25f5ef4) | DONE | check-agent-menu.swift; full gate GREEN run 4 | trust prompt on the Pi answered from the phone's Choose card |
+| M6 keyboard = the machine's, floating capsule, Linux absolute pointer, ordered input (473eafa) | DONE — deployed mac/pi/jetson | check-remote-screen-gestures, check-mesh-chords; full gate GREEN run 5 | 54 chars letter-perfect on the Pi; sticky ⌘+q closed an app |
+| M7 FileViewer + platform-shape ADR (9e16793) | DONE | check-product-spec, fast gate | REPORT.md rendered on the sim off the Pi |
+| M8 third pass (e16610b → 98fda4d): keyboard layouts + launcher + app search + display chips, stats charts, limit→hand-off, Report a problem, Live Activity fix, Hundred app via mesh, device build OTA, **0.8.0**, upgrade --src fix | DONE — fleet on 0.8.0 | check-feedback-redact.swift; fast gate GREEN; **full gate RED at 758a6d1, failing check not yet named** (interrupted) — see /tmp/handoff-lesearch-ai-2026-09-22.md | next session: name it, fix, gate GREEN |
+| M9 Moshi parity phase 1 (6511d50 → ): parity map, SwiftTerm native terminal, `/agents/:s/pty` + PtyClient stream, key bar lock/d-pad, themes, native = Terminal mode, bridge screens deleted; red check from M8 named + fixed (check-phone-input-and-wake, FeedbackView shellSafe) | DONE on the sim; fleet daemons not yet redeployed with `pty` | check-native-terminal-keys.sh, check-pty-route.sh; fast gate GREEN | full gate: see run record 2026-09-22T110000Z-moshi-parity-phase1 |
+| P1 publish (03fe081 → ): `check-published.sh` finish line + Stop hook, Supabase feedback table/bucket/RLS + auth config in git, Report a problem → LeSearch AI + optional account, worker → deduped `from-users` issues (launchd), getting-started + product map + design system + rendered page, landing 0.8.0 deployed to lesearch.ai, clean-device install check, first-run lock fix | IN PROGRESS | check-published.sh (MESH_PUBLISHED=1), check-feedback-cloud, check-feedback-pipeline, check-web-docs, check-clean-install | row 50cb992c → https://github.com/LeSearch-AI/mesh/issues/1; fresh sim 8DDE6724 installed + launched 0.8.0; PUBLISHED.md is the ledger; TestFlight upload + SMTP + repo consolidation are in BLOCKED.md |
+| S12 ship | DONE — fleet on the branch build (Mac backup ~/.mesh/backups/meshd-0.6.0-1790020360); draft PR https://github.com/aryateja2106/lecoder-watch/pull/133; files sent (Telegram unavailable — no token vars on this Mac) | | |
+
+## Log
+- 10:5x IST S0 started. Worktree created, PRODUCT.md cherry-picked (efe9cb1).
+- 23:16 IST Fleet online (3 hosts 0.6.0). iPhone sim paired to the Mac daemon via `xcrun simctl openurl <sim> 'meshwatch://pair?h=…&c=…'` + one tap on Pair; fleet adopted (mac, pi, jetson, dataflow-offline). Screenshots: shots/iphone-machines-paired.png, ipad-before-rebrand.png, watch-after-pair.png (watch shows the notification prompt; sim MCP access to the watch device not granted — cannot tap Allow unattended).
+- Installer served for the night: python http.server on 127.0.0.1:8890 (install/dist) behind `tailscale serve --https=8890`. Direct tailnet bind of python triggered the macOS firewall prompt (unattended hang) — Tailscale Serve avoids it. Disable in the morning: `tailscale serve --https=8890 off`.
+- 23:35 IST S1 committed 4a2a151 after verifier ACCEPT. S4 proven with agy on the Pi (claude OAuth expired on both Linux hosts). Installer server moved to loopback :8897 (tailscale serve :8890 → 8897). Next: S3 (agy running), then S5 mesh cp (codex, after agy finishes — both touch bin/mesh).
+- 00:30 IST S5/S6/S7/S9 landed. Finding: the simulator loses paired machines on every `simctl install` of an unsigned build (Keychain items become inaccessible) — a simulator/unsigned-build artefact; on a real iPhone the Keychain survives even delete-and-reinstall (measured 2026-08-28). Re-pair the sim via the meshwatch:// deep link when screenshots need machines.
+- 00:35 IST Codex running S8 (kb + skill). S10 brief written (pair auth), dispatch after S8 lands (serialized files).
+- 01:2x IST S8, S10 landed; Mac live daemon upgraded from the branch; fleet all on the branch build (28 caps). Note: my side-port smoke used :8901 which is the cmux bridge's port — no harm (bind failed), use 893x next time. check-overnight.sh running.
+- 02:1x IST gates.sh full: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none` (first run RED only on a stale codemap). Draft PR opened. Night closed.
+- 16:5x IST Publish run. The M8 full gate's red was three checks, not one: `check-codemap` (stale
+  SYMBOLS.md), `check-phone-input-and-wake` (a TextField without `.shellSafe`) and, in a fresh
+  worktree, `check-sim-fleet` (no Mac build yet). The smoke's `testATextFieldCanAppear` was red on a
+  simulator with no machines — Settings' only always-present TextField sat below Alerts; Quick send
+  moved above it. Two sessions share this Mac: simulator work is now handed over explicitly, because
+  `check-ios-smoke` always picks the newest iPhone simulator and kills whatever else is driving it.

@@ -1,0 +1,28 @@
+{"phrase": "tell claude yes", "expect": {"name": "answer_agent", "session": "claude", "decision": "yes"}}
+{"phrase": "say no to codex", "expect": {"name": "answer_agent", "session": "codex", "decision": "no"}}
+{"phrase": "let claude continue", "expect": {"name": "answer_agent", "session": "claude", "decision": "continue"}}
+{"phrase": "stop the codex session", "expect": {"name": "answer_agent", "session": "codex", "decision": "stop"}}
+{"phrase": "type ls -la into build1", "expect": {"name": "send_text", "session": "build1", "text": "ls -la"}}
+{"phrase": "press enter in claude", "expect": {"name": "send_key", "session": "claude", "key": "enter"}}
+{"phrase": "hit ctrl-c on the pi-probe session", "expect": {"name": "send_key", "session": "pi-probe", "key": "ctrl-c"}}
+{"phrase": "start claude on the jetson and ask it to build the model", "expect": {"name": "new_session", "machine": "jetson", "cli": "claude"}}
+{"phrase": "run codex on the mac to fix the failing tests", "expect": {"name": "new_session", "machine": "mac", "cli": "codex"}}
+{"phrase": "open a shell on the pi", "expect": {"name": "new_session", "machine": "pi", "cli": "shell"}}
+{"phrase": "kill the build1 session", "expect": {"name": "kill_session", "session": "build1"}}
+{"phrase": "show me what claude printed", "expect": {"name": "peek", "session": "claude"}}
+{"phrase": "show me the jetson screen", "expect": {"name": "screen_peek", "machine": "jetson"}}
+{"phrase": "what is on the mac's screen", "expect": {"name": "screen_peek", "machine": "mac"}}
+{"phrase": "wake up the pi", "expect": {"name": "wake", "machine": "pi"}}
+{"phrase": "restart the jetson", "expect": {"name": "power", "machine": "jetson", "action": "restart"}}
+{"phrase": "lock my mac", "expect": {"name": "power", "machine": "mac", "action": "lock"}}
+{"phrase": "shut down the pi", "expect": {"name": "power", "machine": "pi", "action": "shutdown"}}
+{"phrase": "mute the mac", "expect": {"name": "volume", "machine": "mac", "muted": true}}
+{"phrase": "set the mac volume to 40", "expect": {"name": "volume", "machine": "mac", "level": 40}}
+{"phrase": "pause the music on the mac", "expect": {"name": "media", "machine": "mac", "action": "pause"}}
+{"phrase": "paste my clipboard into the jetson", "expect": {"name": "paste", "machine": "jetson"}}
+{"phrase": "open safari on the mac", "expect": {"name": "open_app", "machine": "mac", "app": "safari"}}
+{"phrase": "open github.com on the mac", "expect": {"name": "open_url", "machine": "mac"}}
+{"phrase": "copy hello.txt from the pi to the mac", "expect": {"name": "copy_file", "from_machine": "pi", "to_machine": "mac"}}
+{"phrase": "send the model file from the jetson to my mac", "expect": {"name": "copy_file", "from_machine": "jetson", "to_machine": "mac"}}
+{"phrase": "search the knowledge base for meshd auth", "expect": {"name": "search_knowledge"}}
+{"phrase": "what did we decide about the pi token", "expect": {"name": "search_knowledge"}}

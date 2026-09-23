@@ -1,0 +1,406 @@
+[
+ {
+  "name": "answer_agent",
+  "description": "Answer a coding agent that stopped to ask a question: approve, decline, or reply with text",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "session": {
+     "type": "string",
+     "description": "the agent session name, e.g. claude, codex, ls-probe"
+    },
+    "decision": {
+     "type": "string",
+     "enum": [
+      "yes",
+      "no",
+      "continue",
+      "stop"
+     ]
+    },
+    "text": {
+     "type": "string",
+     "description": "a free-text reply instead of a decision"
+    }
+   },
+   "required": [
+    "session"
+   ]
+  }
+ },
+ {
+  "name": "send_text",
+  "description": "Type a shell command or text into a named terminal session and press Enter, e.g. 'type ls into build1'",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "session": {
+     "type": "string"
+    },
+    "text": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "session",
+    "text"
+   ]
+  }
+ },
+ {
+  "name": "send_key",
+  "description": "Press one key such as enter, escape, ctrl-c or tab in a named terminal session, e.g. 'hit ctrl-c on build1'",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "session": {
+     "type": "string"
+    },
+    "key": {
+     "type": "string",
+     "enum": [
+      "enter",
+      "escape",
+      "ctrl-c",
+      "up",
+      "down",
+      "tab",
+      "y",
+      "n"
+     ]
+    }
+   },
+   "required": [
+    "session",
+    "key"
+   ]
+  }
+ },
+ {
+  "name": "new_session",
+  "description": "Start, launch, run or open a coding agent (claude, codex, cursor-agent, agy) or a shell on a machine, optionally with a task, e.g. 'start claude on the jetson', 'open a shell on the pi'",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    },
+    "cli": {
+     "type": "string",
+     "enum": [
+      "claude",
+      "codex",
+      "cursor-agent",
+      "agy",
+      "shell"
+     ]
+    },
+    "task": {
+     "type": "string"
+    },
+    "cwd": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "machine",
+    "cli"
+   ]
+  }
+ },
+ {
+  "name": "kill_session",
+  "description": "Stop and remove a terminal or agent session",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "session": {
+     "type": "string"
+    },
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    }
+   },
+   "required": [
+    "session"
+   ]
+  }
+ },
+ {
+  "name": "peek",
+  "description": "Show or read what a terminal session printed: its recent output lines",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "session": {
+     "type": "string"
+    },
+    "lines": {
+     "type": "integer",
+     "minimum": 5,
+     "maximum": 200
+    }
+   },
+   "required": [
+    "session"
+   ]
+  }
+ },
+ {
+  "name": "screen_peek",
+  "description": "Show a screenshot of a machine's screen",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    }
+   },
+   "required": [
+    "machine"
+   ]
+  }
+ },
+ {
+  "name": "wake",
+  "description": "Wake up, power on or turn on a sleeping machine over the network",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    }
+   },
+   "required": [
+    "machine"
+   ]
+  }
+ },
+ {
+  "name": "power",
+  "description": "Sleep, restart, shut down or lock a machine",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    },
+    "action": {
+     "type": "string",
+     "enum": [
+      "sleep",
+      "restart",
+      "shutdown",
+      "lock"
+     ]
+    }
+   },
+   "required": [
+    "machine",
+    "action"
+   ]
+  }
+ },
+ {
+  "name": "volume",
+  "description": "Change or mute a machine's speaker volume",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    },
+    "level": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 100
+    },
+    "muted": {
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "machine"
+   ]
+  }
+ },
+ {
+  "name": "media",
+  "description": "Play, pause, resume or skip music and video playback on a machine",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    },
+    "action": {
+     "type": "string",
+     "enum": [
+      "play",
+      "pause",
+      "next",
+      "previous"
+     ]
+    }
+   },
+   "required": [
+    "machine",
+    "action"
+   ]
+  }
+ },
+ {
+  "name": "paste",
+  "description": "Paste the phone's clipboard contents into a machine or session",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    },
+    "session": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "machine"
+   ]
+  }
+ },
+ {
+  "name": "open_app",
+  "description": "Bring an application to the front on a machine",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    },
+    "app": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "machine",
+    "app"
+   ]
+  }
+ },
+ {
+  "name": "open_url",
+  "description": "Open a website, web address or URL such as github.com in the machine's browser",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    },
+    "url": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "machine",
+    "url"
+   ]
+  }
+ },
+ {
+  "name": "copy_file",
+  "description": "Copy a file from one machine to another",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "from_machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    },
+    "path": {
+     "type": "string"
+    },
+    "to_machine": {
+     "type": "string",
+     "enum": [
+      "mac",
+      "pi",
+      "jetson"
+     ]
+    }
+   },
+   "required": [
+    "from_machine",
+    "path",
+    "to_machine"
+   ]
+  }
+ },
+ {
+  "name": "search_knowledge",
+  "description": "Search the shared knowledge base every agent on the mesh writes to",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "query"
+   ]
+  }
+ }
+]

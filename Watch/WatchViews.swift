@@ -1,3 +1,4 @@
+// WatchViews.swift — every watch screen: machines list, attention rows, the crown-scrollable terminal with its key bar, events, screen peek, dictation.
 import SwiftUI
 import WatchKit
 #if canImport(UIKit)
@@ -94,7 +95,7 @@ struct WatchRootView: View {
         NavigationStack {
             MachinesListView()
                 .environmentObject(store)
-                .navigationTitle("LeSearch Mesh")
+                .navigationTitle("LeSearch AI")
         }
         .onAppear {
             store.start()
@@ -162,7 +163,9 @@ struct MachinesListView: View {
                             }
                             // Resume the pinned session straight from the glance once the
                             // limit clears — the wrist action a mirrored notification tap can't do.
-                            if let pin = store.pinnedLimitSessions.first(where: { $0.providerId.lowercased() == row.providerId.lowercased() }) {
+                            if let pin = store.pinnedLimitSessions.first(where: { $0.providerId.lowercased() == row.providerId.lowercased() }),
+                               let pinnedAgent = store.snaps.first(where: { $0.host == pin.host })?.agents.first(where: { $0.name == pin.sessionName }),
+                               isCodingAgent(pinnedAgent.agentType) {
                                 Spacer()
                                 // `.mini` drew a ~24pt tall control, well under the 44pt
                                 // Apple asks for and roughly a fingertip's width short of
@@ -588,6 +591,8 @@ struct SessionsView: View {
     @State private var customCwd = ""
     @State private var showHelp = false
     @State private var openAgent: SessionRoute?
+    // The static list until /doctor answers, so the section is never blank.
+    @State private var launchableList: [String] = ["shell", "claude", "codex", "cursor-agent"]
 
     private var snap: MachineSnapshot? { store.snaps.first { $0.host == host } }
 
@@ -625,7 +630,7 @@ struct SessionsView: View {
             }
             if snap?.authError != nil {
                 Section("Fix") {
-                    Text("Open MeshWatch on your iPhone and copy the install command for this machine.")
+                    Text("Open LeSearch AI on your iPhone and copy the install command for this machine.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Text("Then refresh the watch.")
@@ -644,32 +649,46 @@ struct SessionsView: View {
                     NavigationLink {
                         RemoteView(machine: machine).environmentObject(store)
                     } label: {
-                        Label("Control Mac", systemImage: "cursorarrow.motionlines")
+                        Label("Control", systemImage: "cursorarrow.motionlines")
                     }
                     .disabled(snap?.reachable != true || snap?.authError != nil)
                 }
             }
             Section("New") {
-                Button { openNewSession(cmd: nil) } label: {
-                    Label("Shell", systemImage: "terminal")
+                ForEach(launchableList, id: \.self) { item in
+                    Button { openNewSession(cmd: item == "shell" ? nil : item) } label: {
+                        if item == "shell" {
+                            Label("Shell", systemImage: "terminal")
+                        } else if item == "claude" {
+                            Label("Claude", systemImage: "sparkles")
+                        } else if item == "codex" {
+                            Label("Codex", systemImage: "curlybraces")
+                        } else if item == "cursor-agent" {
+                            Label("Cursor", systemImage: "cursorarrow.rays")
+                        } else if item == "agy" {
+                            Label("Antigravity", systemImage: "airplane")
+                        } else if item == "hermes" {
+                            Label("Hermes", systemImage: "brain")
+                        } else {
+                            Label(item.capitalized, systemImage: "terminal")
+                        }
+                    }
                 }
-                Button { openNewSession(cmd: "claude") } label: {
-                    Label("Claude", systemImage: "sparkles")
+                
+                if launchableList.contains("claude") {
+                    Button { taskAgent = "claude"; showTask = true } label: {
+                        Label("Claude task", systemImage: "text.bubble")
+                    }
                 }
-                Button { openNewSession(cmd: "codex") } label: {
-                    Label("Codex", systemImage: "curlybraces")
+                if launchableList.contains("codex") {
+                    Button { taskAgent = "codex"; showTask = true } label: {
+                        Label("Codex task", systemImage: "text.badge.checkmark")
+                    }
                 }
-                Button { openNewSession(cmd: "cursor-agent") } label: {
-                    Label("Cursor", systemImage: "cursorarrow.rays")
-                }
-                Button { taskAgent = "claude"; showTask = true } label: {
-                    Label("Claude task", systemImage: "text.bubble")
-                }
-                Button { taskAgent = "codex"; showTask = true } label: {
-                    Label("Codex task", systemImage: "text.badge.checkmark")
-                }
-                Button { taskAgent = "pi"; showTask = true } label: {
-                    Label("Pi task", systemImage: "brain")
+                if launchableList.contains("pi") {
+                    Button { taskAgent = "pi"; showTask = true } label: {
+                        Label("Pi task", systemImage: "brain")
+                    }
                 }
                 // The three buttons above cover three programs. Anything else the machine
                 // can run — herdr, tmux, a REPL, a script — needed a shell session plus a
@@ -679,6 +698,9 @@ struct SessionsView: View {
                 }
             }
             .disabled(snap?.reachable != true || snap?.authError != nil)
+            .task {
+                launchableList = await store.launchable(host: host)
+            }
             if let s = snap?.stats {
                 Section("Machine") {
                     Text(store.routeLabel(for: host))
@@ -775,7 +797,7 @@ struct SessionsView: View {
                     helpLine("Open terminal", "The full screen of a session, with the key bar. Turn the Digital Crown to scroll back.")
                     helpLine("Reader / Raw", "The first chip in the key bar. Reader wraps every line to the screen — best for questions, prose and errors. Raw keeps the Mac's own line breaks and lets you drag sideways — best for diffs and tables.")
                     helpLine("Reply", "Type or dictate text, then send it. Nothing is sent until you tap Send.")
-                    helpLine("Insert iPhone clipboard", "Types whatever is on your iPhone's clipboard into the session, so a URL or a key never has to be scribbled. Your iPhone must be open on MeshWatch at the time.")
+                    helpLine("Insert iPhone clipboard", "Types whatever is on your iPhone's clipboard into the session, so a URL or a key never has to be scribbled. Your iPhone must be open on LeSearch AI at the time.")
                     helpLine("Open on Mac", "Appears when an agent has printed a link. Opens it in the Mac's own browser.")
                     helpLine("Key bar", "Enter, arrows, Tab, Escape, Page up/down, Home, End, Backspace and Ctrl-D — enough to drive a full-screen program. Text size lives under the … chip at the end.")
                     helpLine("Interrupt", "Ctrl-C, to stop whatever is running.")
@@ -801,9 +823,9 @@ struct SessionsView: View {
     private var supportsInput: Bool { snap?.capabilities?.contains("input") ?? false }
 
     private var emptySessionHint: String {
-        if snap?.authError != nil { return "Open MeshWatch on your iPhone, fix the token, then refresh." }
+        if snap?.authError != nil { return "Open LeSearch AI on your iPhone, fix the token, then refresh." }
         if snap?.reachable == true { return "Start Shell, Claude, or Codex below." }
-        return "Open MeshWatch on your iPhone, or refresh when the Mac is nearby."
+        return "Open LeSearch AI on your iPhone, or refresh when the Mac is nearby."
     }
 
     private func openNewSession(cmd: String?, initialText: String? = nil) {
@@ -879,8 +901,10 @@ struct AgentLiveView: View {
     @State private var reply = ""
     @State private var showReply = false
     @State private var showMore = false
+    /// Which modifier the letter grid on the Terminal options page sends.
+    @State private var chordModifier = "ctrl"
     @State private var confirmInterrupt = false
-    @State private var fontSize: CGFloat = 13
+    @AppStorage("watchTerminalFontSize") private var fontSize: Double = 13
     @State private var selectedPane: String?
     /// Whether new output should yank the view to the bottom. False the moment the
     /// reader scrolls up, true again when they land back on the last line — see
@@ -915,7 +939,7 @@ struct AgentLiveView: View {
     }
 
     private var previewLines: [String] {
-        Array(terminalLines.suffix(8))
+        Array(terminalLines.suffix(max(6, Int(120 / fontSize))))
     }
 
     private var statusText: String {
@@ -976,7 +1000,27 @@ struct AgentLiveView: View {
                 }
             }
 
-            if awaitingDecision {
+            // The agent's own choices as buttons, read off the pane — present whether or not
+            // a hook fired (the trust-folder prompt fires none). Enter/Esc live in Actions.
+            if let menu = AgentMenu.parse(lines: terminalLines) {
+                Section("Choose") {
+                    // The question, first: on a 45 mm screen "Yes / No" with no subject is
+                    // an answer to nothing.
+                    if let prompt = menu.prompt {
+                        Text(prompt).font(.caption2).foregroundStyle(.primary)
+                    }
+                    ForEach(menu.options) { option in
+                        MenuOptionRow(label: option.label, highlighted: option.index == menu.highlighted) {
+                            WKInterfaceDevice.current().play(.click)
+                            if let text = menu.text(toPick: option.index) { store.send(text: text + "\n") }
+                            else { store.sendKeys(menu.keys(toPick: option.index)) }
+                        }
+                    }
+                    if let footer = menu.footer {
+                        Text(footer).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            } else if awaitingDecision {
                 Section("Decision Needed") {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
@@ -1045,22 +1089,41 @@ struct AgentLiveView: View {
             }
 
             Section("Actions") {
-                Button { store.send(text: "continue\n") } label: {
-                    Label("Continue", systemImage: "play.fill")
-                        .frame(minHeight: WatchTouch.minHeight)
+                if isCodingAgent(currentAgent?.agentType) {
+                    Button { store.send(text: "continue\n") } label: {
+                        Label("Continue", systemImage: "play.fill")
+                            .frame(minHeight: WatchTouch.minHeight)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(continueBlocked)
+                    Text("Types \"continue\" into \(currentAgent?.agentType ?? agent)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(continueBlocked)
                 Button { store.send(key: "enter") } label: {
                     Label("Enter", systemImage: "return")
                         .frame(minHeight: WatchTouch.minHeight)
                 }
                 .buttonStyle(.bordered)
-                Button { showReply = true } label: {
-                    Label("Reply", systemImage: "square.and.pencil")
-                        .frame(minHeight: WatchTouch.minHeight)
+                // Cursor keys and Esc: what a menu, a list or a mode prompt needs and what
+                // "Enter or Continue" never covered.
+                HStack(spacing: 6) {
+                    Button { store.send(key: "up") } label: { Image(systemName: "arrow.up").frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight) }
+                        .accessibilityLabel("Up")
+                    Button { store.send(key: "down") } label: { Image(systemName: "arrow.down").frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight) }
+                        .accessibilityLabel("Down")
+                    Button { store.send(key: "escape") } label: { Text("Esc").frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight) }
+                    Button { store.send(key: "shift-tab") } label: { Text("⇧⇥").frame(maxWidth: .infinity, minHeight: WatchTouch.minHeight) }
+                        .accessibilityLabel("Shift Tab, cycle mode")
                 }
                 .buttonStyle(.bordered)
+                // Dictate or scribble, read it back, fix a word, then send — the sheet holds
+                // the draft until you say so ("Send" types it, "Send ⏎" submits it).
+                Button { showReply = true } label: {
+                    Label("Type or dictate", systemImage: "mic.badge.plus")
+                        .frame(minHeight: WatchTouch.minHeight)
+                }
+                .buttonStyle(.borderedProminent)
                 // The one thing a wrist cannot produce for itself: a URL, a stack
                 // trace, a key. It is nearly always already on the phone in your
                 // pocket, so fetch it from there rather than asking anyone to scribble
@@ -1107,10 +1170,19 @@ struct AgentLiveView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Text(previewLines.joined(separator: "\n"))
-                        .font(.system(size: fontSize, design: .monospaced))
-                        .lineLimit(10)
+                        .font(.system(size: CGFloat(fontSize), design: .monospaced))
                         .focusable(false)
                 }
+                HStack(spacing: 6) {
+                    Text("Text size").font(.caption2).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("A−") { step(-1) }
+                        .accessibilityLabel("Smaller text")
+                    Button("A+") { step(1) }
+                        .accessibilityLabel("Larger text")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
                 Button { showMore = true } label: {
                     Label("Open terminal", systemImage: "terminal")
                 }
@@ -1146,6 +1218,16 @@ struct AgentLiveView: View {
 
     private var replySheet: some View {
         NavigationStack {
+            replyBody
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showReply = false } } }
+        }
+    }
+
+    /// The reply form without its own NavigationStack, so the terminal screen — itself a
+    /// sheet — can PUSH it. watchOS does not reliably present a sheet over a sheet, which
+    /// is why the Reply chip in the key bar did nothing at all: it asked for a second one.
+    private var replyBody: some View {
+        Group {
             ScrollView {
                 VStack(spacing: 12) {
                     Text("Send to \(currentAgent?.displayName ?? agent)")
@@ -1183,7 +1265,6 @@ struct AgentLiveView: View {
                 }
                 .padding()
             }
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { showReply = false } } }
         }
     }
 
@@ -1205,6 +1286,10 @@ struct AgentLiveView: View {
             }
             .navigationTitle(currentAgent?.displayName ?? agent)
             .navigationBarTitleDisplayMode(.inline)
+            // Without this there is no way off this screen: it opens scrolled to the
+            // newest line, so the swipe-down that dismisses a sheet lands on the output
+            // and scrolls it instead.
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { showMore = false } } }
             .safeAreaInset(edge: .bottom) { terminalKeyBar }
         }
     }
@@ -1221,7 +1306,7 @@ struct AgentLiveView: View {
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(terminalLines.isEmpty ? "waiting for output…" : terminalLines.joined(separator: "\n"))
-                        .font(.system(size: fontSize, design: .monospaced))
+                        .font(.system(size: CGFloat(fontSize), design: .monospaced))
                         .foregroundStyle(terminalLines.isEmpty ? .secondary : .primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("Terminal output, \(terminalLines.count) lines")
@@ -1255,7 +1340,7 @@ struct AgentLiveView: View {
             ScrollView([.horizontal, .vertical]) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(terminalLines.isEmpty ? "waiting for output…" : terminalLines.joined(separator: "\n"))
-                        .font(.system(size: fontSize, design: .monospaced))
+                        .font(.system(size: CGFloat(fontSize), design: .monospaced))
                         .foregroundStyle(terminalLines.isEmpty ? .secondary : .primary)
                         // The whole point of Raw: never re-flow, however far right it runs.
                         .fixedSize(horizontal: true, vertical: true)
@@ -1299,10 +1384,21 @@ struct AgentLiveView: View {
                         store.readerOutput ? "arrow.left.and.right" : "text.alignleft") {
                     store.readerOutput.toggle()
                 }
-                keyChip("Reply", "text.bubble") { showReply = true }
+                // A push, not a sheet: this bar lives inside one already.
+                NavigationLink {
+                    replyBody.navigationTitle("Reply")
+                } label: {
+                    Image(systemName: "text.bubble")
+                        .frame(minWidth: WatchTouch.minWidth, minHeight: WatchTouch.minHeight)
+                }
+                .accessibilityLabel("Reply")
                 keyChip("Enter", "return") { store.send(key: "enter") }
                 keyChip("Interrupt", "xmark.octagon", role: .destructive) { store.send(key: "ctrl-c") }
                 keyChip("Tab", "arrow.right.to.line") { store.send(key: "tab") }
+                // Shift-Tab cycles a coding agent's mode; Shift-Enter is a newline without
+                // submitting (ESC CR — what Claude Code reads as meta+return).
+                keyChip("Shift Tab, cycle mode", "arrow.left.arrow.right") { store.send(key: "shift-tab") }
+                keyChip("Newline, do not submit", "return.left") { store.send(key: "shift-enter") }
                 keyChip("Escape", "escape") { store.send(key: "escape") }
                 keyChip("Up", "arrow.up") { store.send(key: "up") }
                 keyChip("Down", "arrow.down") { store.send(key: "down") }
@@ -1342,11 +1438,49 @@ struct AgentLiveView: View {
         List {
             Section("Text size") {
                 HStack(spacing: 8) {
-                    keyChip("Smaller text", "textformat.size.smaller") { fontSize = max(9, fontSize - 1) }
-                    keyChip("Larger text", "textformat.size.larger") { fontSize = min(24, fontSize + 1) }
+                    keyChip("Smaller text", "textformat.size.smaller") { step(-1) }
+                    keyChip("Larger text", "textformat.size.larger") { step(1) }
                     Spacer()
                     Text("\(Int(fontSize))pt")
                         .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            // The readline vocabulary: ctrl-a/e/k/u/w, ctrl-l, ctrl-r, alt-b/f. meshd
+            // resolves every `ctrl-<letter>`/`alt-<letter>` by pattern, so 49 chords were
+            // already accepted and the wrist could reach exactly two of them.
+            if currentAgent?.isHerdr != true {
+                Section("Keys") {
+                    // watchOS has no segmented picker; a two-state button is clearer on a
+                    // 45 mm screen than a wheel anyway.
+                    Button {
+                        chordModifier = chordModifier == "ctrl" ? "alt" : "ctrl"
+                    } label: {
+                        HStack {
+                            Text(chordModifier == "ctrl" ? "Control" : "Option")
+                                .font(.caption.weight(.semibold))
+                            Spacer()
+                            Image(systemName: "arrow.triangle.2.circlepath").font(.caption2)
+                        }
+                    }
+                    .accessibilityLabel("Modifier: \(chordModifier == "ctrl" ? "Control" : "Option"). Tap to switch.")
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5), spacing: 4) {
+                        // ctrl-z is deliberately absent: meshd refuses it over /send,
+                        // because there is no client here to resume a suspended job.
+                        ForEach(Array("abcdefghijklmnopqrstuvwxy"), id: \.self) { letter in
+                            Button {
+                                store.send(key: "\(chordModifier)-\(letter)")
+                            } label: {
+                                Text(String(letter))
+                                    .font(.caption2.monospaced())
+                                    .frame(minWidth: WatchTouch.minWidth - 12, minHeight: WatchTouch.minHeight - 8)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("\(chordModifier) \(String(letter))")
+                        }
+                    }
+                    Text("Tap a letter to send \(chordModifier == "ctrl" ? "Control" : "Option") and that key.")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -1370,6 +1504,10 @@ struct AgentLiveView: View {
         }
         .navigationTitle("Terminal")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func step(_ delta: Double) {
+        fontSize = min(24, max(9, fontSize + delta))
     }
 
     @ViewBuilder
@@ -1567,3 +1705,24 @@ func meshImage(from data: Data) -> Image? {
 #else
 func meshImage(from data: Data) -> Image? { nil }
 #endif
+
+
+/// One row of a menu the agent is waiting on; the highlighted row is what Enter takes.
+private struct MenuOptionRow: View {
+    let label: String
+    let highlighted: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(label).font(.caption).multilineTextAlignment(.leading)
+                Spacer(minLength: 4)
+                if highlighted { Image(systemName: "return").font(.caption2) }
+            }
+            .frame(minHeight: WatchTouch.minHeight)
+        }
+        .buttonStyle(.bordered)
+        .tint(highlighted ? Color.accentColor : Color.gray)
+    }
+}

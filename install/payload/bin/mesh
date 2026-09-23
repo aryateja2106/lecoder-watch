@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
-// mesh — command-line control for a LeSearch Mesh fleet (the meshd HTTP API).
+// mesh — command-line control for a LeSearch AI fleet (the meshd HTTP API).
 // Dependency-free (bun's built-in fetch). Config: ~/.mesh/hosts.json.
 // Human output by default; --json for agents/scripts. `mesh help <cmd>` for details.
 
-import { homedir, networkInterfaces } from "os";
-import { join } from "path";
+import { homedir, hostname, networkInterfaces } from "os";
+import { dirname, join, resolve } from "path";
 import {
   existsSync, readFileSync, writeFileSync, mkdirSync,
   statSync, readdirSync, renameSync, rmSync, copyFileSync, chmodSync,
@@ -29,7 +29,9 @@ const VERSION =
 
 // ---------- config ----------
 
-type Host = { ip: string; port: number; token: string };
+// `role` is the owner's own words for what a machine is for ("24/7, CUDA — long jobs
+// here"). Hardware is discoverable; intent is not, so it is written down, not guessed.
+type Host = { ip: string; port: number; token: string; role?: string };
 type Config = { default?: string; hosts: Record<string, Host> };
 
 function loadConfig(): Config {
@@ -72,10 +74,12 @@ function resolveHost(name: string | undefined, cfg: Config): { name: string; ip:
 
 // Throws on any failure (so callers like `hosts` can catch and mark a host down);
 // single-target commands let it bubble to the top-level handler, which prints + exits.
-async function api(host: ReturnType<typeof resolveHost>, method: string, path: string, body?: unknown): Promise<any> {
+// `timeoutMs` is for the rare call that does real work before answering (a resume that
+// restores a large deleted transcript); everything else keeps the 5 s "is it up" budget.
+async function api(host: ReturnType<typeof resolveHost>, method: string, path: string, body?: unknown, timeoutMs = TIMEOUT_MS): Promise<any> {
   const url = `http://${host.ip}:${host.port}${path}`;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -89,12 +93,17 @@ async function api(host: ReturnType<typeof resolveHost>, method: string, path: s
     });
   } catch (e: any) {
     clearTimeout(t);
-    if (e?.name === "AbortError") throw new Error(`timeout after ${TIMEOUT_MS}ms → ${host.name} (${host.ip}:${host.port}) unreachable`);
+    if (e?.name === "AbortError") throw new Error(`timeout after ${timeoutMs}ms → ${host.name} (${host.ip}:${host.port}) unreachable`);
     if (e?.code === "ConnectionRefused" || /refused|ECONNREFUSED/.test(String(e?.code || e))) throw new Error(`connection refused → meshd not running on ${host.name} (${host.ip}:${host.port})`);
     throw new Error(String(e?.message || e));
   }
   clearTimeout(t);
-  if (!res.ok) throw new Error(`${method} ${path} → HTTP ${res.status} on ${host.name} (${host.ip}:${host.port})`);
+  if (!res.ok) {
+    // The daemon's own reason, when it gave one, is the useful half of the error — and it is
+    // how a caller tells "this route does not exist here" (a bare 404) from a real refusal.
+    const why = await res.json().then((j: any) => typeof j?.error === "string" ? j.error : undefined, () => undefined);
+    throw Object.assign(new Error(`${method} ${path} → HTTP ${res.status} on ${host.name} (${host.ip}:${host.port})${why ? `: ${why}` : ""}`), { status: res.status, why });
+  }
   const text = await res.text();
   return text ? JSON.parse(text) : {};
 }
@@ -122,6 +131,7 @@ const VALUE_FLAGS = new Set([
   "--rotated", "--ignored", "--reopen",
   "--team", "--prefix", "--slug", "--name", "--app", "--bundle-id", "--device",
   "--ipa", "--icon", "--app-version", "--url",
+  "--scope", "--kind", "--limit", "--tags", "--source", "--at", "--as",
 ]);
 function parse(argv: string[]): { pos: string[]; flags: Record<string, string>; bools: Set<string> } {
   const pos: string[] = [], bools = new Set<string>(), flags: Record<string, string> = {};
@@ -137,6 +147,116 @@ function parse(argv: string[]): { pos: string[]; flags: Record<string, string>; 
 const hostOf = (f: Record<string, string>) => f.host || f.H;
 
 // ---------- commands ----------
+
+type CopySide = { raw: string; path: string; host?: ReturnType<typeof resolveHost> };
+
+function copySide(raw: string, cfg: Config): CopySide {
+  const colon = raw.indexOf(":");
+  if (colon <= 0 || raw.startsWith("~/") || raw.startsWith("./") || raw.startsWith("/")) return { raw, path: raw };
+  const name = raw.slice(0, colon);
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) return { raw, path: raw };
+  const known = name === "local" || name === "default" || !!cfg.hosts[name];
+  if (!known) die(`unknown host: ${name}  (known: ${["local", ...Object.keys(cfg.hosts)].join(", ")})`);
+  return { raw, path: raw.slice(colon + 1), host: resolveHost(name === "default" ? undefined : name, cfg) };
+}
+
+function localPath(path: string) {
+  return resolve(path.startsWith("~/") ? join(homedir(), path.slice(2)) : path);
+}
+
+async function cmdCp(pos: string[], bools: Set<string>, cfg: Config) {
+  const [fromRaw, toRaw] = pos;
+  if (!fromRaw || !toRaw || pos.length !== 2) die("usage: mesh cp <src> <dst> [--force] [--mkdirs]");
+  const from = copySide(fromRaw, cfg), to = copySide(toRaw, cfg);
+  if (!from.host && !to.host) die("use cp");
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 10 * 60 * 1000);
+  const request = async (host: ReturnType<typeof resolveHost>, method: string, path: string, body?: BodyInit, length?: string | null) => {
+    const res = await fetch(`http://${host.ip}:${host.port}${path}`, {
+      method,
+      headers: {
+        ...(host.token ? { Authorization: `Bearer ${host.token}` } : {}),
+        ...(body ? { "content-type": "application/octet-stream" } : {}),
+        ...(length ? { "content-length": length } : {}),
+      },
+      body,
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({})) as any;
+      throw new Error(detail.error || `${method} ${path} → HTTP ${res.status} on ${host.name} (${host.ip}:${host.port})`);
+    }
+    return res;
+  };
+
+  let bytes = 0;
+  const hasher = new Bun.CryptoHasher("sha256");
+  const counted = (stream: ReadableStream<Uint8Array>) => stream.pipeThrough(new TransformStream({
+    transform(chunk: Uint8Array, controller) {
+      bytes += chunk.byteLength;
+      hasher.update(chunk);
+      controller.enqueue(chunk);
+    },
+  }));
+
+  try {
+    let expected = "";
+    let writeResult: any = null;
+    if (!from.host) {
+      const source = Bun.file(localPath(from.path));
+      if (!(await source.exists()) || !statSync(source.name!).isFile()) throw new Error(`not a file: ${localPath(from.path)}`);
+      const query = new URLSearchParams({ path: to.path });
+      if (bools.has("force")) query.set("overwrite", "1");
+      if (bools.has("mkdirs")) query.set("mkdirs", "1");
+      const res = await request(to.host!, "POST", `/fs/write?${query}`, counted(source.stream()), String(source.size));
+      writeResult = await res.json();
+    } else {
+      const query = new URLSearchParams({ path: from.path, raw: "1" });
+      const read = await request(from.host, "GET", `/fs/read?${query}`);
+      expected = read.headers.get("x-mesh-sha256") || "";
+      if (to.host) {
+        const writeQuery = new URLSearchParams({ path: to.path });
+        if (bools.has("force")) writeQuery.set("overwrite", "1");
+        if (bools.has("mkdirs")) writeQuery.set("mkdirs", "1");
+        const res = await request(to.host, "POST", `/fs/write?${writeQuery}`, counted(read.body!), read.headers.get("content-length"));
+        writeResult = await res.json();
+      } else {
+        const dest = localPath(to.path);
+        if (existsSync(dest) && !bools.has("force")) throw new Error(`destination exists: ${dest}`);
+        if (!existsSync(dirname(dest))) {
+          if (!bools.has("mkdirs")) throw new Error(`no such directory: ${dirname(dest)}`);
+          mkdirSync(dirname(dest), { recursive: true });
+        }
+        const part = `${dest}.part-${process.pid}`;
+        try {
+          // Bun.write(path, ReadableStream) wrote an empty file on Bun 1.3; a FileSink loop streams for real.
+          const sink = Bun.file(part).writer();
+          for await (const chunk of counted(read.body!) as unknown as AsyncIterable<Uint8Array>) sink.write(chunk);
+          await sink.end();
+          renameSync(part, dest);
+        } finally {
+          rmSync(part, { force: true });
+        }
+      }
+    }
+    const sha256 = hasher.digest("hex");
+    if (expected && expected !== sha256) throw new Error(`sha256 mismatch reading ${from.raw}: expected ${expected}, got ${sha256}`);
+    if (writeResult?.sha256 && writeResult.sha256 !== sha256) {
+      throw new Error(`sha256 mismatch writing ${to.raw}: sent ${sha256}, destination reported ${writeResult.sha256}`);
+    }
+    out(() => console.log(`copied ${bytes} B  ${from.raw} → ${to.raw}  sha256 ${sha256.slice(0, 12)}`),
+      { ok: true, from: from.raw, to: to.raw, bytes, sha256 });
+  } catch (e: any) {
+    if (e?.name === "AbortError") throw new Error(`timeout after 600000ms → file copy did not finish`);
+    if (e?.code === "ConnectionRefused" || /refused|ECONNREFUSED/.test(String(e?.code || e?.cause?.code || e))) {
+      throw new Error("connection refused → meshd not running on the source or destination host");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 async function cmdHosts(cfg: Config) {
   const names = Object.keys(cfg.hosts);
@@ -162,6 +282,16 @@ function cmdHostAdd(pos: string[], flags: Record<string, string>, cfg: Config) {
   if (!cfg.default) cfg.default = name;
   saveConfig(cfg);
   out(() => console.log(`added ${name} → ${ip}:${cfg.hosts[name].port}${cfg.default === name ? " (default)" : ""}`), cfg.hosts[name]);
+}
+
+function cmdHostRole(pos: string[], cfg: Config) {
+  const [name, ...words] = pos;
+  if (!name) die('usage: mesh host role <name> "<what this machine is for>"   (empty text clears it)');
+  if (!cfg.hosts[name]) die(`unknown host: ${name}`);
+  const role = words.join(" ").trim();
+  if (role) cfg.hosts[name].role = role; else delete cfg.hosts[name].role;
+  saveConfig(cfg);
+  out(() => console.log(role ? `${name}: ${role}` : `${name}: role cleared`), { host: name, role: role || null });
 }
 
 function cmdHostRm(pos: string[], cfg: Config) {
@@ -311,6 +441,190 @@ async function cmdStatus(cfg: Config) {
   }, rows);
 }
 
+// One view of every machine an agent can run on: what it is (board, cores, RAM, GPU or
+// Apple unified memory), how busy it is right now (free RAM, CPU, load, sessions), which
+// agent CLIs are installed, which local model servers answer and with what models, and
+// the owner's own note on what the machine is for. `--json` is the form an agent reads
+// before deciding where to start work; nothing here chooses for it.
+//
+// Every field comes from a route the daemon already serves (/health, /stats, /doctor,
+// /brain), fetched in parallel; a daemon too old for one of them just leaves that field
+// empty. The same machine listed twice — "local" and a named entry both on 127.0.0.1 —
+// is shown once, under its name.
+// Lossless history of this machine's agent transcripts (meshd sessions.ts). An id may be
+// a prefix; `log` lists versions, `restore` writes version N back as a new resumable session,
+// `search` finds a conversation by what was said, `resume` starts it again as a mesh session.
+async function cmdSessions(pos: string[], flags: Record<string, string>, bools: Set<string>, cfg: Config) {
+  const h = resolveHost(hostOf(flags), cfg);
+  const [sub, want] = pos;
+  const size = (b: number) => b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`;
+  // A Codex id is rollout-<timestamp>-<uuid>; the uuid is the part a person can type.
+  const short = (id: string) => id.replace(/^rollout-.*?-(?=[0-9a-f]{8}-[0-9a-f]{4}-)/, "");
+  // What every listing prints: the uuid's LAST 12 hex. Codex uuids are v7, so their first
+  // 8 hex are a timestamp that sessions started the same day share; the tail is random.
+  const tag = (id: string) => short(id).slice(-12);
+  // A daemon from before chat search answers these routes with its generic 404; a current
+  // one says why (say, no stored version rebuilds cleanly), and that reason is what to show.
+  const predates = (e: any): never => {
+    if (e?.status === 404 && (!e.why || e.why === "not found")) die(`meshd on ${h.name} predates chat search — upgrade it: mesh upgrade -H ${h.name}`);
+    throw e;
+  };
+  if (sub === "mirror-to") {
+    // Register every machine this one knows (itself included) with the mirror, each with
+    // its own mirror token — the mirror never receives a machine's full token.
+    if (!want || !cfg.hosts[want]) die("usage: mesh sessions mirror-to <host> [--as <name for this machine>]");
+    const mirror = resolveHost(want, cfg);
+    const done: string[] = [];
+    const loopback = (ip: string) => ip === "127.0.0.1" || ip === "localhost";
+    const names = Object.keys(cfg.hosts).filter((n) => n !== want);
+    for (const name of names.some((n) => loopback(cfg.hosts[n].ip)) ? names : ["local", ...names]) {
+      const src = resolveHost(name, cfg);
+      try {
+        const { token } = await api(src, "GET", "/sessions/mirror-token");
+        const as = name === "local" ? (flags.as || hostname().split(".")[0].toLowerCase()) : name;
+        // This machine's address is whatever the mirror sees the request come from.
+        await api(mirror, "POST", "/sessions/mirror-peers", { name: as, ip: loopback(src.ip) ? undefined : src.ip, port: src.port, token });
+        done.push(as);
+      } catch (e: any) { console.error(`skipped ${name}: ${e.message}`); }
+    }
+    return out(() => console.log(`${want} will mirror: ${done.join(", ") || "nothing"}${done.length ? " — pulling now, then every ten minutes" : ""}`), { mirror: want, peers: done });
+  }
+  if (bools.has("mirror")) {
+    const { sessions } = await api(h, "GET", "/sessions?mirror=1");
+    return out(() => {
+      if (!sessions.length) { console.log(`(${h.name} mirrors nothing yet — run: mesh sessions mirror-to ${h.name})`); return; }
+      for (const s of sessions.slice(0, Number(flags.n || flags.limit) || 30)) {
+        console.log(`${String(s.host).padEnd(10)} ${tag(s.id)}  ${s.runtime.padEnd(6)} v${String(s.n).padEnd(4)} ${(s.title ?? s.cwd ?? "").slice(0, 60)}`);
+      }
+    }, sessions);
+  }
+  if (sub === "search") {
+    // Full-text over what every machine kept (meshd chats.ts); the daemon asked fans out
+    // to its peers unless --local, and names the ones that did not answer.
+    const query = pos.slice(1).join(" ");
+    if (!query) die('usage: mesh sessions search "<query>" [--local] [--all] [-n N] [-H host] [--json]');
+    const qs = new URLSearchParams({ q: query, limit: String(Number(flags.n || flags.limit) || 20), federate: bools.has("local") ? "0" : "1" });
+    if (bools.has("all")) qs.set("all", "1");
+    const r = await api(h, "GET", `/sessions/search?${qs}`).catch(predates);
+    // A row the queried machine answered for itself carries whatever it calls itself; print
+    // the name this CLI reached it by, so the column can go straight back into -H.
+    const peerNames = new Set((r?.peers ?? []).map((p: any) => p.host));
+    for (const row of r?.results ?? []) if (!peerNames.has(row.host)) row.host = h.name;
+    const ago = (ts: unknown) => {
+      const t = typeof ts === "number" ? (ts < 1e12 ? ts * 1000 : ts) : Date.parse(String(ts));
+      if (!t) return "?";
+      const m = Math.max(0, (Date.now() - t) / 60000);
+      return m < 60 ? `${Math.round(m)}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
+    };
+    return out(() => {
+      const hits = r?.results ?? [];
+      // stderr, like kb search: stdout stays a pure result stream.
+      if (!hits.length) console.error(`no conversation matches "${query}"${bools.has("local") ? ` on ${h.name}` : " on any machine that answered"}`);
+      for (const s of hits) {
+        console.log(`${String(s.host ?? h.name).padEnd(10)} ${tag(String(s.id))}  ${String(s.runtime).padEnd(6)} ${ago(s.lastTs).padStart(4)}  ${String(s.title ?? s.cwd ?? "").slice(0, 70)}`);
+        for (const x of (s.excerpts ?? []).slice(0, 2)) console.log(`      ${x.role === "user" ? "you" : "ai "}  ${String(x.text ?? "").replace(/\s+/g, " ").slice(0, 110)}`);
+      }
+      const down = (r?.peers ?? []).filter((p: any) => !p.ok).map((p: any) => p.host);
+      if (down.length) console.error(`did not answer: ${down.join(", ")}`);
+    }, r);
+  }
+  const { sessions } = await api(h, "GET", "/sessions?limit=5000").catch(predates);
+  if (!sub || sub === "ls" || sub === "list") {
+    return out(() => {
+      if (!sessions.length) { console.log(`(no snapshots on ${h.name} yet — the first sweep runs 30 s after meshd starts)`); return; }
+      for (const s of sessions.slice(0, Number(flags.n || flags.limit) || 30)) {
+        console.log(`${tag(s.id)}  ${s.runtime.padEnd(6)} v${String(s.versions).padEnd(4)} ${size(s.size).padStart(8)}  ${s.live ? " " : "†"} ${(s.title ?? s.cwd ?? "").slice(0, 70)}`);
+      }
+      console.log("† = the runtime has deleted its own copy; only mesh still has it");
+    }, sessions);
+  }
+  // A full id, a prefix of it or of its uuid, or the printed tag (the uuid's tail) — a
+  // prefix or a suffix, never the middle, so a short input cannot match a stranger by chance.
+  const hits = sessions.filter((s: any) => want && (s.id.startsWith(want) || short(s.id).startsWith(want) || (want.length >= 6 && s.id.endsWith(want))));
+  if (hits.length !== 1) die(hits.length ? `ambiguous id ${want}: ${hits.map((s: any) => s.id).join(", ")}`
+    : want ? `no session ${want} on ${h.name}  (mesh sessions ls -H ${h.name})` : `usage: mesh sessions ${sub} <id>${sub === "restore" ? " [--at N]" : ""} [-H host]`);
+  const s = hits[0];
+  if (sub === "log") {
+    const ix = await api(h, "GET", `/sessions/${s.runtime}/${s.id}`);
+    return out(() => {
+      console.log(`${s.runtime} ${s.id}  ${ix.cwd ?? ""}\n${ix.title ?? ""}`);
+      for (const v of ix.versions) console.log(`  v${String(v.n).padEnd(4)} ${v.kind.padEnd(6)} ${size(v.size).padStart(8)}  ${v.ts}`);
+    }, ix);
+  }
+  if (sub === "restore") {
+    const r = await api(h, "POST", `/sessions/${s.runtime}/${s.id}/restore${flags.at ? `?v=${Number(flags.at)}` : ""}`, undefined, 60_000);
+    return out(() => console.log(`restored as ${r.id}\n  cd ${r.cwd} && ${r.resume}`), r);
+  }
+  if (sub === "resume") {
+    // The daemon only plans (validated uuid, a folder that exists, restore if the runtime
+    // deleted its copy); starting it is the ordinary /agents/new, so it shows up everywhere.
+    const plan = await api(h, "POST", `/sessions/${s.runtime}/${s.id}/resume`, undefined, 60_000).catch(predates);
+    const tg = tag(s.id), peek = `mesh peek ${plan.name} -H ${h.name}`;
+    let running = false;
+    try { await api(h, "POST", "/agents/new", { name: plan.name, cmd: plan.cmd, cwd: plan.cwd }); }
+    catch (e: any) { if (!/HTTP 409/.test(String(e?.message ?? e))) throw e; running = true; }
+    return out(() => {
+      console.log(running ? `${tg} is already running on ${h.name} as ${plan.name} — watch it: ${peek}`
+        : `resumed ${tg} on ${h.name} as ${plan.name} — watch it: ${peek}`);
+      if (plan.restoredFrom) console.log(`  the runtime had deleted this conversation; restored mesh's copy first (from ${plan.restoredFrom})`);
+      if (plan.cwdMissing) console.log(`  its folder ${s.cwd ?? ""} is gone; started in ${plan.cwd}`);
+    }, { ...plan, host: h.name, alreadyRunning: running });
+  }
+  die("usage: mesh sessions [ls|search <query>|log <id>|restore <id> [--at N]|resume <id>] [-H host]");
+}
+
+async function cmdFleet(cfg: Config) {
+  const named = Object.keys(cfg.hosts).map((n) => resolveHost(n, cfg));
+  const local = resolveHost("local", cfg);
+  const targets = named.some((h) => h.ip === local.ip && h.port === local.port) ? named : [local, ...named];
+  const get = async (h: ReturnType<typeof resolveHost>, path: string) => {
+    try { return await api(h, "GET", path); } catch { return null; }
+  };
+  const rows = await Promise.all(targets.map(async (h) => {
+    const health = await get(h, "/health");
+    const base = { host: h.name, address: `${h.ip}:${h.port}`, role: cfg.hosts[h.name]?.role ?? null };
+    if (!health?.ok) return { ...base, reachable: false };
+    const [stats, doctor, brain] = await Promise.all([get(h, "/stats"), get(h, "/doctor"), get(h, "/brain")]);
+    const mem = stats?.mem;
+    const endpoints: any[] = brain?.endpoints ?? [];
+    return {
+      ...base,
+      reachable: true,
+      meshd: health.meshdVersion ?? null,
+      platform: health.platform ?? stats?.platform ?? null,
+      arch: health.arch ?? stats?.hw?.arch ?? null,
+      hardware: stats?.hw ?? null,
+      memFreeMB: mem ? Math.round(mem.totalMB - mem.usedMB) : null,
+      memTotalMB: mem ? Math.round(mem.totalMB) : null,
+      memUsedPct: mem ? Math.round(mem.pct) : null,
+      cpuPct: typeof stats?.cpuPct === "number" ? Math.round(stats.cpuPct) : null,
+      load1: Array.isArray(stats?.load) ? Number(stats.load[0].toFixed(2)) : null,
+      diskFreeGB: stats?.disk ? Math.round(stats.disk.totalGB - stats.disk.usedGB) : null,
+      sessions: stats?.agentsCount ?? null,
+      agents: (doctor?.agents ?? []).map((a: any) => a.name),
+      models: endpoints.filter((e) => e.reachable).map((e) => ({ server: e.source, endpoint: e.endpoint, models: e.models ?? (e.model ? [e.model] : []) })),
+      pty: Array.isArray(health.capabilities) ? health.capabilities.includes("pty") : false,
+    };
+  }));
+  out(() => {
+    for (const r of rows as any[]) {
+      const head = `${String(r.host).padEnd(10)} ${String(r.address).padEnd(22)}`;
+      if (!r.reachable) { console.log(`${head} unreachable`); continue; }
+      const hw = r.hardware;
+      const accel = !hw ? "?" : hw.accel.kind === "apple" ? "Apple GPU, unified memory"
+        : hw.accel.kind === "cuda" ? `CUDA ${hw.accel.version || "?"}${hw.accel.memory === "shared" ? ", RAM shared with GPU" : ""}` : "no GPU";
+      const gb = (mb: number | null) => (mb == null ? "?" : (mb / 1024).toFixed(1));
+      console.log(`${head} ${hw?.board ?? r.platform}`);
+      console.log(`${"".padEnd(34)}${hw ? `${hw.cores} cores · ${gb(hw.ramMB)} GB · ` : ""}${accel}`);
+      console.log(`${"".padEnd(34)}now: ${gb(r.memFreeMB)} GB free of ${gb(r.memTotalMB)} (${r.memUsedPct ?? "?"}% used) · cpu ${r.cpuPct ?? "?"}% · load ${r.load1 ?? "?"} · ${r.sessions ?? "?"} session(s)`);
+      console.log(`${"".padEnd(34)}agents: ${r.agents.length ? r.agents.join(", ") : "none"}`);
+      const models = r.models.map((m: any) => `${m.server}: ${m.models.join(", ") || "(none loaded)"}`);
+      console.log(`${"".padEnd(34)}models: ${models.length ? models.join(" · ") : "no local model server answering"}`);
+      if (r.role) console.log(`${"".padEnd(34)}role: ${r.role}`);
+    }
+  }, rows);
+}
+
 // Reads /doctor, which tests each capability by exercising it. --fix POSTs
 // /doctor/fix, which makes macOS show the real Accessibility and Screen Recording
 // dialogs on that machine — the honest version of "a proper permission dialog",
@@ -344,6 +658,51 @@ async function cmdEvents(flags: Record<string, string>, cfg: Config) {
     const list = Array.isArray(ev) ? ev : (ev?.events || []);
     for (const e of list) console.log(`${e.createdISO || ""}  ${e.level || "info"}  ${e.title || ""}`);
   }, ev);
+}
+
+async function cmdKb(pos: string[], flags: Record<string, string>, bools: Set<string>, cfg: Config) {
+  const sub = pos.shift();
+  const h = resolveHost(hostOf(flags), cfg);
+  if (sub === "put") {
+    const [scope, key, title, ...body] = pos;
+    if (!scope || !key || !title) die("usage: mesh kb put <scope> <key> <title> [body...] [--kind K] [--tags a,b] [--source S] [-H host]");
+    const doc: Record<string, string> = { scope, key, title };
+    if (body.length) doc.body = body.join(" ");
+    for (const name of ["kind", "tags", "source"]) if (flags[name]) doc[name] = flags[name];
+    const r = await api(h, "PUT", "/kb", doc);
+    out(() => console.log(`${r.scope}/${r.key}  ${r.title ?? ""}`), r);
+    return;
+  }
+  if (sub === "search") {
+    const query = pos.join(" ");
+    if (!query) die('usage: mesh kb search "<query>" [--scope S] [--kind K] [--limit N] [--local] [-H host] [--json]');
+    const qs = new URLSearchParams({ q: query });
+    for (const name of ["scope", "kind", "limit"]) if (flags[name]) qs.set(name, flags[name]);
+    if (bools.has("local")) qs.set("federate", "0");
+    const r = await api(h, "GET", `/kb/search?${qs}`);
+    out(() => {
+      const hits = r?.results ?? [];
+      // Silence is not an answer: printing nothing at all is indistinguishable from a
+      // hang or a swallowed error, and it was read as one (fresh-eyes review 2026-09-22).
+      // On stderr, not stdout: stdout stays a pure result stream (empty means no
+      // results, which scripts and checks rely on), while a person still gets told
+      // instead of staring at a blank line wondering whether it hung.
+      if (!hits.length) { console.error(`no notes match "${query}"${bools.has("local") ? " on this machine" : " on any online machine"}`); return; }
+      for (const hit of hits) {
+        const body = String(hit.body ?? "").replace(/\s+/g, " ").slice(0, 80);
+        console.log(`${hit.host ?? h.name}  ${hit.scope}/${hit.key}  ${hit.title ?? ""}  — ${body}`);
+      }
+    }, r);
+    return;
+  }
+  if (sub === "get") {
+    const [scope, key] = pos;
+    if (!scope || !key) die("usage: mesh kb get <scope> <key> [-H host]");
+    const r = await api(h, "GET", `/kb/${encodeURIComponent(scope)}/${encodeURIComponent(key)}`);
+    out(() => console.log(`${r.host ?? h.name}  ${r.scope}/${r.key}  ${r.title ?? ""}\n${r.body ?? ""}`), r);
+    return;
+  }
+  die("usage: mesh kb <put|search|get> ...  (mesh help kb)");
 }
 
 /**
@@ -428,15 +787,21 @@ async function pairQR(text: string): Promise<string> {
 }
 
 async function cmdPair(flags: Record<string, string>, cfg: Config) {
-  // Minted over loopback so no token is needed here — that is the whole point.
-  const port = Number(flags.port) || Number(process.env.MESHD_PORT) || 8899;
+  // `-H other` asks THAT machine for a code and hands back its address. Its daemon only
+  // mints over loopback (pair.ts: a code is a token in disguise, so the machine itself
+  // must be in the loop) — so this either works against a daemon that trusts this Mac's
+  // bearer for it, or says exactly where to run `mesh pair` instead of silently minting
+  // a code for the wrong machine, which is what -H used to do.
+  const remote = hostOf(flags) ? resolveHost(hostOf(flags), cfg) : undefined;
+  const port = remote?.port ?? (Number(flags.port) || Number(process.env.MESHD_PORT) || 8899);
   let r: any;
   try {
-    r = await api({ name: "local", ip: "127.0.0.1", port, token: localToken() }, "GET", "/pair/new");
+    r = await api(remote ?? { name: "local", ip: "127.0.0.1", port, token: localToken() }, "GET", "/pair/new");
   } catch (e: any) {
-    die(`meshd is not answering on 127.0.0.1:${port} — is it running?  (${String(e?.message ?? e)})`);
+    if (remote && /403/.test(String(e?.message ?? e))) die(`${remote.name} mints pairing codes only on itself — run \`mesh pair\` on ${remote.name} (or scan the QR from \`mesh desktop\` there).`);
+    die(`meshd is not answering on ${remote ? `${remote.name} (${remote.ip}:${port})` : `127.0.0.1:${port}`} — is it running?  (${String(e?.message ?? e)})`);
   }
-  const address = flags.address || reachableAddress();
+  const address = flags.address || remote?.ip || reachableAddress();
   // meshwatch://, not mesh:// — `meshwatch` is the only scheme the iOS app registers
   // (project.yml CFBundleURLSchemes), so a mesh:// QR scanned into iOS opens nothing.
   const url = `meshwatch://pair?h=${encodeURIComponent(address)}&p=${port}&c=${r.code}`;
@@ -455,7 +820,7 @@ async function cmdPair(flags: Record<string, string>, cfg: Config) {
     if (qr) console.log(qr);
     // No QR on this install (no qr.ts) — the deep link itself is still the fallback.
     else { console.log(`    Link      ${url}`); console.log(""); }
-    console.log(`  Open LeSearch Mesh on your iPhone -> Machines -> Add machine,`);
+    console.log(`  Open LeSearch AI on your iPhone -> Machines -> Add machine,`);
     console.log(`  and enter those two. Expires in ${Math.round(r.ttlSec / 60)} minutes, one use.`);
     console.log("");
     if (!address) console.log("  No address found. Pass one: mesh pair --address <ip>");
@@ -676,6 +1041,31 @@ function syncHooks(payload: string): { updated: string[]; unchanged: number } {
   return { updated, unchanged };
 }
 
+/// The bridge's terminal page (rmux-bridge/public/index.html and its vendor files) is
+/// served from disk per request, so copying it is the whole upgrade — the bridge
+/// process keeps running. Left out until 2026-09-22, so `mesh upgrade` shipped a new
+/// terminal page to every Linux box (install.sh copies everything) and never to the Mac.
+function syncBridgePage(payload: string): { updated: string[]; unchanged: number } {
+  const from = join(payload, "rmux-bridge", "public"), to = join(MESH_HOME, "rmux-bridge", "public");
+  const updated: string[] = [];
+  let unchanged = 0;
+  if (!existsSync(from) || !existsSync(join(MESH_HOME, "rmux-bridge"))) return { updated, unchanged };
+  const walk = (dir: string, rel: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const a = join(dir, e.name), r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { walk(a, r); continue; }
+      if (!e.isFile()) continue;
+      const b = join(to, r);
+      if (existsSync(b) && Buffer.compare(readFileSync(a), readFileSync(b)) === 0) { unchanged++; continue; }
+      mkdirSync(join(to, rel), { recursive: true });
+      copyFileSync(a, b);
+      updated.push(r);
+    }
+  };
+  walk(from, "");
+  return { updated, unchanged };
+}
+
 const shq = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
 /**
@@ -788,8 +1178,10 @@ async function cmdUpgradeLocal(flags: Record<string, string>, bools: Set<string>
     backup = swapInMeshd(payload, oldDisk, epoch);
     const bin = syncBin(payload);
     const hooks = syncHooks(payload);
+    const page = syncBridgePage(payload);
     say(`  installed meshd ${newVersion}  (bin: ${bin.updated.length ? bin.updated.join(", ") : "no changes"}${bin.unchanged ? `, ${bin.unchanged} unchanged` : ""})`);
     if (hooks.updated.length) say(`  hooks: ${hooks.updated.join(", ")}`);
+    if (page.updated.length) say(`  terminal page: ${page.updated.join(", ")}`);
 
     if (noRestart) {
       say(`  --no-restart: ${MESH_HOME}/meshd is ${newVersion}, the running daemon is still ${oldRunning || "whatever it was"}`);
@@ -838,7 +1230,12 @@ async function cmdUpgradeRemote(flags: Record<string, string>, cfg: Config) {
   try { before = (await api(h, "GET", "/health"))?.meshdVersion ?? ""; }
   catch { say(`note: ${h.name} is not answering /health yet — starting the installer anyway`); }
 
-  await api(h, "POST", "/agents/new", { name, cmd: `sh -c 'curl -fsSL ${base}/install.sh | sh -s -- --upgrade'` });
+  // The tarball URL travels too: an install.sh fetched from a plain file server has no
+  // baked-in source and answers "no payload found" — the session then ends, the daemon
+  // stays on its old version, and this command reports "still <old> after 3 minutes"
+  // with nothing left to peek at. Measured on the Pi, 2026-09-22.
+  const tgz = /\.(tgz|tar\.gz)$/.test(src) ? src : `${base}/mesh-install.tgz`;
+  await api(h, "POST", "/agents/new", { name, cmd: `sh -c 'curl -fsSL ${base}/install.sh | sh -s -- --upgrade --src ${tgz}'` });
   say(`started ${name} on ${h.name} — installing from ${base}/install.sh`);
   say(`waiting up to 3 minutes for ${h.name} to report a new meshd version…`);
 
@@ -1184,7 +1581,7 @@ async function cmdSetup(cfg: Config) {
   console.log(`  3/4  Pairing your phone.`);
   await cmdPair({}, cfg);
   console.log(`       Open the Camera app on your iPhone, point it at the square above, tap the banner.`);
-  console.log(`       (No QR? Type the code into LeSearch Mesh → Machines → Add machine.)`);
+  console.log(`       (No QR? Type the code into LeSearch AI → Machines → Add machine.)`);
   if (tty) prompt("       Press Enter once the phone shows this machine…");
 
   // 4 — the fleet, so the last thing on screen is the truth.
@@ -1257,17 +1654,44 @@ function cmdHooks(pos: string[], flags: Record<string, string>, cfg: Config) {
     mkdirSync(join(homedir(), ".claude"), { recursive: true });
   }
   writeFileSync(CLAUDE_SETTINGS, JSON.stringify(settings, null, 2) + "\n");
+  const agy = syncAgyHooks(action === "install");
 
   out(() => {
     console.log(action === "install"
       ? `Installed into ${HOOK_EVENTS.join(" + ")} hooks. Restart Claude Code sessions to pick them up.`
       : `Removed from ${CLAUDE_SETTINGS}.`);
     console.log(`Backup: ${CLAUDE_SETTINGS}.mesh-backup`);
+    if (agy) console.log(`Antigravity: ${action === "install" ? "Stop hook installed in" : "mesh entry removed from"} ${agy}`);
     if (action === "install") {
       console.log(`\nCodex users: add this to ~/.codex/config.toml`);
       console.log(`  notify = ["${join(MESH_HOME, "bin", "mesh-codex-notify")}"]`);
     }
   }, { ok: true, action, events: HOOK_EVENTS, settings: CLAUDE_SETTINGS });
+}
+
+/// Antigravity (`agy`) reads ~/.gemini/config/hooks.json: one namespace per tool, each
+/// with event → [hook]. Its Stop hook gives the phone "Antigravity stopped" for a session
+/// the way Claude Code's does; its permission prompt has no hook (docs/agents/harnesses.md
+/// §C) so "needs you" for agy still comes from the pane. The file is other tools' too
+/// (orca-status lives there), so only the `mesh` namespace is ever written or removed.
+function syncAgyHooks(install: boolean): string | null {
+  const dir = join(homedir(), ".gemini", "config");
+  const file = join(dir, "hooks.json");
+  if (!install && !existsSync(file)) return null;
+  if (install && !existsSync(join(homedir(), ".gemini")) && !Bun.which("agy")) return null;
+  let doc: any = {};
+  if (existsSync(file)) {
+    try { doc = JSON.parse(readFileSync(file, "utf8")) || {}; }
+    catch { return null; }   // someone else's broken file is not ours to rewrite
+  }
+  if (install) {
+    doc.mesh = { Stop: [{ type: "command", command: `${join(MESH_HOME, "bin", "mesh-hook")} --source agy`, timeout: 5 }] };
+  } else {
+    delete doc.mesh;
+  }
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, JSON.stringify(doc, null, 2) + "\n");
+  return file;
 }
 
 // ---------- skills ----------
@@ -1729,9 +2153,12 @@ function cmdAppsInstall(pos: string[], flags: Record<string, string>, bools: Set
   if (!existsSync(meta.app)) appsErr(`app bundle no longer at ${meta.app}`);
 
   if (bools.has("sim")) {
-    const r = Bun.spawnSync(["xcrun", "simctl", "install", "booted", meta.app], { stdout: "pipe", stderr: "pipe" });
+    // --device names a simulator udid here (several are usually booted on a Mac that runs
+    // checks); without it simctl's own "booted" alias picks one.
+    const target = flags.device || "booted";
+    const r = Bun.spawnSync(["xcrun", "simctl", "install", target, meta.app], { stdout: "pipe", stderr: "pipe" });
     if (!r.success) appsErr(`simctl install failed: ${r.stderr.toString().trim().split("\n").pop()}`);
-    appsOk(`install ${slug}`, { slug, target: "sim" });
+    appsOk(`install ${slug}`, { slug, target: "sim", udid: target });
   }
 
   const udid = flags.device || firstPairedIphoneUdid();
@@ -1867,7 +2294,7 @@ function cmdUninstall(bools: Set<string>, cfg: Config) {
   }, { ok: true, removed });
 }
 
-const HELP = `mesh ${VERSION} — control a LeSearch Mesh fleet from the command line
+const HELP = `mesh ${VERSION} — control a LeSearch AI fleet from the command line
 
 USAGE
   mesh <command> [args] [-H host] [--json]
@@ -1882,8 +2309,12 @@ HOSTS
   hooks [status|install|remove]  wire agent alerts into Claude Code on this machine
   hosts                       list configured hosts + reachability
   host add <name> <ip>        add a host   [--port N] [--token T]
+  host role <name> "<text>"   note what a machine is for (shown by fleet)
   host rm <name>              remove a host
   host default <name>         set the default host
+
+FILES
+  cp <src> <dst>              copy a file between machines   host:path on either side   [--force] [--mkdirs]
 
 SESSIONS  (default host, or -H <name>)
   ls                          list sessions/agents          (alias: agents)
@@ -1895,11 +2326,24 @@ SESSIONS  (default host, or -H <name>)
 
 STATUS
   status                      every machine on one line: version, uptime, doctor score
+  fleet                       what each machine is and has right now — hardware, free RAM,
+                              load, agent CLIs, local models, role   [--json for agents]
+                              Agents: read "mesh fleet --json" before choosing where to run.
+  sessions                    every agent conversation this machine kept, with versions
+                              [log <id> | restore <id> --at N | --mirror]  survives compaction + cleanup
+                              mirror-to <host>: that machine keeps everyone's history, redacted
+  sessions search "<query>"   find a past conversation on every machine  [--local] [--all] [-n N]
+  sessions resume <id>        start it again where it lives, then: mesh peek <name> -H <host>
   usage                       usage/limits per provider     (alias: limits)
   health                      is meshd up?
   doctor                      what actually works on a machine  [--fix shows the permission dialogs]
   events                      recent agent events           [--since ISO]
   exposures                   secrets the daemon redacted, to rotate  [--rotated FP | --ignored FP | --reopen FP]
+
+KNOWLEDGE
+  kb put <scope> <key> <title> [body...]  remember a note on one machine
+  kb search <query>           search every online machine             [--scope S] [--kind K] [--limit N] [--local]
+  kb get <scope> <key>        fetch one note
 
 MAINTENANCE
   upgrade                     install the latest meshd + tools and restart the daemon
@@ -1931,6 +2375,24 @@ GLOBAL
 Config: ${HOSTS_FILE}   ·   mesh man   for the full manual`;
 
 const CMD_HELP: Record<string, string> = {
+  kb: `mesh kb put <scope> <key> <title> [body...] [--kind K] [--tags a,b] [--source S] [-H host]
+mesh kb search "<query>" [--scope S] [--kind K] [--limit N] [--local] [-H host] [--json]
+mesh kb get <scope> <key> [-H host]
+
+Put and get target one daemon. Search asks the default daemon, which also searches every
+configured peer currently online in Tailscale; --local searches only that daemon.
+
+  mesh kb put project/mesh cli-help "Keep help current" "Update PRODUCT.md too" --kind note
+  mesh kb search "CLI help" --json
+  mesh kb get project/mesh cli-help`,
+  cp: `mesh cp <src> <dst> [--force] [--mkdirs] [--json]
+
+Copy one file between this machine and a configured mesh host, or between two hosts.
+Prefix either path with host:; a bare path means this machine. Existing destinations
+are refused unless --force is set. --mkdirs creates a missing destination directory.
+
+  mesh cp jetson:~/lesearch-probe/hello.txt mac:~/Downloads/hello.txt
+  mesh cp ./report.pdf jetson:~/reports/ --mkdirs`,
   new: `mesh new <name> [-H host] [--cmd C] [--cwd DIR] [--task "..."]
 
 Start a new session. --cmd is any CLI (claude, codex, pi, bun, a shell one-liner);
@@ -2126,8 +2588,10 @@ async function main() {
       if (sub === "add") return cmdHostAdd(pos, flags, cfg);
       if (sub === "rm" || sub === "remove") return cmdHostRm(pos, cfg);
       if (sub === "default") return cmdHostDefault(pos, cfg);
-      return die("usage: mesh host <add|rm|default> ...");
+      if (sub === "role") return cmdHostRole(pos, cfg);
+      return die("usage: mesh host <add|rm|default|role> ...");
     }
+    case "cp": return cmdCp(pos, bools, cfg);
     case "ls": case "agents": return cmdLs(flags, cfg);
     case "peek": case "output": case "logs": return cmdPeek(pos, flags, cfg);
     case "send": return cmdSend(pos, flags, cfg);
@@ -2137,9 +2601,12 @@ async function main() {
     case "usage": case "limits": return cmdUsage(flags, cfg);
     case "health": return cmdHealth(flags, cfg);
     case "status": return cmdStatus(cfg);
+    case "fleet": case "where": return cmdFleet(cfg);
+    case "sessions": return cmdSessions(pos, flags, bools, cfg);
     case "upgrade": case "update": return cmdUpgrade(flags, bools, cfg);
     case "doctor": return cmdDoctor(flags, cfg, bools);
     case "events": return cmdEvents(flags, cfg);
+    case "kb": return cmdKb(pos, flags, bools, cfg);
     case "exposures": return cmdExposures(flags, cfg);
     case "uninstall": return cmdUninstall(bools, cfg);
     default: die(`unknown command: ${cmd}  (try: mesh help)`);

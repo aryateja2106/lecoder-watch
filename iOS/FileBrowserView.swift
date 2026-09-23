@@ -1,3 +1,4 @@
+// FileBrowserView.swift — browse a machine's filesystem over /files and /fs, open links, read text files.
 import Foundation
 import SafariServices
 import SwiftUI
@@ -203,18 +204,22 @@ struct FileBrowserView: View {
                 }
             }
         } else {
-            HStack {
-                // meshd reports symlinks and never follows them, so a link is shown as
-                // what it is rather than pretending to be a folder you can enter.
-                Image(systemName: entry.isSymlink ? "link" : "doc")
-                    .foregroundStyle(.secondary)
-                Text(entry.name)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer()
-                Text(fileSizeLabel(entry.size))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.tertiary)
+            // A file opens in the viewer: Markdown rendered, HTML shown, text sized by
+            // pinch. Reading what an agent wrote is most of what a phone is for here.
+            NavigationLink { FileViewer(machine: machine, entry: entry) } label: {
+                HStack {
+                    // meshd reports symlinks and never follows them, so a link is shown as
+                    // what it is rather than pretending to be a folder you can enter.
+                    Image(systemName: entry.isSymlink ? "link" : fileSymbol(entry.name))
+                        .foregroundStyle(.secondary)
+                    Text(entry.name)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(fileSizeLabel(entry.size))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
     }
@@ -360,4 +365,15 @@ struct SafariView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: SFSafariViewController, context: Context) { }
+}
+
+
+private func fileSymbol(_ name: String) -> String {
+    switch (name as NSString).pathExtension.lowercased() {
+    case "md", "markdown", "mdx": return "doc.richtext"
+    case "html", "htm": return "globe"
+    case "swift", "ts", "js", "py", "rs", "go", "sh", "json", "yml", "yaml", "toml": return "chevron.left.forwardslash.chevron.right"
+    case "png", "jpg", "jpeg", "gif", "heic", "webp": return "photo"
+    default: return "doc"
+    }
 }

@@ -77,6 +77,29 @@ public final class VoiceTranscriber: NSObject {
 
     public override init() {
         super.init()
+        // A call, Siri, or AirPods changing route stops the audio engine underneath us
+        // while `state` still says `.recording`: the sheet keeps saying "Listening…", the
+        // meter is frozen and nothing more is ever recognised. Both notifications end the
+        // segment honestly instead, keeping what was already said, so Resume works.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(audioInterrupted(_:)),
+            name: AVAudioSession.interruptionNotification, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(engineConfigurationChanged(_:)),
+            name: .AVAudioEngineConfigurationChange, object: audioEngine)
+    }
+
+    @objc private func audioInterrupted(_ note: Notification) {
+        guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+        Task { @MainActor in await self.stopRecording() }
+    }
+
+    @objc private func engineConfigurationChanged(_ note: Notification) {
+        Task { @MainActor in
+            guard case .recording = self.state, !self.audioEngine.isRunning else { return }
+            await self.stopRecording()
+        }
     }
 
     // MARK: - Permission Checks

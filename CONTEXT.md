@@ -1,13 +1,11 @@
-# CONTEXT — LeSearch Mesh
+# CONTEXT — LeSearch AI
 
-## Names (canonical, decided 2026-08-28)
+## Names (canonical, decided 2026-09-21)
 
-- **LeSearch Mesh** — the product and app. The only name that appears as an app name
+- **LeSearch AI** — the product and app. The only name that appears as an app name
   anywhere: App Store, TestFlight, home screen, landing page, README.
-- **LeSearch AI** — the company/brand that publishes LeSearch Mesh. Appears as
-  "by LeSearch AI" in lockups, never as part of the app name itself.
-- **"LeSearch Mesh"** — retired. Wherever it still appears, it is a rename not yet
-  applied, not a second product.
+- **LeSearch AI** — the company/brand that publishes the product.
+- **"LeSearch Mesh"** (2026-09-04 → 2026-09-21), **"MeshWatch"** (2026-08-28) — retired names.
 - **meshd / mesh** — the daemon and CLI keep their lowercase technical names; they are
   components, not brands.
 

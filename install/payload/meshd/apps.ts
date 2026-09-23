@@ -128,7 +128,43 @@ async function readMeta(slug: string): Promise<AppMeta | null> {
 
 export type AppRow = Omit<AppMeta, "app" | "key" | "ipa" | "icon"> & {
   install?: string;   // native + .ipa + otaBase: the itms-services:// URL the phone opens
+  /// Where a build runs: iphone, ipad, watch, mac, vision — read off the .app's Info.plist
+  /// (UIDeviceFamily, CFBundleSupportedPlatforms, an embedded Watch/ bundle). Web apps say web.
+  platforms?: string[];
+  /// The app's own URL scheme when it declares one — the phone opens it to launch the app,
+  /// and a successful open is the only proof iOS gives that the app is installed.
+  scheme?: string;
+  /// The app's icon, on the same token-free folder the installer uses (the phone's image
+  /// loader cannot send a bearer). Only for native apps whose bundle had one.
+  icon?: string;
 };
+
+/// What the bundle says about itself. plutil is macOS-only and native apps are only ever
+/// built on a Mac, so elsewhere the row simply carries no platforms.
+async function bundleFacts(appPath: string | undefined): Promise<Pick<AppRow, "platforms" | "scheme">> {
+  if (!appPath) return {};
+  const plist = join(appPath, "Info.plist");
+  const p = Bun.spawn(["/usr/bin/plutil", "-convert", "json", "-o", "-", plist], { stdout: "pipe", stderr: "ignore" });
+  const out = await new Response(p.stdout).text();
+  if ((await p.exited) !== 0) return {};
+  let info: any;
+  try { info = JSON.parse(out); } catch { return {}; }
+  const families: number[] = Array.isArray(info.UIDeviceFamily) ? info.UIDeviceFamily.map(Number) : [];
+  const supported: string[] = Array.isArray(info.CFBundleSupportedPlatforms) ? info.CFBundleSupportedPlatforms.map(String) : [];
+  const platforms: string[] = [];
+  if (supported.some((x) => /^MacOSX$/i.test(x))) platforms.push("mac");
+  if (supported.some((x) => /^XROS$/i.test(x)) || families.includes(7)) platforms.push("vision");
+  if (supported.some((x) => /^WatchOS$/i.test(x)) || families.includes(4)) platforms.push("watch");
+  if (supported.some((x) => /^iPhoneOS$/i.test(x)) && !platforms.includes("watch")) {
+    if (families.includes(1) || families.length === 0) platforms.push("iphone");
+    if (families.includes(2)) platforms.push("ipad");
+  }
+  // A watch companion inside an iPhone app: Xcode embeds it at <app>/Watch/<name>.app.
+  const watchDir = await readdir(join(appPath, "Watch")).catch(() => [] as string[]);
+  if (watchDir.some((f) => f.endsWith(".app")) && !platforms.includes("watch")) platforms.push("watch");
+  const scheme = info.CFBundleURLTypes?.[0]?.CFBundleURLSchemes?.[0];
+  return { ...(platforms.length ? { platforms } : {}), ...(typeof scheme === "string" && scheme ? { scheme } : {}) };
+}
 
 /// Every app the CLI registered, newest first. Native rows carry no .app path (the
 /// phone has no use for a Mac filesystem path); the key never travels except inside a url.
@@ -142,7 +178,10 @@ export async function listApps(host: string, port: number): Promise<{ apps: AppR
     const m = await readMeta(slug);
     if (!m) continue;
     const row: AppRow = { slug: m.slug, name: m.name, kind: m.kind, bundleId: m.bundleId, version: m.version, updated: m.updated };
+    if (m.kind === "pwa") row.platforms = ["web"];
+    if (m.kind === "native") Object.assign(row, await bundleFacts(m.app));
     if (m.kind === "pwa" && m.key) row.url = m.url ?? `http://${host}:${port}/a/${m.slug}-${m.key}/`;
+    if (m.kind === "native" && m.key && m.icon) row.icon = `${base ?? `http://${host}:${port}`}/a/${m.slug}-${m.key}/${m.icon}`;
     if (m.kind === "native" && m.key && m.ipa && base) {
       const root = `${base}/a/${m.slug}-${m.key}`;
       row.url = `${root}/`;

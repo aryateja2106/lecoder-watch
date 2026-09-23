@@ -1,3 +1,4 @@
+// RemoteScreenView.swift — the phone's Remote tab: live screen, trackpad gestures, chords and the key bar, driving meshd /screen.jpg and /input.
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -96,7 +97,7 @@ final class RemoteScreenModel: ObservableObject {
 
     private static let staleAfter: TimeInterval = 8
 
-    private var client: MeshClient { MeshClient(machine: machine, capabilities: capabilities) }
+    var client: MeshClient { MeshClient(machine: machine, capabilities: capabilities) }
     private var pump: Task<Void, Never>?
     private var clock: Task<Void, Never>?
     private var flush: Task<Void, Never>?
@@ -143,9 +144,14 @@ final class RemoteScreenModel: ObservableObject {
         stale = false
         pump?.cancel()
         pump = Task { [weak self] in
+            // Ask for the next frame as soon as the last one is decoded — the daemon
+            // itself takes ~135 ms a frame (screencapture + sips), and a fixed 350 ms
+            // nap on top of that was the difference between ~2 fps and the ~5 the
+            // machine can give. The short pause is only there so a machine answering
+            // instantly (a cached error, a 503) does not turn into a hot loop.
             while !Task.isCancelled {
                 await self?.refreshScreen()
-                try? await Task.sleep(for: .milliseconds(350))
+                try? await Task.sleep(for: .milliseconds(40))
             }
         }
         clock?.cancel()
@@ -470,9 +476,18 @@ final class RemoteScreenModel: ObservableObject {
         send([.scroll(dx: sign * Double(delta.width), dy: sign * Double(delta.height))])
     }
 
+    /// Input goes out in the order it was made. Each send used to be its own Task, and
+    /// the keyboard's one-character-per-keystroke posts overtook each other on the wire:
+    /// "typed" arrived on the Pi as "ytped". One chain, each post awaiting the previous.
+    private var sendChain: Task<Void, Never>?
+
     func send(_ events: [InputEvent]) {
         guard !inputBlocked else { flash(staleNote); return }
-        Task { try? await client.input(events) }
+        let previous = sendChain
+        sendChain = Task { [client] in
+            await previous?.value
+            try? await client.input(events)
+        }
     }
 
     private var staleNote: String { "No picture from \(machine.host) — reconnect first" }
@@ -528,6 +543,36 @@ final class RemoteScreenModel: ObservableObject {
         send([.text(text)])
         mods.removeAll()
     }
+
+    // MARK: Apps and launchers
+
+    /// The verbs a thumb reaches for before any app name. Each says what happened: a
+    /// launcher that is not installed is an answer, not a silent no-op.
+    func openTerminal() {
+        Task {
+            do { try await client.openTerminal(); flash("Terminal opened on \(machine.host)") }
+            catch let e as MeshClient.MeshError { flash(e.reason ?? "Couldn't open a terminal") }
+            catch { flash("Couldn't reach \(machine.host)") }
+        }
+    }
+
+    func openLauncher() {
+        Task {
+            do { try await client.openLauncher(); flash(isMac ? "Launcher" : "Launcher on \(machine.host)") }
+            catch let e as MeshClient.MeshError { flash(e.reason ?? "No launcher on \(machine.host)") }
+            catch { flash("Couldn't reach \(machine.host)") }
+        }
+    }
+
+    func launch(_ name: String) {
+        Task {
+            do { try await client.activateApp(name); flash(name) }
+            catch let e as MeshClient.MeshError { flash(e.reason ?? "Couldn't open \(name)") }
+            catch { flash("Couldn't reach \(machine.host)") }
+        }
+    }
+
+    var isMac: Bool { (platform ?? "darwin").hasPrefix("darwin") }
 
     // MARK: Clipboard and view
 
@@ -625,7 +670,7 @@ struct TrackpadSurface: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+        let view = TrackpadView()
         view.backgroundColor = .clear
         view.isMultipleTouchEnabled = true
         let c = context.coordinator
@@ -670,9 +715,17 @@ struct TrackpadSurface: UIViewRepresentable {
 
         // Press-and-hold then move is a drag on a real trackpad: button down, move,
         // release. Without it you cannot move a window or select text.
+        //
+        // `allowableMovement` is what separates "hold" from "move", and only applies
+        // BEFORE the press is recognised — once the drag has begun the finger may go
+        // anywhere. It used to be infinite, which meant any finger still on the glass
+        // after 0.35 s pressed the mouse button, whatever it had been doing: on a real
+        // phone, where aiming the pointer takes longer than a simulator's synthetic
+        // swipe, ordinary pointer moves turned into drags and the Mac spent the whole
+        // session selecting text. 12 pt is a resting finger, not a moving one.
         let hold = UILongPressGestureRecognizer(target: c, action: #selector(Coordinator.hold(_:)))
         hold.minimumPressDuration = 0.35
-        hold.allowableMovement = .greatestFiniteMagnitude
+        hold.allowableMovement = 12
         view.addGestureRecognizer(hold)
         hold.delegate = c                    // the other half of the drag: see pan.delegate above
 
@@ -686,19 +739,36 @@ struct TrackpadSurface: UIViewRepresentable {
         private var lastPan = CGPoint.zero
         private var lastScroll = CGPoint.zero
         private var dragging = false
+        /// How far this one-finger gesture has travelled. The long press and the pan run
+        /// together, so `allowableMovement` alone cannot see a finger that crept 11 pt
+        /// during the press and then set off: that still has to be a move, not a drag.
+        private var panTravel: CGFloat = 0
 
         init(_ parent: TrackpadSurface) { self.parent = parent }
 
+        // Everything on the trackpad runs together (pan and hold, pinch and pan) —
+        // check-remote-screen-gestures.sh pins this line, and the edge case below does
+        // not need it changed. The navigation stack's edge back-swipe is also a pan, and
+        // it used to fire WITH ours: a drag to the right that started near the left edge
+        // popped the screen mid-gesture. It now has to wait for our pan to fail, and ours
+        // recognises on the first move, so on the trackpad it never begins at all.
         func gestureRecognizer(_ g: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+        func gestureRecognizer(_ g: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            other is UIScreenEdgePanGestureRecognizer
+        }
 
         @objc func pan(_ g: UIPanGestureRecognizer) {
             let t = g.translation(in: g.view)
-            if g.state == .began { lastPan = .zero }
-            parent.onMove(CGSize(width: t.x - lastPan.x, height: t.y - lastPan.y))
+            if g.state == .began { lastPan = .zero; panTravel = 0 }
+            let dx = t.x - lastPan.x, dy = t.y - lastPan.y
+            panTravel += abs(dx) + abs(dy)
+            parent.onMove(CGSize(width: dx, height: dy))
             lastPan = t
             if g.state == .ended || g.state == .cancelled {
                 lastPan = .zero
+                panTravel = 0
                 if dragging { dragging = false; parent.onDragEnded() }
                 parent.onGestureEnded()
             }
@@ -725,7 +795,13 @@ struct TrackpadSurface: UIViewRepresentable {
         @objc func tertiary(_ g: UITapGestureRecognizer) { parent.onTertiaryTap() }
 
         @objc func hold(_ g: UILongPressGestureRecognizer) {
-            if g.state == .began { dragging = true; parent.onDragBegan() }
+            // A finger that has already travelled is aiming, not pressing: pressing the
+            // button under it would turn the rest of the move into a drag.
+            if g.state == .began {
+                guard panTravel < 12 else { return }
+                dragging = true
+                parent.onDragBegan()
+            }
             if g.state == .ended || g.state == .cancelled, dragging {
                 dragging = false; parent.onDragEnded()
             }
@@ -737,12 +813,11 @@ struct TrackpadSurface: UIViewRepresentable {
 
 struct RemoteScreenView: View {
     @StateObject private var remote: RemoteScreenModel
-    @State private var typing = ""
     @State private var keyboardUp = false
+    @State private var launching = false
     /// Every overlay gone, leaving the picture. Tapping the picture brings them back —
     /// which is why this mode does not click: it is the "just show me the Mac" mode.
     @State private var chromeHidden = false
-    @FocusState private var typingFocused: Bool
 
     init(machine: Machine, session: String? = nil, pane: String? = nil) {
         _remote = StateObject(wrappedValue: RemoteScreenModel(machine: machine, session: session, pane: pane))
@@ -753,12 +828,32 @@ struct RemoteScreenView: View {
             Color.black.ignoresSafeArea()
             VStack(spacing: 0) {
                 screenSurface
-                if !chromeHidden {
-                    if let status = remote.status, status.ok, !status.trusted { notTrustedBanner(status) }
-                    controlBar
-                    if keyboardUp { keyboardPane }
-                }
+                if !chromeHidden, let status = remote.status, status.ok, !status.trusted { notTrustedBanner(status) }
             }
+            // The keys themselves: an invisible first responder that forwards every
+            // character the moment it is typed. No field, no Send — the machine's screen is
+            // the echo, exactly as at its own keyboard.
+            DirectKeyboard(active: keyboardUp && !remote.inputBlocked,
+                           onText: { remote.type($0) },
+                           onKey: { remote.pressKey($0) })
+                .frame(width: 0, height: 0)
+        }
+        // A capsule in the corner instead of a bar across the bottom: the picture is what
+        // this screen is for, and every control is one tap away without costing it a strip.
+        .overlay(alignment: .bottomTrailing) {
+            if !chromeHidden && !keyboardUp { floatingControls.padding(12) }
+        }
+        // Two monitors are two pictures, not one wide one: the daemon captures one display
+        // per frame, and a side-by-side composite would halve what a phone can read. The
+        // chips switch; the pointer, the zoom and the keyboard all follow the chosen one.
+        .overlay(alignment: .top) {
+            if !chromeHidden, remote.displays.count > 1 { displayChips.padding(.top, 8) }
+        }
+        .sheet(isPresented: $launching) { LaunchSheet(remote: remote) }
+        // Sits above the system keyboard (the safe area moves with it): modifiers, escapes
+        // and arrows — the keys a phone keyboard does not have.
+        .safeAreaInset(edge: .bottom) {
+            if !chromeHidden && keyboardUp { keyBar }
         }
         .navigationTitle(remote.machine.host)
         .navigationBarTitleDisplayMode(.inline)
@@ -943,56 +1038,82 @@ struct RemoteScreenView: View {
             .background(.orange.opacity(0.12))
     }
 
-    // MARK: Control bar
+    // MARK: Floating controls
 
-    private var controlBar: some View {
-        HStack(spacing: 8) {
-            Button { remote.click() } label: { Label("Click", systemImage: "cursorarrow.click") }
-                .buttonStyle(.borderedProminent).controlSize(.small)
-                .disabled(remote.inputBlocked)
-            Button { remote.click("right") } label: { Image(systemName: "cursorarrow.click.badge.clock") }
-                .buttonStyle(.bordered).controlSize(.small)
-                .disabled(remote.inputBlocked)
+    private var floatingControls: some View {
+        HStack(spacing: 2) {
             Button {
                 remote.setDragMode(remote.dragMode == .pan ? .pointer : .pan)
             } label: {
                 Image(systemName: remote.dragMode == .pan ? "hand.draw" : "cursorarrow.motionlines")
+                    .frame(width: 40, height: 40)
             }
-            .buttonStyle(.bordered).controlSize(.small)
-            .tint(remote.dragMode == .pan ? .orange : .accentColor)
+            .tint(remote.dragMode == .pan ? .orange : .primary)
             .accessibilityLabel(remote.dragMode == .pan ? "Drag pans the view" : "Drag moves the pointer")
-            Divider().frame(height: 18)
-            Button { remote.setZoom(remote.zoom - 1) } label: { Image(systemName: "minus.magnifyingglass") }
-                .buttonStyle(.bordered).controlSize(.small)
-                .disabled(remote.zoom <= 1)
-            Text(String(format: "%.1f×", remote.zoom))
-                .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                .frame(width: 34)
-            Button { remote.setZoom(remote.zoom + 1) } label: { Image(systemName: "plus.magnifyingglass") }
-                .buttonStyle(.bordered).controlSize(.small)
-                .disabled(remote.zoom >= 6)
-            Spacer()
-            Button {
-                chromeHidden = true
-                remote.flash("Tap the screen to bring the controls back")
+            Button { remote.setZoom(remote.zoom - 1) } label: {
+                Image(systemName: "minus.magnifyingglass").frame(width: 40, height: 40)
+            }
+            .disabled(remote.zoom <= 1)
+            Button { remote.setZoom(remote.zoom + 1) } label: {
+                Image(systemName: "plus.magnifyingglass").frame(width: 40, height: 40)
+            }
+            .disabled(remote.zoom >= 6)
+            Button { keyboardUp = true } label: {
+                Image(systemName: "keyboard").frame(width: 40, height: 40)
+            }
+            .disabled(remote.inputBlocked)
+            .accessibilityLabel("Keyboard")
+            // Find and open anything on the machine — the phone's own Spotlight.
+            Button { launching = true } label: {
+                Image(systemName: "magnifyingglass").frame(width: 40, height: 40)
+            }
+            .disabled(remote.inputBlocked)
+            .accessibilityLabel("Open an app")
+            // The one ⋯ on this screen: the pointer's own actions here, everything about the
+            // machine (clipboard, windows, displays) under the title bar's.
+            Menu {
+                Button { remote.click("right") } label: { Label("Right click", systemImage: "cursorarrow.click.badge.clock") }
+                Button { remote.click("middle") } label: { Label("Middle click", systemImage: "cursorarrow.click.2") }
+                Divider()
+                Button { remote.recenterPointer() } label: { Label("Recenter pointer", systemImage: "scope") }
+                Button { remote.resetZoom() } label: { Label("Fit to screen", systemImage: "arrow.down.right.and.arrow.up.left") }
+                Button { remote.openTerminal() } label: { Label("Open a terminal", systemImage: "terminal") }
             } label: {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                Image(systemName: "ellipsis").frame(width: 40, height: 40)
             }
-            .buttonStyle(.bordered).controlSize(.small)
-            .accessibilityLabel("Hide the controls")
-            Button { keyboardUp.toggle(); typingFocused = keyboardUp } label: {
-                Image(systemName: keyboardUp ? "keyboard.chevron.compact.down" : "keyboard")
-            }
-            .buttonStyle(.bordered).controlSize(.small)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .font(.body)
+        .tint(.primary)
+        .padding(.horizontal, 4)
+        .glassEffect(.regular, in: .capsule)
+    }
+
+    private var displayChips: some View {
+        HStack(spacing: 4) {
+            ForEach(remote.displays) { d in
+                Button {
+                    remote.activeDisplay = d.index
+                } label: {
+                    Text(d.main == true ? "Main" : "Display \(d.index)")
+                        .font(.caption.weight(remote.activeDisplay == d.index ? .bold : .regular))
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+                .background(remote.activeDisplay == d.index ? Color.accentColor.opacity(0.35) : Color.clear, in: Capsule())
+            }
+        }
+        .padding(3)
+        .glassEffect(.regular, in: .capsule)
     }
 
     // MARK: Keyboard
 
-    private static let modifiers = [("⇧", "shift"), ("⌃", "ctrl"), ("⌥", "option"), ("⌘", "cmd")]
+    /// The modifier row is the machine's, not the phone's: a Mac has ⌘ ⌥ ⌃ ⇧, a Linux
+    /// desktop has Ctrl Alt Super ⇧ — same wire names, so a saved chord means the same
+    /// thing on both, but the caps a person reads match the keyboard in front of the machine.
+    private static let macModifiers = [("⇧", "shift"), ("⌃", "ctrl"), ("⌥", "option"), ("⌘", "cmd")]
+    private static let linuxModifiers = [("⇧", "shift"), ("Ctrl", "ctrl"), ("Alt", "option"), ("Super", "meta")]
+    private var modifiers: [(String, String)] { remote.isMac ? Self.macModifiers : Self.linuxModifiers }
     // "space" is here because this bar is the only way to reach the OS input path — the
     // text field types *into* whatever has focus, so ⌥Space (Raycast) and ⌘Space were
     // literally unsendable from the phone without it. Both hosts know the name: keycode
@@ -1007,6 +1128,9 @@ struct RemoteScreenView: View {
     private static let chords: [(String, String, [String])] = [
         ("⌘space", "space", ["cmd"]),
         ("⌥space", "space", ["option"]),
+        ("⌘tab", "tab", ["cmd"]),
+        ("⌘w", "w", ["cmd"]),
+        ("⌘q", "q", ["cmd"]),
         ("⌘⇧2", "2", ["cmd", "shift"]),
         ("⌘⇧4", "4", ["cmd", "shift"]),
     ]
@@ -1018,57 +1142,67 @@ struct RemoteScreenView: View {
         (mods.map { spokenModifiers[$0] ?? $0 } + [key]).joined(separator: " ")
     }
 
-    private var keyboardPane: some View {
-        VStack(spacing: 8) {
-            // Sticky modifiers, cleared by the next real key — so ⌘⇧4 is two taps and a
-            // key, not a chord nobody can perform on a touchscreen.
+    /// The bar above the system keyboard. Sticky modifiers (cleared by the next real
+    /// key, so ⌘⇧4 is two taps and a key), the keys a phone keyboard lacks, and the
+    /// chords worth a label. The characters come from the keyboard itself, straight
+    /// through `DirectKeyboard`.
+    private var keyBar: some View {
+        HStack(spacing: 6) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(Self.modifiers, id: \.1) { label, key in
+                    // A held modifier is a filled key, not a tinted one: the state has to
+                    // read at a glance while the other hand finds the letter.
+                    ForEach(modifiers, id: \.1) { label, key in
+                        let held = remote.mods.contains(key)
                         Button(label) { remote.toggleMod(key) }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.borderedProminent)
                             .controlSize(.small)
-                            .tint(remote.mods.contains(key) ? .orange : .secondary)
-                            .fontWeight(remote.mods.contains(key) ? .bold : .regular)
+                            .tint(held ? Color.orange : Color(.tertiarySystemFill))
+                            .foregroundStyle(held ? Color.white : Color.primary)
+                            .fontWeight(held ? .bold : .regular)
+                            .accessibilityLabel(Self.spokenModifiers[key] ?? key)
+                            .accessibilityValue(held ? "held" : "")
                     }
                     Divider().frame(height: 18)
                     ForEach(Self.specials, id: \.1) { label, key in
                         Button(label) { remote.pressKey(key) }
-                            .buttonStyle(.bordered).controlSize(.small)
+                            .buttonStyle(.bordered).controlSize(.small).tint(.primary)
                     }
                     Divider().frame(height: 18)
+                    // The machine's launcher and a terminal, one tap each; then the chords.
                     // send(), not pressKey(): a chord carries its own modifiers and must
                     // not consume the sticky ones the user is part-way through setting.
-                    ForEach(Self.chords, id: \.0) { label, key, mods in
-                        Button(label) { remote.send([.key(key, mods)]) }
-                            .buttonStyle(.bordered).controlSize(.small)
+                    Button { remote.openLauncher() } label: { Image(systemName: "sparkle.magnifyingglass") }
+                        .buttonStyle(.bordered).controlSize(.small).tint(.primary)
+                        .accessibilityLabel("Launcher")
+                    Button { remote.openTerminal() } label: { Image(systemName: "terminal") }
+                        .buttonStyle(.bordered).controlSize(.small).tint(.primary)
+                        .accessibilityLabel("Open a terminal")
+                    Menu {
+                        ForEach(Self.chords, id: \.0) { label, key, mods in
+                            Button(label) {
+                                remote.send([.key(key, mods)])
+                                remote.flash("\(label) sent")
+                            }
                             .accessibilityLabel(Self.spoken(key, mods))
+                        }
+                    } label: {
+                        Text(remote.isMac ? "⌘…" : "Ctrl…").font(.caption)
                     }
+                    .buttonStyle(.bordered).controlSize(.small).tint(.primary)
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 10)
             }
-
-            HStack(spacing: 8) {
-                TextField("Type on \(remote.machine.host)", text: $typing.shellSafe)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .focused($typingFocused)
-                    .onSubmit(sendTyping)
-                Button("Send", action: sendTyping)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(typing.isEmpty)
+            Button { keyboardUp = false } label: {
+                Image(systemName: "keyboard.chevron.compact.down")
             }
-            .padding(.horizontal, 12)
+            .buttonStyle(.bordered).controlSize(.small).tint(.primary)
+            .padding(.trailing, 10)
+            .accessibilityLabel("Hide keyboard")
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 6)
         .background(.ultraThinMaterial)
         .disabled(remote.inputBlocked)
-    }
-
-    private func sendTyping() {
-        remote.type(typing)
-        typing = ""
     }
 
     // MARK: Toolbar
@@ -1077,13 +1211,6 @@ struct RemoteScreenView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button { remote.recenterPointer() } label: {
-                    Label("Recenter pointer", systemImage: "scope")
-                }
-                Button { remote.resetZoom() } label: {
-                    Label("Fit to screen", systemImage: "arrow.down.right.and.arrow.up.left")
-                }
-                .disabled(remote.zoom == 1)
                 Button {
                     chromeHidden = true
                     remote.flash("Tap the screen to bring the controls back")
@@ -1140,5 +1267,174 @@ struct RemoteScreenView: View {
                 .padding(.top, 8)
                 .transition(.opacity)
         }
+    }
+}
+
+
+/// The trackpad's own UIView. Its one extra job: while it is in a window, the navigation
+/// stack's edge back-swipe is off. A drag to the right that starts near the left edge is
+/// exactly that gesture, and it used to slide the screen you were controlling away
+/// mid-drag. Found from the window, not from a view controller: inside SwiftUI a child
+/// controller's `navigationController` is nil more often than not.
+final class TrackpadView: UIView {
+    private weak var disabledGesture: UIGestureRecognizer?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil {
+            if let pop = Self.popGesture(from: window?.rootViewController) {
+                pop.isEnabled = false
+                disabledGesture = pop
+            }
+        } else {
+            disabledGesture?.isEnabled = true
+            disabledGesture = nil
+        }
+    }
+
+    private static func popGesture(from root: UIViewController?) -> UIGestureRecognizer? {
+        guard let root else { return nil }
+        if let nav = root as? UINavigationController, let g = nav.interactivePopGestureRecognizer { return g }
+        if let presented = root.presentedViewController, let g = popGesture(from: presented) { return g }
+        for child in root.children.reversed() { if let g = popGesture(from: child) { return g } }
+        return nil
+    }
+}
+
+
+// MARK: - Direct keyboard
+
+/// An invisible first responder that turns the system keyboard into the machine's:
+/// every character is sent the moment it is typed, backspace and return as keys, and a
+/// hardware keyboard's escape, tab and arrows too. There is no text field to send from —
+/// the remote screen is the only echo, which is what "type like at the Mac" means.
+private struct DirectKeyboard: UIViewRepresentable {
+    let active: Bool
+    let onText: (String) -> Void
+    let onKey: (String) -> Void
+
+    func makeUIView(context: Context) -> KeyCaptureView {
+        let view = KeyCaptureView()
+        view.onText = onText
+        view.onKey = onKey
+        return view
+    }
+
+    func updateUIView(_ view: KeyCaptureView, context: Context) {
+        view.onText = onText
+        view.onKey = onKey
+        // Focus follows `active` and nothing else; a layout pass must not re-summon a
+        // keyboard the person just dismissed.
+        if active, !view.isFirstResponder { DispatchQueue.main.async { view.becomeFirstResponder() } }
+        if !active, view.isFirstResponder { DispatchQueue.main.async { view.resignFirstResponder() } }
+    }
+}
+
+final class KeyCaptureView: UIView, UIKeyInput {
+    var onText: ((String) -> Void)?
+    var onKey: ((String) -> Void)?
+
+    // Per-instance traits, never the appearance proxy: replaying a traits setter through
+    // `UITextField.appearance()` is the 0.5.0 crash.
+    var autocorrectionType: UITextAutocorrectionType = .no
+    var autocapitalizationType: UITextAutocapitalizationType = .none
+    var spellCheckingType: UITextSpellCheckingType = .no
+    var smartQuotesType: UITextSmartQuotesType = .no
+    var smartDashesType: UITextSmartDashesType = .no
+    var smartInsertDeleteType: UITextSmartInsertDeleteType = .no
+    var keyboardType: UIKeyboardType = .asciiCapable
+
+    override var canBecomeFirstResponder: Bool { true }
+    var hasText: Bool { true }
+
+    func insertText(_ text: String) {
+        if text == "\n" { onKey?("return") } else { onText?(text) }
+    }
+
+    func deleteBackward() { onKey?("delete") }
+
+    /// A Bluetooth keyboard's non-character keys arrive here, not through insertText.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        var handled = false
+        for press in presses {
+            guard let key = press.key else { continue }
+            let name: String?
+            switch key.keyCode {
+            case .keyboardEscape: name = "escape"
+            case .keyboardTab: name = "tab"
+            case .keyboardUpArrow: name = "up"
+            case .keyboardDownArrow: name = "down"
+            case .keyboardLeftArrow: name = "left"
+            case .keyboardRightArrow: name = "right"
+            default: name = nil
+            }
+            if let name { onKey?(name); handled = true }
+        }
+        if !handled { super.pressesBegan(presses, with: event) }
+    }
+}
+
+
+// MARK: - Launch sheet
+
+/// The phone's Spotlight for a machine: search what is running and what is installed,
+/// tap to bring it forward or start it. Reads `/apps` once per open — a machine has a few
+/// dozen apps, and a search field over a list is faster than any grid.
+private struct LaunchSheet: View {
+    @ObservedObject var remote: RemoteScreenModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var apps: AppList?
+    @State private var query = ""
+    @State private var failure: String?
+
+    private var running: [MacApp] {
+        (apps?.running ?? []).filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
+    }
+    private var installed: [String] {
+        let runningNames = Set((apps?.running ?? []).map(\.name))
+        return (apps?.installed ?? []).filter { !runningNames.contains($0) && (query.isEmpty || $0.localizedCaseInsensitiveContains(query)) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button { remote.openTerminal(); dismiss() } label: { Label("Terminal", systemImage: "terminal") }
+                    Button { remote.openLauncher(); dismiss() } label: {
+                        Label(remote.isMac ? "Spotlight / Raycast" : "The machine's launcher", systemImage: "sparkle.magnifyingglass")
+                    }
+                }
+                if !running.isEmpty {
+                    Section("Running") {
+                        ForEach(running, id: \.name) { app in
+                            Button { remote.launch(app.name); dismiss() } label: {
+                                HStack {
+                                    Text(app.name)
+                                    Spacer()
+                                    if app.front == true { Text("front").font(.caption2).foregroundStyle(.secondary) }
+                                }
+                            }
+                        }
+                    }
+                }
+                if !installed.isEmpty {
+                    Section("Installed") {
+                        ForEach(installed.prefix(80), id: \.self) { name in
+                            Button { remote.launch(name); dismiss() } label: { Text(name) }
+                        }
+                    }
+                }
+                if let failure { Text(failure).font(.caption).foregroundStyle(.secondary) }
+            }
+            .searchable(text: $query, prompt: "Find an app on \(remote.machine.host)")
+            .navigationTitle("Open")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Done") { dismiss() } }
+            .task {
+                do { apps = try await remote.client.apps() }
+                catch { failure = "Couldn't list apps on \(remote.machine.host)." }
+            }
+        }
+        .presentationDetents([.medium, .large])
     }
 }

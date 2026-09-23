@@ -1,92 +1,36 @@
-# INDEX — Start here
+# INDEX — start here
 
-Read [CONTEXT.md](CONTEXT.md) first (the map and the shape), then [MEMORY.md](MEMORY.md)
-(the reasoning). `CHANGELOG.md` tells you what shipped. `git log` traces the path.
+The file map is generated from the tree and checked against it; nothing here is typed by
+hand any more (the last hand-written version of this file still called 0.3.0 current).
 
-## Top files
+| Read | For | Cost |
+|---|---|---|
+| [docs/agents/CODEMAP.md](docs/agents/CODEMAP.md) | **Which file?** Every code file, its purpose, size bucket, and the self-checks that name it | ~4k tokens |
+| [docs/agents/CONTRACTS.md](docs/agents/CONTRACTS.md) | **What talks to what?** Daemon routes with auth tier, capability strings and where each is gated, the watch → phone relay commands | ~1.7k |
+| [docs/agents/CHECKS.md](docs/agents/CHECKS.md) | **What does check-x prove?** One line per `scripts/` file | ~2.5k |
+| [docs/agents/SYMBOLS.md](docs/agents/SYMBOLS.md) | **Where is symbol X?** Grep it: `grep -n '^| X ' docs/agents/SYMBOLS.md`. Never read whole | grep only |
+| [CONTEXT.md](CONTEXT.md) | The shape: two loops, the daemon, the relay, where things live | ~2k |
+| [MEMORY.md](MEMORY.md) | Why it is shaped that way: settled decisions and dead ends | ~4.6k |
+| [docs/README.md](docs/README.md) | Which docs are current and which are archaeology | ~2k |
 
-| Path | Purpose |
-|---|---|
-| `CONTEXT.md` | Overall shape, where things live, things that cost hours |
-| `MEMORY.md` | Why things are the way they are; settled decisions and dead ends |
-| `CHANGELOG.md` | What shipped, in user words; the `[Unreleased]` block is the 0.6 TestFlight notes |
-| `graphify-out/GRAPH_REPORT.md` | The generated codebase map: god nodes, communities, cross-file edges. `graphify query "…"` asks it; `sh scripts/codemap.sh` rebuilds it |
-| `docs/agents/codebase-map.md` | graphify + codegraph: what each holds, how every agent harness is wired to them |
-| `scripts/repo-status.sh` | Which tree is the truth right now: worktrees, branches vs `origin/main`, open PRs, map freshness |
-| `package.json` | The factory gate's task list: `typecheck` / `lint` / `test` / `build` → `scripts/gate-*.sh` + `check-all.sh` |
-| `install/payload/meshd/server.ts` | The daemon; routes, auth, Host/browser defenses |
-| `install/payload/meshd/auth.ts` | Fail-closed bearer auth; header-only, constant-time |
-| `install/payload/meshd/doctor.ts` | GET/POST /doctor; tests token/input/screen/mux/push |
-| `install/payload/meshd/input.ts` | `/input` endpoint; injects CGEvent/xdotool, also `/screen.jpg` |
-| `install/payload/meshd/push.ts` | APNs push; dedupe on alertKey, 10-min window |
-| `install/payload/meshd/pair.ts` | `/pair/claim` endpoint; the one unauthenticated route |
-| `install/payload/meshd/qr.ts` | Vendored QR encoder (no deps); `mesh pair` renders it; `--check` decodes itself |
-| `install/payload/meshd/wol.ts` | Wake-on-LAN: magic packet, `POST /wake`, `primaryMac()` for /health |
-| `install/payload/meshd/files.ts` | `/files` and `/fs` endpoints; filesystem browser |
-| `install/payload/meshd/kb.ts` | Knowledge base (SQLite FTS5); `/kb/*` endpoints |
-| `install/payload/bin/mesh-input.swift` | CGEvent helper; recompiled on demand, long-lived on stdin |
-| `install/payload/bin/mesh` | CLI: `setup` (first run), `shellenv` (PATH), `pair` (QR), `hooks install`, `doctor [--fix]`, `upgrade`, `token rotate`, `status` |
-| `MeshDesktop/` | Mac menu bar app: daemon status, one Permissions window over `/doctor`, native pairing QR. Self-contained — links no `Shared/` |
-| `Shared/Models.swift` | Wire types, `sessionsNeedingAttention`, pairing logic |
-| `Shared/AlertGating.swift` | Pure notification gates: reachability throttle + event dedupe |
-| `docs/VOICE-INPUT-SPEC.md` | Local-first ASR plan (three lanes); addendum: watchOS has NO Speech.framework |
-| `docs/CLI-FIRST-ROADMAP.md` | CLI-first stance, command surface, the user scenarios as TDD anchors |
-| `Shared/RiskClassifier.swift` | Grades a question safe vs destructive; names the verb ("Force push") |
-| `Shared/MeshClient.swift` | HTTP client; bearer auth, URLSession, timeout/retry |
-| `iOS/RemoteScreenView.swift`, `Watch/RemoteView.swift` | Native remote: pointer, zoom, keyboard, screen |
-| `MeshWatchWidgets/` | Live Activity (Lock Screen, Dynamic Island, Smart Stack) |
-| `WatchWidgets/` | Watch complication; renders attention count/session/question |
-| `web/` | Landing page; redirect to install.sh |
+Deeper than the map: `codegraph explore <symbol>` (source + callers + blast radius over
+MCP) and `graphify query "<question>"` (code + docs graph). Both local; see
+[docs/agents/codebase-map.md](docs/agents/codebase-map.md) for how each harness is wired.
 
-## Daemon routes
+Refresh everything: `sh scripts/codemap.sh`. The map alone: `python3 scripts/codemap-index.py`.
+Stale map = red `scripts/check-codemap.sh` = red `gates.sh full`.
 
-**No token required:**
-- `GET  /health` → capabilities, version, host, uptime
-- `POST /pair/claim` → mint 8-char code + redeem it → token + fleet
+## The rule that saves the most tokens
 
-**Loopback-only (empty token) or any authenticated request (non-loopback):**
-- `GET  /doctor` → test all systems (read-only)
-- `POST /doctor/fix` → same, after showing macOS dialogs
-- `GET  /stats` → CPU/mem/disk/processes
-- `GET  /tailnet` → Tailscale peers
-- `GET  /agents` → rmux/tmux session list
-- `GET  /usage` → agent resource usage
-- `GET  /events` → agent event log (with `?since=...`)
-- `POST /events` → add event (from hook)
-- `GET  /screen.jpg?display=N&width=W` → capture one display
-- `GET  /input` → input status (trusted, screen grant, hint)
-- `POST /input` → inject CGEvent/xdotool + scroll + clipboard + volume
-- `POST /wake` → broadcast a Wake-on-LAN magic packet for a sleeping LAN peer ({mac})
-- `GET  /kb/search?q=...` → cross-machine KB search
-- `POST /kb` or `PUT /kb` → save to KB
-- `GET  /files`, `/fs` → filesystem browser
-- `GET  /agents/:name/output`, `POST /agents/:name/send` → session I/O
-- `GET  /agents/:name/panes`, `POST /agents/:name/panes` → pane list and create
-- `DELETE /agents/:name/panes/:id` → kill pane
-- `DELETE /agents/:name` → kill session
-- `POST /agents/new` → create session
-- `GET  /push` → APNs config + registered device count
-- `POST /push/register` → save APNs device token
-- `POST /push/test` → send a test alert (never deduped)
+Read CODEMAP, pick ONE file, open only that. If the question is "who calls this" or "what
+breaks if I change it", ask codegraph before opening anything. Grep the tree last.
 
-## Check suite
+## Build and check
 
 ```sh
-sh scripts/check-all.sh    # runs every self-check in one command
+./.claude/scripts/gates.sh fast   # types + lint, ~40s, while working
+./.claude/scripts/gates.sh full   # + every check-* + three simulator builds, before a PR
 ```
 
-Globs `check-*.sh` automatically. Includes: auth, CSRF, doctor, hooks, input,
-input-linux, pair, push, mesh CLI, package, and any pure-Swift checks compiled
-with `-Onone` (asserts are not stripped).
-
-## Build gate
-
-```sh
-xcodegen generate                                              # regenerate project
-xcodebuild ... -scheme MeshWatch -destination generic/platform=iOS\ Simulator build
-xcodebuild ... -scheme "MeshWatch Watch App" -destination generic/platform=watchOS\ Simulator build
-sh scripts/check-all.sh                                        # full check suite
-```
-
-Never commit unless all three pass. A green build proves very little; run the app
-against a real daemon before believing it.
+Quote the final `FACTORY_GATES:` line verbatim. A green build proves very little on its
+own; run the change against a real daemon before believing it (AGENTS.md rule 1).

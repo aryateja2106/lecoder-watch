@@ -1,0 +1,30 @@
+  ok   'tell claude yes'                                          -> answer_agent {"session":"claude","decision":"yes"}
+  ok   'say no to codex'                                          -> answer_agent {"session":"codex","decision":"no"}
+  ok   'let claude continue'                                      -> answer_agent {"session":"claude","decision":"continue"}
+  ok   'stop the codex session'                                   -> answer_agent {"session":"codex","decision":"stop"}
+  name 'type ls -la into build1'                                  -> send_text {"session":"build1","text":"type ls"}   expected {"name":"send_text","session":"build1","text":"ls -la"}
+  name 'press enter in claude'                                    -> send_key {"session":"enter","key":"enter"}   expected {"name":"send_key","session":"claude","key":"enter"}
+  name 'hit ctrl-c on the pi-probe session'                       -> send_key {"session":"pi","key":"ctrl-c"}   expected {"name":"send_key","session":"pi-probe","key":"ctrl-c"}
+  ok   'start claude on the jetson and ask it to build the model' -> new_session {"machine":"jetson","cli":"claude","task":"build the model"}
+  ok   'run codex on the mac to fix the failing tests'            -> new_session {"machine":"mac","cli":"codex","task":"fix failing tests"}
+  MISS 'open a shell on the pi'                                   -> open_app {"machine":"pi","app":"shell"}   expected {"name":"new_session","machine":"pi","cli":"shell"}
+  ok   'kill the build1 session'                                  -> kill_session {"session":"build1"}
+  ok   'show me what claude printed'                              -> peek {"session":"claude"}
+  ok   'show me the jetson screen'                                -> screen_peek {"machine":"jetson"}
+  ok   "what is on the mac's screen"                              -> screen_peek {"machine":"mac"}
+  MISS 'wake up the pi'                                           -> None {}   expected {"name":"wake","machine":"pi"}
+  ok   'restart the jetson'                                       -> power {"machine":"jetson","action":"restart"}
+  ok   'lock my mac'                                              -> power {"machine":"mac","action":"lock"}
+  ok   'shut down the pi'                                         -> power {"machine":"pi","action":"shutdown"}
+  ok   'mute the mac'                                             -> volume {"machine":"mac","level":0,"muted":true}
+  ok   'set the mac volume to 40'                                 -> volume {"machine":"mac","level":40,"muted":false}
+  ok   'pause the music on the mac'                               -> media {"machine":"mac","action":"pause"}
+  ok   'paste my clipboard into the jetson'                       -> paste {"machine":"jetson"}
+  ok   'open safari on the mac'                                   -> open_app {"machine":"mac","app":"safari"}
+  ok   'open github.com on the mac'                               -> open_url {"machine":"mac","url":"https://mac.github.com"}
+  name 'copy hello.txt from the pi to the mac'                    -> copy_file {"from_machine":"mac","path":"hello.txt","to_machine":"mac"}   expected {"name":"copy_file","from_machine":"pi","to_machine":"mac"}
+  ok   'send the model file from the jetson to my mac'            -> copy_file {"from_machine":"jetson","path":"mac","to_machine":"mac"}
+  ok   'search the knowledge base for meshd auth'                 -> search_knowledge {"query":"meshd auth"}
+  ok   'what did we decide about the pi token'                    -> search_knowledge {"query":"pi token"}
+check-intent: 26/28 right tool, 22/28 right tool+args; mean confidence 0.28; mean latency 21928 ms; peak RAM 34 MB; floor 24
+check-intent: OK

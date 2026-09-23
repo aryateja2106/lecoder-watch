@@ -34,6 +34,7 @@ import { stat, mkdir, readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   linuxInjectEvents, linuxInputStatus, linuxClipboard, linuxVolume, linuxSystemAction,
+  linuxCaptureScreen, linuxScreenStatus, linuxListApps, linuxActivateApp, linuxOpenTerminal, linuxOpenLauncher,
 } from "./input-linux";
 
 const IS_MAC = process.platform === "darwin";
@@ -195,7 +196,7 @@ export async function injectEvents(events: any[]): Promise<{ ok: boolean; count?
 }
 
 export async function inputStatus(prompt = false) {
-  if (!IS_MAC) return linuxInputStatus();
+  if (!IS_MAC) return { ...(await linuxInputStatus()), screen: (await linuxScreenStatus()).ok };
   const bin = await ensureHelper();
   if (!bin) return { ok: false, trusted: false, helper: HELPER_BIN, error: buildError };
   const out = await run(prompt ? [bin, "--check", "--prompt"] : [bin, "--check"]);
@@ -247,6 +248,8 @@ const SYSTEM_ACTIONS: Record<string, string[]> = {
   sleep: ["/usr/bin/pmset", "sleepnow"],
   lock: ["/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession", "-suspend"],
   screensaver: ["/usr/bin/open", "-a", "ScreenSaverEngine"],
+  // A full-screen shot straight into the clipboard, ready to paste into an agent.
+  screenshot: ["/usr/sbin/screencapture", "-c", "-x"],
   shutdown: ["/usr/bin/osascript", "-e", 'tell app "System Events" to shut down'],
   restart: ["/usr/bin/osascript", "-e", 'tell app "System Events" to restart'],
 };
@@ -282,7 +285,7 @@ const INSTALLED_APPS_SH =
   `"$HOME/Applications" 2>/dev/null | sed -n 's/\\.app$//p' | sort -u`;
 
 async function listApps() {
-  if (!IS_MAC) return { ok: false, error: "app control is macOS only" };
+  if (!IS_MAC) return linuxListApps();
   const [rawRunning, rawFront, rawInstalled] = await Promise.all([
     run(["/bin/sh", "-c", RUNNING_APPS_SH]),
     run(["/bin/sh", "-c", `/usr/bin/lsappinfo info -only name "$(/usr/bin/lsappinfo front)" 2>/dev/null`]),
@@ -299,7 +302,7 @@ async function listApps() {
 
 /// `open -a` via argv, never a shell string — the name comes from the watch.
 async function activateApp(name: string) {
-  if (!IS_MAC) return { ok: false, error: "app control is macOS only" };
+  if (!IS_MAC) return linuxActivateApp(name);
   if (!name.trim()) return { ok: false, error: "app name required" };
   const p = Bun.spawn(["/usr/bin/open", "-a", name], { stdout: "ignore", stderr: "pipe" });
   if ((await p.exited) !== 0) {
@@ -395,7 +398,7 @@ async function imagePixelWidth(path: string): Promise<number> {
 /// The served crop is echoed in x-mesh-rect (normalized) + x-mesh-display; a response
 /// without those headers is a full frame and the client must not interpret it as a crop.
 export async function captureScreen(params: CaptureParams): Promise<Response> {
-  if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
+  if (!IS_MAC) return linuxCaptureScreen(params);
   const { display, rect, quality } = params;
   // Full frames keep their historical default (480) so old clients see identical
   // behavior; a region defaults to native pixels — downscaling is opt-in via width.
@@ -502,9 +505,9 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
   // The whole capture route lives here now — with or without a display named — so
   // rect/width/quality mean exactly one thing. server.ts no longer carries its own copy.
   if (path === "/screen.jpg" && req.method === "GET") {
-    if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
     const params = parseCaptureParams(url);
     if (params.error) return json({ error: params.error }, 400);
+    if (!IS_MAC) return await linuxCaptureScreen(params);
     if (params.display != null && (!Number.isInteger(params.display) || params.display < 1)) {
       return json({ error: "bad display" }, 400);
     }
@@ -530,6 +533,24 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
   }
   if (path === "/apps" && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as any;
+    // Two verbs a phone reaches for before any app name: a terminal, and the machine's own
+    // launcher (Spotlight / Raycast on a Mac, rofi / ulauncher / whatever MESH_LAUNCHER says
+    // on Linux) — so a person's existing launcher habit works from the phone unchanged.
+    if (body?.terminal === true) {
+      const result = IS_MAC ? await activateApp("Terminal") : await linuxOpenTerminal();
+      return json(result, result.ok ? 200 : 400);
+    }
+    if (body?.launcher === true) {
+      if (IS_MAC) {
+        // MESH_LAUNCHER names the chord (cmd+space by default; "option+space" for Raycast).
+        const chord = (process.env.MESH_LAUNCHER || "cmd+space").split("+").map((s) => s.trim()).filter(Boolean);
+        const key = chord.pop() ?? "space";
+        const result = await injectEvents([{ t: "key", key, mods: chord }]);
+        return json(result, result.ok ? 200 : 400);
+      }
+      const result = await linuxOpenLauncher();
+      return json(result, result.ok ? 200 : 400);
+    }
     const result = await activateApp(String(body?.activate ?? ""));
     return json(result, result.ok ? 200 : 400);
   }

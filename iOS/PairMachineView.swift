@@ -63,6 +63,7 @@ struct PairMachineView: View {
                     }
                 } else {
                     success
+                    skipped
                 }
             }
             .navigationTitle(added.isEmpty ? "Pair a machine" : "Paired")
@@ -159,6 +160,34 @@ struct PairMachineView: View {
             Text("On this phone")
         } footer: {
             Text("The code is single-use. Case and the dash don't matter.")
+        }
+    }
+
+    /// Fleet entries the machine offered and the phone refused, because this user had
+    /// removed that machine before. Silence here is what made a Pi invisible forever.
+    @ViewBuilder private var skipped: some View {
+        if !store.skippedByRemoval.isEmpty {
+            Section {
+                ForEach(store.skippedByRemoval, id: \.ip) { host in
+                    HStack {
+                        Image(systemName: "minus.circle.fill").foregroundStyle(.orange)
+                        VStack(alignment: .leading) {
+                            Text(host.host).font(.headline)
+                            Text("\(host.ip):\(String(host.port))")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Add anyway") { store.addDespiteRemoval(host) }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                    }
+                }
+            } header: {
+                Text(store.skippedByRemoval.count == 1 ? "Not added: 1 machine" : "Not added: \(store.skippedByRemoval.count) machines")
+            } footer: {
+                Text("You removed \(store.skippedByRemoval.count == 1 ? "this machine" : "these machines") from this phone before, so pairing does not bring \(store.skippedByRemoval.count == 1 ? "it" : "them") back on its own.")
+            }
         }
     }
 
@@ -320,6 +349,8 @@ struct NoMachinesView: View {
         } actions: {
             Button("Pair a machine", action: pair)
                 .buttonStyle(.borderedProminent)
+            NavigationLink("How it all fits together") { GuidesView() }
+                .buttonStyle(.bordered)
         }
     }
 }

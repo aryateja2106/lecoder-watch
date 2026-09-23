@@ -19,7 +19,7 @@ struct PairingScannerSheet: View {
             ZStack(alignment: .bottom) {
                 QRCaptureView { payload in
                     guard let url = URL(string: payload), let link = parsePairingLink(url) else {
-                        rejection = "That QR isn't a MeshWatch pairing code."
+                        rejection = "That QR isn't a LeSearch AI pairing code."
                         return
                     }
                     rejection = nil

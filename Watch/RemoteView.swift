@@ -24,6 +24,7 @@ final class RemoteControl: ObservableObject {
     /// pre-0.5.0 daemon serves and what the client still has to zoom for itself.
     @Published var screenRect: CGRect?
     @Published var note: String?
+    @Published private(set) var systemFailures: [String: String] = [:]
     @Published var dragLocked = false
     @Published var displays: [DisplayInfo] = []
     /// Which screen the preview shows and taps/window snaps target. 1-based.
@@ -381,6 +382,7 @@ final class RemoteControl: ObservableObject {
     /// second screen from which to notice. `SystemResult` decodes both shapes, and
     /// `failureLine` is nil exactly when it worked.
     func system(_ action: String) {
+        systemFailures[action] = nil
         guard !viaRelay else {
             // The relay reports delivery to the PHONE, not what the Mac did with it —
             // the iOS handler discards /system's body. Say the weaker, true thing.
@@ -393,12 +395,15 @@ final class RemoteControl: ObservableObject {
             do {
                 let result = try await client.systemAction(action)
                 note = result.failureLine.map { "\(action) failed — \($0)" } ?? action
+                systemFailures[action] = result.failureLine
                 WKInterfaceDevice.current().play(result.succeeded ? .success : .failure)
             } catch MeshClient.MeshError.unsupported {
                 note = "\(action) needs meshd 0.5.0"
+                systemFailures[action] = "needs meshd 0.5.0"
                 WKInterfaceDevice.current().play(.failure)
             } catch {
                 note = "\(action) — no answer from the Mac"
+                systemFailures[action] = "no answer from the machine"
                 WKInterfaceDevice.current().play(.failure)
             }
         }
@@ -1346,21 +1351,47 @@ struct RemoteMediaView: View {
 
 struct RemoteSystemView: View {
     @ObservedObject var remote: RemoteControl
-    @State private var armSleep = false
+    @State private var armedAction: PowerAction?
 
     var body: some View {
         List {
-            Button("Lock screen") { remote.system("lock") }
-            Button("Sleep display") { remote.system("displaysleep") }
-            Button("Screen saver") { remote.system("screensaver") }
-            // Two taps: sleeping the Mac cuts the very link being used to send this,
-            // and an accidental wrist tap mid-agent-run is expensive.
-            Button(armSleep ? "Tap again to sleep Mac" : "Sleep Mac") {
-                if armSleep { remote.system("sleep"); armSleep = false } else { armSleep = true }
+            ForEach(PowerAction.reversible) { action in
+                actionRow(action)
             }
-            .foregroundStyle(armSleep ? .orange : .primary)
+            ForEach(PowerAction.irreversible) { action in
+                actionRow(action)
+            }
         }
         .navigationTitle("System")
+    }
+
+    @ViewBuilder
+    private func actionRow(_ action: PowerAction) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Button {
+                if !action.confirms {
+                    remote.system(action.rawValue)
+                } else if armedAction == action {
+                    armedAction = nil
+                    remote.system(action.rawValue)
+                } else {
+                    armedAction = action
+                    Task {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        if armedAction == action { armedAction = nil }
+                    }
+                }
+            } label: {
+                Label(armedAction == action ? "Tap again to \(action == .restart ? "restart" : "shut down")" : action.label,
+                      systemImage: action.symbol)
+            }
+            .foregroundStyle(armedAction == action ? .orange : .primary)
+            if let failure = remote.systemFailures[action.rawValue] {
+                Text(failure)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+            }
+        }
     }
 }
 

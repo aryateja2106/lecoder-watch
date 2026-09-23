@@ -5,9 +5,23 @@
 //   volume                   -> pactl
 //   lock / displaysleep      -> loginctl / xset
 // ponytail: X11 only — Wayland needs ydotool+uinput; add a ydotool branch when a
-// Wayland box actually joins the mesh. Apps/windows/displays stay unsupported here.
+// Wayland box actually joins the mesh. Windows/displays stay unsupported here; apps are
+// the X client list (xprop), activated with xdotool.
+import { existsSync } from "node:fs";
+import { readFile, readdir, unlink } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+
 const DISPLAY = process.env.MESH_DISPLAY ?? process.env.DISPLAY ?? ":0";
-const ENV = { ...process.env, DISPLAY };
+const XAUTHORITY = process.env.XAUTHORITY ?? [
+  join(homedir(), ".Xauthority"),
+  process.getuid?.() == null ? "" : `/run/user/${process.getuid()}/gdm/Xauthority`,
+].find((path) => path && existsSync(path));
+const ENV = { ...process.env, DISPLAY, ...(XAUTHORITY ? { XAUTHORITY } : {}) };
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+}
 
 async function run(cmd: string[], stdin?: string): Promise<{ out: string; stderr: string; code: number }> {
   try {
@@ -30,6 +44,71 @@ async function has(bin: string): Promise<boolean> {
   return (await run(["/bin/sh", "-c", `command -v ${bin}`])).code === 0;
 }
 
+export async function linuxScreenStatus(): Promise<{ ok: boolean; tool: "scrot"; hint?: string }> {
+  const tool = await has("scrot");
+  const display = tool && (await run(["xdotool", "getdisplaygeometry"])).code === 0;
+  return {
+    ok: tool && display,
+    tool: "scrot",
+    hint: !tool ? "apt install scrot"
+      : !display ? `no X display at ${DISPLAY} (set MESH_DISPLAY if X is not on :0)` : undefined,
+  };
+}
+
+export async function linuxCaptureScreen(params: {
+  width?: number | null;
+  rect?: { x: number; y: number; w: number; h: number } | null;
+  quality?: number | null;
+}): Promise<Response> {
+  if (!(await has("scrot"))) return json({ error: "scrot not installed (apt install scrot)" }, 503);
+  const geometry = await run(["xdotool", "getdisplaygeometry"]);
+  const [screenWidth, screenHeight] = geometry.out.trim().split(/\s+/).map(Number);
+  if (geometry.code !== 0 || !(screenWidth > 0) || !(screenHeight > 0)) {
+    return json({ error: "screen geometry unavailable" }, 503);
+  }
+
+  const path = join(tmpdir(), `meshd-screen-linux-${process.pid}-${Date.now()}.jpg`);
+  const headers: Record<string, string> = { "content-type": "image/jpeg", "cache-control": "no-store" };
+  const args = ["scrot", "-o", "-q", String(params.quality ?? 70)];
+  if (params.rect) {
+    const { x, y, w, h } = params.rect;
+    args.push("-a", `${Math.round(x * screenWidth)},${Math.round(y * screenHeight)},${Math.max(1, Math.round(w * screenWidth))},${Math.max(1, Math.round(h * screenHeight))}`);
+  }
+  args.push("--pointer", path);
+
+  try {
+    let shot = await run(args);
+    if (shot.code !== 0 && /pointer/i.test(shot.stderr)) {
+      shot = await run(args.filter((arg) => arg !== "--pointer"));
+    }
+    if (shot.code !== 0) return json({ error: shot.stderr || "screenshot unavailable" }, 503);
+    const bytes = await readFile(path).catch(() => null);
+    // scrot can exit 0 and leave nothing behind (X gone mid-shot); an empty 200 would read as a black screen.
+    if (!bytes || bytes.byteLength === 0) return json({ error: "screenshot empty" }, 503);
+    if (params.rect) headers["x-mesh-rect"] = `${params.rect.x},${params.rect.y},${params.rect.w},${params.rect.h}`;
+    // width is honoured when a resizer is around: a 3440-wide JPEG measured 78 KB per frame
+    // whatever the watch asked for, and the watch decodes every pixel of it.
+    const width = params.width && params.width > 0 && params.width < screenWidth ? Math.round(params.width) : 0;
+    if (width) {
+      const q = String(params.quality ?? 70);
+      const small = path.replace(/\.jpg$/, "-small.jpg");
+      const resized = (await has("convert"))
+        ? await run(["convert", path, "-resize", `${width}x`, "-quality", q, small])
+        : (await has("ffmpeg"))
+          ? await run(["ffmpeg", "-loglevel", "error", "-y", "-i", path, "-vf", `scale=${width}:-2`, "-q:v", String(Math.max(2, Math.round(31 - (Number(q) / 100) * 29))), small])
+          : { code: 1, out: "", stderr: "" };
+      if (resized.code === 0) {
+        const smallBytes = await readFile(small).catch(() => null);
+        await unlink(small).catch(() => {});
+        if (smallBytes && smallBytes.byteLength > 0) return new Response(smallBytes, { headers });
+      }
+    }
+    return new Response(bytes, { headers });
+  } finally {
+    await unlink(path).catch(() => {});
+  }
+}
+
 // Watch key names -> X keysyms. Letters/digits pass through untouched.
 const KEYSYMS: Record<string, string> = {
   return: "Return", enter: "Return", tab: "Tab", space: "space", esc: "Escape", escape: "Escape",
@@ -43,6 +122,9 @@ const KEYSYMS: Record<string, string> = {
   // (cmd-shift-2, cmd-shift-4) made digits part of the key bar's vocabulary.
   0: "0", 1: "1", 2: "2", 3: "3", 4: "4",
   5: "5", 6: "6", 7: "7", 8: "8", 9: "9",
+  // Letters likewise: the phone's chord chips now include ⌘w and ⌘q, and the coverage
+  // check wants every chip's key in this map by name.
+  a: "a", b: "b", c: "c", d: "d", e: "e", f: "f", g: "g", h: "h", i: "i", j: "j", k: "k", l: "l", m: "m", n: "n", o: "o", p: "p", q: "q", r: "r", s: "s", t: "t", u: "u", v: "v", w: "w", x: "x", y: "y", z: "z",
 };
 // cmd from the watch means "the primary shortcut modifier" — on Linux that is ctrl.
 const MODS: Record<string, string> = {
@@ -70,7 +152,13 @@ function keysym(key: string): string | null {
 export function eventToArgs(e: any): string[] | null {
   switch (e.t) {
     case "move": return ["mousemove_relative", "--", String(Math.round(e.dx ?? 0)), String(Math.round(e.dy ?? 0))];
-    case "moveto": case "moveTo": return null; // needs per-display geometry; watch falls back to relative
+    case "moveto": case "moveTo": {
+      // Absolute, normalized within the display (the same contract as the Mac helper).
+      // The geometry is stamped onto the event by linuxInjectEvents before we get here.
+      const w = Number(e._screenW), h = Number(e._screenH);
+      if (!(w > 0 && h > 0) || typeof e.x !== "number" || typeof e.y !== "number") return null;
+      return ["mousemove", "--", String(Math.round(Math.min(1, Math.max(0, e.x)) * (w - 1))), String(Math.round(Math.min(1, Math.max(0, e.y)) * (h - 1)))];
+    }
     case "click": {
       const btn = BUTTONS[String(e.button ?? "left")] ?? "1";
       const count = Math.min(3, Math.max(1, Number(e.count ?? 1)));
@@ -108,7 +196,16 @@ export function eventToArgs(e: any): string[] | null {
 export async function linuxInjectEvents(events: any[]): Promise<{ ok: boolean; count?: number; error?: string }> {
   if (!(await has("xdotool"))) return { ok: false, error: "xdotool not installed (apt install xdotool)" };
   let count = 0;
-  for (const e of events) {
+  // The phone positions the pointer absolutely (moveTo, normalized), and a click is
+  // "moveTo, click". moveTo used to be dropped here, so every tap from the phone
+  // clicked wherever the pointer already was — measured on the Pi 2026-09-22.
+  let screen: { w: number; h: number } | null = null;
+  if (events.some((e) => e?.t === "moveTo" || e?.t === "moveto")) {
+    const geometry = (await run(["xdotool", "getdisplaygeometry"])).out.trim().split(/\s+/).map(Number);
+    if (geometry[0] > 0 && geometry[1] > 0) screen = { w: geometry[0], h: geometry[1] };
+  }
+  for (const raw of events) {
+    const e = screen && (raw?.t === "moveTo" || raw?.t === "moveto") ? { ...raw, _screenW: screen.w, _screenH: screen.h } : raw;
     const args = eventToArgs(e);
     if (!args) continue;
     await run(["xdotool", ...args]);
@@ -133,8 +230,13 @@ export async function linuxInputStatus() {
 export async function linuxClipboard(text?: string): Promise<{ ok: boolean; text?: string; error?: string }> {
   if (!(await has("xclip"))) return { ok: false, error: "xclip not installed (apt install xclip)" };
   if (typeof text === "string") {
-    await run(["xclip", "-selection", "clipboard", "-in"], text);
-    return { ok: true };
+    // xclip forks a child that keeps serving the selection, and that child inherits our
+    // stdout pipe: run() waited on it and the route hung until the client's timeout
+    // (measured 15 s on the Pi while the text had landed instantly). Nothing to read here.
+    const p = Bun.spawn(["xclip", "-selection", "clipboard", "-in"], { env: ENV, stdin: "pipe", stdout: "ignore", stderr: "ignore" });
+    p.stdin.write(text);
+    await p.stdin.end();
+    return (await p.exited) === 0 ? { ok: true } : { ok: false, error: "xclip failed" };
   }
   return { ok: true, text: (await run(["xclip", "-selection", "clipboard", "-out"])).out };
 }
@@ -160,6 +262,11 @@ export async function linuxVolume(body: any) {
 const LINUX_SYSTEM: Record<string, string[]> = {
   lock: ["loginctl", "lock-session"],
   displaysleep: ["xset", "dpms", "force", "off"],
+  sleep: ["systemctl", "suspend"],
+  screensaver: ["xdg-screensaver", "activate"],
+  // A full-screen PNG into the clipboard — the thing a person hands to an agent next.
+  // xclip forks to keep serving the selection and would hold our stdout pipe open forever.
+  screenshot: ["/bin/sh", "-c", 'f=$(mktemp --suffix=.png) && scrot -o "$f" && xclip -selection clipboard -t image/png -i "$f" >/dev/null 2>&1; s=$?; rm -f "$f"; exit $s'],
   shutdown: ["systemctl", "poweroff"],
   restart: ["systemctl", "reboot"],
 };
@@ -179,4 +286,112 @@ export async function linuxSystemAction(action: string) {
     stderr: r.stderr,
     ...(r.code === 0 ? {} : { error: r.stderr.slice(0, 300) || `exit ${r.code}` }),
   };
+}
+
+/// Running apps = the window manager's client list, read with xprop (present on every X desktop;
+/// wmctrl is not). One spawn for the list, one per window for its class and title, one for the
+/// active window. Same wire shape as the Mac's lsappinfo pass: `bundleID` carries the WM_CLASS so
+/// the watch can group and activate by it. `installed` stays empty — launching by .desktop id is
+/// a different verb and nobody has asked for it from the wrist yet.
+export async function linuxListApps() {
+  if (!(await has("xprop"))) return { ok: false, error: "xprop not installed (apt install x11-utils)" };
+  const list = await run(["xprop", "-root", "_NET_CLIENT_LIST_STACKING"]);
+  if (list.code !== 0) return { ok: false, error: list.stderr.trim() || "no window manager on the display" };
+  const ids = (list.out.split("#")[1] ?? "").split(",").map((x) => x.trim()).filter((x) => /^0x[0-9a-f]+$/i.test(x)).slice(-40);
+  const active = (await run(["xprop", "-root", "_NET_ACTIVE_WINDOW"])).out.match(/0x[0-9a-f]+/i)?.[0]?.toLowerCase();
+  const seen = new Map<string, { name: string; bundleID: string; front: boolean; windowID: string }>();
+  for (const id of ids) {
+    const props = (await run(["xprop", "-id", id, "WM_CLASS", "_NET_WM_NAME", "WM_NAME"])).out;
+    const cls = props.match(/WM_CLASS\(STRING\) = "[^"]*", "([^"]*)"/)?.[1];
+    const title = props.match(/_NET_WM_NAME\([^)]*\) = "((?:[^"\\]|\\.)*)"/)?.[1] ?? props.match(/WM_NAME\([^)]*\) = "((?:[^"\\]|\\.)*)"/)?.[1];
+    if (!cls) continue;
+    const front = id.toLowerCase() === active;
+    const prev = seen.get(cls);
+    // One row per app, the frontmost window's title winning; the stacking list is bottom-up.
+    if (!prev || front || !prev.front) seen.set(cls, { name: cls, bundleID: cls, front: prev?.front || front, windowID: id });
+    if (title && seen.get(cls)) seen.get(cls)!.name = `${cls} — ${title}`.slice(0, 80);
+  }
+  const running = [...seen.values()];
+  return { ok: true, front: running.find((a) => a.front)?.bundleID, running, installed: await installedDesktopApps() };
+}
+
+/// Names of the apps a launcher would offer: every .desktop entry with a Name= and an Exec=
+/// that is not NoDisplay. Read once per request — it is a few hundred small files.
+const DESKTOP_DIRS = [
+  "/usr/share/applications", "/usr/local/share/applications", "/var/lib/snapd/desktop/applications",
+  `${process.env.HOME ?? ""}/.local/share/applications`, `${process.env.HOME ?? ""}/.local/share/flatpak/exports/share/applications`,
+];
+async function desktopEntries(): Promise<Array<{ id: string; name: string; exec: string }>> {
+  const out: Array<{ id: string; name: string; exec: string }> = [];
+  for (const dir of DESKTOP_DIRS) {
+    const files = await readdir(dir).catch(() => [] as string[]);
+    for (const f of files) {
+      if (!f.endsWith(".desktop")) continue;
+      const text = await readFile(join(dir, f), "utf8").catch(() => "");
+      const main = text.split("\n[")[0];   // the [Desktop Entry] group only
+      if (/^NoDisplay=true/m.test(main) || /^Type=(?!Application)/m.test(main)) continue;
+      const name = main.match(/^Name=(.+)$/m)?.[1]?.trim();
+      const exec = main.match(/^Exec=(.+)$/m)?.[1]?.replace(/%[a-zA-Z%]/g, "").trim();
+      if (name && exec) out.push({ id: f.replace(/\.desktop$/, ""), name, exec });
+    }
+  }
+  return out;
+}
+async function installedDesktopApps(): Promise<string[]> {
+  const names = new Set((await desktopEntries()).map((e) => e.name));
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+/// Start a program the desktop way — detached from the daemon, on the display, with the
+/// user's session environment — so it outlives this request and shows up on screen.
+async function launchDetached(command: string): Promise<boolean> {
+  try {
+    Bun.spawn(["/bin/sh", "-c", `nohup ${command} >/dev/null 2>&1 &`], { env: ENV, stdout: "ignore", stderr: "ignore", stdin: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/// A terminal window, whichever one this desktop has. "Open a terminal fast" from the
+/// phone is the one launch worth its own verb.
+export async function linuxOpenTerminal() {
+  for (const t of ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "alacritty", "kitty", "xterm"]) {
+    if (await has(t)) return (await launchDetached(t)) ? { ok: true, launched: t } : { ok: false, error: `could not start ${t}` };
+  }
+  return { ok: false, error: "no terminal emulator found" };
+}
+
+/// The machine's own launcher (Spotlight's role): MESH_LAUNCHER in ~/.mesh/meshd.env wins
+/// (`rofi -show drun`, `ulauncher-toggle`, `albert toggle`…), else the first one installed.
+export async function linuxOpenLauncher() {
+  const configured = process.env.MESH_LAUNCHER?.trim();
+  if (configured) return (await launchDetached(configured)) ? { ok: true, launched: configured } : { ok: false, error: `could not start ${configured}` };
+  const known: Array<[string, string]> = [["rofi", "rofi -show drun"], ["ulauncher-toggle", "ulauncher-toggle"], ["albert", "albert toggle"], ["wofi", "wofi --show drun"], ["dmenu_run", "dmenu_run"]];
+  for (const [bin, cmd] of known) if (await has(bin)) return (await launchDetached(cmd)) ? { ok: true, launched: bin } : { ok: false, error: `could not start ${bin}` };
+  return { ok: false, error: "no launcher installed — apt install rofi, or set MESH_LAUNCHER in ~/.mesh/meshd.env" };
+}
+
+/// Bring a running app's window to the front by class (what linuxListApps reports as
+/// bundleID) or by title; argv only, the name comes from the watch.
+export async function linuxActivateApp(name: string) {
+  if (!name.trim()) return { ok: false, error: "app name required" };
+  if (!(await has("xdotool"))) return { ok: false, error: "xdotool not installed" };
+  const query = name.split(" — ")[0].trim();
+  let found = "";
+  for (const by of ["--class", "--classname", "--name"]) {
+    found = (await run(["xdotool", "search", "--onlyvisible", by, query])).out.trim().split("\n")[0];
+    if (found) break;
+  }
+  if (!found) {
+    // Not running: launch it from its .desktop entry (by Name or id), the way a launcher would.
+    const q = query.toLowerCase();
+    const entry = (await desktopEntries()).find((e) => e.name.toLowerCase() === q || e.id.toLowerCase() === q)
+      ?? (await desktopEntries()).find((e) => e.name.toLowerCase().startsWith(q));
+    if (!entry) return { ok: false, error: `no window or app named ${query}` };
+    const cmd = (await has("gtk-launch")) ? `gtk-launch ${entry.id}` : entry.exec;
+    return (await launchDetached(cmd)) ? { ok: true, launched: entry.name } : { ok: false, error: `could not start ${entry.name}` };
+  }
+  const r = await run(["xdotool", "windowactivate", "--sync", found]);
+  return r.code === 0 ? { ok: true, activated: query } : { ok: false, error: r.stderr.trim() || "could not activate" };
 }

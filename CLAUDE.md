@@ -75,20 +75,27 @@ See `docs/agents/triage-labels.md`.
 
 Single-context: `CONTEXT.md`, `MEMORY.md`, `AGENTS.md`. See `docs/agents/domain.md`.
 
-## Codebase map
+## Codebase map — read it before you grep
 
-Two local graphs, no API key, nothing leaves the machine. Build or refresh both with
-`sh scripts/codemap.sh` (once per clone, then after edits; `--full` after big deletes).
+Three layers, cheapest first. Stop at the first one that answers.
 
-- **graphify** — code + docs knowledge graph in `graphify-out/`. For any "where / how /
-  what talks to what" question, run `graphify query "<question>"` before grepping;
-  `graphify path "<A>" "<B>"` for a relationship, `graphify explain "<concept>"` for one
-  thing. `graphify-out/GRAPH_REPORT.md` is the committed readable map; read it whole only
-  for architecture review.
-- **codegraph** — symbol / caller / impact graph over MCP (`codegraph_explore`; CLI
-  `codegraph explore|callers|impact <symbol>`). Use it before changing a shared function.
-- `sh scripts/repo-status.sh` — which tree is the truth right now: worktrees, branches vs
-  `origin/main`, open PRs, and whether the map is stale.
+1. **The committed map** (generated from the tree, checked by `scripts/check-codemap.sh`):
+   [docs/agents/CODEMAP.md](docs/agents/CODEMAP.md) — which file (purpose, size, the
+   checks that name it), ~4k tokens; [CONTRACTS.md](docs/agents/CONTRACTS.md) — daemon
+   routes with auth tier, capabilities and where each is gated, relay commands;
+   [CHECKS.md](docs/agents/CHECKS.md) — what each `scripts/` file proves;
+   [SYMBOLS.md](docs/agents/SYMBOLS.md) — `grep -n '^| Name ' docs/agents/SYMBOLS.md`, never read whole.
+2. **codegraph** (MCP tool `codegraph_explore`; CLI `codegraph explore|callers|impact <symbol>`):
+   verbatim source plus callers and blast radius in one call. Use it before changing anything
+   in the serialized list, instead of a grep-and-read loop.
+3. **graphify** (`graphify query "<question>"`, `path`, `explain`): code + docs graph for
+   "how does X relate to Y". `graphify-out/GRAPH_REPORT.md` only for architecture review.
 
-After modifying code, `graphify update .` (AST only, seconds) keeps the graph current.
-Per-harness wiring and what is committed: [docs/agents/codebase-map.md](docs/agents/codebase-map.md).
+Then open ONE file. `sh scripts/repo-status.sh` says which tree is the truth (worktrees,
+branches vs `origin/main`, open PRs, map freshness).
+
+After editing: `python3 scripts/codemap-index.py` when you added a file, a header line, a
+top-level declaration, a route or a capability (the check tells you); `graphify update .`
+for the graph. `sh scripts/codemap.sh` does all of it. Every code file's first comment
+line is its purpose in the map; a new file without one fails the check.
+Per-harness wiring: [docs/agents/codebase-map.md](docs/agents/codebase-map.md).

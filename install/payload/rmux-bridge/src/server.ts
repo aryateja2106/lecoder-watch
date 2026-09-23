@@ -1,3 +1,4 @@
+// server.ts — rmux-bridge: the :7820 daemon that serves the phone's xterm.js terminal and attaches it to a mux session over a token-gated WebSocket.
 import { unlink } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";

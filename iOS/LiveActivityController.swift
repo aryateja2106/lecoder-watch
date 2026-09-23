@@ -25,6 +25,8 @@ final class LiveActivityController {
     /// switches the permission on mid-session gets a card on the next poll instead of
     /// having to relaunch. Settings watches the same system stream to say so out loud.
     private(set) var activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+    /// Why the push-capable request was refused, if it was — surfaced in the problem report.
+    private(set) var lastRequestFailure: String?
 
     /// Hands a push token to every paired machine. Set by the app at launch — this
     /// type deliberately knows nothing about the machine list.
@@ -248,12 +250,20 @@ final class LiveActivityController {
         // costs nothing when no daemon can use it — the token is simply never uploaded
         // anywhere that wants it, because `uploadLAToken` refuses hosts without
         // "laPush".
-        let started = try? Activity.request(
-            attributes: attributes,
-            content: ActivityContent(state: content,
-                                     staleDate: Date(timeIntervalSinceNow: Self.staleAfter)),
-            pushType: .token,
-        )
+        let activityContent = ActivityContent(state: content, staleDate: Date(timeIntervalSinceNow: Self.staleAfter))
+        var started: Activity<SessionActivityAttributes>?
+        do {
+            started = try Activity.request(attributes: attributes, content: activityContent, pushType: .token)
+        } catch {
+            // `.token` needs the aps-environment entitlement. A build without it (every
+            // simulator build the gate makes, an ad-hoc build, a profile without push) used
+            // to throw here and the card never appeared at all — swallowed by a `try?`, so
+            // "live notifications don't work" had no line to point at. Without push the card
+            // still shows and follows the app's own polls while it is open; only the
+            // closed-app updates need the token, and meshd says so in /doctor.
+            lastRequestFailure = "\(error)"
+            started = try? Activity.request(attributes: attributes, content: activityContent, pushType: nil)
+        }
         guard let started else {
             activity = nil
             showing = nil
