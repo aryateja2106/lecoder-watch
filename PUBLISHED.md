@@ -5,7 +5,7 @@ produced by running something, not by describing it. Written 2026-09-22 from the
 run recorded in [docs/factory/runs/2026-09-22T093000Z-publish.md](docs/factory/runs/2026-09-22T093000Z-publish.md).
 
 Gate: `FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none`
-Gate SHA: ae30715196a6accd1542dc0a299939aec8355540
+Gate SHA: c6823f25e81ba7b0fd70761ede3fd7aedd7ee044
 Gate log: docs/overnight/2026-09-21/gate-full-publish-2026-09-23-tail.txt
 Gate note: run on 2026-09-23 at the sha above, with no environment overrides. Getting there
 took fixing the machine rather than the check: `check-brain` asks this Mac's own model server
