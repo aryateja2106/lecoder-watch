@@ -894,7 +894,9 @@ final class MeshStore: ObservableObject {
                 guard matches.count == 1 else { return }
                 let read = try await c.readKnowledgeNote(id: matches[0].id)
                 guard read.title == titled else { return }
-                _ = try await c.replaceKnowledgeNote(id: read.id, body: shown)
+                let saved = try await c.replaceKnowledgeNote(id: read.id, body: shown)
+                guard saved.title == titled else { return }
+                loadedKnowledgeNote = saved
             } catch {
                 return
             }
