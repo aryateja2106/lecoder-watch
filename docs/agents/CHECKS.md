@@ -95,6 +95,7 @@
 | `check-risk.swift` | Continue" on a watch sends Return, and Return takes whichever option the agent has highlighted |
 | `check-roundtrip.sh` | The notification round-trip: an event an agent hook posts must carry a session name the reply route can… |
 | `check-screen-zoom.swift` | Aiming is the whole product on this screen |
+| `check-session-snapshots.sh` | Lossless session history (meshd sessions.ts) keeps every version of an agent transcript after the runtime… |
 | `check-session-state.swift` | Run: swiftc Shared/Models.swift scripts/check-session-state.swift -o /tmp/css && /tmp/css |
 | `check-shell-quoting.swift` | shellQuotedArgument() single-quotes anything a shell would split or interpret, and leaves plain paths alone |
 | `check-shell-startup.sh` | The shell hook must never make opening a terminal slow |

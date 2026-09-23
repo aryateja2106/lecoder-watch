@@ -7,7 +7,8 @@
 #   - every version rebuilds byte-exact, and a tampered chunk is refused, not served
 #   - the store is 0700, every file in it 0600 (transcripts carry pasted secrets)
 #   - subagent transcripts (agent-*.jsonl) are not sessions; Codex rollouts are
-#   - a second sweep over unchanged files records nothing
+#   - a second sweep over unchanged files records nothing; concurrent snapshots of one
+#     file never share a version number
 #   - restore writes a NEW session file next to the original with every sessionId
 #     rewritten, leaves the original alone, and is refused for Codex
 # Plus the wiring in server.ts: route, capability, boot sweep, Stop-event trigger.
@@ -60,6 +61,17 @@ ok(eq(await reconstruct("claude", id, 1), v1), "v1 does not rebuild byte-exact")
 ok(eq(await reconstruct("claude", id, 2), v2), "v2 (base + append) does not rebuild byte-exact");
 ok(eq(await reconstruct("claude", id), v3), "latest does not rebuild byte-exact");
 
+// Concurrent writers (Stop-event trigger + sweep) must not share a version number.
+const race = join(proj, "22222222-2222-4333-8444-555555555555.jsonl");
+writeFileSync(race, line({ type: "user", message: { content: "race" } }));
+const pending = [];
+for (let i = 0; i < 80; i++) { pending.push(snapshot(race)); await Bun.sleep(1); appendFileSync(race, line({ i, pad: "z".repeat(200_000) })); }
+await Promise.all(pending);
+await snapshot(race);
+const raceVersions = JSON.parse(readFileSync(join(HOME, ".mesh/sessions/claude/22222222-2222-4333-8444-555555555555/index.json"), "utf8")).versions;
+ok(new Set(raceVersions.map((v: any) => v.n)).size === raceVersions.length, "two concurrent snapshots recorded the same version number");
+for (const v of raceVersions) ok(!!(await reconstruct("claude", "22222222-2222-4333-8444-555555555555", v.n)), `concurrent snapshots left v${v.n} unreadable`);
+
 const dir = join(HOME, ".mesh/sessions/claude", id);
 ok((statSync(join(HOME, ".mesh/sessions")).mode & 0o777) === 0o700, "the store is not 0700");
 ok((statSync(dir).mode & 0o777) === 0o700, "a session folder is not 0700");
@@ -78,7 +90,7 @@ ok(again.recorded === 0, `a sweep over unchanged files recorded ${again.recorded
 
 const req = (m: string, p: string) => handleSessions(new Request("http://x" + p, { method: m }), new URL("http://x" + p));
 const list = await (await req("GET", "/sessions"))!.json();
-ok(list.sessions.length === 2, `GET /sessions listed ${list.sessions.length}, expected 2`);
+ok(list.sessions.length === 3, `GET /sessions listed ${list.sessions.length}, expected 3`);
 const claudeRow = list.sessions.find((s: any) => s.id === id);
 ok(claudeRow?.title === "fix the flaky test" && claudeRow?.cwd === "/tmp/demo", "title/cwd not read from the transcript head");
 ok(eq(new Uint8Array(await (await req("GET", `/sessions/claude/${id}/raw?v=2`))!.arrayBuffer()), v2), "GET raw?v=2 is not byte-exact");

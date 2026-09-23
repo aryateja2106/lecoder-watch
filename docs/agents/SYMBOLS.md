@@ -243,6 +243,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | handlePair | function | install/payload/meshd/pair.ts:93 |
 | handlePtyUpgrade | function | install/payload/meshd/pty.ts:44 |
 | handlePush | function | install/payload/meshd/push.ts:437 |
+| handleSessions | function | install/payload/meshd/sessions.ts:215 |
 | handoff | function | install/payload/meshd/handoff.ts:215 |
 | HANDOFF_TARGETS | export | install/payload/meshd/handoff.ts:29 |
 | HandoffDeps | type | install/payload/meshd/handoff.ts:187 |
@@ -480,6 +481,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | readClaudeSettings | function | install/payload/bin/mesh:1514 |
 | readStopReason | function | install/payload/meshd/codex-state.ts:85 |
 | readThread | function | install/payload/meshd/codex-state.ts:144 |
+| reconstruct | function | install/payload/meshd/sessions.ts:144 |
 | record | function | install/payload/meshd/redact.ts:206 |
 | redact | function | install/payload/meshd/redact.ts:113 |
 | redactAndRecord | function | install/payload/meshd/redact.ts:234 |
@@ -553,8 +555,10 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | similar | function | scripts/feedback-to-issues.ts:119 |
 | skillsPayloadDir | function | install/payload/bin/mesh:1622 |
 | smokeTest | function | install/payload/bin/mesh:844 |
+| snapshot | function | install/payload/meshd/sessions.ts:88 |
 | snapshotMachineMatching | func | Shared/Models.swift:167 |
 | stagePayload | function | install/payload/bin/mesh:798 |
+| startSessionSweep | function | install/payload/meshd/sessions.ts:195 |
 | StatRow | struct | iOS/ContentView.swift:1708 |
 | Stats | struct | Shared/Models.swift:272 |
 | StatsSample | struct | iOS/MachineStatsView.swift:11 |
@@ -567,6 +571,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | stripRcLines | function | install/payload/bin/mesh:2115 |
 | SuggestionChip | struct | iOS/AgentChatView.swift:1172 |
 | swapInMeshd | function | install/payload/bin/mesh:883 |
+| sweep | function | install/payload/meshd/sessions.ts:178 |
 | SwiftTermView | struct | iOS/NativeTerminalScreen.swift:464 |
 | SwiftUI | extension | iOS/NativeTerminalScreen.swift:384 |
 | syncAgyHooks | function | install/payload/bin/mesh:1581 |

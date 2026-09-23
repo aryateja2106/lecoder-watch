@@ -58,6 +58,7 @@
 | POST | `/push/test` | token | push.ts:494 |
 | GET | `/resumable` | token | handoff.ts:275 |
 | GET | `/screen.jpg` | token | input.ts:507 |
+| GET | `/sessions` | token | sessions.ts:216 |
 | ANY | `/stats` | token | server.ts:1416 |
 | POST | `/system` | token | input.ts:557 |
 | ANY | `/tailnet` | token | server.ts:1417 |

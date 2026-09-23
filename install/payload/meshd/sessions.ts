@@ -25,6 +25,7 @@
 import { homedir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { mkdir, readdir, readFile, rename, stat, writeFile, chmod } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
 
@@ -79,8 +80,19 @@ function describe(bytes: Uint8Array): { cwd: string | null; title: string | null
   return { cwd, title };
 }
 
-/// Record the current state of one transcript. A no-op when nothing changed.
-export async function snapshot(path: string): Promise<"unchanged" | "base" | "append" | "skipped"> {
+type Outcome = "unchanged" | "base" | "append" | "skipped";
+const inflight = new Map<string, Promise<Outcome>>();
+/// Record the current state of one transcript. A no-op when nothing changed. Calls for
+/// the same file queue behind each other: the Stop-event trigger and the sweep can land
+/// together, and two writers picking the same v<N> would break every later version.
+export function snapshot(path: string): Promise<Outcome> {
+  const next = (inflight.get(path) ?? Promise.resolve("skipped" as Outcome)).catch(() => "skipped" as Outcome).then(() => take(path));
+  inflight.set(path, next);
+  next.finally(() => { if (inflight.get(path) === next) inflight.delete(path); }).catch(() => {});
+  return next;
+}
+
+async function take(path: string): Promise<Outcome> {
   const who = identify(path);
   if (!who) return "skipped";
   const st = await stat(path).catch(() => null);
@@ -89,20 +101,42 @@ export async function snapshot(path: string): Promise<"unchanged" | "base" | "ap
   const last = index.versions.at(-1);
   if (last && last.size === st.size && last.mtimeMs === st.mtimeMs) return "unchanged";
 
+  // The common case, a turn appended to the file: hash the old prefix in chunks and read
+  // only the new bytes, so a 139 MB transcript costs its delta in memory, not a full copy
+  // per turn (measured: 593 MB RSS reading it whole, every turn).
+  if (last && last.size > 0 && st.size > last.size) {
+    const h = new Bun.CryptoHasher("sha256");
+    // node:fs, not Bun.file().slice().stream(): on bun 1.3.14 that stream never ends when
+    // the slice stops mid-file past its first chunk (reproduced with 200 KB of 400 KB).
+    for await (const chunk of createReadStream(path, { start: 0, end: last.size - 1 })) h.update(chunk);
+    if (h.copy().digest("hex") === last.sha256) {
+      const delta = new Uint8Array(await Bun.file(path).slice(last.size).arrayBuffer());
+      return record(index, path, st.mtimeMs, "append", delta, last.size + delta.length, h.update(delta).digest("hex"));
+    }
+  }
+  // First sight, or the runtime rewrote the file (compaction): a new full base.
+  // ponytail: reads the whole file (~2.5x its size in RSS, once per session and per
+  // compaction); stream it through createGzip if a base ever has to fit a tight box.
   const bytes = new Uint8Array(await Bun.file(path).arrayBuffer());
   const full = sha(bytes);
   if (last && last.sha256 === full) return "unchanged";
-  const appended = !!last && bytes.length > last.size && sha(bytes.subarray(0, last.size)) === last.sha256;
-  const n = (last?.n ?? 0) + 1;
-  const dir = dirOf(who.runtime, who.id);
+  return record(index, path, st.mtimeMs, "base", bytes, bytes.length, full);
+}
+
+async function record(index: Index, path: string, mtimeMs: number, kind: Version["kind"], bytes: Uint8Array, size: number, sha256: string) {
+  const n = (index.versions.at(-1)?.n ?? 0) + 1;
+  const dir = dirOf(index.runtime, index.id);
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await chmod(STORE, 0o700).catch(() => {});
-  await writePrivate(join(dir, `v${n}.gz`), gzipSync(appended ? bytes.subarray(last!.size) : bytes));
-  if (!index.cwd || !index.title) { const d = describe(bytes); index.cwd ??= d.cwd; index.title ??= d.title; }
+  await writePrivate(join(dir, `v${n}.gz`), gzipSync(bytes));
+  if (!index.cwd || !index.title) {
+    const head = kind === "base" ? bytes : new Uint8Array(await Bun.file(path).slice(0, 262144).arrayBuffer());
+    const d = describe(head); index.cwd ??= d.cwd; index.title ??= d.title;
+  }
   index.source = path;
-  index.versions.push({ n, kind: appended ? "append" : "base", size: bytes.length, sha256: full, mtimeMs: st.mtimeMs, ts: new Date().toISOString() });
+  index.versions.push({ n, kind, size, sha256, mtimeMs, ts: new Date().toISOString() });
   await writePrivate(join(dir, "index.json"), JSON.stringify(index, null, 1));
-  return appended ? "append" : "base";
+  return kind;
 }
 
 /// Version `n` (default: latest), rebuilt from its base and the appends after it, and
