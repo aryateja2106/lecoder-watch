@@ -322,7 +322,7 @@ res_path, draft, assistant, marker, state, paper_id, id_path = sys.argv[1:8]
 ask = os.environ["FIRST_ASK"]
 raw = open(res_path).read()
 data = json.loads(raw)
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: ask keys are %r" % (sorted(data),))
 if data.get("modelClass") != "local" or data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: ask result is %r" % (data,))
@@ -454,7 +454,7 @@ ask = os.environ["NEXT_ASK"]
 raw = open(res_path).read()
 data = json.loads(raw)
 note = json.load(open(note_path))
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: reply query keys are %r" % (sorted(data),))
 if data.get("modelClass") != "local" or data.get("commandRan") is not False or data.get("held") is not True:
     raise SystemExit("FAIL: reply query result is %r" % (data,))

@@ -404,7 +404,7 @@ expect_held() {
 import json, sys
 data = json.load(open(sys.argv[1]))
 allowed = {"local", "user-subscription"}
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: %s keys are %r" % (sys.argv[2], sorted(data)))
 if data.get("modelClass") not in allowed or data.get("modelClass") != "local":
     raise SystemExit("FAIL: %s modelClass is %r" % (sys.argv[2], data.get("modelClass")))
@@ -449,7 +449,7 @@ raw = open(sys.argv[1]).read()
 data = json.loads(raw)
 label, want_ran, marker = sys.argv[4:7]
 allowed = {"local", "user-subscription"}
-if set(data) != {"modelClass", "draft", "commandRan", "held"}:
+if set(data) != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("FAIL: %s keys are %r" % (label, sorted(data)))
 if data.get("modelClass") not in allowed or data.get("modelClass") != "local":
     raise SystemExit("FAIL: %s modelClass is %r" % (label, data.get("modelClass")))

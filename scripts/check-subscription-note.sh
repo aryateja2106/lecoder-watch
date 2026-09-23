@@ -462,7 +462,7 @@ if "sk-secret" in raw or "llm.example" in raw or "user:sk-secret" in raw:
     raise SystemExit("case 1 response contains the host or the key")
 obj = json.loads(raw)
 keys = set(obj.keys())
-if keys != {"modelClass", "draft", "commandRan", "held"}:
+if keys != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 1 keys %s" % sorted(keys))
 if obj["modelClass"] != "user-subscription":
     raise SystemExit("case 1 modelClass %r" % obj["modelClass"])
@@ -561,7 +561,7 @@ if "sk-secret" in raw or "user:sk-secret" in raw:
     raise SystemExit("case 3 response contains the key")
 obj = json.loads(raw)
 keys = set(obj.keys())
-if keys != {"modelClass", "draft", "commandRan", "held"}:
+if keys != {"modelClass", "draft", "commandRan", "held", "reply"}:
     raise SystemExit("case 3 keys %s" % sorted(keys))
 if obj["modelClass"] != "user-subscription":
     raise SystemExit("case 3 modelClass %r" % obj["modelClass"])
