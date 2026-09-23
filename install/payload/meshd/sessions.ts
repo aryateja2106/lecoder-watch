@@ -32,8 +32,9 @@
 // redacted chunks — never /raw, /restore or anything else on the machine — so the
 // always-on machine holds one per peer instead of each peer's full token.
 //
-// Mirror (MESH_SESSIONS_MIRROR=on, meant for the always-on machine): every ten minutes, pull
-// each peer's new versions from hosts.json into ~/.mesh/sessions-mirror/<host>/<runtime>/
+// Mirror (meant for the always-on machine): every ten minutes, pull each registered peer's
+// new versions (`mesh sessions mirror-to <this machine>`; with MESH_SESSIONS_MIRROR=on, every
+// hosts.json peer too; =off stops it) into ~/.mesh/sessions-mirror/<host>/<runtime>/
 // <id>.jsonl — plain redacted JSONL an agent there can grep or hand off. An append is
 // appended; a new base (compaction) keeps the previous file as <id>.v<N>.jsonl.gz. Redaction
 // happens on the machine that wrote the transcript, so a secret never crosses the tailnet.
@@ -321,14 +322,20 @@ async function mirrorPeer(name: string, base: string, token: string): Promise<nu
   return fetched;
 }
 
-let mirroring = false;
-export async function mirrorOnce(): Promise<{ peers: number; fetched: number }> {
-  if (mirroring) return { peers: 0, fetched: 0 };
-  mirroring = true;
+let running: Promise<{ peers: number; fetched: number }> | null = null;
+/// One pull round. A caller arriving mid-round waits for that round instead of starting a
+/// second one over the same files.
+export function mirrorOnce(): Promise<{ peers: number; fetched: number }> {
+  running ??= pullRound().finally(() => { running = null; });
+  return running;
+}
+
+async function pullRound(): Promise<{ peers: number; fetched: number }> {
   let peers = 0, fetched = 0;
-  try {
-    // Peers registered with a mirror token win over a full token in hosts.json.
-    const cfg = await readFile(join(HOME, ".mesh", "hosts.json"), "utf8").then(JSON.parse, () => ({}));
+  {
+    // A registered peer (mirror token) wins over the same name in hosts.json (full token),
+    // and hosts.json peers are pulled only when the owner asked for it.
+    const cfg = process.env.MESH_SESSIONS_MIRROR === "on" ? await readFile(join(HOME, ".mesh", "hosts.json"), "utf8").then(JSON.parse, () => ({})) : {};
     const registered = await readFile(MIRROR_PEERS, "utf8").then(JSON.parse, () => ({}));
     const mine = new Set(Object.values(networkInterfaces()).flat().map((i) => i?.address));
     for (const [name, h] of Object.entries<any>({ ...(cfg?.hosts ?? {}), ...registered })) {
@@ -337,12 +344,12 @@ export async function mirrorOnce(): Promise<{ peers: number; fetched: number }> 
       // A peer that is asleep or predates `sessions` is simply tried again next round.
       fetched += await mirrorPeer(name, `http://${h.ip}:${h.port || 8899}`, h.token ? String(h.token) : "").catch(() => 0);
     }
-  } finally { mirroring = false; }
+  }
   return { peers, fetched };
 }
 
 export function startSessionMirror(): void {
-  if (process.env.MESH_SESSIONS_MIRROR !== "on") return;
+  if (process.env.MESH_SESSIONS_MIRROR === "off") return;
   setTimeout(() => { mirrorOnce().catch(() => {}); setInterval(() => mirrorOnce().catch(() => {}), 10 * 60_000); }, 60_000);
 }
 
@@ -371,7 +378,9 @@ export async function handleSessions(req: Request, url: URL, server?: any): Prom
     await mkdir(MIRROR, { recursive: true, mode: 0o700 });
     await writePrivate(MIRROR_PEERS, JSON.stringify(peers, null, 1));
     addKnownSecrets([[`mirror-token:${b.name}`, b.token]]);
-    return Response.json({ ok: true, name: b.name, ip, mirroring: process.env.MESH_SESSIONS_MIRROR === "on" }, { status: 201 });
+    const on = process.env.MESH_SESSIONS_MIRROR !== "off";
+    if (on) mirrorOnce().catch(() => {});  // start pulling now, not at the next ten-minute tick
+    return Response.json({ ok: true, name: b.name, ip, mirroring: on }, { status: 201 });
   }
   if (url.pathname === "/sessions" && req.method === "GET") {
     if (url.searchParams.get("mirror") === "1") return Response.json({ sessions: await mirrorList() });

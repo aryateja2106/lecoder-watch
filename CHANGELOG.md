@@ -15,10 +15,10 @@ each entry as you ship the slice, not at release time.
   size of what was added per turn, not a copy per turn. `mesh sessions` lists them,
   `mesh sessions restore <id> --at N` brings any version back as a new session you resume with
   `claude --resume`. Nothing needs an account.
-- **One machine can hold everyone's history.** Set `MESH_SESSIONS_MIRROR=on` on the machine
-  that is always on and it pulls every other machine's sessions every ten minutes, redacted
-  on the machine that wrote them, as plain files an agent there can search or pick up.
-  `mesh sessions mirror-to <host>` sets it up from one machine; the mirror gets a token per
+- **One machine can hold everyone's history.** `mesh sessions mirror-to <host>` makes the
+  machine that is always on pull every other machine's sessions every ten minutes, redacted
+  on the machine that wrote them, as plain files an agent there can search or pick up. It
+  survives upgrades and needs no restart; the mirror gets a token per
   machine that can read session history and nothing else, never that machine's full token.
   `mesh sessions --mirror -H <host>` lists what it holds.
 - **`mesh fleet`** — what each machine is and has right now (hardware, accelerator, free RAM,

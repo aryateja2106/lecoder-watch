@@ -243,7 +243,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | handlePair | function | install/payload/meshd/pair.ts:93 |
 | handlePtyUpgrade | function | install/payload/meshd/pty.ts:44 |
 | handlePush | function | install/payload/meshd/push.ts:437 |
-| handleSessions | function | install/payload/meshd/sessions.ts:359 |
+| handleSessions | function | install/payload/meshd/sessions.ts:366 |
 | handoff | function | install/payload/meshd/handoff.ts:215 |
 | HANDOFF_TARGETS | export | install/payload/meshd/handoff.ts:29 |
 | HandoffDeps | type | install/payload/meshd/handoff.ts:187 |
@@ -391,8 +391,8 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | MeshWatchWidgetBundle | struct | MeshWatchWidgets/MeshWatchWidgetBundle.swift:6 |
 | mintCode | function | install/payload/meshd/pair.ts:42 |
 | mintToken | function | install/payload/bin/mesh:1208 |
-| mirrorOnce | function | install/payload/meshd/sessions.ts:325 |
-| mirrorReadAllowed | function | install/payload/meshd/sessions.ts:268 |
+| mirrorOnce | function | install/payload/meshd/sessions.ts:328 |
+| mirrorReadAllowed | function | install/payload/meshd/sessions.ts:269 |
 | MonitorBell | struct | iOS/ContentView.swift:58 |
 | MonitorView | struct | iOS/ContentView.swift:102 |
 | mouseButton | func | install/payload/bin/mesh-input.swift:224 |
@@ -483,7 +483,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | readClaudeSettings | function | install/payload/bin/mesh:1543 |
 | readStopReason | function | install/payload/meshd/codex-state.ts:85 |
 | readThread | function | install/payload/meshd/codex-state.ts:144 |
-| reconstruct | function | install/payload/meshd/sessions.ts:162 |
+| reconstruct | function | install/payload/meshd/sessions.ts:163 |
 | record | function | install/payload/meshd/redact.ts:206 |
 | redact | function | install/payload/meshd/redact.ts:113 |
 | redactAndRecord | function | install/payload/meshd/redact.ts:234 |
@@ -557,11 +557,11 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | similar | function | scripts/feedback-to-issues.ts:119 |
 | skillsPayloadDir | function | install/payload/bin/mesh:1651 |
 | smokeTest | function | install/payload/bin/mesh:873 |
-| snapshot | function | install/payload/meshd/sessions.ts:106 |
+| snapshot | function | install/payload/meshd/sessions.ts:107 |
 | snapshotMachineMatching | func | Shared/Models.swift:167 |
 | stagePayload | function | install/payload/bin/mesh:827 |
-| startSessionMirror | function | install/payload/meshd/sessions.ts:344 |
-| startSessionSweep | function | install/payload/meshd/sessions.ts:213 |
+| startSessionMirror | function | install/payload/meshd/sessions.ts:351 |
+| startSessionSweep | function | install/payload/meshd/sessions.ts:214 |
 | StatRow | struct | iOS/ContentView.swift:1708 |
 | Stats | struct | Shared/Models.swift:272 |
 | StatsSample | struct | iOS/MachineStatsView.swift:11 |
@@ -574,7 +574,7 @@ Top-level declarations only (Swift column-0 types and funcs; TS exports; CLI fun
 | stripRcLines | function | install/payload/bin/mesh:2144 |
 | SuggestionChip | struct | iOS/AgentChatView.swift:1172 |
 | swapInMeshd | function | install/payload/bin/mesh:912 |
-| sweep | function | install/payload/meshd/sessions.ts:196 |
+| sweep | function | install/payload/meshd/sessions.ts:197 |
 | SwiftTermView | struct | iOS/NativeTerminalScreen.swift:464 |
 | SwiftUI | extension | iOS/NativeTerminalScreen.swift:384 |
 | syncAgyHooks | function | install/payload/bin/mesh:1610 |

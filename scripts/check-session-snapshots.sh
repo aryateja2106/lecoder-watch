@@ -168,6 +168,8 @@ ok(bad1!.status === 400, "a mirror peer named ../x was accepted");
 await mirrorOnce();
 ok(Buffer.compare(readFileSync(join(HOME, ".mesh/sessions-mirror/peer2/claude", `${id}.jsonl`)), v3) === 0, "pulling with only a mirror token did not work");
 strict.stop(true);
+delete process.env.MESH_SESSIONS_MIRROR;
+ok((await mirrorOnce()).peers === 1, "without MESH_SESSIONS_MIRROR=on the mirror still used a full token from hosts.json");
 
 // Tamper: flip a byte inside the stored append — reconstruct must refuse, not serve it.
 const p2 = join(dir, "v2.gz");
@@ -176,6 +178,6 @@ ok(await reconstruct("claude", id, 2) === null, "a tampered version was served")
 ok((await req("GET", `/sessions/claude/${id}/raw?v=2`))!.status === 404, "GET raw served a tampered version");
 process.exit(bad);
 TS
-HOME="$T/home" MODULE="$ROOT/install/payload/meshd/sessions.ts" MESH_SESSIONS_DIR="$T/home/.mesh/sessions" bun "$T/run.ts" || fail=1
+HOME="$T/home" MODULE="$ROOT/install/payload/meshd/sessions.ts" MESH_SESSIONS_DIR="$T/home/.mesh/sessions" MESH_SESSIONS_MIRROR=on bun "$T/run.ts" || fail=1
 
 [ "$fail" = 0 ] && echo "check-session-snapshots: OK" || exit 1

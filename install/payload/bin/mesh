@@ -467,12 +467,12 @@ async function cmdSessions(pos: string[], flags: Record<string, string>, bools: 
         done.push(as);
       } catch (e: any) { console.error(`skipped ${name}: ${e.message}`); }
     }
-    return out(() => console.log(`${want} will mirror: ${done.join(", ") || "nothing"}${done.length ? "  (needs MESH_SESSIONS_MIRROR=on in its meshd.env)" : ""}`), { mirror: want, peers: done });
+    return out(() => console.log(`${want} will mirror: ${done.join(", ") || "nothing"}${done.length ? " — pulling now, then every ten minutes" : ""}`), { mirror: want, peers: done });
   }
   if (bools.has("mirror")) {
     const { sessions } = await api(h, "GET", "/sessions?mirror=1");
     return out(() => {
-      if (!sessions.length) { console.log(`(${h.name} mirrors nothing — set MESH_SESSIONS_MIRROR=on in its meshd.env)`); return; }
+      if (!sessions.length) { console.log(`(${h.name} mirrors nothing yet — run: mesh sessions mirror-to ${h.name})`); return; }
       for (const s of sessions.slice(0, Number(flags.n || flags.limit) || 30)) {
         console.log(`${String(s.host).padEnd(10)} ${s.id.slice(0, 8)}  ${s.runtime.padEnd(6)} v${String(s.n).padEnd(4)} ${(s.title ?? s.cwd ?? "").slice(0, 60)}`);
       }
