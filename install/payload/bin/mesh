@@ -449,6 +449,9 @@ async function cmdStatus(cfg: Config) {
 async function cmdSessions(pos: string[], flags: Record<string, string>, bools: Set<string>, cfg: Config) {
   const h = resolveHost(hostOf(flags), cfg);
   const [sub, want] = pos;
+  const size = (b: number) => b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`;
+  // A Codex id is rollout-<timestamp>-<uuid>; the uuid is the part a person can type.
+  const short = (id: string) => id.replace(/^rollout-.*?-(?=[0-9a-f]{8}-[0-9a-f]{4}-)/, "");
   if (sub === "mirror-to") {
     // Register every machine this one knows (itself included) with the mirror, each with
     // its own mirror token — the mirror never receives a machine's full token.
@@ -479,9 +482,6 @@ async function cmdSessions(pos: string[], flags: Record<string, string>, bools: 
     }, sessions);
   }
   const { sessions } = await api(h, "GET", "/sessions?limit=500");
-  const size = (b: number) => b >= 1 << 20 ? `${(b / (1 << 20)).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`;
-  // A Codex id is rollout-<timestamp>-<uuid>; the uuid is the part a person can type.
-  const short = (id: string) => id.replace(/^rollout-.*?-(?=[0-9a-f]{8}-[0-9a-f]{4}-)/, "");
   if (!sub || sub === "ls" || sub === "list") {
     return out(() => {
       if (!sessions.length) { console.log(`(no snapshots on ${h.name} yet — the first sweep runs 30 s after meshd starts)`); return; }

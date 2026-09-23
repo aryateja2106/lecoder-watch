@@ -102,7 +102,7 @@ function describe(bytes: Uint8Array): { cwd: string | null; title: string | null
         if (ask >= 0) text = text.slice(ask + 24);
         text = text.trim();
         // Hook, system and instruction wrappers are not what the person typed.
-        if (text && !text.startsWith("<") && !text.startsWith("# AGENTS.md") && !text.startsWith("# Files mentioned")) { title = text.replace(/\s+/g, " ").slice(0, 120); break; }
+        if (text && !/^(<|# AGENTS\.md|# Files mentioned|\[Image)/.test(text)) { title = text.replace(/\s+/g, " ").slice(0, 120); break; }
       }
     }
     if (cwd && title) break;
