@@ -36,7 +36,7 @@
 // paths, "..", and any path that resolves outside cwd are refused.
 //
 //   POST /agent-note  { id?, q?, cwd?, model?, file?, command?, confirm?, ask? }
-//        -> { modelClass, draft, commandRan, held }
+//        -> { modelClass, draft, commandRan, held, reply }
 //
 // id alone is the note, as before. When id is absent, q selects one note
 // with the same local-text refusal as knowledge search and the listNotes
@@ -345,7 +345,7 @@ export async function runAgentNote(opts: {
   command?: string;
   confirm?: boolean;
   ask?: string;
-}): Promise<{ modelClass: ModelClass; draft: string | null; commandRan: boolean; held: boolean }> {
+}): Promise<{ modelClass: ModelClass; draft: string | null; commandRan: boolean; held: boolean; reply: string | null }> {
   if (!opts.model.trim()) throw new AgentNoteError("model required", 400);
   const modelClass = modelClassOf(opts.model);
   // Classification is the gate. A URL that is neither class is not called.
@@ -368,21 +368,21 @@ export async function runAgentNote(opts: {
   // the held shape for a secret ask; this keeps a direct call on the same side.
   if (extra && askIsRemote(extra)) throw new AgentNoteError("ask must be local text", 400);
   if (extra && textHeldByRoute(extra)) {
-    return { modelClass, draft: null, commandRan: false, held: true };
+    return { modelClass, draft: null, commandRan: false, held: true, reply: null };
   }
   const assistant = await completeNote(endpoint, promptForModel(noteText(note), extra), modelClass);
   // A reply the route would hold is not a draft and not a note.
   if (textHeldByRoute(assistant)) {
-    return { modelClass, draft: null, commandRan: false, held: true };
+    return { modelClass, draft: null, commandRan: false, held: true, reply: null };
   }
   await writeHeldFile(heldFile.abs, assistant);
   if (extra) await writeNote(extra, assistant);
 
   const command = opts.command?.trim() ?? "";
-  if (!command) return { modelClass, draft: heldFile.rel, commandRan: false, held: false };
+  if (!command) return { modelClass, draft: heldFile.rel, commandRan: false, held: false, reply: assistant };
   // Review before dispatch: the file stays on disk. A shell command runs
   // only when the caller confirmed, and that command is not the file.
-  if (opts.confirm !== true) return { modelClass, draft: heldFile.rel, commandRan: false, held: true };
+  if (opts.confirm !== true) return { modelClass, draft: heldFile.rel, commandRan: false, held: true, reply: assistant };
 
   const proc = Bun.spawn(["/bin/sh", "-c", command], {
     cwd,
@@ -392,7 +392,7 @@ export async function runAgentNote(opts: {
   });
   const code = await proc.exited;
   if (code !== 0) throw new AgentNoteError("command failed", 400);
-  return { modelClass, draft: heldFile.rel, commandRan: true, held: false };
+  return { modelClass, draft: heldFile.rel, commandRan: true, held: false, reply: assistant };
 }
 
 export async function handleAgentNote(req: Request, url: URL): Promise<Response | null> {
@@ -437,7 +437,7 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
   if (ask && askIsRemote(ask)) return json({ error: "ask must be local text" }, 400);
   if (ask && textHeldByRoute(ask)) {
     if (!model.trim()) return json({ error: "model required" }, 400);
-    return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true });
+    return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true, reply: null });
   }
   const givenId = typeof body.id === "string" ? body.id.trim() : "";
   let id = givenId;
@@ -454,14 +454,14 @@ export async function handleAgentNote(req: Request, url: URL): Promise<Response 
     if (!note) return json({ error: "note not found" }, 404);
     if (heldByRoute(note)) {
       if (!model.trim()) return json({ error: "model required" }, 400);
-      return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true });
+      return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true, reply: null });
     }
   }
   if (givenId) {
     const note = await readNote(id);
     if (note && heldByRoute(note)) {
       if (!model.trim()) return json({ error: "model required" }, 400);
-      return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true });
+      return json({ modelClass: modelClassOf(model), draft: null, commandRan: false, held: true, reply: null });
     }
   }
   if (cwdOmitted) {

@@ -968,6 +968,7 @@ struct AgentNoteAsk: Codable, Hashable {
     var draft: String?
     var commandRan: Bool
     var held: Bool
+    var reply: String?
 }
 
 /// One title from `GET /knowledge`. The list is id and title.
