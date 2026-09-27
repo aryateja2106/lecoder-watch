@@ -145,6 +145,8 @@ def wants_index(d, files, tree=None):
         return False
     if tree is not None and under_skill(d, tree):
         return False
+    if re.match(r"^\.(claude|cursor)/commands(/|$)", d):
+        return False  # every .md there is a slash command; an INDEX.md would become /INDEX
     media = sum(1 for f in direct if f.endswith(MEDIA))
     return media < 0.8 * max(len(direct), 1)  # a folder of screenshots needs AGENTS.md, not a table
 
@@ -165,6 +167,8 @@ def needs_agents_md(d, files):
         return False
     if d == "graphify-out":
         return False  # generated; only GRAPH_REPORT.md is tracked and the rest is gitignored
+    if re.match(r"^\.(claude|cursor)/commands(/|$)", d):
+        return False  # every .md in a commands/ folder is a slash command; a brief there becomes /AGENTS
     if depth >= 2 and len(files) < 3:
         return False  # tiny leaf
     return True
