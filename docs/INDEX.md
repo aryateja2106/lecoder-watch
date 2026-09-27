@@ -11,7 +11,7 @@
 | `product/` | 25 files | docs/product/ — the product definition: what LeSearch AI is, every screen and daemon feature, the design system, and where each feature… |
 | `recordings/` | 1 files | docs/recordings/ — drop zone for screen recordings Arya shares so an agent can watch a bug or a flow |
 | `screenshots/` | 6 files | docs/screenshots/ — the five app-store-style screenshots shown at the top of the main README |
-| `sdlc/` | 1 files |  |
+| `sdlc/` | 6 files |  |
 | `shots/` | 3 files | docs/shots/ — dated proof screenshots from individual work sessions, one folder per day |
 | `AGENTS.md` | S | docs/ — every written explanation of the product: the spec, how-to guides, decisions, release plans and dated history |
 | `CLI-FIRST-ROADMAP.md` | S | CLI-first roadmap — mesh as the product |

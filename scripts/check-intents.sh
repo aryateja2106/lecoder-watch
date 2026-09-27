@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.."
 fail=0
 bad() { printf 'check-intents: %s: %s\n' "$1" "$2"; fail=1; }
 for f in intents/*.md; do
-  case "$(basename "$f")" in README.md|TEMPLATE.md|AGENTS.md|INDEX.md) continue ;; esac
+  case "$(basename "$f")" in README.md|TEMPLATE.md|AGENTS.md|INDEX.md|INTERVIEW.md) continue ;; esac
   printf '%s\n' "$(basename "$f")" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+\.md$' || bad "$f" "name it YYYY-MM-DD-<slug>.md"
   head -1 "$f" | grep -q '^---$' || bad "$f" "missing front matter"
   grep -qE '^status: (draft|accepted|in-progress|shipped|closed)' "$f" || bad "$f" "status must be draft|accepted|in-progress|shipped|closed"

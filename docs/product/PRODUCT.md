@@ -163,6 +163,8 @@ route line). That is the rule for adding anything.
 `mesh` (the CLI), `mesh-input.swift` (the HID helper), `mesh-event`, `mesh-hook`,
 `mesh-agent-run`, `mesh-codex-notify` (the four ways an agent tells the daemon
 something happened), `mesh-kb`, `mesh-self-check`, `start-cmux-bridge`.
+The folder also carries `AGENTS.md` (the folder brief) and a generated `INDEX.md`
+(one line per file); they are navigation for agents, not helpers, and are not installed.
 
 **Where to run (0.8).** `mesh fleet` (alias `mesh where`) is the capability map an agent
 reads before choosing a machine: per host its hardware, free RAM, CPU and load, running
