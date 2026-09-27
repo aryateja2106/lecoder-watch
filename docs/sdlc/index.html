@@ -40,21 +40,22 @@
   <p>One line per stage. Each line says whether the stage's hand-off exists in the repo yet.
   Lines tagged <span class="you">you</span> are waiting on you, not on an agent.</p>
   <ul class="status">
-    <li data-state="not-started" data-proof="any:intents/20*.md|status: accepted" data-owner="arya" data-block="B-06">
+    <li data-state="not-started" data-proof="any:intents/20*.md|status: accepted" data-owner="arya">
       <span class="state">Not started</span>
-      <span class="label"><a href="1-plan.html">1 Plan</a>: you have accepted at least one intent</span>
+      <span class="label"><a href="1-plan.html">1 Plan</a>: you have accepted at least one intent (the first is the design intent, part of <a href="blocks.html#B-06">B-06</a>)</span>
+      <span class="you">you</span>
+    </li>
+    <li data-state="in-progress" data-proof="file:openspec/changes/design-theme/proposal.md" data-owner="arya" data-block="B-06" data-asof="2026-09-27">
+      <span class="state">In progress</span>
+      <span class="label"><a href="2-design.html">2 Design</a>: the design theme is written as a spec (the draft intent exists; the spec does not)</span>
       <span class="you">you</span>
       <a class="bid" href="blocks.html#B-06">B-06</a>
+      <span class="asof">checked 2026-09-27</span>
     </li>
-    <li data-state="not-started" data-proof="file:openspec/changes/design-theme/proposal.md" data-owner="arya" data-block="B-06">
+    <li data-state="not-started" data-proof="file:scripts/check-charter.sh" data-owner="arya" data-block="B-16">
       <span class="state">Not started</span>
-      <span class="label"><a href="2-design.html">2 Design</a>: the design theme is written as a spec</span>
+      <span class="label"><a href="3-build.html">3 Build</a>: the charter is filled in and checked, including the rule that every change commits its plan before code</span>
       <span class="you">you</span>
-      <a class="bid" href="blocks.html#B-06">B-06</a>
-    </li>
-    <li data-state="not-started" data-proof="file:scripts/check-run-plans.sh" data-owner="agent" data-block="B-16">
-      <span class="state">Not started</span>
-      <span class="label"><a href="3-build.html">3 Build</a>: every run writes its plan before code</span>
       <a class="bid" href="blocks.html#B-16">B-16</a>
     </li>
     <li data-state="not-started" data-proof="text:CLAUDE.md|## Verifying your work" data-owner="agent" data-block="B-20">
@@ -80,7 +81,9 @@
   <section class="week" data-asof="2026-09-27">
     <p>Three moves. Each one is yours: no agent can make these for you. None of them needs any code.</p>
     <ol>
-      <li><b>Put your ideas in your own words.</b> Sit with an agent that interviews you from
+      <li><b>Put your ideas in your own words.</b> Sit with an agent in the Claude Code desktop
+      app, in a session opened on this repo. Tap the "Flush out my plans" chip, or say "Open
+      intents/INTERVIEW.md and follow it". The agent interviews you from
       <a href="../../intents/INTERVIEW.md"><code>intents/INTERVIEW.md</code></a>, one question at a
       time. The <a href="glossary.html#intent">intents</a> in
       <a href="../../intents/README.md"><code>intents/</code></a> dated 2026-09-27 are drafts an agent
@@ -88,10 +91,14 @@
       minutes per intent, about an hour for the design sitting.
       <a class="bid" href="blocks.html#B-06">B-06</a></li>
       <li><b>Turn on GitHub protection for <code>main</code>.</b> About 2 minutes in GitHub →
-      Settings → Rules. After that, GitHub itself refuses a change nobody reviewed.
+      Settings → Rules, following the steps on <a href="5-ship.html#you">the Ship page</a>.
+      After that, GitHub refuses any change to <code>main</code> that is not a pull request you
+      merged yourself: no direct push, no force push, by anyone, including an agent using your
+      account.
       <a class="bid" href="blocks.html#B-04">B-04</a></li>
-      <li><b>Decide what happens to the unreviewed Cursor pull requests.</b> On 22–23 September
-      2026 an unattended Cursor loop opened 123 pull requests (counted on 2026-09-27). Close all,
+      <li><b>Decide what happens to the unreviewed Cursor pull requests.</b> An unattended Cursor
+      loop opened 119 pull requests on 22–23 September 2026 (123 open Cursor pull requests in
+      all, counted on 2026-09-27). Close all,
       keep a few, or park them. Reply with the block id and your choice.
       <a class="bid" href="blocks.html#B-15">B-15</a></li>
     </ol>
@@ -147,7 +154,9 @@
   <ul>
     <li><a href="../../ROADMAP.md" data-anchor="## Non-goals"><code>ROADMAP.md</code></a>, the
     <a href="glossary.html#non-goal">non-goals</a>: no cloud relay, no VNC, no account system.
-    Nothing of yours leaves your machines except one anonymous daily heartbeat.</li>
+    Only three things leave your machines: one anonymized daily heartbeat (you can switch it
+    off), a problem report you choose to send, and push alerts, whose text is redacted before it
+    goes to Apple's push service (APNs).</li>
     <li><a href="../../AGENTS.md" data-anchor="## The rules that have actually cost days"><code>AGENTS.md</code></a>,
     the rules for every agent, each one learned from a mistake that cost days.</li>
     <li><a href="../../CLAUDE.md" data-anchor="## Non-negotiable"><code>CLAUDE.md</code></a>,
@@ -167,19 +176,19 @@
   <details class="agents">
     <summary>For agents</summary>
     <p>Read the state of every status line on every page from one command instead of parsing
-    the HTML. It is written by <code class="missing">scripts/check-sdlc-status.sh</code>, which
-    does not exist yet.</p>
+    the HTML. It is printed by <a href="../../scripts/check-sdlc-status.sh"><code>scripts/check-sdlc-status.sh</code></a>.</p>
     <pre><code>sh scripts/check-sdlc-status.sh --board</code></pre>
     <p>Before editing this folder, read the folder brief
-    <code class="missing">docs/sdlc/AGENTS.md</code> (not written yet). Before committing, run both checks:</p>
+    <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a>. Before committing, run both checks:</p>
     <pre><code>sh scripts/check-sdlc-status.sh
 sh scripts/check-sdlc-site.sh</code></pre>
     <p>Block ids on this page come from <a href="BLOCKS.md"><code>docs/sdlc/BLOCKS.md</code></a>.
     When you land a block, flip its line here in the same pull request.</p>
     <p>Name trap: <a href="../../intent/cases.jsonl"><code>intent/</code></a> (singular) is test
     data for the on-device model. <a href="../../intents/README.md"><code>intents/</code></a>
-    (plural) is Stage 1, Arya's ideas. Never mark an intent <code>status: accepted</code>; that
-    word is Arya's.</p>
+    (plural) is Stage 1, Arya's ideas. Never mark an intent <code>status: accepted</code> on your
+    own; that word is Arya's. When he types "I accept &lt;title&gt;" in the session, make that one
+    edit and commit it.</p>
   </details>
 </main>
 <footer class="site-footer">

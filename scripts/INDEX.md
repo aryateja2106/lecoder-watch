@@ -85,6 +85,7 @@
 | `check-pair-qr.sh` | S | qr.ts self-check: every payload is encoded and then read back by a decoder written against the standard rather than against the encoder —… |
 | `check-pairing.swift` | M | Pairing writes real tokens into the saved machine list, so the merge has to be right: a wrong match silently points a machine at another… |
 | `check-paste-epipe.sh` | S | a big paste must not take the machine off the mesh |
+| `check-payload-no-agent-docs.sh` | S | the installer tarball carries no agent navigation files (AGENTS.md, INDEX.md) and no harness state (.omc, node_modules, lockfiles) |
 | `check-phone-input-and-wake.sh` | S | Two defects that a green build cannot see, because in both cases the wrong code compiles, renders and behaves normally right up to the… |
 | `check-pointer-gain.swift` | S | The gain curve decides whether the pad can both cross two screens and hit a close button |
 | `check-preview-mapping.swift` | S | Tap-to-place-cursor is the flagship interaction |
@@ -100,6 +101,7 @@
 | `check-roundtrip.sh` | S | The notification round-trip: an event an agent hook posts must carry a session name the reply route can actually address — or say that it… |
 | `check-screen-zoom.swift` | S | Aiming is the whole product on this screen |
 | `check-sdlc-site.sh` | S | the lifecycle teaching site under docs/sdlc/ points only at files that exist, and every block in docs/sdlc/BLOCKS.md is shown on the blocks… |
+| `check-sdlc-status.sh` | M | every status line on the lifecycle site under docs/sdlc/ carries a proof, and its Done / In progress / Not started word agrees with what… |
 | `check-session-snapshots.sh` | S | Lossless session history (meshd sessions.ts) keeps every version of an agent transcript after the runtime compacts or deletes it, and gives… |
 | `check-session-state.swift` | S | Run: swiftc Shared/Models.swift scripts/check-session-state.swift -o /tmp/css && /tmp/css |
 | `check-shell-quoting.swift` | S | shellQuotedArgument() single-quotes anything a shell would split or interpret, and leaves plain paths alone |

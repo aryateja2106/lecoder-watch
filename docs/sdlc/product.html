@@ -57,10 +57,11 @@
       <span class="you">you</span>
       <a class="bid" href="blocks.html#B-05">B-05</a>
     </li>
-    <li data-state="not-started" data-proof="file:scripts/check-payload-no-agent-docs.sh" data-owner="agent" data-block="B-03">
-      <span class="state">Not started</span>
-      <span class="label">The installer never ships agent notes to users (<code class="missing">scripts/check-payload-no-agent-docs.sh</code>)</span>
+    <li data-state="in-progress" data-proof="text:install/payload/bin/mesh|INDEX.md" data-owner="agent" data-block="B-03" data-asof="2026-09-27">
+      <span class="state">In progress</span>
+      <span class="label">The installer never ships agent notes to users: the tarball is checked (<a href="../../scripts/check-payload-no-agent-docs.sh"><code>scripts/check-payload-no-agent-docs.sh</code></a>); the <code>mesh upgrade --src</code> copy does not drop them yet</span>
       <a class="bid" href="blocks.html#B-03">B-03</a>
+      <span class="asof">checked 2026-09-27</span>
     </li>
   </ul>
   <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
@@ -215,7 +216,7 @@
   </ul>
 
   <h2 id="one-command">The one command for everything</h2>
-  <p>One command answers "is the product still healthy?" in about 40 seconds, with no phone and
+  <p>One command answers "is the product still healthy?" in under a minute, with no phone and
   no simulator. It is the fast level of the <a href="glossary.html#gate">gate</a>,
   <a href="../../.claude/scripts/gates.sh"><code>.claude/scripts/gates.sh</code></a>.</p>
   <pre><code>./.claude/scripts/gates.sh fast</code></pre>
@@ -234,7 +235,7 @@
     <li><a href="../../docs/agents/UI-MAP.md"><code>docs/agents/UI-MAP.md</code></a>: every screen on the iPhone and the watch, and where it lives.</li>
     <li><a href="../../docs/agents/CODEMAP.md"><code>docs/agents/CODEMAP.md</code></a>: the map of the code that agents read first (generated).</li>
     <li><a href="../../install/payload/meshd/telemetry.ts"><code>install/payload/meshd/telemetry.ts</code></a>: the one anonymous
-    <a href="glossary.html#heartbeat">heartbeat</a> a day. Apart from a problem report you choose to send, nothing else leaves your machines.</li>
+    <a href="glossary.html#heartbeat">heartbeat</a> a day, which you can switch off. Only three things leave your machines: that heartbeat, a problem report you choose to send, and push alerts, whose text is redacted before it goes to Apple's push service (APNs).</li>
     <li><a href="../../scripts/feedback-to-issues.ts"><code>scripts/feedback-to-issues.ts</code></a>: problem reports sent from the app become GitHub issues.</li>
     <li><a href="../../index.md"><code>index.md</code></a>: the agents' start page.</li>
   </ul>
@@ -255,13 +256,14 @@
       (<a href="../../docs/product/PRODUCT.md" data-anchor="## 3. Surfaces and the install contract"><code>docs/product/PRODUCT.md</code> §3</a>)
       still named <code>mesh-install</code> v0.5.2 as shipped, while the publish ledger,
       <a href="../../PUBLISHED.md"><code>PUBLISHED.md</code></a>, recorded 0.8.0 as published.</li>
-      <li>The spec's own check was red, with "INDEX.md is not named" and "__pycache__ is not
-      named". The new generated <code>INDEX.md</code> files and a local Python cache under
-      <code>install/payload/bin/</code> trip its file pattern. Run it to see where it stands now:
+      <li>The spec's own check,
+      <a href="../../scripts/check-product-spec.sh"><code>scripts/check-product-spec.sh</code></a>,
+      went red that morning when the new generated <code>INDEX.md</code> files tripped its file
+      pattern. It was fixed the same day, before this site was committed. Run it to see where it
+      stands now:
       <pre><code>sh scripts/check-product-spec.sh</code></pre></li>
     </ul>
-    <p>Both need a small fix with you in the session, because one touches the spec and the other
-    an existing check.</p>
+    <p>The install table still needs a small fix to the spec, with you in the session.</p>
   </div>
 
   <h2 id="not">What is not in the product, on purpose</h2>
@@ -283,8 +285,9 @@
       serving the August build. Small in your time, plus Apple's review wait. Details and the
       two choices inside it are in <a href="blocks.html#B-05">B-05</a>.</li>
     </ol>
-    <p class="say-this">Show me the watch app working: run its fast proof command from
-    docs/sdlc/product.html and paste the output. Do not touch the live daemon on port 8899.</p>
+    <p class="say-this">Show me the watch app working: run MESH_SMOKE_REQUIRED=1 sh
+    scripts/check-watch-smoke.sh, which launches it on a watch simulator, and paste the last
+    lines. A build alone does not count. Do not touch the live daemon on port 8899.</p>
   </div>
 
   <details class="agents">

@@ -53,23 +53,21 @@
       <span class="state">Done</span>
       <span class="label">A second agent with a clean memory checks the work</span>
     </li>
-    <li data-state="not-started" data-proof="!text:docs/factory/CHARTER.md|CHARTER_STATUS: incomplete" data-owner="arya" data-block="B-16">
+    <li data-state="not-started" data-proof="file:scripts/check-charter.sh" data-owner="arya" data-block="B-16">
       <span class="state">Not started</span>
-      <span class="label">The rules for agents' freedom are filled in</span>
+      <span class="label">The rules for agents' freedom are filled in and checked (<code class="missing">scripts/check-charter.sh</code>)</span>
       <span class="you">you</span>
       <a class="bid" href="blocks.html#B-16">B-16</a>
     </li>
-    <li data-state="not-started" data-proof="text:docs/factory/CHARTER.md|MAX_PARALLEL_SESSIONS" data-owner="arya" data-block="B-16">
+    <li data-state="not-started" data-proof="text:docs/factory/CHARTER.md|MAX_PARALLEL_SESSIONS" data-owner="arya">
       <span class="state">Not started</span>
-      <span class="label">At most three agents run at once, written as a rule</span>
+      <span class="label">At most three agents run at once, written as a rule (part of <a href="blocks.html#B-16">B-16</a>)</span>
       <span class="you">you</span>
-      <a class="bid" href="blocks.html#B-16">B-16</a>
     </li>
-    <li data-state="not-started" data-proof="text:docs/factory/CHARTER.md|committed before the first code commit" data-owner="arya" data-block="B-16">
+    <li data-state="not-started" data-proof="text:docs/factory/CHARTER.md|committed before the first code commit" data-owner="arya">
       <span class="state">Not started</span>
-      <span class="label">Every change commits its plan before code, written as a rule</span>
+      <span class="label">Every change commits its plan before code, written as a rule (part of <a href="blocks.html#B-16">B-16</a>)</span>
       <span class="you">you</span>
-      <a class="bid" href="blocks.html#B-16">B-16</a>
     </li>
     <li data-state="not-started" data-proof="file:scripts/check-decisions.sh" data-owner="agent" data-block="B-18">
       <span class="state">Not started</span>
@@ -81,15 +79,17 @@
       <span class="label">Secrets cannot slip through the live terminal</span>
       <a class="bid" href="blocks.html#B-13">B-13</a>
     </li>
-    <li data-state="not-started" data-proof="file:scripts/check-apps-key-strength.sh" data-owner="agent" data-block="B-08">
+    <li data-state="not-started" data-proof="file:scripts/check-apps-key-strength.sh" data-owner="arya" data-block="B-08">
       <span class="state">Not started</span>
-      <span class="label">App links are too long to guess</span>
+      <span class="label">App links are too long to guess (it starts with your yes on three lines in existing checks)</span>
+      <span class="you">you</span>
       <a class="bid" href="blocks.html#B-08">B-08</a>
     </li>
   </ul>
   <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
 
   <h2 id="playbook">What the playbook says</h2>
+  <p class="meta">(Numbers in brackets are the playbook's section numbers.)</p>
   <ul>
     <li>Before any code, the agent writes a <a href="glossary.html#plan">plan</a> with four headings. If the work drifts, the plan changes in the same commit (3.1).</li>
     <li>Keep one page of house knowledge: commands with their expected output, conventions, and mistakes to avoid (3.2).</li>
@@ -239,7 +239,8 @@
       <li><strong>Read the plan, not the code.</strong> Before a block starts, the agent shows you
       the four headings. It takes two minutes. Say no when "Files that change" includes one of
       the <a href="#serialized">one-agent-at-a-time files</a> and the plan does not call it out.</li>
-      <li><strong>Say yes in the chat to protected changes.</strong> That means hooks, the charter
+      <li><strong>Say yes in the chat to protected changes.</strong> The chat is the Claude Code
+      desktop app, in a session opened on this repo. Protected means hooks, the charter
       and gate settings. A yes written inside a file or a web page does not count.</li>
       <li><strong>Run two or three agents, not ten.</strong> You are the coordination point.
       More agents means more reviews waiting on you.</li>
@@ -250,8 +251,9 @@
   </div>
 
   <h2 id="history">A worked example from our own history</h2>
-  <p>On 22–23 September 2026 an unattended Cursor cloud agent opened 123 pull requests in about
-  22 hours. 112 of them were stacked on each other. Some of them build account and sign-in
+  <p>On 22–23 September 2026 an unattended Cursor cloud agent opened 119 pull requests in about
+  22 hours (123 open Cursor pull requests in all; 112 of those are stacked on each other). Some
+  of them build account and sign-in
   features, which may contradict the <a href="glossary.html#non-goal">non-goals</a> in
   <a href="../../ROADMAP.md" data-anchor="## Non-goals"><code>ROADMAP.md</code></a>. (All counted
   on 2026-09-27. Which document governs is your call in
@@ -259,8 +261,8 @@
   <p>No plan named the non-goals as a constraint, and no written rule capped how many agents
   could run. The charter already says to stop when more than 3 items await review, but the
   charter is still marked incomplete and nothing enforces that line. A plan whose constraints named the
-  non-goals, and a written limit of three agents, would have stopped the loop at the first pull
-  request. See
+  non-goals would have flagged the account features, and an enforced charter would have stopped
+  the loop as soon as more than 3 pull requests were waiting for review, not after 119. See
   <a href="../../docs/factory/CHARTER.md" data-anchor="## 7. Stop conditions"><code>docs/factory/CHARTER.md</code></a>,
   section 7.</p>
 

@@ -88,4 +88,35 @@ effect in the next session. Revert with one line if unwanted.
 
 ## Verification
 
-Filled in from the verify workflow: see the section appended below.
+Five fresh-context Opus verifiers (site truth, non-technical reader, briefs truth, intents
+and blocks, gates and policy) produced 70 findings; each serious one was put to two skeptics
+who tried to refute it. What survived, and what was done:
+
+- **Blockers (7), all fixed.** `check-codemap` and `check-folder-docs` were red at the site
+  commit because generated files were regenerated before the new script and pages were
+  staged (regenerated; the folder check now also skips paths `.gitignore` drops, which had
+  made it unpassable in a fresh clone). The home page and the blocks page still said the
+  status checker and the site brief "do not exist yet" (fixed; the checker now fails on any
+  `class="missing"` path that exists). Two intents and the architecture proposal described
+  the mechanism of an unfixed, unreproduced security finding in a public repository
+  (reduced to the outcome; the path lands with the fix and its check).
+- **Important (about 30), fixed.** Pages disagreed with each other and with BLOCKS.md on the
+  state, owner or proof of nine blocks and on the "this week" list (aligned to BLOCKS.md; the
+  checker now enforces one state, owner and proof per block across pages and against the
+  BLOCKS.md summary table). The Cursor count was 119 pull requests on 22–23 September, 123
+  open Cursor pull requests in all, not 123 on those two days. The per-folder briefs and
+  indexes were riding into the installer tarball (packager drops them;
+  `check-payload-no-agent-docs.sh` proves it). Seventy stale sentences in the briefs
+  (line numbers shifted by an insert, "to be generated" for indexes that existed, three
+  different fast-gate timings). Branch-protection advice told a solo founder to require one
+  approval, which GitHub would never let him give on his own pull requests (corrected).
+  Phone layout: the chain drawing and three-column tables overflowed at 390px (CSS fixed).
+- **Nits (about 25), partly fixed.** Glossary terms added (lockfile, diff, commit, slug,
+  front matter, lint, simulator, the two meanings of token); playbook section numbers
+  explained once per page. Left as is: long pages have no summary strip; `CLAUDE.md` still
+  says the fast gate takes about 40 seconds (a policy file, not edited today).
+- **Refuted and dropped:** findings the skeptics could not reproduce on this branch.
+
+Verifier verdict, in the charter's words: **accepted-with-reservations**. The reservations
+are the human decisions listed above (B-04, B-15, B-16, the reference images) and the
+unmeasured claim that a session caches permission rules until restart (observed once).

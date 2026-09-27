@@ -58,11 +58,10 @@
       <span class="label">The healthy output is written where agents read it</span>
       <a class="bid" href="blocks.html#B-20">B-20</a>
     </li>
-    <li data-state="not-started" data-proof="!text:.factory/gates.conf|test audit architecture" data-owner="arya" data-block="B-20">
+    <li data-state="not-started" data-proof="!text:.factory/gates.conf|test audit architecture" data-owner="arya">
       <span class="state">Not started</span>
-      <span class="label">The deepest check level can actually pass</span>
+      <span class="label">The deepest check level can actually pass (your pick, part of <a href="blocks.html#B-20">B-20</a>)</span>
       <span class="you">you</span>
-      <a class="bid" href="blocks.html#B-20">B-20</a>
     </li>
     <li data-state="not-started" data-proof="live:ci-latest-green" data-owner="agent" data-block="B-19" data-asof="2026-09-27">
       <span class="state">Not started</span>
@@ -78,6 +77,7 @@
   <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
 
   <h2 id="playbook">What the playbook says</h2>
+  <p class="meta">(Numbers in brackets are the playbook's section numbers.)</p>
   <ul>
     <li>The agent checks its own work before a person sees it (4).</li>
     <li>One command wraps all the checking, and its healthy output is written in <code>CLAUDE.md</code> under "Verifying your work" (4).</li>
@@ -155,7 +155,7 @@ Run all before reporting done; paste output.</pre>
       <li>The healthy output is not written in <code>CLAUDE.md</code>, so an agent cannot tell a good run from a bad one without guessing.</li>
       <li><code>deep</code> can never be green: <code>npm audit</code> fails with <code>ENOLOCK</code> because there is no lockfile, and its architecture rule is empty.</li>
       <li>The full run quietly needs the Pi, the Jetson and the local model servers. The only way to skip them is <code>MESH_OVERNIGHT_SKIP</code> in <a href="../../scripts/check-overnight.sh"><code>scripts/check-overnight.sh</code></a>, and <code>CLAUDE.md</code> does not mention it.</li>
-      <li>On 2026-09-27 three self-checks were red, so <code>full</code> started red, and <a href="glossary.html#ci">CI</a> was red on the newest integration branch (cause unverified).</li>
+      <li>Generated maps go stale whenever files are added: at the commit that added this site (2026-09-27), <a href="../../scripts/check-codemap.sh"><code>scripts/check-codemap.sh</code></a> and <a href="../../scripts/check-folder-docs.sh"><code>scripts/check-folder-docs.sh</code></a> were red for that reason, so <code>full</code> started red. <a href="glossary.html#ci">CI</a> was red on the newest <a href="glossary.html#integration-branch">integration branch</a> too (cause unverified). Run <code>sh scripts/check-all.sh</code> to see where it stands now.</li>
       <li>No suite tests the coding agents themselves (<code class="missing">evals/cases.jsonl</code>).</li>
     </ul>
   </div>
@@ -173,7 +173,8 @@ Run all before reporting done; paste output.</pre>
   <h2 id="you">How you take part</h2>
   <div class="you-part">
     <ol>
-      <li><strong>Pick the way out for the deep gate.</strong> One word in chat, about 2 minutes:
+      <li><strong>Pick the way out for the deep gate.</strong> One word in chat (the Claude Code
+      desktop app, in a session opened on this repo), about 2 minutes:
       add a lockfile, point the audit at the daemon's real dependencies, or drop the gate. The
       agent records your pick in
       <a href="../../docs/factory/DECISIONS.md"><code>docs/factory/DECISIONS.md</code></a>

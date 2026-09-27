@@ -140,6 +140,12 @@ a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outli
 .site .aux a { color: var(--text-2); font-size: var(--fs-small); text-decoration: none; padding: var(--s1) var(--s2); }
 .site a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .site a[aria-current="page"] b { color: var(--accent); }
+/* phones: the rail fits one row and the aux links a second */
+@media (max-width: 479px) {
+  .site ol, .site ul { gap: var(--s1); }
+  .site .rail a { padding: 2px var(--s2); font-size: 0.8125rem; }
+  .site .aux a { padding: 2px var(--s1); font-size: 0.8125rem; }
+}
 
 /* ---------- page header ---------- */
 .eyebrow { font-size: var(--fs-label); letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--text-3); margin: var(--s6) 0 0; }
@@ -177,8 +183,9 @@ pre code { background: transparent; padding: 0; font-size: var(--fs-small); }
 pre.out { background: var(--surface); border-style: dashed; color: var(--text-2); }
 
 /* ---------- tables (always inside .scroll so the page never scrolls sideways) ---------- */
+/* min-width keeps columns readable on a phone; the .scroll box scrolls instead of the page */
 .scroll { overflow-x: auto; margin: 0 0 var(--s4); -webkit-overflow-scrolling: touch; }
-table { border-collapse: collapse; width: 100%; font-size: var(--fs-small); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; table-layout: auto; font-size: var(--fs-small); }
 th, td { text-align: left; vertical-align: top; padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line); }
 th { font-weight: 600; color: var(--text-2); background: var(--surface-2); }
 
@@ -192,6 +199,7 @@ th { font-weight: 600; color: var(--text-2); background: var(--surface-2); }
 .warn { border-left: 4px solid var(--missing); }
 .say-this { margin: var(--s3) 0 0; padding: var(--s3) var(--s4); border-left: 4px solid var(--accent); background: var(--surface); font-style: italic; }
 .say-this::before { content: "Say this to an agent"; display: block; font-style: normal; font-size: var(--fs-label); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-bottom: var(--s1); }
+.note > h3:first-child { margin-top: 0; }
 .say > :last-child, .week > :last-child, .you-part > :last-child, .gap > :last-child, .note > :last-child, .warn > :last-child { margin-bottom: 0; }
 
 /* ---------- template side by side ---------- */
@@ -228,6 +236,8 @@ th { font-weight: 600; color: var(--text-2); background: var(--surface-2); }
 .rail-chain rect { fill: var(--surface); stroke: var(--line); }
 .rail-chain text { fill: var(--text); font: 13px var(--font-body); }
 .rail-chain .arrow { stroke: var(--text-3); fill: none; }
+/* below 480px the diagram's text is too small to read; the ordered list after it is the phone view */
+@media (max-width: 479px) { .rail-chain { display: none; } }
 
 /* ---------- agents detail, glossary, footers ---------- */
 details.agents { border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s3) var(--s4); background: var(--surface); margin: var(--s6) 0 var(--s4); }

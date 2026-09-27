@@ -66,9 +66,10 @@
       <span class="label">agent-git: the live terminal cannot leak a secret cut in half (<code class="missing">scripts/check-redact-stream.sh</code>)</span>
       <a class="bid" href="blocks.html#B-13">B-13</a>
     </li>
-    <li data-state="not-started" data-proof="file:scripts/check-apps-key-strength.sh" data-owner="agent" data-block="B-08">
+    <li data-state="not-started" data-proof="file:scripts/check-apps-key-strength.sh" data-owner="arya" data-block="B-08">
       <span class="state">Not started</span>
-      <span class="label">Nethera: app links carry a key too long to guess (<code class="missing">scripts/check-apps-key-strength.sh</code>)</span>
+      <span class="label">Nethera: app links carry a key too long to guess (<code class="missing">scripts/check-apps-key-strength.sh</code>); it starts with your yes</span>
+      <span class="you">you</span>
       <a class="bid" href="blocks.html#B-08">B-08</a>
     </li>
   </ul>
@@ -100,9 +101,10 @@
       <dt>Licence</dt>
       <dd>MIT. Borrowing a pattern needs no notice; a copied file keeps Orca's copyright line.</dd>
       <dt>First block</dt>
-      <dd>None yet. The worktree idea is useful on one machine, not across machines, and
-      <a href="../../ROADMAP.md" data-anchor="## Later"><code>ROADMAP.md</code></a> lists
-      per-agent isolation under "Later". So
+      <dd>None yet. The worktree idea is useful on one machine, not across machines. The
+      "Later" list in <a href="../../ROADMAP.md" data-anchor="## Later"><code>ROADMAP.md</code></a>
+      isolates agents a different way (each agent gets its own Unix user and its own daemon),
+      not with worktrees. So
       <a href="BLOCKS.md" data-anchor="## Deliberately not a block yet"><code>BLOCKS.md</code>, "Deliberately not a block yet"</a>
       keeps it until an intent asks for it. The "pair again, not offline" idea is the candidate
       for <a href="blocks.html#B-11">B-11</a> First multi-machine build block.</dd>
@@ -193,8 +195,9 @@
       </dd>
       <dt>We refuse, and why</dt>
       <dd>Its hosted hub, its sign-in, and usage statistics that cannot be switched off: no
-      account system, and nothing of yours leaves your machines except one anonymous daily
-      heartbeat.</dd>
+      account system, and only three things leave your machines: one anonymized daily
+      heartbeat (you can switch it off), a problem report you choose to send, and push alerts,
+      whose text is redacted before it goes to Apple's push service (APNs).</dd>
       <dt>Licence</dt>
       <dd>MIT. One file inside it comes from another project with its own terms, which were
       not checked.</dd>
@@ -272,7 +275,8 @@
       <a href="../../scripts/check-apps-ota.sh"><code>scripts/check-apps-ota.sh</code></a>,
       expect the short key. Agents may not edit an existing check without you
       (<a href="../../CLAUDE.md" data-anchor="## Non-negotiable"><code>CLAUDE.md</code>, "Non-negotiable"</a>).
-      Reply "B-08 yes". A minute.</li>
+      Reply "B-08 yes" in the Claude Code desktop app, in a session opened on this repo. A
+      minute.</li>
       <li><b>B-12, the audit skill: two decisions.</b> Yes to adding a third-party skill under a
       protected folder, and where findings live until fixed (this Mac only is recommended). See
       <a href="references/security-audit-skill.md" data-anchor="## Open questions for Arya"><code>references/security-audit-skill.md</code>, "Open questions for Arya"</a>.

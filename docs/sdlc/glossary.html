@@ -66,6 +66,10 @@
     <dd>GitHub running our checks automatically every time a change is pushed.
       <span class="see">See it: <a href="../../.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a></span></dd>
 
+    <dt id="commit">Commit</dt>
+    <dd>A saved snapshot of a change in git, recording who made it, when, and a one-line message; the repo's history is a chain of commits.
+      <span class="see">See it: <a href="../../intents/README.md" data-anchor="That commit is the audit trail"><code>intents/README.md</code></a> (why a commit is the record)</span></dd>
+
     <dt id="complication">Complication</dt>
     <dd>The small live element on the watch face; ours shows how many agents are waiting, which session, and the question it is asking.
       <span class="see">See it: <a href="../../WatchWidgets/WatchGlanceWidget.swift" data-anchor="WatchGlanceWidget"><code>WatchWidgets/WatchGlanceWidget.swift</code></a></span></dd>
@@ -77,6 +81,14 @@
     <dt id="daemon">Daemon (<code>meshd</code>)</dt>
     <dd>The background program that runs on each of your machines and that the phone and the watch talk to.
       <span class="see">See it: <a href="../../install/payload/meshd/AGENTS.md"><code>install/payload/meshd/</code></a></span></dd>
+
+    <dt id="dependency">Dependency</dt>
+    <dd>Someone else's code that ours needs in order to run, named in a package file so it can be installed.
+      <span class="see">See it: <a href="../../install/payload/meshd/package.json"><code>install/payload/meshd/package.json</code></a> (the daemon's dependencies)</span></dd>
+
+    <dt id="diff">Diff</dt>
+    <dd>The exact lines a change adds and removes, shown side by side; reviewing a pull request means reading its diff.
+      <span class="see">See it: <a href="../../docs/factory/CONTRACT.md" data-anchor="reads the diff"><code>docs/factory/CONTRACT.md</code></a> (the verifier reads the diff)</span></dd>
 
     <dt id="dora">DORA metrics</dt>
     <dd>Four standard delivery numbers: how often you release, how long a change takes to reach users, how often a release breaks, and how fast you recover.
@@ -94,17 +106,25 @@
     <dd>This repo's name for agents taking one GitHub issue at a time, doing it, proving it, and opening a draft pull request.
       <span class="see">See it: <a href="../../docs/factory/CONTRACT.md"><code>docs/factory/CONTRACT.md</code></a></span></dd>
 
+    <dt id="front-matter">Front matter</dt>
+    <dd>The few <code>key: value</code> lines between two <code>---</code> lines at the top of a file, such as <code>status: draft</code>, that a script can read.
+      <span class="see">See it: <a href="../../intents/TEMPLATE.md"><code>intents/TEMPLATE.md</code></a></span></dd>
+
     <dt id="gate">Gate</dt>
     <dd>An automatic check that must say green before work moves on; its last line, starting <code>FACTORY_GATES:</code>, is the verdict.
       <span class="see">See it: <a href="../../.claude/scripts/gates.sh"><code>.claude/scripts/gates.sh</code></a></span></dd>
 
     <dt id="heartbeat">Heartbeat (telemetry)</dt>
-    <dd>The one anonymous message a day the daemon may send out, holding only a version, a platform and a few counters, never anything you typed or saw; it can be turned off.
+    <dd>The one anonymized message a day the daemon may send out, holding only a version, a platform, a few counters and a random install id, never anything you typed or saw; <code>MESHD_TELEMETRY=off</code> turns it off. Besides it, only a problem report you choose to send and push alerts (their text redacted before it goes to Apple's push service, APNs) leave your machines.
       <span class="see">See it: <a href="../../install/payload/meshd/telemetry.ts"><code>install/payload/meshd/telemetry.ts</code></a></span></dd>
 
     <dt id="hook">Hook</dt>
     <dd>A small script the agent tool runs automatically before an action, used to block dangerous actions whatever the agent intends.
       <span class="see">See it: <a href="../../.claude/hooks/block-merge.sh"><code>.claude/hooks/block-merge.sh</code></a></span></dd>
+
+    <dt id="integration-branch">Integration branch</dt>
+    <dd>A shared branch where several finished changes are combined and tested together before they reach <code>main</code>.
+      <span class="see">See it: <a href="../../.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a> (the branch patterns CI runs on)</span></dd>
 
     <dt id="intent">Intent</dt>
     <dd>A short note in your own words saying what problem you want solved, for whom, and what "done" looks like, written before anyone designs anything.
@@ -114,6 +134,10 @@
     <dd>Two folders with nearly the same name: <code>intent/</code> (singular) holds test phrases for the product's local voice model, and <code>intents/</code> (plural) is where your Stage 1 intents live.
       <span class="see">See it: <a href="../../intent/cases.jsonl"><code>intent/cases.jsonl</code></a> and <a href="../../intents/AGENTS.md"><code>intents/</code></a></span></dd>
 
+    <dt id="lint">Lint</dt>
+    <dd>An automatic check that reads code without running it and flags mistakes; ours checks that the scripts the release and the checks depend on still parse.
+      <span class="see">See it: <a href="../../scripts/gate-lint.sh"><code>scripts/gate-lint.sh</code></a></span></dd>
+
     <dt id="live-activity">Live Activity</dt>
     <dd>The live card on the iPhone Lock Screen, the Dynamic Island and the watch Smart Stack that shows which agent is waiting on you.
       <span class="see">See it: <a href="../../MeshWatchWidgets/AGENTS.md"><code>MeshWatchWidgets/</code></a></span></dd>
@@ -121,6 +145,10 @@
     <dt id="load-bearing">Load-bearing path</dt>
     <dd>A file or folder so important (sign-in, policy, CI) that no agent may change it without a human reading the change.
       <span class="see">See it: <a href="../../docs/factory/CHARTER.md" data-anchor="## 2. Load-bearing paths"><code>docs/factory/CHARTER.md</code></a></span></dd>
+
+    <dt id="lockfile">Lockfile</dt>
+    <dd>A file that pins the exact version of every dependency, so every install gets the same code; the repo root has none, which is why the deep gate's audit cannot pass.
+      <span class="see">See it: <a href="../../package.json"><code>package.json</code></a> (the root package file, with no lockfile beside it)</span></dd>
 
     <dt id="merge">Merge</dt>
     <dd>Accepting a pull request so its change becomes part of the main line; in this repo agents are blocked from doing it.
@@ -148,7 +176,7 @@
 
     <dt id="proof">Proof (status line)</dt>
     <dd>The fact written into every "Where we are" line on this site, which a script tests so the line cannot say "done" while the repo says otherwise.
-      <span class="see">See it: <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a></span></dd>
+      <span class="see">See it: <a href="../../scripts/check-sdlc-status.sh"><code>scripts/check-sdlc-status.sh</code></a> (the script that tests every proof)</span></dd>
 
     <dt id="published">Publish ledger</dt>
     <dd>The file that lists what was actually released, where every line is evidence produced by running something, not by describing it.
@@ -182,9 +210,17 @@
     <dd>The usual amount a number wiggles; "2σ" means twice the usual wiggle, which is rare enough to look into.
       <span class="see">See it: <a href="5-ship.html#template">Stages 5–6, the template</a></span></dd>
 
+    <dt id="simulator">Simulator</dt>
+    <dd>A pretend iPhone or Apple Watch that runs on the Mac, so the real app can be opened and tapped without a device.
+      <span class="see">See it: <a href="../../scripts/check-watch-smoke.sh"><code>scripts/check-watch-smoke.sh</code></a> (launches the watch app on one)</span></dd>
+
     <dt id="skill">Skill</dt>
     <dd>A written instruction pack an agent loads for one kind of task, such as a security review; it advises and does not enforce.
       <span class="see">See it: <a href="../../.claude/skills/INDEX.md"><code>.claude/skills/INDEX.md</code></a></span></dd>
+
+    <dt id="slug">Slug</dt>
+    <dd>The short lowercase, hyphenated name inside a file or folder name, such as <code>many-machines-one-screen</code>, that stays put when the title changes.
+      <span class="see">See it: <a href="../../intents/2026-09-27-many-machines-one-screen.md"><code>intents/2026-09-27-many-machines-one-screen.md</code></a></span></dd>
 
     <dt id="source-of-truth">Source of truth</dt>
     <dd>The one file or place that wins when two documents disagree about the same thing.
@@ -193,6 +229,10 @@
     <dt id="spec">Spec</dt>
     <dd>The agreed description of what will be built and how it should look and behave, written from an intent and checked against your rules.
       <span class="see">See it: <a href="../../openspec/changes/reach-my-mac-from-anywhere/proposal.md"><code>openspec/changes/reach-my-mac-from-anywhere/proposal.md</code></a></span></dd>
+
+    <dt id="stacked-prs">Stacked pull requests</dt>
+    <dd>Pull requests built on top of each other, each based on the previous one's branch instead of on <code>main</code>, so none can be merged before the ones beneath it.
+      <span class="see">See it: <a href="BLOCKS.md" data-anchor="### B-15"><code>docs/sdlc/BLOCKS.md</code></a> (B-15, the Cursor pile)</span></dd>
 
     <dt id="subagent">Subagent</dt>
     <dd>A second agent started with a clean memory to do one job, such as checking the first agent's work without trusting its story.
@@ -205,6 +245,10 @@
     <dt id="testflight">TestFlight</dt>
     <dd>Apple's app for installing test builds; it is how new versions of our iPhone app reach testers, and the watch app rides along inside it.
       <span class="see">See it: <a href="../../docs/updating.md"><code>docs/updating.md</code></a></span></dd>
+
+    <dt id="token">Token (two meanings)</dt>
+    <dd>The daemon's bearer token is the long secret your phone sends with every request (see <a href="#pairing">pairing</a>); a design token is one named value of the look, such as the accent colour, kept in one file.
+      <span class="see">See it: <a href="../../install/payload/meshd/auth.ts"><code>install/payload/meshd/auth.ts</code></a> (bearer token) and <a href="../../docs/product/design-system.md" data-anchor="design-token"><code>docs/product/design-system.md</code></a> (design tokens)</span></dd>
 
     <dt id="worktree">Worktree</dt>
     <dd>A second copy of the project folder on disk, on its own branch, so two agents can work at once without overwriting each other.

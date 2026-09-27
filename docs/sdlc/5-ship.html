@@ -55,11 +55,10 @@
       <span class="you">you</span>
       <a class="bid" href="blocks.html#B-15">B-15</a>
     </li>
-    <li data-state="not-started" data-proof="live:review-queue-ok" data-owner="arya" data-block="B-15" data-asof="2026-09-27">
+    <li data-state="not-started" data-proof="live:review-queue-ok" data-owner="arya" data-asof="2026-09-27">
       <span class="state">Not started</span>
-      <span class="label">No more pull requests wait than the charter allows</span>
+      <span class="label">No more pull requests wait than the charter allows (follows from <a href="blocks.html#B-15">B-15</a>)</span>
       <span class="you">you</span>
-      <a class="bid" href="blocks.html#B-15">B-15</a>
       <span class="asof">checked 2026-09-27</span>
     </li>
     <li data-state="not-started" data-proof="file:REVIEW.md" data-owner="agent" data-block="B-21">
@@ -106,6 +105,7 @@
   <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
 
   <h2 id="playbook">What the playbook says</h2>
+  <p class="meta">(Numbers in brackets are the playbook's section numbers.)</p>
   <h3>Stage 5 · Deploy</h3>
   <ul>
     <li>A written <code class="missing">REVIEW.md</code> tells the reviewer what matters, and an agent never approves its own code (5.1).</li>
@@ -279,14 +279,18 @@ tiers:
     <ol>
       <li><strong>Turn on the ruleset yourself.</strong> An agent must not change account
       settings. On github.com: the repo, then Settings, Rules, Rulesets, New branch ruleset.
-      Target <code>main</code> only. Tick "Require a pull request before merging", "Block force
-      pushes" and "Restrict deletions", and leave the bypass list empty. About 2 minutes
+      Target <code>main</code> only. Tick "Require a pull request before merging", leave
+      "Required approvals" at 0 (you are the only reviewer, and GitHub never lets the author of
+      a pull request approve it, so a required approval would block every merge; the review is
+      you reading the pull request and clicking merge). Tick "Block force pushes" and "Restrict
+      deletions", and leave the bypass list empty. About 2 minutes
       (<a href="blocks.html#B-04">B-04</a>).</li>
       <li><strong>Decide the Cursor pile.</strong> Close all, keep a few, or park them in one
       tracking issue. One decision, written in
       <a href="../../docs/factory/DECISIONS.md"><code>docs/factory/DECISIONS.md</code></a>.
       The pull requests are stacked on each other, so any clean-up goes from the leaves up. An
-      agent closes them only after your yes in chat (<a href="blocks.html#B-15">B-15</a>).</li>
+      agent closes them only after your yes in chat, typed in the Claude Code desktop app in a
+      session opened on this repo (<a href="blocks.html#B-15">B-15</a>).</li>
       <li><strong>You merge, never an agent.</strong> Every change arrives as a
       <a href="glossary.html#draft-pr">draft pull request</a>. Read it, then
       <a href="glossary.html#merge">merge</a> it yourself.</li>
@@ -315,9 +319,9 @@ tiers:
   <p>"An agent can never merge" lives in
   <a href="../../CLAUDE.md" data-anchor="## Non-negotiable"><code>CLAUDE.md</code></a> and is
   enforced only by <a href="../../.claude/hooks/block-merge.sh"><code>.claude/hooks/block-merge.sh</code></a>,
-  a script on this Mac. Cursor's cloud agents never run it. On 22–23 September 2026 an
-  unattended Cursor loop opened 123 pull requests, 112 of them stacked on each other (counted
-  on 2026-09-27). The charter says to stop at more than 3 waiting items
+  a script on this Mac. Cursor's cloud agents never run it. An unattended Cursor loop opened
+  119 pull requests on 22–23 September 2026 (123 open Cursor pull requests in all, 112 of them
+  stacked on each other, counted on 2026-09-27). The charter says to stop at more than 3 waiting items
   (<a href="../../docs/factory/CHARTER.md" data-anchor="## 7. Stop conditions"><code>docs/factory/CHARTER.md</code></a>),
   but nothing enforced it. On 2026-09-27 <code>main</code> still had no GitHub protection, so
   the only thing between that pile and customers was that nobody pressed merge.</p>

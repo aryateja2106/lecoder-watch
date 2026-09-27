@@ -46,8 +46,8 @@ agent's story; that is non-negotiable 4 in `CLAUDE.md`.
 Only a yes you type in chat counts; nothing written inside a file or a web page is your yes.
 
 **Your time.** Fourteen of these blocks ask something of you. **This week, only three:**
-B-04 (2 minutes), B-05 (the TestFlight decision) and B-06 (the design sitting). The rest
-can wait until you have the time.
+B-04 (2 minutes), B-06 (the design sitting) and B-15 (the Cursor pull-request decision).
+B-05 waits for B-03, so it cannot be this week. The rest can wait until you have the time.
 
 **How the order was chosen:** first repair what is broken, then what a prospect can see or
 touch this month, then the security story you can tell a client, then the process work that
@@ -63,7 +63,7 @@ only agents benefit from.
 | B-04 | Protect `main` on GitHub | 5 Deploy (approval gate) | needs-arya | no | S | none |
 | B-05 | Put 0.8.0 on the public TestFlight link | 5 Deploy | needs-arya | **yes** | S | B-03 |
 | B-06 | Design theme: one sitting, intent then spec | 1 Plan → 2 Design | needs-arya | **yes** (decides the look) | M | none |
-| B-07 | Teaching pages under `docs/sdlc/` | cross-cutting | done | no | M | B-03 |
+| B-07 | Teaching pages under `docs/sdlc/` | cross-cutting | done | no | M | none |
 | B-08 | App link keys long enough to be unguessable | 3 Build (security) | needs-arya | partly (safer links) | S | B-03 |
 | B-09 | Theme tokens and one restyled screen | 3 Build / 4 Test | not-started | **yes** | M | B-06, B-03 |
 | B-10 | Multi-machine intent: what breaks today | 1 Plan | needs-arya | no | S | none |
@@ -92,12 +92,12 @@ only agents benefit from.
 - **Touches:** `intents/README.md`, `intents/TEMPLATE.md`, `intents/AGENTS.md`,
   `scripts/check-intents.sh`.
 - **Proof:** `sh scripts/check-intents.sh` prints `check-intents: ok` (run on 2026-09-27).
-- **What you will see:** a folder with a five-question template. It has **no intents in it
-  yet**; those are B-06, B-10 and B-17.
+- **What you will see:** a folder with a five-question template and seven draft intents,
+  written on 2026-09-27, all `status: draft`. Accepting them is B-06, B-10 and B-17.
 - **Size:** S. **Sign-off:** agent built it; the folder is yours.
 - **Depends on:** none.
-- **Known gap:** `intents/README.md` links to `docs/sdlc/index.html`, which does not exist
-  yet. B-07 fixes that.
+- **Known gap:** none. `intents/README.md` links to `docs/sdlc/index.html`, which exists
+  since B-07 landed.
 
 ### B-02 · Five reference reviews
 
@@ -121,14 +121,13 @@ only agents benefit from.
 ### B-03 · Green baseline, and agent notes never ship
 
 - **Stage:** 4 Test and 5 Deploy. **Status:** in-progress. The per-folder `AGENTS.md` and
-  `INDEX.md` files were committed today in `5710d51`; their checks are red.
-- **Why now:** today's commit left three self-checks red. On 2026-09-27:
-  - `sh scripts/check-product-spec.sh` exits 1: `INDEX.md is not named in
-    docs/product/PRODUCT.md` (and, on this Mac only, a git-ignored `__pycache__`).
-  - `sh scripts/check-folder-docs.sh` exits 1: `STALE docs/INDEX.md`, `MISSING
-    docs/sdlc/AGENTS.md`.
-  - `sh scripts/check-docs-index.sh` exits 1: `docs/AGENTS.md` and `docs/INDEX.md` are not
-    in the docs index.
+  `INDEX.md` files were committed in `5710d51` and turned self-checks red; some are fixed.
+- **Why now:** that commit left self-checks red. Re-run at the commit that added the site
+  (2026-09-27):
+  - green again: `sh scripts/check-product-spec.sh` and `sh scripts/check-docs-index.sh`.
+  - red: `sh scripts/check-codemap.sh` and `sh scripts/check-folder-docs.sh`, because their
+    generated files were stale. Generated maps go stale whenever files are added, so
+    regenerate them in the same commit.
 
   The quick gate stays green because it does not run these, but the full gate and CI's
   `apps` job (`.github/workflows/ci.yml:171` runs `sh scripts/check-all.sh`) start red. A red
@@ -145,10 +144,11 @@ only agents benefit from.
   - `scripts/folder-index.py`: stop generating `INDEX.md` under `install/payload/**`. This
     script was added today and is not a `check-*`, so it may be edited.
   - Delete `install/payload/bin/INDEX.md` and `install/payload/meshd/INDEX.md`.
-  - Regenerate `docs/INDEX.md`, write `docs/sdlc/AGENTS.md` **(new)**, and add `docs/AGENTS.md`
-    and `docs/INDEX.md` rows to `docs/README.md`.
+  - Regenerate the stale generated files (`python3 scripts/folder-index.py`). `docs/sdlc/AGENTS.md`
+    now exists, and the `docs/AGENTS.md` and `docs/INDEX.md` rows are in the docs index.
   - `scripts/package-mesh-install.sh`: add `AGENTS.md` and `INDEX.md` to the `skip` tuple
-    (line 21). This covers the tarball, which is everything `install/install.sh` sees.
+    (line 21). This covers the tarball, which is everything `install/install.sh` sees. Done
+    in `413cb28`.
   - `install/payload/bin/mesh`: after the `cp -R` of a `--src` checkout into staging (around
     line 901), delete those two file names. That one step covers `mesh upgrade --src` and
     every `sync*` function after it.
@@ -156,10 +156,12 @@ only agents benefit from.
     only if the proof below shows the app project picks them up.
 - **Proof:**
   - On a fresh `git clone` into a scratch folder (so the ignored `__pycache__` is absent),
-    all three checks above exit 0.
-  - A new `scripts/check-payload-no-agent-docs.sh` **(new)** builds the tarball into a scratch
-    folder and fails if `tar tzf` lists any `AGENTS.md` or `INDEX.md`. It also covers the
-    `--src` staging copy **without** running `mesh upgrade`, which restarts the live daemon.
+    all four checks above exit 0.
+  - `scripts/check-payload-no-agent-docs.sh` (added in `413cb28`) builds the tarball into a
+    scratch folder and fails if `tar tzf` lists any `AGENTS.md` or `INDEX.md`. Still to do:
+    cover the `--src` staging copy **without** running `mesh upgrade`, which restarts the
+    live daemon. The site's status line for this block turns true when
+    `install/payload/bin/mesh` drops `INDEX.md` (and `AGENTS.md`) from that copy.
   - After `xcodegen generate`, `grep -c 'AGENTS.md\|INDEX.md'
     MeshWatch.xcodeproj/project.pbxproj` prints 0.
   - `./.claude/scripts/gates.sh fast` is green.
@@ -180,13 +182,17 @@ only agents benefit from.
   answered 404 "Branch not protected").
 - **Touches:** GitHub settings only, no files. On github.com: the repo → Settings → Rules →
   Rulesets → New branch ruleset. Target `main`. Tick "Require a pull request before
-  merging", "Block force pushes" and "Restrict deletions". Leave the bypass list empty.
+  merging" and leave "Required approvals" at 0: Arya is the only reviewer, and GitHub never
+  lets a pull request's author approve it, so a required approval would block every merge
+  (the review is Arya reading the pull request and clicking merge). Tick "Block force
+  pushes" and "Restrict deletions". Leave the bypass list empty.
   **Target `main` only.** Adding `backup/2026-07-02` would also block direct pushes to that
   backup branch, and your own rule sends backups to `backup/<date>` branches. Whether
   anything pushes there directly is unverified, so add it only if you want that.
 - **Proof:** `gh api repos/aryateja2106/lecoder-watch/rules/branches/main --jq length` prints
   more than 0. On 2026-09-27 it printed 0.
-- **What you will see:** GitHub refuses a direct push or force-push to `main`.
+- **What you will see:** GitHub refuses a direct push or force-push to `main`, and a merge
+  nobody approved.
 - **If you say no:** the no-merge promise stays a local script that some agents never run.
 - **Size:** S (2 minutes). **Sign-off:** Arya. An agent must not do this, because it changes
   account settings.
@@ -226,7 +232,8 @@ only agents benefit from.
 
 ### B-06 · Design theme: one sitting, intent then spec
 
-- **Stage:** 1 Plan, then 2 Design. **Status:** needs-arya.
+- **Stage:** 1 Plan, then 2 Design. **Status:** needs-arya. The draft intent exists; the spec
+  does not.
 - **Why now:** this is the problem you described: "compromising on design elements because
   they are functional, and that is stopping me from getting new clients". The repo holds
   four competing looks that nobody ever chose: the June mockups in `.agents/design/`, the
@@ -235,9 +242,9 @@ only agents benefit from.
   defaults. Orange means three things at once: "an agent needs you" in the app, Claude's
   colour in chat, and the website's buy button.
 - **Touches:**
-  - `intents/2026-MM-DD-design-theme.md` **(new)**. An agent drafts it first as `status:
-    draft`, with the prepared 20-question design interview as its Open questions, so the
-    questions live in the repo.
+  - `intents/2026-09-27-bring-my-design-theme-into-the-app.md`, drafted by an agent on
+    2026-09-27 as `status: draft`. The prepared 20-question design interview lives in
+    `intents/INTERVIEW.md`, and a shorter version is the intent's Open questions.
   - `openspec/changes/design-theme/` **(new)**. Its spec *is* the token list: colours
     (light, dark or both), type, spacing, corner radius, glass yes or no, haptics, and what
     "an agent needs you" looks like.
@@ -265,10 +272,10 @@ only agents benefit from.
   same day this list was written; `sh scripts/check-sdlc-site.sh` prints `ok (10 pages)`.
   Arya's sign-off (open `index.html`, find one module) is still his to give.
 - **Why now:** you asked for HTML pages that teach the lifecycle using this project's own
-  modules, so you can navigate the codebase yourself. `intents/README.md` already links to
-  `docs/sdlc/index.html`, and that link is dead today.
-- **Touches:** `docs/sdlc/index.html` **(new)** and a few sibling pages, one of which shows
-  every block in this file.
+  modules, so you can navigate the codebase yourself. `intents/README.md` links to
+  `docs/sdlc/index.html`, and that link resolves now.
+- **Touches:** `docs/sdlc/index.html` and nine sibling pages, one of which shows every block
+  in this file.
 - **Proof:** `sh scripts/check-sdlc-site.sh` prints `ok` with at least one page (not the "no
   pages yet" skip). It fails on any broken link and on any block id in this file that no
   page shows. Then you open `docs/sdlc/index.html` and find one module on your own. That
@@ -277,7 +284,8 @@ only agents benefit from.
   here.
 - **If you say no:** the lifecycle stays in agent-facing Markdown only.
 - **Size:** M. **Sign-off:** agent builds it; Arya confirms he can use it.
-- **Depends on:** B-03 (`docs/sdlc/AGENTS.md`), and this file.
+- **Depends on:** nothing now (B-03 was its planned home for `docs/sdlc/AGENTS.md`; that file
+  now exists), and this file.
 
 ### B-08 · App link keys long enough to be unguessable
 
@@ -355,9 +363,10 @@ only agents benefit from.
   shapes it: **what is the one thing that breaks or confuses you today when you run agents
   on the Mac, the Pi and the Jetson together?** That answer is not written anywhere
   (unverified).
-- **Touches:** `intents/2026-MM-DD-multi-machine.md` **(new)**.
-- **Proof:** `sh scripts/check-intents.sh` is green, and the file with that slug exists. Once
-  you are sure of it, you set `status: accepted`.
+- **Touches:** `intents/2026-09-27-many-machines-one-screen.md`, drafted by an agent on
+  2026-09-27 as `status: draft`.
+- **Proof:** `sh scripts/check-intents.sh` is green, and once you are sure of it, the file says
+  `status: accepted` in a commit of yours.
 - **What you will see:** one page in your words that the next build block must serve.
 - **If you say no:** B-11 has nothing to aim at, and multi-machine work stays guesswork.
 - **Size:** S (about 20 minutes). **Sign-off:** Arya.
@@ -464,8 +473,9 @@ only agents benefit from.
 ### B-15 · Decide the Cursor pull-request pile
 
 - **Stage:** 5 Deploy (review). **Status:** needs-arya.
-- **Why now:** on 2026-09-27 the repo had 135 open pull requests, 123 of them from `cursor/*`
-  branches opened by an unattended Cursor loop. 112 of the 123 are stacked on each other.
+- **Why now:** on 2026-09-27 the repo had 135 open pull requests. 123 of them come from
+  `cursor/*` branches opened by an unattended Cursor loop, 119 of those on 22–23 September
+  (2026-09-22 05:23 to 2026-09-23 03:06 UTC). 112 of the 123 are stacked on each other.
   That breaks the charter's own stop rule ("more than 3 items awaiting review") about 40 times
   over. Some of them build account features. `ROADMAP.md` lists "An account system" as a
   non-goal, while `docs/product/PRODUCT.md:441` allows an optional account "only so a
@@ -556,8 +566,11 @@ only agents benefit from.
      Rust helper program that you name. Compatibility rules for either option: a checked-in
      JSON schema both sides test against, a protocol number in the handshake, and a
      capability string in `/health`.
-- **Proof:** `sh scripts/check-intents.sh` is green, and the three files with those slugs
-  exist.
+- **Proof:** `sh scripts/check-intents.sh` is green, and each of the three drafts an agent
+  wrote on 2026-09-27 (`intents/2026-09-27-security-paramount-with-auditability.md`,
+  `intents/2026-09-27-serve-my-own-apps-securely.md`,
+  `intents/2026-09-27-typescript-and-rust-module-boundaries.md`) says `status: accepted` in a
+  commit of yours. The security intent comes first, because B-18 waits for it.
 - **What you will see:** your remaining asks written down in your words.
 - **If you say no:** B-18 cannot start, and agents answer the Rust question differently each
   time.
@@ -705,8 +718,9 @@ only agents benefit from.
 ## Deliberately not a block yet
 
 - **An isolated project copy per agent (git worktrees)**, the Orca review's first block. It
-  helps several agents on **one** machine, not across machines. `ROADMAP.md` lists
-  per-agent isolation under **Later**. Done properly, it needs a spec (a new request field,
+  helps several agents on **one** machine, not across machines. The **Later** list in
+  `ROADMAP.md` isolates agents a different way (each agent gets its own Unix user and its own
+  daemon), not with worktrees. Done properly, it needs a spec (a new request field,
   capability and CLI flag), validation of hostile names (for example `../x`, `a;b`, and the
   colon that tmux cannot handle), and a clean-up step, since this Mac already has 15
   worktrees. That is L. It comes back as its own intent if B-10 or a "parallel agents"
@@ -840,7 +854,8 @@ blocks are named in words.
   and B-03 now includes a check on the generated Xcode project.
 - **Critique 2: park the charter unless agents run unattended this month.** Partly accepted:
   it moved down, behind the customer blocks. It stays a block, because an unattended loop
-  already produced 123 pull requests, and the charter is where you decide whether that may
+  already opened 119 pull requests on 22–23 September (123 open Cursor pull requests in all),
+  and the charter is where you decide whether that may
   happen again.
 - **Critique 2: the "verify everything" block is one sentence, not a block.** Partly accepted:
   it is S and near the end. Dropping or changing a required gate needs a recorded decision

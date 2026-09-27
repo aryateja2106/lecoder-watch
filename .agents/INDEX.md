@@ -6,7 +6,7 @@
 |---|---|---|
 | `design/` | 14 files | .agents/design/ — twelve clickable HTML mockups of app screens from the June 2026 redesign; reference only |
 | `rules/` | 3 files | .agents/rules/ — two always-on instructions for non-Claude AI tools: read the code map first, and use the knowledge graph for "how does X… |
-| `skills/` | 27 files |  |
+| `skills/` | 29 files | .agents/skills/ — the instruction packs Codex (and other tools that use the shared folder) sees: the factory queue workflow plus a few… |
 | `workflows/` | 2 files | .agents/workflows/ — one saved routine that tells a non-Claude AI tool to rebuild the code knowledge graph |
 | `AGENTS.md` | S | .agents/ — the shared folder other AI coding tools (mainly Codex) read for skills and rules, plus old June 2026 redesign notes |
 | `REDESIGN-BRIEF.md` | S | LeSearch Mesh Redesign — Orchestration Prompt (paste into the waiting Opus 4.8 session) |

@@ -47,39 +47,37 @@
       <span class="label">The product spec is checked against the code
       (<a href="../../scripts/check-product-spec.sh"><code>scripts/check-product-spec.sh</code></a>)</span>
     </li>
-    <li data-state="not-started" data-proof="file:openspec/changes/design-theme/proposal.md" data-owner="arya" data-block="B-06">
-      <span class="state">Not started</span>
+    <li data-state="in-progress" data-proof="file:openspec/changes/design-theme/proposal.md" data-owner="arya" data-block="B-06" data-asof="2026-09-27">
+      <span class="state">In progress</span>
       <span class="label">The design theme is written as a spec
-      (<code class="missing">openspec/changes/design-theme/proposal.md</code>)</span>
+      (<code class="missing">openspec/changes/design-theme/proposal.md</code>); the draft intent exists</span>
       <span class="you">you</span>
       <a class="bid" href="blocks.html#B-06">B-06</a>
+      <span class="asof">checked 2026-09-27</span>
     </li>
-    <li data-state="not-started" data-proof="text:openspec/config.yaml|intents/" data-owner="agent" data-block="B-06">
+    <li data-state="not-started" data-proof="text:openspec/config.yaml|intents/" data-owner="agent">
       <span class="state">Not started</span>
-      <span class="label">Every spec names the intent it came from</span>
-      <a class="bid" href="blocks.html#B-06">B-06</a>
+      <span class="label">Every spec names the intent it came from (part of <a href="blocks.html#B-06">B-06</a>)</span>
     </li>
-    <li data-state="not-started" data-proof="!text:openspec/config.yaml|LeSearch Mesh" data-owner="agent" data-block="B-06">
+    <li data-state="not-started" data-proof="!text:openspec/config.yaml|LeSearch Mesh" data-owner="agent">
       <span class="state">Not started</span>
-      <span class="label">The spec tool uses the product's current name</span>
-      <a class="bid" href="blocks.html#B-06">B-06</a>
+      <span class="label">The spec tool uses the product's current name (part of <a href="blocks.html#B-06">B-06</a>)</span>
     </li>
-    <li data-state="not-started" data-proof="file:Shared/Theme.swift" data-owner="agent" data-block="B-09">
+    <li data-state="not-started" data-proof="file:Shared/Theme.swift" data-owner="agent">
       <span class="state">Not started</span>
       <span class="label">One file holds the app's colours and spacing
-      (<code class="missing">Shared/Theme.swift</code>)</span>
-      <a class="bid" href="blocks.html#B-09">B-09</a>
+      (<code class="missing">Shared/Theme.swift</code>, part of <a href="blocks.html#B-09">B-09</a>)</span>
     </li>
-    <li data-state="not-started" data-proof="any:intents/20*typescript-and-rust*.md|status: accepted" data-owner="arya" data-block="B-17">
+    <li data-state="not-started" data-proof="any:intents/20*typescript-and-rust*.md|status: accepted" data-owner="arya">
       <span class="state">Not started</span>
-      <span class="label">The TypeScript and Rust boundary is decided</span>
+      <span class="label">The TypeScript and Rust boundary is decided (one of the three intents in <a href="blocks.html#B-17">B-17</a>)</span>
       <span class="you">you</span>
-      <a class="bid" href="blocks.html#B-17">B-17</a>
     </li>
   </ul>
   <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
 
   <h2 id="playbook">What the playbook says</h2>
+  <p class="meta">(Numbers in brackets are the playbook's section numbers.)</p>
   <ul>
     <li>A spec turns an accepted intent into requirements and a design. (2)</li>
     <li>It is written under the company's own <a href="glossary.html#skill">skills</a>: brand, security, compliance and UX. (2)</li>
@@ -218,7 +216,8 @@
       <li>Read the draft design intent,
         <a href="../../intents/2026-09-27-bring-my-design-theme-into-the-app.md"><code>intents/2026-09-27-bring-my-design-theme-into-the-app.md</code></a>.
         It is written in your words. About 5 minutes.</li>
-      <li>Answer the 20 design questions, one at a time, with an agent asking
+      <li>Answer the 20 design questions, one at a time, with an agent asking, in the Claude
+        Code desktop app, in a session opened on this repo
         (<a href="../../intents/INTERVIEW.md" data-anchor="## Appendix: the design-theme interview (20 questions)"><code>intents/INTERVIEW.md</code></a>).
         Pick an example answer, combine two, name an app you like, or show a picture. About 30 minutes.</li>
       <li>Accept the intent yourself: change <code>status: draft</code> to <code>status: accepted</code>.

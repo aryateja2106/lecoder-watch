@@ -5,13 +5,13 @@
 | entry | size | what it is |
 |---|---|---|
 | `agents/` | 12 files | docs/agents/ — the navigation maps coding agents read before opening code: which file, which route, which check |
-| `factory/` | 27 files | docs/factory/ — the rules for unattended AI work on this repo: what agents may do alone, when they must stop, and the record of every run |
+| `factory/` | 28 files | docs/factory/ — the rules for unattended AI work on this repo: what agents may do alone, when they must stop, and the record of every run |
 | `overnight/` | 37 files | docs/overnight/ — dated logbooks of unattended night runs: what was planned, what landed, proof logs and screenshots |
 | `playbooks/` | 7 files | docs/playbooks/ — step-by-step runbooks for Apple's build tools (Xcode, simulators, device installs, TestFlight) and the local daemon |
 | `product/` | 25 files | docs/product/ — the product definition: what LeSearch AI is, every screen and daemon feature, the design system, and where each feature… |
 | `recordings/` | 1 files | docs/recordings/ — drop zone for screen recordings Arya shares so an agent can watch a bug or a flow |
 | `screenshots/` | 6 files | docs/screenshots/ — the five app-store-style screenshots shown at the top of the main README |
-| `sdlc/` | 8 files |  |
+| `sdlc/` | 22 files | docs/sdlc/ — the lifecycle teaching site: the AI-native playbook explained with this repo's own files, plus the ordered blocks |
 | `shots/` | 3 files | docs/shots/ — dated proof screenshots from individual work sessions, one folder per day |
 | `AGENTS.md` | S | docs/ — every written explanation of the product: the spec, how-to guides, decisions, release plans and dated history |
 | `CLI-FIRST-ROADMAP.md` | S | CLI-first roadmap — mesh as the product |

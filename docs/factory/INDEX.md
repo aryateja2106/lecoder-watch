@@ -4,7 +4,7 @@
 
 | entry | size | what it is |
 |---|---|---|
-| `runs/` | 17 files | Factory run records |
+| `runs/` | 18 files | Factory run records |
 | `AGENTS.md` | S | docs/factory/ — the rules for unattended AI work on this repo: what agents may do alone, when they must stop, and the record of every run |
 | `CHARTER.md` | S | Factory charter |
 | `CONTRACT.md` | S | Factory contract |

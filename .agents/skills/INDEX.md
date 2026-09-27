@@ -20,3 +20,4 @@
 | `teach/` | 5 files | Teach the user a new skill or concept, within this workspace. |
 | `to-prd/` | 1 files | Turn the current conversation into a PRD and publish it to the project issue tracker — no interview, just synthesis of what you've already… |
 | `writing-great-skills/` | 2 files | Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable. |
+| `AGENTS.md` | S | .agents/skills/ — the instruction packs Codex (and other tools that use the shared folder) sees: the factory queue workflow plus a few… |

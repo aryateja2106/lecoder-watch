@@ -19,4 +19,5 @@
 | `2026-09-23T060000Z-publish-green.md` | S | The finish line goes green: the Choose card, and the Mac's brain |
 | `2026-09-23T070000Z-session-snapshots.md` | S | Session snapshots, slice A — no agent conversation is lost |
 | `2026-09-23T150000Z-chat-search.md` | S | Chat search and resume |
+| `2026-09-27T060000Z-sdlc-playbook-adoption.md` | S | Adopting the AI-native SDLC playbook: the first day |
 | `README.md` | S | Factory run records |

@@ -11,7 +11,11 @@
 # item markup (state word, owner, `you` tag, block id), relative links resolve to files,
 # data-anchor literals are still in their files, page#id fragments exist, blocks.html ids
 # match BLOCKS.md, the <header class="top"> nav is identical on every page, and no images,
-# scripts, inline styles or private screenshots slip in.
+# scripts, inline styles or private screenshots slip in. Against drift between pages: a
+# <code class="missing"> path that now exists fails; every line carrying the same data-block
+# has the same state, owner and proof on every page (a .bid chip needs a data-block); and
+# BLOCKS.md's summary-table status agrees with blocks.html (needs-arya = not-started or
+# in-progress with data-owner="arya").
 #
 # Reads the tree only; no network unless SDLC_LIVE=1 (then the three fixed `live:` queries
 # run through `gh`; page text never chooses a command). Under two seconds.
@@ -126,7 +130,7 @@ for page in pages:
     ids[name] = [n.a["id"] for n in t.root.walk() if n.a.get("id")]
 
 block_ids = set(ids.get("blocks.html", []))
-navs, n_items, n_skip, board_lines, counts = {}, 0, 0, [], {}
+navs, n_items, n_skip, board_lines, counts, block_items = {}, 0, 0, [], {}, []
 for page in pages:
     name, raw, root = os.path.basename(page), text_of(page), doms[os.path.basename(page)]
     nodes = list(root.walk())
@@ -151,12 +155,16 @@ for page in pages:
         if (owner == "arya") != has_you:
             fail(f'{where}: data-owner="arya" if and only if the item has <span class="you">you</span>')
         blk = it.a.get("data-block")
+        bids = [n.a.get("href", "") for n in it.walk() if "bid" in n.cls()]
+        if blk is None and bids:
+            fail(f'{where}: a .bid chip {bids} with no data-block; add data-block (the line then carries that block\'s state) or link the block inside the label')
         if blk is not None:
             if not re.fullmatch(r"B-\d{2}", blk):
                 fail(f'{where}: data-block="{blk}" is not B-nn')
             elif blk not in block_ids:
                 fail(f'{where}: data-block="{blk}" has no id="{blk}" on blocks.html')
-            bids = [n.a.get("href", "") for n in it.walk() if "bid" in n.cls()]
+            else:
+                block_items.append((blk, name, st, owner, proof))
             if bids and bids != [f"blocks.html#{blk}"]:
                 fail(f'{where}: the .bid link {bids} must point to blocks.html#{blk}')
         asof = it.a.get("data-asof")
@@ -213,6 +221,10 @@ for page in pages:
             if frag and os.path.dirname(rel) == site and rel.endswith(".html"):
                 tgt = os.path.basename(rel)
                 if frag not in ids.get(tgt, []): fail(f"{name}: {u} -> no id=\"{frag}\" on {tgt}")
+        if n.tag == "code" and "missing" in n.cls():
+            p = n.text()
+            if p in fileset or p.rstrip("/") in dirs:
+                fail(f"{name}: {p} exists; drop class=missing and link it")
         if "data-anchor" in n.a:
             lit, href = n.a["data-anchor"], n.a.get("href", "")
             rel = os.path.normpath(os.path.join(site, href.partition("#")[0].partition("?")[0])) if href else ""
@@ -254,6 +266,18 @@ if len(set(navs.values())) > 1:
     for p, h in navs.items():
         if h != base: fail(f'{p}: <header class="top"> differs from the other pages (copy it verbatim)')
 
+# 12. one block, one status: every line with the same data-block agrees on state, owner and
+# proof on every page. blocks.html is the reference; each other page is compared with it.
+first = {}
+for blk, pg, *v in sorted(block_items, key=lambda r: r[1] != "blocks.html"):
+    v = tuple(v)
+    if blk not in first:
+        first[blk] = (pg, v)
+    elif v != first[blk][1]:
+        fp, fv = first[blk]
+        fail(f"{blk}: {pg} says state={v[0]} owner={v[1]} proof={v[2]} but {fp} says "
+             f"state={fv[0]} owner={fv[1]} proof={fv[2]}; one block shows one status everywhere")
+
 # 7. blocks.html vs BLOCKS.md
 bm = os.path.join(site, "BLOCKS.md")
 if os.path.isfile(bm) and "blocks.html" in ids:
@@ -262,6 +286,21 @@ if os.path.isfile(bm) and "blocks.html" in ids:
     for b in sorted(want):
         if have.count(b) != 1: fail(f'blocks.html: id="{b}" appears {have.count(b)} times (BLOCKS.md needs exactly one)')
     for b in sorted(set(have) - want): fail(f'blocks.html: id="{b}" is not in BLOCKS.md')
+    # 13. the summary table's status column agrees with each block's line on blocks.html
+    ALLOWED = {"done": {("done", None)}, "in-progress": {("in-progress", None)},
+               "not-started": {("not-started", None)},
+               "needs-arya": {("not-started", "arya"), ("in-progress", "arya")}}
+    on_page = {b: (st, ow) for b, pg, st, ow, _ in block_items if pg == "blocks.html"}
+    rows = re.findall(r"^\|\s*(B-\d{2})\s*\|[^|\n]*\|[^|\n]*\|\s*([a-z-]+)\s*\|", text_of(bm), re.M)
+    if not rows: fail("BLOCKS.md: no summary table rows (| B-nn | name | stage | status | ...)")
+    for b, s in rows:
+        if s not in ALLOWED:
+            fail(f'BLOCKS.md: {b} status "{s}" is not done / in-progress / not-started / needs-arya')
+        elif b not in on_page:
+            fail(f"blocks.html: {b} has no status line with data-block (BLOCKS.md says {s})")
+        elif not any(on_page[b][0] == a and o in (None, on_page[b][1]) for a, o in ALLOWED[s]):
+            fail(f'{b}: BLOCKS.md says {s} but blocks.html says {on_page[b][0]} (owner {on_page[b][1]}); '
+                 'needs-arya means not-started or in-progress with data-owner="arya"')
 
 if board:
     for l in board_lines: print(l)

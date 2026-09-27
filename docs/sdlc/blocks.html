@@ -44,7 +44,8 @@
   on. The full text of every block, with the files it touches and what happens if you say no,
   is in <a href="BLOCKS.md" data-anchor="## For Arya: how to read this"><code>docs/sdlc/BLOCKS.md</code></a>.</p>
   <p>There are two lanes that run at the same time: yours, and the agents'. Inside each lane,
-  work top to bottom. To answer a block, reply in chat with its id and one word, for example
+  work top to bottom. To answer a block, reply in chat (the Claude Code desktop app, in a
+  session opened on this repo) with its id and one word, for example
   "B-04 yes" or "B-15 option a". Only a yes you type in chat counts.</p>
 
   <h2 id="done">Already done</h2>
@@ -91,11 +92,11 @@
 
   <h2 id="yours">Only you can start these</h2>
   <p>Each of these needs a decision, a yes, or some minutes of your time. An agent may prepare
-  it for you, but must not do it for you. When <code>BLOCKS.md</code> was written on 2026-09-27,
-  it suggested only three for the first week: <a href="blocks.html#B-04">B-04</a> (2 minutes),
-  <a href="blocks.html#B-05">B-05</a> (the TestFlight decision) and
-  <a href="blocks.html#B-06">B-06</a> (the design sitting). The rest can wait until you have
-  the time.</p>
+  it for you, but must not do it for you. This week, only three:
+  <a href="blocks.html#B-04">B-04</a> (2 minutes), <a href="blocks.html#B-06">B-06</a> (the
+  design sitting) and <a href="blocks.html#B-15">B-15</a> (the Cursor pull-request decision).
+  <a href="blocks.html#B-05">B-05</a> waits for <a href="blocks.html#B-03">B-03</a>, so it cannot
+  be this week. The rest can wait until you have the time.</p>
   <ol class="blocks">
     <li class="block" id="B-04">
       <h3>B-04 · Protect <code>main</code> on GitHub</h3>
@@ -234,8 +235,8 @@
         <dt>Who signs off</dt><dd>You decide; an agent closes pull requests only after your yes in chat, because closing them is public</dd>
         <dt>Waits for</dt><dd>Nothing</dd>
       </dl>
-      <p>Why now: on 22–23 September 2026 an unattended Cursor loop opened 123 pull requests
-      (counted on 2026-09-27), most of them stacked on each other, which breaks the stop rule in
+      <p>Why now: an unattended Cursor loop opened 119 pull requests on 22–23 September 2026
+      (123 open Cursor pull requests in all, counted on 2026-09-27), most of them stacked on each other, which breaks the stop rule in
       <a href="../../docs/factory/CHARTER.md"><code>docs/factory/CHARTER.md</code></a> many times
       over, so no agent run can honestly start until you choose: close all, keep a few, or park them.</p>
       <p><a href="BLOCKS.md" data-anchor="### B-15">Full block in BLOCKS.md</a></p>
@@ -308,16 +309,24 @@
         <dt>Who signs off</dt><dd>The agent, then a fresh verifier</dd>
         <dt>Waits for</dt><dd>Nothing. It must land before any release (<a href="blocks.html#B-05">B-05</a>, <a href="blocks.html#B-14">B-14</a>)</dd>
       </dl>
-      <p>Why now: on 2026-09-27 the new folder notes turned three self-checks red, and the same
+      <p>Why now: a red self-check hides every new red. The folder notes committed on 2026-09-27
+      turned self-checks red;
+      <a href="../../scripts/check-product-spec.sh"><code>scripts/check-product-spec.sh</code></a> and
+      <a href="../../scripts/check-docs-index.sh"><code>scripts/check-docs-index.sh</code></a>
+      were green again the same day, while
+      <a href="../../scripts/check-codemap.sh"><code>scripts/check-codemap.sh</code></a> and
+      <a href="../../scripts/check-folder-docs.sh"><code>scripts/check-folder-docs.sh</code></a> were red at the commit that added this site, because their
+      generated files were stale. The same
       notes (<code>AGENTS.md</code> and <code>INDEX.md</code> files) would ship to every user
-      inside the next installer unless
+      inside the next installer.
       <a href="../../scripts/package-mesh-install.sh"><code>scripts/package-mesh-install.sh</code></a>
-      learns to skip them.</p>
+      skips them since commit <code>413cb28</code>; <code>mesh upgrade --src</code> still copies
+      them.</p>
       <p><a href="BLOCKS.md" data-anchor="### B-03">Full block in BLOCKS.md</a></p>
       <ul class="status">
-        <li data-state="in-progress" data-proof="file:scripts/check-payload-no-agent-docs.sh" data-owner="agent" data-block="B-03" data-asof="2026-09-27">
+        <li data-state="in-progress" data-proof="text:install/payload/bin/mesh|INDEX.md" data-owner="agent" data-block="B-03" data-asof="2026-09-27">
           <span class="state">In progress</span>
-          <span class="label">The installer is checked for agent notes (<code class="missing">scripts/check-payload-no-agent-docs.sh</code>)</span>
+          <span class="label">Agent notes never ship: the installer tarball is checked (<a href="../../scripts/check-payload-no-agent-docs.sh"><code>scripts/check-payload-no-agent-docs.sh</code></a>), but the <code>mesh upgrade --src</code> copy in <a href="../../install/payload/bin/mesh"><code>install/payload/bin/mesh</code></a> does not drop them yet</span>
           <span class="asof">checked 2026-09-27</span>
         </li>
       </ul>
@@ -328,7 +337,7 @@
         <dt>Stage</dt><dd>All stages (teaching)</dd>
         <dt>Size</dt><dd>M</dd>
         <dt>Who signs off</dt><dd>An agent builds it; you confirm you can find your way with it</dd>
-        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a>, and <code>BLOCKS.md</code></dd>
+        <dt>Waits for</dt><dd>Nothing (<a href="blocks.html#B-03">B-03</a> was its planned home for <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a>; that file now exists)</dd>
       </dl>
       <p>Why now: you asked for pages that teach the lifecycle with this project's own files, so you
       can navigate the codebase yourself; this page is one of them.</p>
@@ -520,7 +529,7 @@
   <p>These came up and were left out on purpose. Each one returns as its own intent when the
   reason below stops being true (<a href="BLOCKS.md" data-anchor="## Deliberately not a block yet"><code>BLOCKS.md</code></a>).</p>
   <ul>
-    <li><b>A separate project copy per agent (worktrees).</b> It helps several agents on one machine, not across machines, and <a href="../../ROADMAP.md" data-anchor="## Later"><code>ROADMAP.md</code></a> puts it under Later; done properly it is too big for a block.</li>
+    <li><b>A separate project copy per agent (worktrees).</b> It helps several agents on one machine, not across machines. The <a href="../../ROADMAP.md" data-anchor="## Later"><code>ROADMAP.md</code></a> "Later" list isolates agents a different way (each agent gets its own Unix user and its own daemon), not with worktrees. Done properly, worktrees are too big for a block.</li>
     <li><b>Agent evals in CI and a CI-health control band.</b> A real eval runs an agent on paid model calls with a key in a public repo's workflow, and it only pays off once agents run unattended on a green CI.</li>
     <li><b>A plan section inside run records.</b> A plan written at the end of a run cannot prove it came first; the charter's plan-before-code rule replaces it.</li>
     <li><b>Per-device tokens.</b> They touch pairing and sign-in, the most sensitive code, so they need their own intent.</li>
@@ -556,7 +565,7 @@
     <p>The ids, names, order and full text come from <a href="BLOCKS.md"><code>docs/sdlc/BLOCKS.md</code></a>
     alone. If it is renumbered, this page changes in the same commit. Read the state of every
     status line on the site with the board, not by parsing HTML
-    (<code class="missing">scripts/check-sdlc-status.sh</code> is being written):</p>
+    (<a href="../../scripts/check-sdlc-status.sh"><code>scripts/check-sdlc-status.sh</code></a>):</p>
     <pre><code>sh scripts/check-sdlc-status.sh --board
 sh scripts/check-sdlc-status.sh
 sh scripts/check-sdlc-site.sh</code></pre>

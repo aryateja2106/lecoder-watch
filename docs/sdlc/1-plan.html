@@ -42,24 +42,19 @@
 
   <h2 id="status">Where we are</h2>
   <ul class="status">
-    <li data-state="done" data-proof="file:intents/TEMPLATE.md" data-owner="agent" data-block="B-01">
+    <li data-state="done" data-proof="file:scripts/check-intents.sh" data-owner="agent" data-block="B-01">
       <span class="state">Done</span>
-      <span class="label">A home for intents, with a template (<a href="../../intents/TEMPLATE.md"><code>intents/TEMPLATE.md</code></a>)</span>
+      <span class="label">A home for intents, with a template (<a href="../../intents/TEMPLATE.md"><code>intents/TEMPLATE.md</code></a>) and a check of every intent's shape (<a href="../../scripts/check-intents.sh"><code>scripts/check-intents.sh</code></a>)</span>
       <a class="bid" href="blocks.html#B-01">B-01</a>
-    </li>
-    <li data-state="done" data-proof="file:scripts/check-intents.sh" data-owner="agent">
-      <span class="state">Done</span>
-      <span class="label">Every intent's shape is checked automatically (<a href="../../scripts/check-intents.sh"><code>scripts/check-intents.sh</code></a>)</span>
     </li>
     <li data-state="done" data-proof="any:intents/20*.md" data-owner="agent">
       <span class="state">Done</span>
       <span class="label">At least one intent is written down, as a draft</span>
     </li>
-    <li data-state="not-started" data-proof="any:intents/20*.md|status: accepted" data-owner="arya" data-block="B-06">
+    <li data-state="not-started" data-proof="any:intents/20*.md|status: accepted" data-owner="arya">
       <span class="state">Not started</span>
-      <span class="label">At least one intent is accepted by you</span>
+      <span class="label">At least one intent is accepted by you (the first is the design intent, part of <a href="blocks.html#B-06">B-06</a>)</span>
       <span class="you">you</span>
-      <a class="bid" href="blocks.html#B-06">B-06</a>
     </li>
     <li data-state="not-started" data-proof="any:intents/20*.md|source: monitor" data-owner="agent">
       <span class="state">Not started</span>
@@ -69,6 +64,7 @@
   <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
 
   <h2 id="playbook">What the playbook says</h2>
+  <p class="meta">(Numbers in brackets are the playbook's section numbers.)</p>
   <ul>
     <li>Every idea is captured as an <a href="glossary.html#intent">intent</a> with five headings: Problem, Proposed outcome, Affected users and systems, Constraints, Open questions. (1)</li>
     <li>The person with the idea drafts it with Claude; the product owner commits it. (1)</li>
@@ -159,12 +155,21 @@
   <h2 id="you">How you take part</h2>
   <div class="you-part">
     <ol>
-      <li><strong>Talk.</strong> An agent interviews you, one question at a time, using <a href="../../intents/INTERVIEW.md"><code>intents/INTERVIEW.md</code></a>. About 20 minutes per intent.</li>
+      <li><strong>Talk.</strong> In the Claude Code desktop app, in a session opened on this repo, tap the "Flush out my plans" chip or say the line at the bottom of this box. An agent interviews you, one question at a time, using <a href="../../intents/INTERVIEW.md"><code>intents/INTERVIEW.md</code></a>. About 20 minutes per intent.</li>
       <li><strong>Read the draft.</strong> Open the intent file the answers went into, under <a href="../../intents/AGENTS.md"><code>intents/</code></a>. Check that the Problem is in your words and the outcome says what is true, not how it is built.</li>
       <li><strong>Commit it,</strong> or tell the agent to. The commit is the record of who asked and when.</li>
-      <li><strong>Accept it.</strong> Only you change <code>status: draft</code> to <code>status: accepted</code> (<a href="../../intents/README.md" data-anchor="## For agents"><code>intents/README.md</code></a>). A spec may start only after that.</li>
+      <li><strong>Accept it.</strong> Only you change <code>status: draft</code> to <code>status: accepted</code> (<a href="../../intents/README.md" data-anchor="## For agents"><code>intents/README.md</code></a>; how, in the box below). A spec may start only after that.</li>
     </ol>
-    <p class="say-this">Interview me with the interview-me skill, one question at a time, and write intents/YYYY-MM-DD-&lt;slug&gt;.md from intents/TEMPLATE.md with status: draft. Do not mark it accepted.</p>
+    <p class="say-this">Open intents/INTERVIEW.md and follow it.</p>
+  </div>
+  <div class="note" id="accept">
+    <h3>How you accept an intent</h3>
+    <ol>
+      <li>Open the intent file in the Claude Code desktop app.</li>
+      <li>On line 2, change <code>status: draft</code> to <code>status: accepted</code>.</li>
+      <li>Say "commit it" to the agent.</li>
+      <li>Or skip the editing: tell the agent "I accept &lt;title&gt;", and it makes that edit and commits it.</li>
+    </ol>
   </div>
 
   <h2 id="history">A worked example from our own history</h2>
@@ -205,7 +210,7 @@
     <code>ok</code> line; a red one names the file and what is missing.</p>
 <pre><code>sh scripts/check-intents.sh</code></pre>
     <ul>
-      <li>Never set <code>status: accepted</code> or <code>status: closed</code>. That is Arya's word (<a href="../../intents/README.md" data-anchor="## For agents"><code>intents/README.md</code></a>).</li>
+      <li>Never set <code>status: accepted</code> or <code>status: closed</code> on your own. That is Arya's word (<a href="../../intents/README.md" data-anchor="## For agents"><code>intents/README.md</code></a>). When he types "I accept &lt;title&gt;" in the session, make that one edit and commit it.</li>
       <li>Findings from reviews, monitoring or security scans that need more than a one-file fix land here as <code>status: draft</code> with <code>source:</code> naming what found them.</li>
       <li>When running the plans interview, follow <a href="../../intents/INTERVIEW.md" data-anchor="## 4. Writing the answers down"><code>intents/INTERVIEW.md</code></a>: answers go under <code>## Decisions</code>, and the five original headings are never renamed.</li>
       <li>The trap: <a href="../../intent/cases.jsonl"><code>intent/</code></a> (singular) is test data for the product's on-device model. Playbook intents go in <a href="../../intents/AGENTS.md"><code>intents/</code></a> (plural) only. See <a href="glossary.html#intent-vs-intents">the glossary entry</a>.</li>
