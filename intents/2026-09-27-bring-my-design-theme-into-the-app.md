@@ -71,7 +71,10 @@ Everyone who opens the app, and every prospect I demo it to.
   contrast) apply. Light and dark mode both reach users today, because the app follows the
   phone's setting.
 - My reference images (`Reference-images/`) and some committed screenshots show personal or
-  infrastructure details; they guide the look but are never published.
+  infrastructure details (a private network address, a user@host, an on-screen sign-in code that
+  has since expired). They are already in this public repository's history; whether to remove
+  them from the tree is my decision (see Open questions). They guide the look; nothing copies
+  their values into a file.
 - Frozen names (`MeshWatch`, `com.lecoder.*`) stay as they are; only visible branding changes.
 - Small first step: one theme file, one screen, one check, one screenshot pair. No new
   third-party UI library.
@@ -79,8 +82,8 @@ Everyone who opens the app, and every prospect I demo it to.
 
 ## Open questions
 
-Condensed from the 20-question design interview drafted on 2026-09-27 (the full script, with
-example answers, was not committed; ask for it in the plans session). Answer with a word, an
+Condensed from the 20-question design interview of 2026-09-27; the full script with example
+answers is the appendix of `intents/INTERVIEW.md`, which the plans session follows. Answer with a word, an
 app name, or a reference image; examples are only there to make answering easy.
 
 1. Who should feel "this was made for me" the first time they open it: someone scared of
@@ -114,3 +117,5 @@ app name, or a reference image; examples are only there to make answering easy.
 16. Anything off-limits (purple or neon glow, monospace body text, emoji, stock illustrations)?
 17. Who decides the look is right: you approving screenshots, an agent checking against the
     theme file with your spot-check, a day of using it on your phone, or a target user?
+18. Should `Reference-images/` and the screenshots that show a private address or a user@host
+    be removed from the public repository (they stay on disk as guides), or left as they are?

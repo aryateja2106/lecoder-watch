@@ -31,9 +31,10 @@ Doors already known to be open, from the 2026-09-17 security review
   the local connection with no credential, and receive the token.
 - SEC-01: on home or office Wi-Fi the token travels in plain HTTP, because the daemon listens on
   every network interface.
-- An app page an agent built is served from the daemon's own address; opened at `localhost` on
-  the Mac, it can very likely call any daemon command without the token. This was found by
-  reading the code today and has **not** been reproduced by running it.
+- An app page an agent built could, when opened on the Mac itself, act with the daemon's own
+  permissions. Found by reading the code on 2026-09-27, **not** reproduced by running it; the
+  exact path is deliberately not written here (this repository is public) and goes into the
+  check that ships with the fix.
 - The installer downloads the program without checking a checksum or signature (a hypothesis
   from `docs/sdlc/references/security-audit-skill.md`, not yet validated).
 - Typing in the phone's terminal goes through a live connection that a simple request log would

@@ -84,6 +84,7 @@
 | `check-pair-qr.sh` | qr.ts self-check: every payload is encoded and then read back by a decoder written against the standard… |
 | `check-pairing.swift` | Pairing writes real tokens into the saved machine list, so the merge has to be right: a wrong match silently… |
 | `check-paste-epipe.sh` | a big paste must not take the machine off the mesh |
+| `check-payload-no-agent-docs.sh` | the installer tarball carries no agent navigation files (AGENTS.md, INDEX.md) and no harness state (.omc,… |
 | `check-phone-input-and-wake.sh` | Two defects that a green build cannot see, because in both cases the wrong code compiles, renders and behaves… |
 | `check-pointer-gain.swift` | The gain curve decides whether the pad can both cross two screens and hit a close button |
 | `check-preview-mapping.swift` | Tap-to-place-cursor is the flagship interaction |
@@ -99,6 +100,7 @@
 | `check-roundtrip.sh` | The notification round-trip: an event an agent hook posts must carry a session name the reply route can… |
 | `check-screen-zoom.swift` | Aiming is the whole product on this screen |
 | `check-sdlc-site.sh` | the lifecycle teaching site under docs/sdlc/ points only at files that exist, and every block in… |
+| `check-sdlc-status.sh` | every status line on the lifecycle site under docs/sdlc/ carries a proof, and its Done / In progress / Not… |
 | `check-session-snapshots.sh` | Lossless session history (meshd sessions.ts) keeps every version of an agent transcript after the runtime… |
 | `check-session-state.swift` | Run: swiftc Shared/Models.swift scripts/check-session-state.swift -o /tmp/css && /tmp/css |
 | `check-shell-quoting.swift` | shellQuotedArgument() single-quotes anything a shell would split or interpret, and leaves plain paths alone |

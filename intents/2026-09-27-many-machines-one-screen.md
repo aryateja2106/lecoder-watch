@@ -30,9 +30,9 @@ it, and whether it works when started from the phone is unverified.
 
 Other gaps:
 
-- A machine whose token was rejected and a machine that is simply unreachable both show as
-  "offline", so I cannot tell "pair again" from "it is asleep" (`docs/sdlc/references/orca.md`,
-  "What to borrow").
+- The machine list shows one word per machine: "online", "last seen 5m ago", "offline", or the
+  token error's own text (`Shared/Models.swift`, `statusLabel`). It never says what to do next:
+  wake it, pair it again, or check Tailscale (`docs/sdlc/references/orca.md`, "What to borrow").
 - There is a marker for "an agent is waiting on you", but none for "an agent finished and you
   have not looked yet", so finished work gets lost among many sessions.
 - With many machines and sessions, I get overwhelmed on what to show where (see the design intent

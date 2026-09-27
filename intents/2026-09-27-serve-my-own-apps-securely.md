@@ -26,9 +26,9 @@ on my home Wi-Fi, because the daemon listens on every network interface (SEC-01)
 
 Two more gaps:
 
-- An app page is served from the daemon's own address. Opened at `localhost` on the Mac itself,
-  such a page can very likely tell the daemon to run any command without the token. Found by
-  reading the code on 2026-09-27; **not** proven by running it yet.
+- An app page an agent built could, opened on the Mac itself, act with the daemon's own
+  permissions. Found by reading the code on 2026-09-27; **not** proven by running it; the path
+  is withheld here (public repository) and goes into the check that ships with the fix.
 - There is no support at all for an app that has its own small server, such as a shared to-do
   list with a database. Nothing forwards requests to one (`docs/sdlc/references/nethera.md`,
   "What it is" and "Our side"). That is exactly the kind of app where "edit and delete" matter.

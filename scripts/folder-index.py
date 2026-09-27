@@ -174,15 +174,26 @@ def needs_agents_md(d, files):
     return True
 
 
+def ignored(paths):
+    """The subset of paths .gitignore would drop: a brief or index there could never be
+    committed, so a fresh clone or CI must not be asked for it."""
+    if not paths:
+        return set()
+    import subprocess
+    r = subprocess.run(["git", "-C", ROOT, "check-ignore", "--stdin"], input="\n".join(paths), text=True, capture_output=True)
+    return set(r.stdout.split())
+
+
 def main():
     check = "--check" in sys.argv
     files = git_files()
     tree = dirs_of(files)
     stale, missing = [], []
+    skip = ignored([d + "/AGENTS.md" for d in tree] + [d + "/INDEX.md" for d in tree])
     for d, sub in sorted(tree.items()):
-        if needs_agents_md(d, sub) and d + "/AGENTS.md" not in sub and not os.path.exists(os.path.join(ROOT, d, "AGENTS.md")):
+        if d + "/AGENTS.md" not in skip and needs_agents_md(d, sub) and d + "/AGENTS.md" not in sub and not os.path.exists(os.path.join(ROOT, d, "AGENTS.md")):
             missing.append(d + "/AGENTS.md")
-        if not wants_index(d, sub, tree):
+        if d + "/INDEX.md" in skip or not wants_index(d, sub, tree):
             continue
         want = render(d, sub)
         out = os.path.join(ROOT, d, "INDEX.md")

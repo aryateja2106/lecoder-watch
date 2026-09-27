@@ -338,14 +338,14 @@ in it. The app's data lives in the browser on each device, so a visitor cannot c
 on your Mac. That part already matches "we don't want anyone to just access it and delete or
 edit stuff" (`docs/sdlc/references/nethera.md:96-105`).
 
-The review found a more important problem than the one the draft led with. The apps are served
-**from the same address as the daemon itself**. Browsers treat everything at one address as one
-trusted family. So an agent-built page, **when opened on the Mac itself** through a local
-address, can very likely do anything your token can do, without knowing the token. This was
-found by reading the code; it has not yet been reproduced by running it, and the first step
-does that. It matters because agents build these pages, and the app-builder skill encourages
-testing them at a local address (`install/payload/share/skills/pwa-local-app-builder/SKILL.md:27-29`).
-Opening the app from your phone does not trigger it.
+The review found a more important problem than the one the draft led with: an agent-built app
+page, **when opened on the Mac itself**, could act with the daemon's own permissions. Found by
+reading the code on 2026-09-27; not yet reproduced by running it, and the first step does that.
+How the pieces combine is deliberately not written here (this repository is public); it lands
+in the check that ships with the fix. It matters because agents build these pages, and the
+app-builder skill encourages testing them on the Mac
+(`install/payload/share/skills/pwa-local-app-builder/SKILL.md:27-29`). Opening the app from
+your phone does not trigger it.
 
 The fix is to give apps **their own address** (a second port). The daemon's port then only
 forwards old app links to the new port, so links already saved on a Home Screen keep working.
@@ -367,10 +367,10 @@ After that comes the draft's fix: a longer secret in each link. Apps with their 
 - **A browser "sandbox" header would be one line but breaks app storage. Accepted** as a
   rejected alternative. It gives the page a blank identity, and the app skill keeps data in
   browser storage (`install/payload/share/skills/pwa-local-app-builder/SKILL.md:24-26`).
-- **The canonical spec and the code disagree. Accepted.** `docs/product/PRODUCT.md:185-187`
-  says any request with an `Origin` header is refused. The code allows the daemon's own origin
-  (`install/payload/meshd/server.ts:1200-1206`) so that the web console works. The first slice
-  corrects the spec in the same change.
+- **The canonical spec and the code disagree. Accepted.** `docs/product/PRODUCT.md` §5.4 states
+  one browser rule more strictly than the daemon enforces it. The first slice corrects the spec
+  in the same change as the fix; which rule, and how, is withheld until then (this repository
+  is public; the repo's rule is outcome now, mechanism with the fix).
 - **Longer link secrets second, not first. Accepted.** A correction the review also found:
   `mesh apps publish` already creates a **new** secret on every publish
   (`install/payload/bin/mesh:2038`), so a re-published app breaks saved links today. Only
@@ -421,15 +421,14 @@ After that comes the draft's fix: a longer secret in each link. Apps with their 
 
 **Today's path**
 
-- `install/payload/meshd/apps.ts:3-6` serves `~/.mesh/apps/<slug>/site/` at `/a/<slug>-<key>/`
+- `install/payload/meshd/apps.ts` serves `~/.mesh/apps/<slug>/site/` at `/a/<slug>-<key>/`
   without the token, because Safari's "Add to Home Screen" cannot send one. The key in the path
   is the gate: 8 hex characters (`apps.ts:90`), minted by `randomHex(4)`
-  (`install/payload/bin/mesh:2038`, `:2063`). No Content-Security-Policy is set
-  (`grep -ci content-security install/payload/meshd/apps.ts` → 0).
-- The route is mounted before the browser check (`server.ts:1343-1348`). The browser check
-  deliberately lets the daemon's own origin through (`server.ts:1200-1206`), because the web
-  console at `/desktop` posts to the daemon from a page the daemon served. On the Mac itself,
-  that console works without a token through the local-program exemption.
+  (`install/payload/bin/mesh:2038`, `:2063`).
+- Outcome of the open finding: a page served this way, opened on the Mac itself, could act with
+  the daemon's own permissions. Unreproduced (found by reading, 2026-09-27). The route order and
+  guard that make it possible are described in `scripts/check-app-origin.sh` **(new)**, which
+  ships with the fix, not here.
 - Wireless install puts `/a` behind Tailscale Serve on the machine's MagicDNS name
   (`install/payload/bin/mesh:1936-1946`). Through that path, requests carry a forward header,
   which removes the local exemption (`loopback-trust.ts:14-21`), and only `/a` is mapped. That
@@ -441,9 +440,9 @@ After that comes the draft's fix: a longer secret in each link. Apps with their 
 
 | Option | Verdict | Why |
 |---|---|---|
-| Separate port for `/a/` | **Chosen** | A different port is a different origin to every browser, so the daemon's own-origin allowance can never apply to an app page. Old links keep working through a redirect |
+| Separate port for `/a/` | **Chosen** | A different port is a different site to every browser, which is the property the fix needs. Old links keep working through a redirect |
 | `Content-Security-Policy: sandbox` on app pages | Rejected | One line, but the page gets an opaque origin and loses the browser storage the app skill relies on (`SKILL.md:24-26`) |
-| Refuse the local exemption for any request from a browser | Rejected | The web console at `/desktop` on the Mac depends on that exemption (its page reads `window.MESH_TOKEN`, which only the native app injects, `install/payload/meshd/desktop.html:55-58`). The documented "open `http://127.0.0.1:8899/desktop`" path (`docs/product/PRODUCT.md:86`) would stop working |
+| Tighten the browser rules on the daemon's own port | Rejected | The documented web console at `/desktop` on the Mac (`docs/product/PRODUCT.md:86`) depends on today's rules and would stop working |
 | Tell the daemon apart from app pages by the `Referer` header | Rejected | A page can rewrite its own path within its origin and can suppress the header |
 
 **Later, only with a named need** (from the draft and `docs/sdlc/references/nethera.md:126-132`):
@@ -574,8 +573,8 @@ separate messages for "token rejected" versus "cannot reach the machine", which 
 
 ## Things found while writing (not part of the four topics)
 
-- **The spec and the code disagree about browser requests.** `docs/product/PRODUCT.md:185-187`
-  versus `install/payload/meshd/server.ts:1200-1206`. Fixed inside topic 3's first slice.
+- **The spec and the code disagree about one browser rule** (`docs/product/PRODUCT.md` §5.4).
+  Corrected inside topic 3's first slice, together with the fix.
 - **`CONSTRAINTS.md` is missing.** `docs/product/PRODUCT.md:460` calls it "the floor", and no
   such file exists in the tree.
 - **VNC conflict.** `docs/adr-2026-09-22-platform-shape.md` §2 proposes an opt-in
