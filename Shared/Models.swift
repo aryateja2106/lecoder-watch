@@ -1,10 +1,26 @@
+// Models.swift — every wire type the phone, the watch and meshd agree on (Agent, AgentEvent, Machine, WatchCommand…) plus the pure logic derived from them, above all `sessionsNeedingAttention(from:)`.
 import Foundation
 
 // MARK: - Machine
 
 /// A machine on the Tailscale mesh that runs `meshd`.
 struct Machine: Codable, Identifiable, Hashable {
-    var id: String { host }
+    /// Stable row identity, and deliberately NOT `host`.
+    ///
+    /// `id` used to be `host`, which the machine editor binds straight to a TextField:
+    /// the row's identity changed on every keystroke while you renamed a machine, and
+    /// two machines added with "Add manually" both claimed the id "new-machine".
+    /// Duplicate or moving ids inside a `ForEach` over bindings are a crash, not a
+    /// cosmetic glitch.
+    ///
+    /// Optional so a list written by an older build still decodes — a non-optional
+    /// stored id would fail to decode every pre-existing machine, and the `try?` at the
+    /// call site turns that into a silently empty fleet. `MeshStore.load()` stamps any
+    /// machine that arrives without one, so the fallback below is only ever used for the
+    /// instant between decode and stamp; it is derived from `host` rather than fresh so
+    /// that even then it does not change identity on every access.
+    var uid: UUID?
+    var id: String { uid?.uuidString ?? "host:\(host)" }
     var host: String          // display name, e.g. "arya-macbook-pro"
     var ip: String            // tailscale IP, e.g. "100.100.1.99"
     var port: Int             // meshd port, default 8899
@@ -40,7 +56,10 @@ struct Machine: Codable, Identifiable, Hashable {
     var resolvedBridge: String? {
         if let b = bridgeURL, !b.isEmpty { return b }
         // rmux-bridge runs on every mesh machine at tailnet IP:7820 (http+ws).
-        return addresses.last.map { "http://\($0):7820" }
+        // `addresses` is [ip, host]: dial the NUMERIC address first, not the bare
+        // hostname — a phone without MagicDNS answers "hostname could not be found"
+        // for the name while the IP works, and the terminal died on exactly that.
+        return addresses.first.map { "http://\($0):7820" }
     }
 
     /// meshd's own remote desktop: polls /screen.jpg, posts /input. Needs no VNC
@@ -53,7 +72,8 @@ struct Machine: Codable, Identifiable, Hashable {
 
     var resolvedVNC: String {
         if let v = vncURL, !v.isEmpty { return v }
-        let address = addresses.last ?? ip
+        // Numeric address first, same reason as `resolvedBridge`.
+        let address = addresses.first ?? ip
         return "http://\(address):6080/vnc.html?autoconnect=1&resize=scale"
     }
 
@@ -116,10 +136,42 @@ func normalizedPairingCode(_ input: String) -> String {
     input.uppercased().filter { $0.isASCII && ($0.isNumber || ($0.isLetter && $0.isUppercase)) }
 }
 
+/// A `meshwatch://pair?h=&p=&c=` link, parsed. The three fields `mesh pair`'s QR
+/// encodes, and nothing else — pairing itself still needs a human tap.
+struct PairingLink: Hashable {
+    var address: String
+    var port: Int
+    var code: String
+}
+
+/// One parser for one link format, shared by every way a pairing QR reaches the app:
+/// the system Camera handing off the URL, and the in-app scanner reading the same code
+/// directly off the frame. Both must agree on what counts as a valid link, or a QR that
+/// the in-app scanner accepts and the deep link handler rejects (or the reverse) is a
+/// pairing flow that works differently depending on which camera happened to read it.
+///
+/// `h` is required and non-empty; `c` must normalize to at least 6 characters (mirrors
+/// `canPair` in `PairMachineView`); `p` defaults to meshd's default port.
+func parsePairingLink(_ url: URL) -> PairingLink? {
+    guard url.scheme == "meshwatch", url.host == "pair" else { return nil }
+    let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    func value(_ name: String) -> String? { items.first { $0.name == name }?.value }
+    guard let address = value("h")?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !address.isEmpty,
+          let code = value("c"), normalizedPairingCode(code).count >= 6 else { return nil }
+    return PairingLink(address: address, port: Int(value("p") ?? "") ?? 8899, code: code)
+}
+
 /// `machineMatching` over snapshots rather than configs — same rules, and they have to
 /// stay the same rules, so both defer to `hostNamesMatch`.
 func snapshotMachineMatching(_ name: String, in machines: [MachineSnapshot]) -> MachineSnapshot? {
     machines.first { $0.host == name }
+        // The daemon's own hostname, as its /stats reports it. A phone that adopted the
+        // fleet from another machine's hosts.json knows the Pi as "pi" while every event
+        // it posts says "arya-pi" — no prefix rule bridges that, and the id-first agent
+        // match below never ran because this returned nil first. Measured 2026-09-22:
+        // a permission prompt on the Pi, the event on the phone, and no "Needs you" row.
+        ?? machines.first { $0.stats.map { hostNamesMatch($0.host, name) } == true }
         ?? machines.first { hostNamesMatch($0.host, name) }
 }
 
@@ -168,10 +220,29 @@ func mergingPairedHosts(_ existing: [Machine], _ paired: [PairedHost]) -> [Machi
             out[i].token = entry.token
             out[i].port = entry.port
         } else {
-            out.append(Machine(host: entry.host, ip: entry.ip, port: entry.port, token: entry.token))
+            // Stamp the id here, not on the next launch: a machine paired in this
+            // session would otherwise fall back to a host-derived id, and renaming it
+            // before relaunching would change its identity mid-edit — the bug `uid`
+            // exists to stop.
+            out.append(Machine(uid: UUID(), host: entry.host, ip: entry.ip, port: entry.port, token: entry.token))
         }
     }
     return out
+}
+
+/// Which of a pairing's fleet entries are allowed in, given the hosts the user has
+/// deliberately removed. Pairing adopts the paired machine's whole `hosts.json`, so a
+/// machine deleted on the phone would otherwise resurrect on the very next pair —
+/// including the pair the user performs to fix an unrelated token, which makes deletion
+/// feel broken. The machine being explicitly paired always comes through (pairing it IS
+/// the un-remove gesture); every other fleet entry stays out if its name or address is
+/// in `removed`. `removed` holds lowercased names and addresses.
+func filteringRemovedHosts(_ hosts: [PairedHost], removed: Set<String>,
+                           pairedHost: String, pairedAddress: String) -> [PairedHost] {
+    hosts.filter { entry in
+        if hostNamesMatch(entry.host, pairedHost) || entry.ip == pairedAddress { return true }
+        return !removed.contains(entry.host.lowercased()) && !removed.contains(entry.ip.lowercased())
+    }
 }
 
 // MARK: - Stats (htop-style)
@@ -244,6 +315,12 @@ struct DoctorReport: Codable, Hashable {
     var version: String
     var bind: String
     var checks: [String: Check]
+    
+    struct AgentCLI: Codable, Hashable {
+        var name: String
+        var path: String?
+    }
+    var agents: [AgentCLI]?
 
     /// A stable render order — JSON object key order is not guaranteed, and a setup
     /// list that reshuffles every refresh is hard to read.
@@ -258,6 +335,24 @@ struct DoctorReport: Codable, Hashable {
     /// (input = Accessibility, screen = Screen Recording). Everything else is a fix the
     /// user does at a shell, so the button would lie.
     static func isRemotelyFixable(_ name: String) -> Bool { name == "input" || name == "screen" }
+
+    var launchable: [String] {
+        guard let agents = agents else {
+            return ["shell", "claude", "codex", "pi", "agy"]
+        }
+        var names = [String]()
+        var seen = Set<String>()
+        for agent in agents {
+            if !seen.contains(agent.name) {
+                seen.insert(agent.name)
+                names.append(agent.name)
+            }
+        }
+        if !seen.contains("shell") {
+            names.append("shell")
+        }
+        return names
+    }
 }
 
 // MARK: - Tailnet
@@ -312,11 +407,29 @@ struct Agent: Codable, Hashable, Identifiable {
 
     var displayName: String { title?.isEmpty == false ? title! : name }
     var isCmux: Bool { name.hasPrefix("cmux:") }
+    /// meshd 0.5.4+ ("herdr"): a pane of the herdr multiplexer, named `herdr:<pane_id>`.
+    var isHerdr: Bool { name.hasPrefix("herdr:") }
+
+    /// What kind of thing this row is, in one word the multiplexer would recognise.
+    /// A herdr pane that says "1 pane" reads as an rmux session, and the whole point
+    /// of listing it is that you can tell where it lives.
+    var kindLabel: String {
+        if isCmux { return "cmux" }
+        if isHerdr { return "herdr" }
+        return "\(windows) pane\(windows == 1 ? "" : "s")"
+    }
+
+    /// Neither cmux nor herdr takes the full rmux key set, and neither can be split or
+    /// killed over the wire. One question, asked in every place that used `!isCmux`.
+    var isMuxGuest: Bool { isCmux || isHerdr }
 }
 
 struct AgentOutput: Codable, Hashable {
     var name: String
     var lines: [String]
+    /// Present only for `ansi=1` on a `captureAnsi` daemon: the pane's cursor cell and size.
+    var cursor: Cursor?
+    struct Cursor: Codable, Hashable { var x: Int; var y: Int; var cols: Int; var rows: Int }
 }
 
 /// One pane within a session (a session may hold several windows/panes).
@@ -346,6 +459,13 @@ struct PaneList: Codable, Hashable {
 
 /// One row of `GET /fs`. Field names match `Entry` in meshd's files.ts exactly —
 /// that file is the schema; this is its Swift shadow.
+/// `GET /fs/read` — a text file's contents, and whether the daemon stopped at `max`.
+struct FsFile: Codable, Hashable {
+    var path: String
+    var text: String
+    var truncated: Bool?
+}
+
 struct FsEntry: Codable, Hashable, Identifiable {
     var id: String { path }
     var name: String
@@ -378,6 +498,66 @@ struct FsListing: Codable, Hashable {
     /// Directories first, then case-insensitive by name — the daemon already sorted;
     /// this just spares every view the nil dance.
     var rows: [FsEntry] { entries ?? [] }
+}
+
+/// What `FileBrowserView` shows: `entries` with dotfiles/dotfolders removed unless
+/// `showHidden`, then a case-insensitive substring match of `query` against the
+/// name. A free function rather than a view computed property so a
+/// `scripts/check-*.swift` can exercise it without linking SwiftUI. The daemon has
+/// no query param and does not filter dotfiles — both are client-side.
+func filterFsEntries(_ entries: [FsEntry], showHidden: Bool, query: String) -> [FsEntry] {
+    var result = showHidden ? entries : entries.filter { !$0.name.hasPrefix(".") }
+    let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !needle.isEmpty {
+        // localizedStandardContains, not localizedCaseInsensitiveContains: filename
+        // search must be diacritic-insensitive ("cafe" finds "café.txt"), and this is
+        // the API Apple documents for exactly this user-initiated-search case.
+        result = result.filter { $0.name.localizedStandardContains(needle) }
+    }
+    return result
+}
+
+/// Collapse machine rows that are provably one physical box: two entries whose
+/// /health-reported hardware MAC matches are the same machine paired twice — the live
+/// case was a fleet-adopted alias ("mac", from the CLI's hosts.json) sitting next to
+/// the real "arya-macbook-pro" row, each listing the same sessions. A free function so
+/// `scripts/check-machine-dedupe.swift` can exercise it without a store.
+///
+/// The keeper, decided in order (each rule breaks the previous rule's ties):
+///   1. a non-loopback ip beats a 127.0.0.1 artifact,
+///   2. the longer host name beats the shorter (the alias is usually the short one),
+///   3. list order.
+/// Configured bridge/VNC URLs do NOT vote: the fold below carries them to whichever
+/// row wins, so config survives either way and must not crown an alias.
+/// The keeper absorbs any bridgeURL/vncURL a losing row had that it lacks. Each loser
+/// is returned WITH its keeper so the caller can tombstone selectively — only the
+/// identifiers the keeper does not share. Tombstoning a loser's ip wholesale would
+/// block the keeper too: `filteringRemovedHosts` rejects fleet entries by ip, and two
+/// rows for one box usually hold the same ip. Without any tombstone, the next
+/// `mesh pair` fleet-adoption resurrects the alias immediately.
+func mergeDuplicateMachineRows(_ rows: [Machine]) -> (kept: [Machine], removed: [(loser: Machine, keeper: Machine)]) {
+    var byMac: [String: [Int]] = [:]
+    for (i, m) in rows.enumerated() {
+        guard let mac = m.macAddress?.lowercased(), !mac.isEmpty else { continue }
+        byMac[mac, default: []].append(i)
+    }
+    var losers: [Int: Int] = [:]   // loser index -> keeper index
+    var kept = rows
+    for idxs in byMac.values where idxs.count > 1 {
+        func score(_ m: Machine) -> (Int, Int) {
+            ((m.ip.hasPrefix("127.") || m.ip == "localhost") ? 0 : 1,
+             m.host.count)
+        }
+        let ranked = idxs.sorted { score(rows[$0]) == score(rows[$1]) ? $0 < $1 : score(rows[$0]) > score(rows[$1]) }
+        let keeper = ranked[0]
+        for loser in ranked.dropFirst() {
+            if kept[keeper].bridgeURL?.isEmpty != false { kept[keeper].bridgeURL = rows[loser].bridgeURL }
+            if kept[keeper].vncURL?.isEmpty != false { kept[keeper].vncURL = rows[loser].vncURL }
+            losers[loser] = keeper
+        }
+    }
+    return (kept: kept.indices.filter { losers[$0] == nil }.map { kept[$0] },
+            removed: losers.sorted { $0.key < $1.key }.map { (loser: rows[$0.key], keeper: kept[$0.value]) })
 }
 
 // MARK: - Usage (OpenUsage)
@@ -927,6 +1107,175 @@ struct AppList: Codable, Hashable {
     var installed: [String]
 }
 
+// MARK: - Agent chat (meshd 0.6+, capability "chat")
+
+/// `GET /agents/:n/chat` replaces client-side parsing of terminal text: the daemon
+/// already has the Claude Code / Codex transcript, so the app no longer guesses at
+/// roles and tool calls from regex over `capture-pane` output.
+struct ChatToolInfo: Codable, Hashable {
+    var name: String
+    var input: String?
+}
+
+struct ChatMessage: Codable, Hashable, Identifiable {
+    var id: String
+    var ts: String
+    /// "user" | "assistant" | "thinking" | "tool" | "result" | "system". Left as a
+    /// raw string, like `Agent.status` and `SecretExposure.status` below, so a role
+    /// the daemon adds later degrades to the `default` case instead of a decode
+    /// failure that blanks the whole transcript.
+    var role: String
+    var text: String
+    var tool: ChatToolInfo?
+    var status: String?
+}
+
+/// One poll's worth of transcript. `source == "output"` means the daemon found no
+/// Claude/Codex transcript and fell back to capture-pane lines — render those as
+/// plain terminal blocks rather than trusting `messages` to carry real structure.
+struct ChatFeed: Codable, Hashable {
+    var name: String
+    var source: String
+    var cursor: String?
+    var messages: [ChatMessage]
+}
+
+// MARK: - Exposed secrets (meshd 0.6+, capability "redact")
+
+struct SecretExposure: Codable, Hashable, Identifiable {
+    var id: String { fp }
+    var fp: String
+    var kind: String
+    var hint: String
+    var first: String
+    var last: String
+    var count: Int
+    var channels: [String]
+    var status: String   // open | rotated | ignored
+}
+
+struct ExposureList: Codable, Hashable {
+    var count: Int
+    var open: Int
+    var items: [SecretExposure]
+}
+
+// MARK: - Hosted apps (meshd 0.6+, capability "apps")
+//
+// Deliberately NOT named `App`/`AppList` — those already mean "a running process on
+// the Mac" (`MacApp`/`AppList` above, backing `/apps` GET+POST for the app switcher).
+// This is a different feature living at the daemon's own hosted-app routes: a PWA or
+// native build an agent produced, published for the phone to open or install.
+struct MeshApp: Codable, Hashable, Identifiable {
+    var id: String { slug }
+    var slug: String
+    var name: String
+    var kind: String   // pwa | native
+    /// PWA: the page to open. Native: its install page, only once the machine serves an
+    /// .ipa over HTTPS. A native row without one has no url at all — do not invent one.
+    var url: String?
+    var bundleId: String?
+    var version: String?
+    /// Native only: the `itms-services://` URL iOS installs from, present exactly when
+    /// wireless install works from this machine (`mesh apps ota --enable`). Absent means
+    /// the only route is the machine's own devicectl push (cable or same Wi-Fi).
+    var install: String?
+    /// Where a build runs — iphone, ipad, watch, mac, vision, web — as the daemon read it off
+    /// the bundle. Absent on an older daemon or a build it could not open.
+    var platforms: [String]?
+    /// The app's own URL scheme when it declares one: the phone can launch it, and a
+    /// successful launch is the only proof iOS gives that the app is installed here.
+    var scheme: String?
+    /// Icon URL on the machine's token-free app folder, when the bundle had one.
+    var icon: String?
+    var updated: String
+}
+
+struct MeshAppList: Codable, Hashable {
+    var apps: [MeshApp]
+}
+
+struct MeshAppInstallResult: Codable, Hashable {
+    var ok: Bool
+    var error: String?
+    /// What actually happened, when it was not a plain install — e.g. iOS's own
+    /// installer was opened and is now asking.
+    var detail: String?
+}
+
+// MARK: - Hand-off (meshd 0.6+, capability "handoff")
+
+/// One conversation a CLI kept for a working directory, and the exact command that
+/// reopens it — `cmd` is meshd's own choice (`claude --resume <id>`, `codex resume
+/// <id>`, `cursor-agent --resume <id>`), never reconstructed client-side.
+struct ResumableItem: Codable, Hashable, Identifiable {
+    var kind: String   // claude | codex | cursor
+    var id: String
+    var title: String
+    var updated: String   // ISO 8601
+    var cmd: String
+}
+
+struct ResumableList: Codable, Hashable {
+    var cwd: String
+    var items: [ResumableItem]
+    /// Which CLIs `handoff(agent:to:)` can hand this session to — only the ones the
+    /// daemon found installed on that machine.
+    var targets: [String]
+}
+
+/// The answer to `POST /agents/:n/handoff`. A refusal normally never decodes into
+/// this: the daemon answers it with HTTP 400 and `MeshClient.request` throws the
+/// body's `error` as `MeshError.refused` first. `error` stays Optional anyway so a
+/// future 200-with-ok:false shape would still decode.
+struct HandoffResult: Codable, Hashable {
+    var ok: Bool
+    var file: String?
+    var cmd: String?
+    var error: String?
+}
+
+// MARK: - Chat search (capability "chatSearch")
+
+/// One conversation that matched `GET /sessions/search`. Title and excerpts arrive
+/// already redacted by the daemon; the matched words inside an excerpt sit between « ».
+/// `score` is bm25, so lower is better.
+struct ChatSearchHit: Codable, Hashable {
+    var runtime: String   // claude | codex
+    var id: String
+    var shortId: String?
+    var title: String?
+    var cwd: String?
+    var cwdExists: Bool?
+    /// false: the runtime's own transcript file is gone and only meshd's copy remains.
+    var live: Bool?
+    var lastTs: String?   // ISO 8601
+    var kind: String?
+    var score: Double?
+    var excerpts: [Excerpt]?
+
+    struct Excerpt: Codable, Hashable {
+        var role: String?
+        var ts: String?
+        var text: String
+    }
+}
+
+struct ChatSearchResults: Codable, Hashable {
+    var results: [ChatSearchHit]
+}
+
+/// The answer to `POST /sessions/:runtime/:id/resume` — a plan, not a launch: the
+/// caller starts it with `/agents/new`. `restoredFrom` is set when the transcript had
+/// to be rebuilt from meshd's history first, which gives the conversation a new id.
+struct ChatResumePlan: Codable, Hashable {
+    var name: String
+    var cmd: String
+    var cwd: String
+    var cwdMissing: Bool?
+    var restoredFrom: String?
+}
+
 struct VolumeState: Codable, Hashable {
     var ok: Bool
     var level: Int?
@@ -1045,6 +1394,22 @@ enum RelayReply {
 
     /// The failure form of a relayed read.
     static func failure(_ why: String) -> String { errorPrefix + " " + why }
+
+    /// Encode a failure reason as JSON `Data` suitable for a relay reply's `"data"` field.
+    /// Fire-and-forget commands use this so the watch can tell a failure from silence.
+    static func encodeFailure(_ why: String) -> Data? {
+        try? JSONEncoder().encode(failure(why))
+    }
+
+    /// Extract the human reason from relay reply data when it carries a failure.
+    /// Returns `nil` for success payloads, non-string JSON, or nil data.
+    static func failureReason(in data: Data?) -> String? {
+        guard let data, let text = try? JSONDecoder().decode(String.self, from: data),
+              text.hasPrefix(errorPrefix) else { return nil }
+        let reason = String(text.dropFirst(errorPrefix.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return reason.isEmpty ? nil : reason
+    }
 }
 
 enum WatchCommandKind: String, Codable {
@@ -1263,4 +1628,164 @@ private func isShellPrompt(_ line: String) -> Bool {
     if "$%#>".contains(last) { return true }                       // bash / zsh / root / generic
     if line.hasSuffix("❯") || line.hasSuffix("→") { return true }  // starship / pure / zsh themes
     return false
+}
+
+// MARK: - Menus an agent is waiting on
+
+// Recognises a menu an agent's TUI is waiting on (Claude Code's numbered permission list,
+// its trust prompt, a y/N question) in the pane's last lines, and says which keys pick each
+// option. Hook events tell the phone THAT an agent is waiting; they never say what the
+// choices are, and the trust-folder prompt fires no hook at all. The choices are on screen,
+// in the text the daemon already ships. Parsing them here is what turns "Enter or Esc" into
+// the buttons a thumb needs — and every agent that prints a `❯`-marked list gets them.
+
+struct AgentMenu: Equatable {
+    struct Option: Equatable, Identifiable {
+        var id: Int { index }
+        /// 1-based position in the list — the number Claude Code prints, or the row.
+        let index: Int
+        let label: String
+    }
+
+    let options: [Option]
+    /// 1-based index of the option carrying the `❯` marker (what Enter would take).
+    let highlighted: Int
+    /// The question the options answer — the line above the list ("Do you want to
+    /// proceed?", "Claude Code'll be able to read, edit, and execute files here."). Without
+    /// it the card reads "Choose · 1. Yes · 2. No" and you are approving you-know-not-what.
+    /// `var` with a default so every existing initializer still compiles.
+    var prompt: String? = nil
+    /// The line under the list, when the TUI printed one ("Enter to confirm · Esc to cancel").
+    let footer: String?
+    /// True for `[y/N]`-style questions: the answer is a typed letter, not a cursor move.
+    let typed: Bool
+
+    /// Keys, in order, that pick option `k` — cursor moves relative to the highlighted row,
+    /// then Enter. For a typed prompt the caller sends the letter as text instead.
+    func keys(toPick k: Int) -> [String] {
+        guard !typed, options.contains(where: { $0.index == k }) else { return [] }
+        let delta = k - highlighted
+        let moves = Array(repeating: delta > 0 ? "down" : "up", count: abs(delta))
+        return moves + ["enter"]
+    }
+
+    /// The typed answer for a y/N prompt ("y" / "n"), nil for cursor menus.
+    func text(toPick k: Int) -> String? {
+        guard typed, let option = options.first(where: { $0.index == k }) else { return nil }
+        return option.label.lowercased().hasPrefix("y") ? "y" : "n"
+    }
+
+    // Claude Code: `❯ 1. Yes` / `  2. Yes, and always allow …` / `  4. No`
+    // `›` is what Codex's TUI is expected to print; the class is one place on purpose.
+    private static let numbered = try! NSRegularExpression(pattern: #"^\s*(❯|›|>)?\s*(\d{1,2})\.\s+(\S.*)$"#)
+    // Trust prompt and other unnumbered lists: `❯ No, exit` / `  Yes, I trust this folder`
+    private static let marked = try! NSRegularExpression(pattern: #"^\s*(❯|›|>)\s+(\S.*)$"#)
+    private static let yesNo = try! NSRegularExpression(pattern: #"\((y/n|Y/n|y/N)\)\s*:?\s*$|\[(y/n|Y/n|y/N)\]\s*:?\s*$"#, options: [.caseInsensitive])
+    // Claude Code's footers, plus pi's `enter select • esc cancel`. See docs/agents/harnesses.md §D.
+    private static let footerWords = ["Enter to confirm", "Esc to cancel", "Tab to amend", "to cycle", "esc cancel", "enter select"]
+
+    /// The menu in the tail of `lines`, or nil when the screen shows no open question.
+    /// Only the last ~25 lines are read: an old menu further up was answered long ago.
+    static func parse(lines: [String]) -> AgentMenu? {
+        let tail = Array(lines.suffix(25)).map { $0.replacingOccurrences(of: "\u{1B}[[0-9;]*m", with: "", options: .regularExpression) }
+        // 1. Numbered list: contiguous `n.` rows counting up from 1, one of them marked.
+        var rows: [(index: Int, label: String, marked: Bool, line: Int)] = []
+        for (i, line) in tail.enumerated() {
+            if let m = numbered.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+               let n = Int(line[Range(m.range(at: 2), in: line)!]) {
+                let marked = m.range(at: 1).location != NSNotFound
+                let label = String(line[Range(m.range(at: 3), in: line)!]).trimmingCharacters(in: .whitespaces)
+                if let last = rows.last, n != last.index + 1 || i != last.line + 1 { rows.removeAll() }
+                if rows.isEmpty && n != 1 { continue }
+                rows.append((n, label, marked, i))
+            }
+        }
+        if rows.count >= 2, let marked = rows.first(where: { $0.marked }) {
+            let footer = footerLine(in: tail, after: rows.last!.line)
+            return AgentMenu(options: rows.map { Option(index: $0.index, label: $0.label) },
+                             highlighted: marked.index,
+                             prompt: promptLine(in: tail, above: rows.first!.line),
+                             footer: footer, typed: false)
+        }
+        // 2. A `❯` row with unnumbered siblings at the same indent (the trust prompt).
+        if let markedAt = tail.lastIndex(where: { marked.firstMatch(in: $0, range: NSRange($0.startIndex..., in: $0)) != nil }) {
+            let markedLine = tail[markedAt]
+            let indent = markedLine.prefix { $0 == " " }.count
+            func sibling(_ s: String) -> String? {
+                let body = s.trimmingCharacters(in: .whitespaces)
+                guard !body.isEmpty, !isFooter(body), !body.allSatisfy({ "─-═".contains($0) }) else { return nil }
+                let ind = s.prefix { $0 == " " }.count
+                // A sibling sits where the marker's text starts (marker + space = 2 columns).
+                guard ind == indent + 2 || ind == indent else { return nil }
+                return body.hasPrefix("❯") || body.hasPrefix("›") || body.hasPrefix(">") ? nil : body
+            }
+            var block: [(label: String, marked: Bool)] = []
+            var i = markedAt - 1
+            while i >= 0, let s = sibling(tail[i]) { block.insert((s, false), at: 0); i -= 1 }
+            let markedLabel = markedLine.trimmingCharacters(in: .whitespaces).dropFirst().trimmingCharacters(in: .whitespaces)
+            block.append((markedLabel, true))
+            i = markedAt + 1
+            while i < tail.count, let s = sibling(tail[i]) { block.append((s, false)); i += 1 }
+            // Unnumbered lists must come with their footer: a typed prompt line ("❯ run the
+            // tests") followed by the status rows under it would otherwise read as a menu.
+            if block.count >= 2, let footer = footerLine(in: tail, after: i - 1) {
+                let firstRow = markedAt - block.prefix(while: { !$0.marked }).count
+                return AgentMenu(options: block.enumerated().map { Option(index: $0.offset + 1, label: $0.element.label) },
+                                 highlighted: (block.firstIndex { $0.marked } ?? 0) + 1,
+                                 prompt: promptLine(in: tail, above: firstRow),
+                                 footer: footer, typed: false)
+            }
+        }
+        // 3. A trailing y/N question.
+        if let last = tail.last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
+           yesNo.firstMatch(in: last, range: NSRange(last.startIndex..., in: last)) != nil {
+            let defaultsYes = last.contains("Y/n")
+            return AgentMenu(options: [Option(index: 1, label: "Yes"), Option(index: 2, label: "No")],
+                             highlighted: defaultsYes ? 1 : 2, footer: last.trimmingCharacters(in: .whitespaces), typed: true)
+        }
+        return nil
+    }
+
+    private static func isFooter(_ s: String) -> Bool { footerWords.contains { s.contains($0) } }
+
+    /// The question above a menu.
+    ///
+    /// "Nearest line above the options" is right for a permission list, where the question
+    /// sits immediately above them, and wrong for Claude Code's trust prompt, where the
+    /// line immediately above is the "Security guide" link — the card then asked the owner
+    /// to approve a *link label*, which is the same defect as approving nothing, with a
+    /// wrong noun instead of a missing one (found on a live trust prompt, 2026-09-23).
+    ///
+    /// So: a real question wins over proximity. Within eight lines above the list, take the
+    /// nearest line containing "?" and cut it at the question mark — the trust prompt wraps
+    /// its question mid-line and the rest is guidance, not the question. Failing that, the
+    /// nearest line that ends like a sentence. Failing that, the nearest line at all.
+    private static func promptLine(in tail: [String], above line: Int) -> String? {
+        guard line > 0 else { return nil }
+        var sentence: String? = nil
+        var nearest: String? = nil
+        for s in tail[max(0, line - 8)..<line].reversed() {
+            var body = s.trimmingCharacters(in: .whitespaces)
+            // Strip a TUI's box edges: "│ Do you want to proceed?  │".
+            body = body.trimmingCharacters(in: CharacterSet(charactersIn: "│|╭╮╰╯─═ "))
+            guard !body.isEmpty, !isFooter(body) else { continue }
+            guard numbered.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)) == nil,
+                  marked.firstMatch(in: body, range: NSRange(body.startIndex..., in: body)) == nil,
+                  !body.allSatisfy({ "─-═•· ".contains($0) }) else { continue }
+            if let mark = body.firstIndex(of: "?") {
+                return String(body[...mark].prefix(200))
+            }
+            if sentence == nil, let last = body.last, ".!:".contains(last) { sentence = body }
+            if nearest == nil { nearest = body }
+        }
+        return (sentence ?? nearest).map { String($0.prefix(200)) }
+    }
+
+    private static func footerLine(in tail: [String], after line: Int) -> String? {
+        for s in tail.dropFirst(line + 1).prefix(4) {
+            let body = s.trimmingCharacters(in: .whitespaces)
+            if isFooter(body) { return body }
+        }
+        return nil
+    }
 }

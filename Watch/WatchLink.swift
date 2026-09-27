@@ -95,6 +95,11 @@ final class WatchLink: NSObject, WCSessionDelegate, @unchecked Sendable {
                 // exactly like a network failure unless it is named.
                 if let ok = reply["ok"] as? Bool, !ok {
                     once.finish(.failed("iPhone could not read that command"))
+                } else if let reason = RelayReply.failureReason(in: reply["data"] as? Data) {
+                    // The phone decoded and dispatched the command, but the daemon
+                    // (or the phone's own guard) said no. Show the reason on the wrist
+                    // instead of a tick for a command that went nowhere.
+                    once.finish(.failed(reason))
                 } else {
                     once.finish(.delivered(reply["data"] as? Data))
                 }

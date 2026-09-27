@@ -1,0 +1,258 @@
+factory gates | level=full stack=node pm=npm
+
+=== gate: types ===
+types: meshd (tsc --noEmit)
+types: Shared/ models (swiftc -typecheck)
+types: OK
+[32mPASS  types[0m
+
+=== gate: lint ===
+lint: shell syntax (sh -n / bash -n)
+lint: python syntax
+lint: shellcheck not installed (brew install shellcheck) — syntax only
+lint: published links
+  200  https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh
+  200  https://github.com/LeSearch-AI/mesh-install/releases/latest/download/mesh-install.tgz
+  200  https://mesh.lesearch.ai/install.sh
+  200  https://testflight.apple.com/join/pVYPTxc7
+check-links: OK (4 published install/TestFlight links all answer)
+lint: OK
+[32mPASS  lint[0m
+
+=== gate: test ===
+check-agent-menu: OK
+check-agent-notifications: OK
+check-air-mouse: OK
+check-alert-gating OK
+check-apns-env: OK
+check-attention-hostname: OK
+check-connection-phase: OK
+check-daemon-gaps: ok
+check-feedback-redact: OK — 8 patterns, 6 secrets removed, plain text untouched
+check-file-browser-filter: OK
+check-glance: OK
+check-launchable: OK
+check-limit-helpers: OK
+check-live-card: OK
+check-machine-dedupe: OK (one MAC one row; alias tombstoned with its keeper known; config folds without overwrites)
+check-pairing: OK
+check-pointer-gain: OK
+OK: preview tap mapping
+check-relay-ack: OK
+check-risk: OK
+check-screen-zoom: OK
+check-session-state: OK
+check-trackpad-clicks OK
+check-watch-scrollback: 300 lines direct, 60 relayed, both inside the 262,144-byte cap
+check-watch-scrollback: 2 terminals auto-follow only while the reader is at the bottom
+check-watch-scrollback: OK
+check-agent-identity-transport: OK (identities survive the URL; the hook can never block a turn)
+check-agent-new-latency: OK (structural; set MESH_LATENCY_LIVE=1 to time the live daemon)
+check-app-icons: OK (1 appicon set(s) checked)
+check-approve-path: ok — sessionId on /agents, observer dropped, shift-tab/shift-enter, bad-pane Enter retried on the session
+check-apps-ota: OK
+check-apps-serve: OK
+check-brain: OK
+check-brand: OK
+check-bridge-auth: OK
+check-bridge-kill-scope: OK (nothing selects by port unscoped; self-test still catches the historical form)
+check-clean-install: SKIP (set MESH_CLEAN_INSTALL_LIVE=1 to create a fresh simulator and install)
+check-codemap: OK (4 generated files match the tree; every code file names its purpose)
+check-codex-state: OK (limit/done/interrupted/unknown separate; epoch survives the premium decoy)
+check-cross-host-cp: OK
+check-daemon-050: health OK (0.8.0, capabilities, ipv4/netmask)
+check-daemon-050: push gate + /agents status OK (info stored but gated; warning queued)
+check-daemon-050: join=1 unwraps, plain=1 strips OK
+check-daemon-050: new-session cols/rows OK (100x30)
+check-daemon-050: paste:true multiline OK
+check-daemon-050: region capture OK (200 + x-mesh-rect, sliver=400)
+check-daemon-050: /system truthful shape OK (no side-effecting action executed)
+check-daemon-050: /open rejects non-http OK
+check-daemon-050: /la/token stores OK (memory counts + la-tokens.json)
+check-daemon-050: mesh-agent-run Failed lands at level error OK
+check-daemon-050: OK
+check-daemon-gaps.sh: ok
+FAIL: check-docs-index.sh: docs/getting-started.md is in the folder but not in the index — nothing would lead an agent to it
+FAIL: check-docs-index.sh
+check-drag-lock-release.sh: OK (the release is sent directly, outlives the view, and has a queued relay fallback)
+check-entitlements.sh: OK — entitlements and Info keys match what the code uses
+check-feedback-cloud: OK — endpoints, metadata, opt-in attachment, and Keychain session storage
+check-feedback-pipeline: OK — dedupe (open issue + same batch), redaction, no e-mail, row id cited, plist scheduled
+check-fleet: OK (structural; set MESH_FLEET_LIVE=1 to probe every host in ~/.mesh/hosts.json)
+check-handoff: OK (markdown, launch lines, resumable stores, respawn on the agent pane + resume, keystroke fallback, HTTP)
+check-harness-picker: OK
+check-herdr-sessions: OK (enumerated with honest labels; gone peeks null, not blank; refused input says why)
+check-host-guard: OK (own name and short name accepted, foreign hosts still 421)
+check-inspect-crop: daemon announces 'x-mesh-rect: 0.25,0.5,0.125,0.375'
+check-inspect-crop: geometry OK
+check-inspect-crop: OK
+check-install-idempotent: OK (live daemon skips, dead one is repaired, --force overrides, older upgrades, unset SHELL survives)
+  ok   'tell claude yes'                                          -> answer_agent {"session":"claude","decision":"yes"}
+  ok   'say no to codex'                                          -> answer_agent {"session":"codex","decision":"no"}
+  ok   'let claude continue'                                      -> answer_agent {"session":"claude","decision":"continue"}
+  ok   'stop the codex session'                                   -> answer_agent {"session":"codex","decision":"stop"}
+  name 'type ls -la into build1'                                  -> send_text {"session":"build1","text":"type ls"}   expected {"name":"send_text","session":"build1","text":"ls -la"}
+  name 'press enter in claude'                                    -> send_key {"session":"enter","key":"enter"}   expected {"name":"send_key","session":"claude","key":"enter"}
+  name 'hit ctrl-c on the pi-probe session'                       -> send_key {"session":"pi","key":"ctrl-c"}   expected {"name":"send_key","session":"pi-probe","key":"ctrl-c"}
+  ok   'start claude on the jetson and ask it to build the model' -> new_session {"machine":"jetson","cli":"claude","task":"build the model"}
+  ok   'run codex on the mac to fix the failing tests'            -> new_session {"machine":"mac","cli":"codex","task":"fix failing tests"}
+  MISS 'open a shell on the pi'                                   -> open_app {"machine":"pi","app":"shell"}   expected {"name":"new_session","machine":"pi","cli":"shell"}
+  ok   'kill the build1 session'                                  -> kill_session {"session":"build1"}
+  ok   'show me what claude printed'                              -> peek {"session":"claude"}
+  ok   'show me the jetson screen'                                -> screen_peek {"machine":"jetson"}
+  ok   "what is on the mac's screen"                              -> screen_peek {"machine":"mac"}
+  MISS 'wake up the pi'                                           -> None {}   expected {"name":"wake","machine":"pi"}
+  ok   'restart the jetson'                                       -> power {"machine":"jetson","action":"restart"}
+  ok   'lock my mac'                                              -> power {"machine":"mac","action":"lock"}
+  ok   'shut down the pi'                                         -> power {"machine":"pi","action":"shutdown"}
+  ok   'mute the mac'                                             -> volume {"machine":"mac","level":0,"muted":true}
+  ok   'set the mac volume to 40'                                 -> volume {"machine":"mac","level":40,"muted":false}
+  ok   'pause the music on the mac'                               -> media {"machine":"mac","action":"pause"}
+  ok   'paste my clipboard into the jetson'                       -> paste {"machine":"jetson"}
+  ok   'open safari on the mac'                                   -> open_app {"machine":"mac","app":"safari"}
+  ok   'open github.com on the mac'                               -> open_url {"machine":"mac","url":"https://mac.github.com"}
+  name 'copy hello.txt from the pi to the mac'                    -> copy_file {"from_machine":"mac","path":"hello.txt","to_machine":"mac"}   expected {"name":"copy_file","from_machine":"pi","to_machine":"mac"}
+  ok   'send the model file from the jetson to my mac'            -> copy_file {"from_machine":"jetson","path":"mac","to_machine":"mac"}
+  ok   'search the knowledge base for meshd auth'                 -> search_knowledge {"query":"meshd auth"}
+  ok   'what did we decide about the pi token'                    -> search_knowledge {"query":"pi token"}
+check-intent: 26/28 right tool, 22/28 right tool+args; mean confidence 0.28; mean latency 751 ms; peak RAM 34 MB; floor 24
+check-intent: OK
+check-ios-smoke: running UI smoke tests on iPhone 18 Pro (iOS 27.0), simulator F28EA5EE-B84E-4FBB-846F-7DECC5E3EE4C
+  Test Case '-[MeshWatchUITests.SmokeTests testATextFieldCanAppear]' passed (17.825 seconds).
+  Test Case '-[MeshWatchUITests.SmokeTests testEveryTabSurvives]' passed (54.036 seconds).
+  Test Case '-[MeshWatchUITests.SmokeTests testPairSheetOpens]' passed (15.394 seconds).
+check-ios-smoke: OK — the app launches, every tab renders, and a text field can appear
+check-ios-smoke:      ran on: iPhone 18 Pro · iOS 27.0 · F28EA5EE-B84E-4FBB-846F-7DECC5E3EE4C
+check-kb-federation: OK
+  200  https://github.com/LeSearch-AI/mesh-install/releases/latest/download/install.sh
+  200  https://github.com/LeSearch-AI/mesh-install/releases/latest/download/mesh-install.tgz
+  200  https://mesh.lesearch.ai/install.sh
+  200  https://testflight.apple.com/join/pVYPTxc7
+check-links: OK (4 published install/TestFlight links all answer)
+check-linux-desktop: ok (structural; MESH_FLEET_LIVE=1 for the live half)
+check-mesh-apps: OK (config/publish/add/list/remove verified, path-traversal slugs rejected)
+check-mesh-auth: OK
+check-mesh-auth: server.ts wired
+OK: 7 chord chips, all mappable; ⌘space ⌥space ⌘⇧2 ⌘⇧4 synthesize atomically; unmappable modifiers refused
+check-mesh-csrf: OK
+check-mesh-doctor: OK
+check-mesh-doctor: server.ts wired
+check-mesh-doctor: CLI --fix reaches POST /doctor/fix
+check-mesh-hooks: OK
+check-mesh-input-linux: OK — all watch events map to xdotool
+OK: mesh-input compiles; 63 keys, 9 media, 6 window, 0 system all mapped
+check-mesh-onboarding: OK (shellenv is one eval-safe line, setup degrades to a checklist, install.sh wires PATH once and says how to load it)
+check-mesh-pair: OK
+check-mesh-push: OK
+check-mesh-push: category matches Swift
+check-mesh-push: collapse id matches Swift
+check-mesh-skills: OK (no personal identifiers, symlinks resolve, install/uninstall verified against a temp HOME)
+check-mesh-uninstall: OK (removes every installer artefact, keeps every user line)
+note: meshd is not answering on 127.0.0.1:8998 — upgrading the files anyway
+  staging from checkout: /Users/aryateja/Projects/lecoder-watch/.claude/worktrees/lesearch-ai-overnight/install/payload
+  trial run: meshd on 127.0.0.1:8902
+  trial run ok: it reports meshd 0.8.0
+  installed meshd 0.8.0  (bin: mesh, mesh-kb, mesh-agent-run, mesh-codex-notify, mesh-hook, mesh-self-check, start-cmux-bridge, mesh-event, mesh-input.swift)
+  hooks: cmux-bridge.zsh
+  --no-restart: /var/folders/wl/2qjnl0_954zgnxtthcl_g8600000gn/T/tmp.iSKuCrvcmK/mesh/meshd is 0.8.0, the running daemon is still whatever it was
+mesh upgrade: 0.0.1-test → 0.8.0 on local
+  backup   /var/folders/wl/2qjnl0_954zgnxtthcl_g8600000gn/T/tmp.iSKuCrvcmK/mesh/backups/meshd-0.0.1-test-1790077230
+  restart  skipped (--no-restart)
+check-mesh-upgrade: OK (0.0.1-test -> 0.8.0, state preserved, hooks synced, failure is a no-op, daemon really restarted)
+check-mesh-version: OK (CLI reports 0.8.0 from the payload, and defers to an installed tree)
+native-terminal-keys-test: ok (23 cases)
+check-native-terminal-keys: ok
+ok:   fleet — check-fleet: OK (live)
+ok:   remote-agent-loop-jetson — check-remote-agent-loop: OK — session created on jetson, Started/Completed events seen, send landed, killed
+ok:   remote-agent-loop-pi — check-remote-agent-loop: OK — session created on pi, Started/Completed events seen, send landed, killed
+ok:   cross-host-cp-jetson — check-cross-host-cp: OK
+ok:   kb-federation-jetson — check-kb-federation: OK
+ok:   brand — check-brand: OK
+ok:   relay-receiver — check-relay-receiver: OK
+ok:   harness-picker — check-harness-picker: OK
+ok:   pair-auth — check-pair-auth: OK
+ok:   intent — check-intent: OK
+ok:   brain — check-brain: OK
+ok:   watch-smoke — check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 74133 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
+ok:   sim-fleet — check-sim-fleet: OK — iPhone, iPad, Watch and Mac all alive; shots in /Users/aryateja/Projects/lecoder-watch/.claude/worktrees/lesearch-ai-overnight/docs/overnight/2026-09-21/shots
+check-overnight: OK — every live check green
+check-pair-auth: OK
+check-pair-qr: OK (14 payloads round-tripped through an independent decoder)
+check-paste-epipe: OK (1.5 MB paste against a non-draining mux; daemon alive, send delivered)
+check-phone-input-and-wake: smart punctuation is normalised per field (26 bindings), with no appearance proxy to crash on
+check-phone-input-and-wake: the WKWebView terminal disables its own input correction, independent of UIKit
+check-phone-input-and-wake: the idle timer is held and released in 1 matching pair(s)
+check-phone-input-and-wake: OK
+check-product-spec: ok
+ok: upgrade without bearer is 401
+ok: unknown session is 404
+ok: socket open with bearer
+ok: scrollback replayed before the attach
+ok: pane sized to the client (16x61 under the status line) and typed bytes reached it
+ok: colour escapes come back unstripped
+ok: resize reaches tmux (pane now 45x11)
+ok: ping answered
+ok: close detaches, session survives
+check-pty-route: ok
+FAIL: check-published: 8 Gate SHA in PUBLISHED.md is not a full 40-hex sha (got: 'pending')
+FAIL: check-published: 1 Gate log missing (PUBLISHED.md 'Gate log:' must name a committed file; got 'docs/overnight/2026-09-21/gate-full-publish.txt')
+FAIL: check-published.sh
+check-redact: OK (17 rules, ledger, HTTP surface)
+  ✓ PhoneConnectivity has didReceiveMessage without replyHandler
+  ✓ WatchLink.acknowledge checks RelayReply.failureReason
+  ✓ MeshStore has 11 RelayReply.encodeFailure calls (≥ 8)
+check-relay-receiver: OK
+check-remote-agent-loop: OK (structural; set MESH_FLEET_LIVE=1 MESH_REMOTE_HOST=jetson to run the loop on a remote host)
+check-remote-screen-gestures: mouse buttons [middle right ] are understood by both the Mac helper and xdotool
+check-remote-screen-gestures: two fingers -> right, three fingers -> middle, three beats two
+check-remote-screen-gestures: pan and hold both run through a delegate that allows simultaneous recognition
+check-remote-screen-gestures: key bar keys [2 4 delete down escape left q return right space tab up w 2 4 q space tab w ] and modifiers [cmd option shift ] exist on both hosts
+check-remote-screen-gestures: default true selects sign -1 — identical to the direction shipped before the preference existed
+check-remote-screen-gestures: natural scrolling has a control bound to it
+check-remote-screen-gestures: the idle timer is held and released in 1 matching pair(s)
+check-remote-screen-gestures: OK
+check-roundtrip: OK
+check-shell-startup: the bridge hook returns in 117ms with no bridge running (budget 1000ms)
+check-shell-startup: a wedged bridge (accepts, never answers) costs 1119ms (budget 2500ms)
+check-shell-startup: OK
+check-sim-fleet: SKIP (set MESH_SIM_LIVE=1 to launch on the simulators)
+check-tmux-restart: OK (session names carry no dots, so the restart can find and replace its own session)
+check-token-rotate: OK (file+backup+modes, hosts preserved, push/LA devices forgotten, daemon restarted on the NEW token, no token in any argv)
+check-usage-alert-identity: ok
+check-voice-accumulate: OK
+check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 81172 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
+check-watch-terminal-wiring: watch reaches every key meshd accepts (except: delete, allowed)
+check-watch-terminal-wiring: cwd travels on the direct route and the phone relay
+check-watch-terminal-wiring: the watch can launch an arbitrary command
+check-watch-terminal-wiring: the watch has a help affordance
+check-watch-terminal-wiring: width reaches the daemon with or without a display
+check-watch-terminal-wiring: the watch's refresh is single flight
+check-watch-terminal-wiring: dictation goes to the mic and resolves its controller at tap time
+check-watch-terminal-wiring: the terminal offers Reader and Raw, and gates the daemon flags on captureJoin
+check-watch-terminal-wiring: key chips are >=42x38 at 8pt spacing, with the font chips in overflow
+check-watch-terminal-wiring: relayed sends are acknowledged, with a haptic and an honest failure line
+check-watch-terminal-wiring: 0.5.0 features are capability-gated and the capabilities are wired in
+check-watch-terminal-wiring: the iPhone's clipboard can be typed into a session, and both sides agree on the wire shape
+check-watch-terminal-wiring: Approve/Decline/Reply/Stop route through respondToAgent, pane and all
+check-watch-terminal-wiring: OK
+FAIL: check-web-docs: getting-started.md embeds product/shots/iphone-machines.png which does not exist
+FAIL: check-web-docs: getting-started.md embeds product/shots/iphone-pair.png which does not exist
+FAIL: check-web-docs: getting-started.md embeds product/shots/iphone-terminal.png which does not exist
+FAIL: check-web-docs: getting-started.md embeds product/shots/iphone-apps.png which does not exist
+FAIL: check-web-docs: getting-started.md embeds product/shots/iphone-report-a-problem.png which does not exist
+FAIL: check-web-docs: getting-started.md embeds product/shots/iphone-settings.png which does not exist
+FAIL: check-web-docs.sh
+check-wol: OK (primaryMac -> null)
+check-wol: server.ts wired
+[31mFAIL  test[0m
+
+=== gate: build ===
+gate-build: MeshWatch ... ok
+gate-build: MeshWatch Watch App ... ok
+gate-build: MeshDesktop ... ok
+gate-build: OK — iOS, watchOS and macOS targets all build
+[32mPASS  build[0m
+
+---------------------------------------------
+[31mGATES RED (1 failed: test)[0m
+FACTORY_GATES: level=full status=RED passed=3 failed=1 failing=test skipped=none misconfigured=none

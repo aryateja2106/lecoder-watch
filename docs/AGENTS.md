@@ -1,0 +1,18 @@
+# docs/ — every written explanation of the product: the spec, how-to guides, decisions, release plans and dated history
+
+**Read first:** [README.md](README.md) (which docs are current vs history), [product/PRODUCT.md](product/PRODUCT.md) (the one canonical spec), [agents/CODEMAP.md](agents/CODEMAP.md) (which code file, before any grep).
+**Surface:** docs
+**Serialized (one agent at a time):** `README.md` (the index `check-docs-index.sh` enforces); `getting-started.md` (rendered to `web/getting-started.html`, served by lesearch.ai).
+**Prove a change:**
+- `sh scripts/check-docs-index.sh` — every `docs/*.md` is listed in README.md and no link dangles (top level only: `scripts/check-docs-index.sh:18-24`).
+- Touched `getting-started.md` or a screenshot it embeds: `bun scripts/build-web-docs.ts && sh scripts/check-web-docs.sh`.
+- Docs-only change: `./.claude/scripts/gates.sh fast` is the required level (`docs/factory/CHARTER.md:135`).
+**Traps:**
+- `README.md` never mentions `product/PRODUCT.md` (grep, 0 hits) and still sends "what to build next" to `PRODUCT-SPEC-V1.md` (`README.md:31`), while `product/PRODUCT.md:3` says it is the only document that defines the product. PRODUCT.md wins.
+- `README.md:3` says "Seventeen files"; there are 35 `docs/*.md` today. Sub-folder files (`agents/domain.md`, `agents/harnesses.md`, all of `factory/`, `product/PRODUCT.md`) are not in the index, and no check covers sub-folders.
+- Dated docs name branches that are now wrong: `ci.md:11` says the PR base is `backup/2026-07-02`; GitHub's default branch is `main` (`gh repo view`, 2026-09-27) and HEAD is 440 commits past that snapshot. Root `HANDOFF.md:7` gives the same stale advice. AGENTS.md rule 2.
+- `backlog.md:3` says "Generated on 2026-08-27" but no script regenerates it (`scripts/sync-issues.sh` only files issues); treat its grades as a 2026-08-27 snapshot.
+- `scripts/check-published.sh` reads `getting-started.md`, `product/README.md`, `product/design-system.md` (`:268-280`) and `overnight/2026-09-21/` (`:48-49`) by hard-coded path. Do not rename or move them.
+- Root `CHANGELOG.md` `## [Unreleased]` becomes the TestFlight "What to Test" text (`scripts/release-testflight-asc.sh:282-285`); write it in user words as each slice lands.
+**SDLC stage:** Plan, Design, Deploy, Maintain — each stage's written artifact is committed here: spec, ADRs, release and publish notes, reviews and dated records (see [docs/sdlc/1-plan.html](sdlc/1-plan.html), [docs/sdlc/2-design.html](sdlc/2-design.html), [docs/sdlc/5-ship.html](sdlc/5-ship.html))
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py)

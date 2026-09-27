@@ -1,4 +1,5 @@
 #!/bin/sh
+# set-development-team.sh — write your Apple DEVELOPMENT_TEAM id into project.yml so a local build signs (never commit the result).
 
 set -eu
 

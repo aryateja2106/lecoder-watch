@@ -25,6 +25,8 @@ final class LiveActivityController {
     /// switches the permission on mid-session gets a card on the next poll instead of
     /// having to relaunch. Settings watches the same system stream to say so out loud.
     private(set) var activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+    /// Why the push-capable request was refused, if it was — surfaced in the problem report.
+    private(set) var lastRequestFailure: String?
 
     /// Hands a push token to every paired machine. Set by the app at launch — this
     /// type deliberately knows nothing about the machine list.
@@ -71,6 +73,22 @@ final class LiveActivityController {
         adoptExistingActivities()
         watchEnablement()
         watchPushToStartTokens()
+    }
+
+    /// Called on every return to the foreground. A card that meshd push-started while
+    /// the app was parked exists in `Activity.activities` but is held by nobody — its
+    /// update token was never observed, so the daemon that started it can never change
+    /// it, and after 15 minutes it grays out stale forever. Adoption at launch alone
+    /// cannot see it; this can. Cheap when there is nothing to do.
+    func readoptIfNeeded() {
+        let held = activity?.id
+        let live = Activity<SessionActivityAttributes>.activities
+        // Re-adopt when we hold nothing, or when what we hold is no longer live
+        // (swiped away while parked — `forget` only hears about that while awake).
+        if held == nil || !live.contains(where: { $0.id == held }) {
+            activity = nil
+            adoptExistingActivities()
+        }
     }
 
     private func adoptExistingActivities() {
@@ -232,12 +250,20 @@ final class LiveActivityController {
         // costs nothing when no daemon can use it — the token is simply never uploaded
         // anywhere that wants it, because `uploadLAToken` refuses hosts without
         // "laPush".
-        let started = try? Activity.request(
-            attributes: attributes,
-            content: ActivityContent(state: content,
-                                     staleDate: Date(timeIntervalSinceNow: Self.staleAfter)),
-            pushType: .token,
-        )
+        let activityContent = ActivityContent(state: content, staleDate: Date(timeIntervalSinceNow: Self.staleAfter))
+        var started: Activity<SessionActivityAttributes>?
+        do {
+            started = try Activity.request(attributes: attributes, content: activityContent, pushType: .token)
+        } catch {
+            // `.token` needs the aps-environment entitlement. A build without it (every
+            // simulator build the gate makes, an ad-hoc build, a profile without push) used
+            // to throw here and the card never appeared at all — swallowed by a `try?`, so
+            // "live notifications don't work" had no line to point at. Without push the card
+            // still shows and follows the app's own polls while it is open; only the
+            // closed-app updates need the token, and meshd says so in /doctor.
+            lastRequestFailure = "\(error)"
+            started = try? Activity.request(attributes: attributes, content: activityContent, pushType: nil)
+        }
         guard let started else {
             activity = nil
             showing = nil

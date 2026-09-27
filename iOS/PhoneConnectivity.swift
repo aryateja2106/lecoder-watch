@@ -76,4 +76,13 @@ final class PhoneConnectivity: NSObject, ObservableObject, WCSessionDelegate {
         guard let command = decodeCommand(userInfo) else { return }
         Task { _ = await commandHandler?(command) }
     }
+
+    /// Commands the watch sends with `replyHandler: nil` (fire-and-forget: remote
+    /// control keys, volume, clipboard writes, new/kill session) land here — NOT in
+    /// the replyHandler overload. Without this method they were silently dropped on
+    /// every physical pair; the simulator hid it because the watch reached meshd directly.
+    func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        guard let command = decodeCommand(message) else { return }
+        Task { _ = await commandHandler?(command) }
+    }
 }

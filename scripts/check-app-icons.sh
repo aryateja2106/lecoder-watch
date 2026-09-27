@@ -30,8 +30,10 @@ if [ -z "$names" ]; then
 fi
 
 for name in $names; do
-  for set_dir in $(find . \( -path "*/build/*" -o -path "*/.asc/*" -o -path "*/DerivedData/*" -o -path "*/node_modules/*" \) -prune \
-      -o -type d -name "${name}.appiconset" -print); do
+  # Only icon sets this repo ships — i.e. tracked files. A plain `find .` also walked
+  # every gitignored clone under references/external/ and the worktrees under .claude/,
+  # and failed the release gate on another project's icon set.
+  for set_dir in $(git ls-files | grep "/${name}\.appiconset/" | sed 's#/[^/]*$##' | sort -u); do
     checked=$((checked + 1))
     contents="$set_dir/Contents.json"
 

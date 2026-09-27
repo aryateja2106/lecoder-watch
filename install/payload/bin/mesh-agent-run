@@ -1,4 +1,5 @@
 #!/bin/sh
+# mesh-agent-run — run a command under an agent's name and post its start/finish (failures at level error) to meshd as events.
 
 set -u
 

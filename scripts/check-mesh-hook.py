@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""check-mesh-hook.py — mesh-hook --dry-run turns each Claude/Codex hook payload into the expected meshd event (level, title, session)."""
 import json
 import os
 import subprocess

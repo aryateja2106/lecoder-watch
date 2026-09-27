@@ -1,0 +1,15 @@
+# docs/factory/ — the rules for unattended AI work on this repo: what agents may do alone, when they must stop, and the record of every run
+
+**Read first:** [CONTRACT.md](CONTRACT.md) (queue, handoff, six non-negotiables), [CHARTER.md](CHARTER.md) (human-owned policy; read, never edit), [runs/README.md](runs/README.md) (run-record format).
+**Surface:** agent-config
+**Serialized (one agent at a time):** `CHARTER.md` is human-only (`CHARTER.md:3-5`, denied to Edit in `.claude/settings.json`, blocked for shell writes by `.claude/hooks/block-merge.sh:59-60`). Everything else: one writer per file; `runs/*.md` are write-once.
+**Prove a change:** `./.factory/scripts/doctor.sh` (factory install sanity) and `./.claude/scripts/gates.sh fast`; no dedicated check for the policy text — add scripts/check-factory-docs.sh.
+**Traps:**
+- The charter is unfilled: `CHARTER_STATUS: incomplete` (`CHARTER.md:13`), `TIER: <choose one tier>` (`:30`), `LAST_REVIEWED: <YYYY-MM-DD>` (`:170`). `doctor.sh:35` only reports ready when the status line says `ready`. Facts to report to Arya, not to fix.
+- `LOAD_BEARING` still lists the template's `src/auth/**` and `src/payments/**` (`CHARTER.md:46-47`), which do not exist here, and omits the real shared contracts (AGENTS.md "Must be serialized"). `AUTOMATABLE` cites `docs/factory/MIGRATION.md` (`:90`), which does not exist.
+- Stop limit disagrees: `CHARTER.md:151` stops at more than 3 awaiting review; `CLAUDE.md:51` says more than two. Use the stricter one until Arya decides.
+- `CONTRACT.md:72` says cut claim branches from "the current default branch": that is `main` on GitHub, but a stale local `origin/HEAD` still points at `backup/2026-07-02` (July). Check with `gh repo view` first.
+- `STATE.md:15` and `QUEUE.md` are unfilled template snapshots; the live queue is GitHub `factory:*` labels (`QUEUE.md:3`). `PLAN-0.6.md` is the 0.6 plan (2026-08-29), now history.
+- `runs/2026-09-22T093000Z-publish.md` still says `status: in-progress`, outside the enum in `runs/README.md:20`; it was closed by `runs/2026-09-23T060000Z-publish-green.md`. Write a new record, never edit an old one.
+**SDLC stage:** Build, Deploy — the charter and contract bound unattended agent work and keep merges human; each run record carries its plan and its proof (see [docs/sdlc/3-build.html](../sdlc/3-build.html), [docs/sdlc/5-ship.html](../sdlc/5-ship.html))
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py). Run records: `runs/YYYY-MM-DDTHHMMSSZ-<stage>-<issue-or-slug>.md`, YAML front matter per `runs/README.md:12-28`.

@@ -4,6 +4,10 @@
 //
 //   GET  /input            -> { ok, trusted, helper, hint }   (?prompt=1 shows the TCC dialog)
 //   POST /input            <- { events: [ {t:"move",dx,dy}, {t:"click"}, ... ] }
+//                             A {t:"key",key,mods:[…]} is a chord — modifiers down, key
+//                             down and up, modifiers up — synthesized as one atomic
+//                             sequence by the backend. Refused whole (400) if a modifier
+//                             name is not one both backends can map.
 //   GET  /clipboard        -> { text }
 //   POST /clipboard        <- { text }
 //   POST /volume           <- { level } | { delta } | { muted }   (GET reads current)
@@ -30,6 +34,7 @@ import { stat, mkdir, readFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   linuxInjectEvents, linuxInputStatus, linuxClipboard, linuxVolume, linuxSystemAction,
+  linuxCaptureScreen, linuxScreenStatus, linuxListApps, linuxActivateApp, linuxOpenTerminal, linuxOpenLauncher,
 } from "./input-linux";
 
 const IS_MAC = process.platform === "darwin";
@@ -123,21 +128,75 @@ async function stream(trusted: boolean): Promise<any> {
 /// status check (which the watch runs on open, and after "Ask the Mac now") moves it.
 let trustedCache = false;
 
+// ---------- chords ----------
+/// Modifier names both backends can map, ranked outermost-first — which is the order
+/// the chord gets pressed in. ⌘ wraps around everything else, the way a hand actually
+/// forms ⌘⇧4.
+///
+/// The rank doubles as an identity: cmd/command are the same physical key, so are
+/// opt/option/alt and ctrl/control, and a chord that pressed one of them twice would
+/// release it on the first lift while the rest of the chord still needed it. `meta`
+/// keeps a rank of its own because it is NOT an alias here — mesh-input reads it as ⌘,
+/// xdotool as Super, and collapsing the two would silently change which key Linux gets.
+const MODIFIER_RANK: Record<string, number> = {
+  cmd: 0, command: 0,
+  meta: 1,
+  ctrl: 2, control: 2,
+  opt: 3, option: 3, alt: 3,
+  shift: 4,
+  fn: 5,
+};
+
+/// Canonicalize every chord in a batch, or name the one modifier that cannot be mapped.
+///
+/// Refusing is the point. Both backends used to drop an unmappable modifier and press
+/// whatever was left, which is the worst of the three possible behaviors: a ⌘⇧4 whose
+/// "cmd" did not map was not a failed screenshot, it was a "$" typed into whatever had
+/// focus. A chord is all-or-nothing or it is a different keystroke wearing its name.
+///
+/// The ordering is not cosmetic either. The phone keeps its sticky modifiers in a Set,
+/// which has no order of its own, so the same two taps could arrive as ["cmd","shift"]
+/// or ["shift","cmd"] and synthesize two different key sequences on the Mac.
+export function normalizeChords(batch: any[]): { events: any[] } | { error: string } {
+  const events: any[] = [];
+  for (const e of batch) {
+    if (e.t !== "key" || !Array.isArray(e.mods) || e.mods.length === 0) { events.push(e); continue; }
+    const byRank = new Map<number, string>();
+    for (const raw of e.mods) {
+      const name = String(raw).toLowerCase();
+      // hasOwn, not a bare lookup — "constructor" is not a modifier. Same reason as
+      // systemAction() below.
+      if (!Object.hasOwn(MODIFIER_RANK, name)) {
+        return { error: `unknown modifier: ${String(raw).slice(0, 24)}` };
+      }
+      const rank = MODIFIER_RANK[name];
+      if (!byRank.has(rank)) byRank.set(rank, name);
+    }
+    const mods = [...byRank.keys()].sort((a, b) => a - b).map((rank) => byRank.get(rank)!);
+    events.push({ ...e, mods });
+  }
+  return { events };
+}
+
 // ---------- actions ----------
 export async function injectEvents(events: any[]): Promise<{ ok: boolean; count?: number; error?: string }> {
   if (!Array.isArray(events) || events.length === 0) return { ok: false, error: "events required" };
   const batch = events.slice(0, MAX_EVENTS).filter((e) => e && typeof e.t === "string");
   if (batch.length === 0) return { ok: false, error: "no valid events" };
-  if (!IS_MAC) return linuxInjectEvents(batch);
+  // Before the platform split, so a chord means the same thing on both backends and a
+  // bad modifier is a 400 the client can show rather than a wrong key on the screen.
+  const chords = normalizeChords(batch);
+  if ("error" in chords) return { ok: false, error: chords.error };
+  if (!IS_MAC) return linuxInjectEvents(chords.events);
   const proc = await stream(trustedCache);
   if (!proc) return { ok: false, error: buildError || "mesh-input unavailable" };
-  proc.stdin.write(batch.map((e) => JSON.stringify(e)).join("\n") + "\n");
+  proc.stdin.write(chords.events.map((e) => JSON.stringify(e)).join("\n") + "\n");
   proc.stdin.flush();
-  return { ok: true, count: batch.length };
+  return { ok: true, count: chords.events.length };
 }
 
 export async function inputStatus(prompt = false) {
-  if (!IS_MAC) return linuxInputStatus();
+  if (!IS_MAC) return { ...(await linuxInputStatus()), screen: (await linuxScreenStatus()).ok };
   const bin = await ensureHelper();
   if (!bin) return { ok: false, trusted: false, helper: HELPER_BIN, error: buildError };
   const out = await run(prompt ? [bin, "--check", "--prompt"] : [bin, "--check"]);
@@ -189,6 +248,8 @@ const SYSTEM_ACTIONS: Record<string, string[]> = {
   sleep: ["/usr/bin/pmset", "sleepnow"],
   lock: ["/System/Library/CoreServices/Menu Extras/User.menu/Contents/Resources/CGSession", "-suspend"],
   screensaver: ["/usr/bin/open", "-a", "ScreenSaverEngine"],
+  // A full-screen shot straight into the clipboard, ready to paste into an agent.
+  screenshot: ["/usr/sbin/screencapture", "-c", "-x"],
   shutdown: ["/usr/bin/osascript", "-e", 'tell app "System Events" to shut down'],
   restart: ["/usr/bin/osascript", "-e", 'tell app "System Events" to restart'],
 };
@@ -224,7 +285,7 @@ const INSTALLED_APPS_SH =
   `"$HOME/Applications" 2>/dev/null | sed -n 's/\\.app$//p' | sort -u`;
 
 async function listApps() {
-  if (!IS_MAC) return { ok: false, error: "app control is macOS only" };
+  if (!IS_MAC) return linuxListApps();
   const [rawRunning, rawFront, rawInstalled] = await Promise.all([
     run(["/bin/sh", "-c", RUNNING_APPS_SH]),
     run(["/bin/sh", "-c", `/usr/bin/lsappinfo info -only name "$(/usr/bin/lsappinfo front)" 2>/dev/null`]),
@@ -241,7 +302,7 @@ async function listApps() {
 
 /// `open -a` via argv, never a shell string — the name comes from the watch.
 async function activateApp(name: string) {
-  if (!IS_MAC) return { ok: false, error: "app control is macOS only" };
+  if (!IS_MAC) return linuxActivateApp(name);
   if (!name.trim()) return { ok: false, error: "app name required" };
   const p = Bun.spawn(["/usr/bin/open", "-a", name], { stdout: "ignore", stderr: "pipe" });
   if ((await p.exited) !== 0) {
@@ -337,7 +398,7 @@ async function imagePixelWidth(path: string): Promise<number> {
 /// The served crop is echoed in x-mesh-rect (normalized) + x-mesh-display; a response
 /// without those headers is a full frame and the client must not interpret it as a crop.
 export async function captureScreen(params: CaptureParams): Promise<Response> {
-  if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
+  if (!IS_MAC) return linuxCaptureScreen(params);
   const { display, rect, quality } = params;
   // Full frames keep their historical default (480) so old clients see identical
   // behavior; a region defaults to native pixels — downscaling is opt-in via width.
@@ -444,9 +505,9 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
   // The whole capture route lives here now — with or without a display named — so
   // rect/width/quality mean exactly one thing. server.ts no longer carries its own copy.
   if (path === "/screen.jpg" && req.method === "GET") {
-    if (!IS_MAC) return json({ error: "screen peek is macOS only" }, 404);
     const params = parseCaptureParams(url);
     if (params.error) return json({ error: params.error }, 400);
+    if (!IS_MAC) return await linuxCaptureScreen(params);
     if (params.display != null && (!Number.isInteger(params.display) || params.display < 1)) {
       return json({ error: "bad display" }, 400);
     }
@@ -472,6 +533,24 @@ export async function handleInput(req: Request, url: URL): Promise<Response | nu
   }
   if (path === "/apps" && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as any;
+    // Two verbs a phone reaches for before any app name: a terminal, and the machine's own
+    // launcher (Spotlight / Raycast on a Mac, rofi / ulauncher / whatever MESH_LAUNCHER says
+    // on Linux) — so a person's existing launcher habit works from the phone unchanged.
+    if (body?.terminal === true) {
+      const result = IS_MAC ? await activateApp("Terminal") : await linuxOpenTerminal();
+      return json(result, result.ok ? 200 : 400);
+    }
+    if (body?.launcher === true) {
+      if (IS_MAC) {
+        // MESH_LAUNCHER names the chord (cmd+space by default; "option+space" for Raycast).
+        const chord = (process.env.MESH_LAUNCHER || "cmd+space").split("+").map((s) => s.trim()).filter(Boolean);
+        const key = chord.pop() ?? "space";
+        const result = await injectEvents([{ t: "key", key, mods: chord }]);
+        return json(result, result.ok ? 200 : 400);
+      }
+      const result = await linuxOpenLauncher();
+      return json(result, result.ok ? 200 : 400);
+    }
     const result = await activateApp(String(body?.activate ?? ""));
     return json(result, result.ok ? 200 : 400);
   }

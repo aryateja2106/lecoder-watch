@@ -1,0 +1,193 @@
+#!/bin/sh
+# Lossless session history (meshd sessions.ts) keeps every version of an agent transcript
+# after the runtime compacts or deletes it, and gives any version back byte-for-byte.
+# Runs the real module against a throwaway HOME — no daemon, no real transcripts touched:
+#   - first snapshot is a full base; a grown file is stored as an append of only the new
+#     bytes; an unchanged file stores nothing; a rewritten (compacted) file is a new base
+#   - every version rebuilds byte-exact, and a tampered chunk is refused, not served
+#   - the store is 0700, every file in it 0600 (transcripts carry pasted secrets)
+#   - subagent transcripts (agent-*.jsonl) are not sessions; Codex rollouts are
+#   - MESH_SESSIONS=off stops every snapshot, not only the sweep
+#   - a second sweep over unchanged files records nothing; concurrent snapshots of one
+#     file never share a version number
+#   - a mirror pulls every version over HTTP: the latest file, the base a compaction
+#     replaced, secrets masked at the source, nothing twice, a half-written append undone
+#   - a mirror token reads the list, an index and redacted chunks, and nothing else; a
+#     peer that accepts only that token can still be mirrored
+#   - restore writes a NEW session file next to the original with every sessionId
+#     rewritten, leaves the original alone, and is refused for Codex
+# Plus the wiring in server.ts: route, capability, boot sweep, Stop-event trigger.
+set -eu
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SERVER="$ROOT/install/payload/meshd/server.ts"
+MESH="$ROOT/install/payload/bin/mesh"
+fail=0
+bad() { echo "FAIL: $1"; fail=1; }
+
+grep -q 'from "./sessions"' "$SERVER" || bad "server.ts does not import sessions.ts"
+grep -q 'await handleSessions(req, url, server)' "$SERVER" || bad "/sessions routes are not dispatched"
+grep -q 'if (await mirrorReadAllowed(req, url))' "$SERVER" || bad "a mirror token is no longer honoured after the full token is refused"
+grep -q '^startSessionSweep();' "$SERVER" || bad "the background sweep never starts"
+grep -q '^startSessionMirror();' "$SERVER" || bad "the mirror never starts on a machine that asks for it"
+grep -q '"pty", "sessions"\]' "$SERVER" || bad "capability sessions is not advertised"
+grep -q 'snapshotTranscript(p!)' "$SERVER" || bad "a finished turn no longer snapshots its session"
+grep -q 'case "sessions": return cmdSessions' "$MESH" || bad "mesh sessions is not wired"
+grep -q '"/sessions/mirror-token"' "$MESH" || bad "mesh sessions mirror-to no longer hands the mirror a mirror token"
+grep -q 'GET", "/sessions/mirror-token"' "$MESH" && ! grep -n 'mirror-peers", { name: as, ip: .*token: src.token' "$MESH" >/dev/null || bad "mesh sessions mirror-to would send a full token"
+
+command -v bun >/dev/null 2>&1 || { echo "check-session-snapshots: SKIP (no bun)"; [ "$fail" = 0 ] && exit 0 || exit 1; }
+
+T="$(mktemp -d "${TMPDIR:-/tmp}/sess-check.XXXXXX")"
+trap 'rm -rf "$T"' EXIT
+cat > "$T/run.ts" <<'TS'
+import { mkdirSync, writeFileSync, appendFileSync, readFileSync, statSync, readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { gzipSync, gunzipSync } from "node:zlib";
+const HOME = process.env.HOME!;
+const { snapshot, reconstruct, sweep, handleSessions } = await import(process.env.MODULE!);
+let bad = 0;
+const ok = (c: boolean, msg: string) => { if (!c) { console.log("FAIL: " + msg); bad = 1; } };
+const eq = (a: Uint8Array | null, b: Buffer) => !!a && Buffer.compare(Buffer.from(a), b) === 0;
+
+const id = "11111111-2222-4333-8444-555555555555";
+const proj = join(HOME, ".claude/projects/-tmp-demo");
+mkdirSync(proj, { recursive: true });
+const file = join(proj, `${id}.jsonl`);
+const line = (o: object) => JSON.stringify(o) + "\n";
+writeFileSync(file, line({ type: "user", sessionId: id, cwd: "/tmp/demo", message: { content: "fix the flaky test" } }));
+const v1 = readFileSync(file);
+ok(await snapshot(file) === "base", "first snapshot is not a base");
+ok(await snapshot(file) === "unchanged", "an unchanged file was stored again");
+appendFileSync(file, line({ type: "assistant", sessionId: id, message: { content: "x".repeat(50_000) } }));
+const v2 = readFileSync(file);
+ok(await snapshot(file) === "append", "a grown file was not stored as an append");
+const gz2 = statSync(join(HOME, ".mesh/sessions/claude", id, "v2.gz")).size;
+ok(gz2 < v2.length / 4, `the append stored ${gz2} bytes for a ${v2.length}-byte file — it copied, not appended`);
+// Compaction: the runtime rewrites the file shorter.
+writeFileSync(file, line({ type: "summary", sessionId: id, summary: "compacted" }));
+const v3 = readFileSync(file);
+ok(await snapshot(file) === "base", "a rewritten (compacted) file was not a new base");
+ok(eq(await reconstruct("claude", id, 1), v1), "v1 does not rebuild byte-exact");
+ok(eq(await reconstruct("claude", id, 2), v2), "v2 (base + append) does not rebuild byte-exact");
+ok(eq(await reconstruct("claude", id), v3), "latest does not rebuild byte-exact");
+
+// Concurrent writers (Stop-event trigger + sweep) must not share a version number.
+const race = join(proj, "22222222-2222-4333-8444-555555555555.jsonl");
+writeFileSync(race, line({ type: "user", message: { content: "race" } }));
+const pending = [];
+for (let i = 0; i < 80; i++) { pending.push(snapshot(race)); await Bun.sleep(1); appendFileSync(race, line({ i, pad: "z".repeat(200_000) })); }
+await Promise.all(pending);
+await snapshot(race);
+const raceVersions = JSON.parse(readFileSync(join(HOME, ".mesh/sessions/claude/22222222-2222-4333-8444-555555555555/index.json"), "utf8")).versions;
+ok(new Set(raceVersions.map((v: any) => v.n)).size === raceVersions.length, "two concurrent snapshots recorded the same version number");
+for (const v of raceVersions) ok(!!(await reconstruct("claude", "22222222-2222-4333-8444-555555555555", v.n)), `concurrent snapshots left v${v.n} unreadable`);
+
+const dir = join(HOME, ".mesh/sessions/claude", id);
+ok((statSync(join(HOME, ".mesh/sessions")).mode & 0o777) === 0o700, "the store is not 0700");
+ok((statSync(dir).mode & 0o777) === 0o700, "a session folder is not 0700");
+for (const f of readdirSync(dir)) ok((statSync(join(dir, f)).mode & 0o777) === 0o600, `${f} is not 0600`);
+
+writeFileSync(join(proj, "agent-abc.jsonl"), line({ type: "user", message: { content: "sub" } }));
+ok(await snapshot(join(proj, "agent-abc.jsonl")) === "skipped", "a subagent transcript was recorded as a session");
+const cx = join(HOME, ".codex/sessions/2026/09/23");
+mkdirSync(cx, { recursive: true });
+writeFileSync(join(cx, "rollout-2026-09-23T10-00-00-abc.jsonl"), line({ type: "session_meta", payload: { cwd: "/tmp/cx" } })
+  + line({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "<environment_context>x</environment_context>" }, { type: "input_text", text: "# AGENTS.md instructions\nbe nice" }] } })
+  + line({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "# Files mentioned by the user:\n\n## a.pdf: /x\n\n## My request for Codex:\nsummarise the screener" }] } }));
+
+process.env.MESH_SESSIONS = "off";
+appendFileSync(race, line({ off: true }));
+ok(await snapshot(race) === "skipped", "MESH_SESSIONS=off did not stop a direct snapshot (the Stop-event path)");
+delete process.env.MESH_SESSIONS;
+await snapshot(race);
+const first = await sweep();
+ok(first.recorded === 1, `first sweep recorded ${first.recorded}, expected only the new Codex rollout`);
+const again = await sweep();
+ok(again.recorded === 0, `a sweep over unchanged files recorded ${again.recorded}`);
+
+const req = (m: string, p: string) => handleSessions(new Request("http://x" + p, { method: m }), new URL("http://x" + p));
+const list = await (await req("GET", "/sessions"))!.json();
+ok(list.sessions.length === 3, `GET /sessions listed ${list.sessions.length}, expected 3`);
+const claudeRow = list.sessions.find((s: any) => s.id === id);
+ok(claudeRow?.title === "fix the flaky test" && claudeRow?.cwd === "/tmp/demo", "title/cwd not read from the transcript head");
+const codexRow = list.sessions.find((s: any) => s.runtime === "codex");
+ok(codexRow?.title === "summarise the screener" && codexRow?.cwd === "/tmp/cx", `Codex title/cwd wrong: ${codexRow?.title} / ${codexRow?.cwd}`);
+ok(eq(new Uint8Array(await (await req("GET", `/sessions/claude/${id}/raw?v=2`))!.arrayBuffer()), v2), "GET raw?v=2 is not byte-exact");
+
+const r = await req("POST", `/sessions/claude/${id}/restore?v=2`);
+ok(r!.status === 201, `restore answered ${r!.status}`);
+const restored = await r!.json();
+const text = readFileSync(restored.path, "utf8");
+ok(restored.path.startsWith(proj + "/") && existsSync(restored.path), "restore did not land next to the original");
+ok(!text.includes(id) && text.includes(`"sessionId":"${restored.id}"`), "restored file still carries the old sessionId");
+ok(restored.resume === `claude --resume ${restored.id}`, "restore did not say how to resume");
+ok(Buffer.compare(readFileSync(file), v3) === 0, "restore touched the original transcript");
+const cxId = list.sessions.find((s: any) => s.runtime === "codex").id;
+ok((await req("POST", `/sessions/codex/${cxId}/restore`))!.status === 400, "Codex restore was not refused");
+
+// Mirror: a second machine pulls every version over HTTP, redacted at the source.
+const { mirrorOnce } = await import(process.env.MODULE!);
+const secret = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+const leaky = join(proj, "33333333-2222-4333-8444-555555555555.jsonl");
+writeFileSync(leaky, line({ type: "user", message: { content: `use ${secret} to push` } }));
+await snapshot(leaky);
+const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: async (q) => (await handleSessions(q, new URL(q.url))) ?? new Response("no", { status: 404 }) });
+writeFileSync(join(HOME, ".mesh/hosts.json"), JSON.stringify({ hosts: { peer1: { ip: "localhost", port: server.port } } }));
+const m1 = await mirrorOnce();
+ok(m1.peers === 1 && m1.fetched > 0, `mirror pulled nothing: ${JSON.stringify(m1)}`);
+const mdir = join(HOME, ".mesh/sessions-mirror/peer1/claude");
+ok(Buffer.compare(readFileSync(join(mdir, `${id}.jsonl`)), v3) === 0, "the mirror's copy is not the latest version");
+ok(Buffer.compare(Buffer.from(gunzipSync(readFileSync(join(mdir, `${id}.v2.jsonl.gz`)))), v2) === 0, "the mirror dropped the version a compaction replaced");
+const mirroredLeak = readFileSync(join(mdir, "33333333-2222-4333-8444-555555555555.jsonl"), "utf8");
+ok(!mirroredLeak.includes(secret) && mirroredLeak.includes("ghp_••••••"), "a secret crossed to the mirror unredacted");
+ok((await mirrorOnce()).fetched === 0, "a second pull with nothing new fetched something");
+const raceFile = join(mdir, "22222222-2222-4333-8444-555555555555.jsonl");
+appendFileSync(raceFile, "half-written junk");            // an interrupted earlier pull
+appendFileSync(race, line({ late: true }));
+await snapshot(race);
+ok((await mirrorOnce()).fetched === 1, "a new append was not pulled exactly once");
+ok(Buffer.compare(readFileSync(raceFile), readFileSync(race)) === 0, "an append after an interrupted pull left the mirror wrong");
+ok((statSync(join(HOME, ".mesh/sessions-mirror")).mode & 0o777) === 0o700, "the mirror is not 0700");
+const ml = await (await req("GET", "/sessions?mirror=1"))!.json();
+ok(ml.sessions.length === 4 && ml.sessions.every((r: any) => r.host === "peer1"), `GET /sessions?mirror=1 listed ${ml.sessions.length}`);
+ok((await req("GET", "/sessions/claude/../raw")) === null && (await req("GET", "/sessions/claude/..%2Findex.json/raw")) === null, "a dot-dot id reached the store");
+server.stop(true);
+
+// Mirror token: opens the list, an index and redacted chunks — nothing else.
+const { mirrorReadAllowed } = await import(process.env.MODULE!);
+const tok = (await (await req("GET", "/sessions/mirror-token"))!.json()).token as string;
+ok(typeof tok === "string" && tok.length >= 32, "no mirror token was minted");
+ok((statSync(join(HOME, ".mesh/mirror-token")).mode & 0o777) === 0o600, "the mirror token file is not 0600");
+ok((await (await req("GET", "/sessions/mirror-token"))!.json()).token === tok, "asking again minted a different mirror token");
+const asMirror = (m: string, p: string, t = tok) => mirrorReadAllowed(new Request("http://x" + p, { method: m, headers: { authorization: `Bearer ${t}` } }), new URL("http://x" + p));
+for (const p of ["/sessions", `/sessions/claude/${id}`, `/sessions/claude/${id}/chunk?v=1`]) ok(await asMirror("GET", p), `the mirror token cannot read ${p}`);
+for (const [m, p] of [["GET", `/sessions/claude/${id}/raw`], ["POST", `/sessions/claude/${id}/restore`], ["GET", "/sessions?mirror=1"], ["GET", "/sessions/mirror-token"], ["POST", "/sessions/mirror-peers"], ["GET", "/agents"], ["GET", "/fs/read?path=/etc/hosts"]])
+  ok(!(await asMirror(m, p)), `the mirror token opened ${m} ${p}`);
+ok(!(await asMirror("GET", "/sessions", tok.slice(0, -1) + (tok.endsWith("A") ? "B" : "A"))), "a wrong mirror token was accepted");
+
+// A strict peer that honours ONLY the mirror token: registering it and pulling must work.
+const strict = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: async (q) => {
+  const u = new URL(q.url);
+  return (await mirrorReadAllowed(q, u)) ? ((await handleSessions(q, u)) ?? new Response("no", { status: 404 })) : new Response("unauthorized", { status: 401 });
+} });
+const reg = await handleSessions(new Request("http://x/sessions/mirror-peers", { method: "POST", body: JSON.stringify({ name: "peer2", ip: "localhost", port: strict.port, token: tok }) }), new URL("http://x/sessions/mirror-peers"));
+ok(reg!.status === 201, `registering a mirror peer answered ${reg!.status}`);
+ok((statSync(join(HOME, ".mesh/sessions-mirror/peers.json")).mode & 0o777) === 0o600, "peers.json is not 0600");
+const bad1 = await handleSessions(new Request("http://x/sessions/mirror-peers", { method: "POST", body: JSON.stringify({ name: "../x", ip: "localhost", token: tok }) }), new URL("http://x/sessions/mirror-peers"));
+ok(bad1!.status === 400, "a mirror peer named ../x was accepted");
+await mirrorOnce();
+ok(Buffer.compare(readFileSync(join(HOME, ".mesh/sessions-mirror/peer2/claude", `${id}.jsonl`)), v3) === 0, "pulling with only a mirror token did not work");
+strict.stop(true);
+delete process.env.MESH_SESSIONS_MIRROR;
+ok((await mirrorOnce()).peers === 1, "without MESH_SESSIONS_MIRROR=on the mirror still used a full token from hosts.json");
+
+// Tamper: flip a byte inside the stored append — reconstruct must refuse, not serve it.
+const p2 = join(dir, "v2.gz");
+const raw = gunzipSync(readFileSync(p2)); raw[10] ^= 1; writeFileSync(p2, gzipSync(raw));
+ok(await reconstruct("claude", id, 2) === null, "a tampered version was served");
+ok((await req("GET", `/sessions/claude/${id}/raw?v=2`))!.status === 404, "GET raw served a tampered version");
+process.exit(bad);
+TS
+HOME="$T/home" MODULE="$ROOT/install/payload/meshd/sessions.ts" MESH_SESSIONS_DIR="$T/home/.mesh/sessions" MESH_SESSIONS_MIRROR=on bun "$T/run.ts" || fail=1
+
+[ "$fail" = 0 ] && echo "check-session-snapshots: OK" || exit 1

@@ -1,10 +1,10 @@
-# MeshWatch Redesign — Orchestration Prompt (paste into the waiting Opus 4.8 session)
+# LeSearch Mesh Redesign — Orchestration Prompt (paste into the waiting Opus 4.8 session)
 
 > This is a **hand-off prompt**, not docs. Paste everything below the line into the Opus 4.8 (max / ultracode) session that is sitting on branch `codex/redesign-exp-1`. It is grounded in a completed 5-agent analysis of the RealVNC refs, the old LeCoder terminal, the two codex taste skills, the live code gaps, and a SwiftTerm/Popovers library eval. Internal only (`.agents/` is gitignored).
 
 ---
 
-You are the lead of a **mini design+build team** for **MeshWatch** — a native watchOS + iOS SwiftUI client (plus the `meshd` Bun daemon) for running and steering machines and AI coding agents over Tailscale. You are on branch `codex/redesign-exp-1` in `/Users/aryateja/Projects/lecoder-watch`. Run this as a **dynamic Workflow**: specialized agents in parallel where independent, a barrier only where a later stage needs all of an earlier stage's output, and an **adversarial design-review pass** before you commit anything. Ship in vertical slices that each build green — not one giant rewrite.
+You are the lead of a **mini design+build team** for **LeSearch Mesh** — a native watchOS + iOS SwiftUI client (plus the `meshd` Bun daemon) for running and steering machines and AI coding agents over Tailscale. You are on branch `codex/redesign-exp-1` in `/Users/aryateja/Projects/lecoder-watch`. Run this as a **dynamic Workflow**: specialized agents in parallel where independent, a barrier only where a later stage needs all of an earlier stage's output, and an **adversarial design-review pass** before you commit anything. Ship in vertical slices that each build green — not one giant rewrite.
 
 ## Mission
 Make the foundation actually *work* and feel premium. Today most of it doesn't: only one (unreachable) machine ever shows, you can't add an SSH/VNC host, discovered Tailscale peers are a dead end, credentials sit in plaintext, stats are opaque, notifications only fire while foregrounded. Fix the functional core **and** give it a rich-monochrome, voice-first, one-finger, small-screen-power-user design.

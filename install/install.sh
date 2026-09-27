@@ -227,6 +227,11 @@ $su_env
 ExecStart=$su_bun run $su_entry
 Restart=always
 RestartSec=3
+# The tmux server meshd starts lives in this unit's cgroup. With the default
+# control-group kill, every daemon restart or upgrade took every agent session
+# on the machine with it (measured 2026-09-22: a Pi upgrade emptied "mesh ls").
+# Only meshd itself is signalled; sessions outlive the daemon, as they do on the Mac.
+KillMode=process
 
 [Install]
 WantedBy=default.target
@@ -517,7 +522,7 @@ install_components() {
     cp "$PAYLOAD_DIR/hooks/cmux-bridge.zsh" "$MESH_HOME/hooks/cmux-bridge.zsh"
     _hook='[ -f "$HOME/.mesh/hooks/cmux-bridge.zsh" ] && source "$HOME/.mesh/hooks/cmux-bridge.zsh"'
     if [ -f "$HOME/.zshrc" ] && ! grep -Fq 'cmux-bridge.zsh' "$HOME/.zshrc" 2>/dev/null; then
-      printf '\n# MeshWatch cmux bridge (auto-start in interactive shells)\n%s\n' "$_hook" >> "$HOME/.zshrc"
+      printf '\n# LeSearch AI cmux bridge (auto-start in interactive shells)\n%s\n' "$_hook" >> "$HOME/.zshrc"
       log "Added cmux-bridge hook to ~/.zshrc"
     fi
   fi
@@ -537,6 +542,23 @@ install_agent_hooks() {
     log "Wired agent alerts into Claude Code (mesh hooks status to check)"
   else
     log "Could not wire Claude Code hooks — run: $MESH_HOME/bin/mesh hooks install"
+  fi
+}
+
+# Skills teach a coding agent working through mesh how to build an app for the user's
+# phone — native (Xcode + devicectl) or a local PWA (mesh apps publish). The payload
+# already staged share/skills/ into $MESH_HOME/share above; this is the step that makes
+# every CLI (Claude Code, Codex, Cursor) actually see it, by copying into
+# ~/.agents/skills and symlinking each CLI's own skills directory to it. Idempotent, and
+# never overwrites a directory it did not create itself.
+install_skills() {
+  want_component tools || return 0
+  command -v bun >/dev/null 2>&1 || return 0
+  [ -x "$MESH_HOME/bin/mesh" ] || return 0
+  if "$MESH_HOME/bin/mesh" skills install >/dev/null 2>&1; then
+    log "Installed agent skills into ~/.agents/skills (mesh skills status to check)"
+  else
+    log "Could not install agent skills — run: $MESH_HOME/bin/mesh skills install"
   fi
 }
 
@@ -569,7 +591,7 @@ setup_path() {
   if [ -f "$PATH_RC" ] && grep -Fq 'mesh shellenv' "$PATH_RC" 2>/dev/null; then
     PATH_STATE="present"; return 0
   fi
-  if printf '\n# MeshWatch CLI on PATH\n%s\n' "$PATH_LINE" >> "$PATH_RC" 2>/dev/null; then
+  if printf '\n# LeSearch AI CLI on PATH\n%s\n' "$PATH_LINE" >> "$PATH_RC" 2>/dev/null; then
     PATH_STATE="added"
   else
     PATH_STATE="manual"
@@ -784,19 +806,25 @@ chmod 600 "$MESH_HOME/token" 2>/dev/null || true
 want_component meshd && install_deps "$MESH_HOME/meshd"
 want_component bridge && install_deps "$MESH_HOME/rmux-bridge"
 install_agent_hooks
+install_skills
 
 MESHD_STATUS="skipped"; BRIDGE_STATUS="skipped"
 if [ "$NO_START" = "1" ]; then
   log "Installed (services not started: --no-start)."
 else
+  SERVICE_PATH=$PATH
+  case ":$SERVICE_PATH:" in *":$HOME/.bun/bin:"*) ;; *) SERVICE_PATH="$HOME/.bun/bin:$SERVICE_PATH" ;; esac
+  case ":$SERVICE_PATH:" in *":$HOME/.local/bin:"*) ;; *) SERVICE_PATH="$HOME/.local/bin:$SERVICE_PATH" ;; esac
   if want_component meshd; then
     {
-      printf 'PATH=%s\n' "$PATH"
+      printf 'PATH=%s\n' "$SERVICE_PATH"
       printf 'HOME=%s\n' "$HOME"
       printf 'USER=%s\n' "$(id -un)"
       printf 'MESHD_TOKEN=%s\n' "$TOKEN_VALUE"
       printf 'MESHD_PORT=%s\n' "$MESHD_PORT_VALUE"
       [ -n "${MESHD_HOST:-}" ] && printf 'MESHD_HOST=%s\n' "$MESHD_HOST"
+      [ -n "${MESH_DISPLAY:-}" ] && printf 'MESH_DISPLAY=%s\n' "$MESH_DISPLAY"
+      [ -n "${XAUTHORITY:-}" ] && printf 'XAUTHORITY=%s\n' "$XAUTHORITY"
       [ -n "$EFFECTIVE_MESHD_MUX" ] && printf 'MESH_MUX=%s\n' "$EFFECTIVE_MESHD_MUX"
       [ -n "${CMUX_PORT:-}" ] && printf 'CMUX_PORT=%s\n' "$CMUX_PORT"
       # An install-time opt-out must survive into the service environment, or
@@ -807,7 +835,7 @@ else
   fi
   if want_component bridge; then
     {
-      printf 'PATH=%s\n' "$PATH"
+      printf 'PATH=%s\n' "$SERVICE_PATH"
       printf 'PORT=%s\n' "$BRIDGE_PORT_VALUE"
       [ -n "${BRIDGE_HOST:-}" ] && printf 'BRIDGE_HOST=%s\n' "$BRIDGE_HOST"
       [ -n "$EFFECTIVE_BRIDGE_MUX" ] && printf 'MUX=%s\n' "$EFFECTIVE_BRIDGE_MUX"
@@ -853,6 +881,17 @@ printf 'Uninstall: sh install.sh --uninstall   (add --purge to remove the token 
 setup_path
 report_path
 printf '\nThen let the wizard finish the job (permissions, QR pairing, fleet check):\n    mesh setup\n'
+
+# A fresh install on a terminal someone is looking at ends with the pairing QR on
+# screen: scan it with the phone's Camera and every machine this one knows comes
+# along. Before this, the one-liner ended with a paragraph to read and a second
+# command to type. Upgrades and piped installs (CI, ssh -T) print nothing extra.
+if [ "$DO_UPGRADE" != "1" ] && [ "$NO_START" != "1" ] && [ -t 1 ] && want_component tools \
+   && [ "${MESHD_STATUS:-}" = "up" ] && [ -x "$MESH_HOME/bin/mesh" ]; then
+  printf '\nPair your phone now — Camera app, point at this:\n'
+  # bun was just installed to ~/.bun/bin; this shell's PATH does not have it yet.
+  PATH="$HOME/.bun/bin:$PATH" "$MESH_HOME/bin/mesh" pair 2>/dev/null || printf '  (run "mesh pair" any time to show it again)\n'
+fi
 
 if [ "$NO_START" != "1" ]; then
   want_component meshd  && [ "$MESHD_STATUS" != "up" ] && exit 1

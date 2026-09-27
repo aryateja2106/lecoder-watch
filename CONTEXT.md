@@ -1,4 +1,13 @@
-# CONTEXT — MeshWatch
+# CONTEXT — LeSearch AI
+
+## Names (canonical, decided 2026-09-21)
+
+- **LeSearch AI** — the product and app. The only name that appears as an app name
+  anywhere: App Store, TestFlight, home screen, landing page, README.
+- **LeSearch AI** — the company/brand that publishes the product.
+- **"LeSearch Mesh"** (2026-09-04 → 2026-09-21), **"MeshWatch"** (2026-08-28) — retired names.
+- **meshd / mesh** — the daemon and CLI keep their lowercase technical names; they are
+  components, not brands.
 
 Read this first. Then `CHANGELOG.md` (what shipped, in a user's words), `PROGRESS.md`
 (slice log), `docs/mac-remote-control.md` (the control surface), then `git log`.

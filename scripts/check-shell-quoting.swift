@@ -1,3 +1,4 @@
+// check-shell-quoting.swift — shellQuotedArgument() single-quotes anything a shell would split or interpret, and leaves plain paths alone.
 import Foundation
 
 @main

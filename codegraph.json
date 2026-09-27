@@ -1,0 +1,11 @@
+{
+  "exclude": [
+    "references/**",
+    "reference-video/**",
+    "graphify-out/**",
+    "web/.scrollcraft/**",
+    "**/node_modules/**",
+    "build/**",
+    "install/dist/**"
+  ]
+}

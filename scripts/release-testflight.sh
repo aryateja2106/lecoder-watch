@@ -1,93 +1,43 @@
 #!/bin/sh
-# Archive MeshWatch (iOS + embedded watch app) and upload it to TestFlight.
+# RETIRED — this is now a shim onto scripts/release-testflight-asc.sh.
 #
-#   ASC_KEY_ID=ABC123DEFG ASC_ISSUER_ID=<uuid> sh scripts/release-testflight.sh
+# WHAT THIS SCRIPT USED TO DO, AND WHY THAT IS NOT ALLOWED ANY MORE
 #
-# The key must be at ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8 —
-# xcodebuild and altool both look there by convention. The issuer id is the UUID on
-# App Store Connect › Users and Access › Integrations › App Store Connect API.
+# It archived with xcodebuild and exported straight to App Store Connect. Three gates that
+# the release path now requires were simply absent from it, and each absence has already
+# cost something real:
 #
-# Why TestFlight rather than sideloading: a development-signed build has to verify its
-# certificate with Apple on every fresh install, which is the "Unable to Verify App"
-# dead end, and each re-sign resets the app's privacy grants (Local Network, and with
-# it the whole tailnet). TestFlight builds are Apple-signed — none of that applies, and
-# other people can install them.
+#   No group assignment. This is the zero-group trap in its purest form: the export lands
+#     the build in App Store Connect and stops. It processes, goes VALID, and belongs to NO
+#     BETA GROUP, so nobody can install it — not external testers, not internal ones, not
+#     you. Every list view shows a healthy build. On 2026-08-27 that was the entire answer
+#     to "I cannot find the update in TestFlight".
+#
+#   No version check. Uploading a marketing version LOWER than one already on TestFlight is
+#     allowed by App Store Connect and punished by iOS: testers on the higher version are
+#     asked to delete and reinstall, which wipes the app Keychain and un-pairs every machine
+#     they had added. The 1.0 → 0.5.0 rename did that to everyone at once.
+#
+#   No smoke test. It ran check-all.sh, which in 2026-08 was entirely static — and 0.5.0
+#     passed all of it while shipping an app that closed itself on every screen containing a
+#     text field. A build that has not been launched has not been tested.
+#
+# Rather than fix three holes in a second implementation of the same job, the file stays as
+# a name that still works. Muscle memory, older docs, and half-remembered runbooks all point
+# here; they should all land on the gated path instead of on a working script with no gates.
+# Deleting it would send those callers to "No such file", which teaches nothing.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
 
-: "${ASC_KEY_ID:?set ASC_KEY_ID (e.g. ABC123DEFG)}"
-: "${ASC_ISSUER_ID:?set ASC_ISSUER_ID (uuid from App Store Connect > Integrations)}"
-KEY="$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
-[ -f "$KEY" ] || { echo "FAIL: no key at $KEY"; exit 1; }
+echo "scripts/release-testflight.sh is retired."
+echo ""
+echo "  It uploaded with no group assignment (the build reached nobody), no version-downgrade"
+echo "  check (testers lost every pairing), and no smoke test (0.5.0 shipped unlaunchable)."
+echo "  scripts/release-testflight-asc.sh does the same job with all three gates in place,"
+echo "  and needs no ASC_KEY_ID/ASC_ISSUER_ID — asc holds the credentials in the keychain."
+echo ""
+echo "  Running it now: sh scripts/release-testflight-asc.sh $*"
+echo ""
 
-# STABLE Xcode, not the beta. App Store Connect accepts a beta-built upload and then
-# fails processing with 90534 "Unsupported SDK or Xcode version" — verified. The beta
-# is only for installing onto devices running a beta OS.
-export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-
-BUILD="$(date +%Y%m%d%H%M)"        # monotonic and obvious; App Store Connect rejects reuse
-ARCHIVE="$ROOT/build/MeshWatch-$BUILD.xcarchive"
-EXPORT="$ROOT/build/export-$BUILD"
-
-echo "==> regenerating project"
-xcodegen generate >/dev/null
-
-echo "==> self-checks"
-sh "$ROOT/scripts/check-all.sh"
-
-echo "==> archiving (build $BUILD)"
-xcodebuild -project MeshWatch.xcodeproj -scheme MeshWatch \
-  -configuration Release -destination 'generic/platform=iOS' \
-  -archivePath "$ARCHIVE" \
-  CURRENT_PROJECT_VERSION="$BUILD" \
-  -allowProvisioningUpdates \
-  -authenticationKeyPath "$KEY" \
-  -authenticationKeyID "$ASC_KEY_ID" \
-  -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-  archive
-
-cat > "$ROOT/build/ExportOptions-$BUILD.plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key><string>app-store-connect</string>
-  <key>destination</key><string>upload</string>
-  <key>teamID</key><string>B5B87F7AXF</string>
-  <key>signingStyle</key><string>automatic</string>
-  <key>uploadSymbols</key><true/>
-  <key>manageAppVersionAndBuildNumber</key><false/>
-</dict>
-</plist>
-PLIST
-
-echo "==> exporting and uploading to TestFlight"
-# Two credential paths, tried in order. The API key can archive but NOT mint the
-# Apple Distribution certificate unless its App Store Connect role has certificate
-# access ("Cloud signing permission error" + "No signing certificate iOS
-# Distribution" — hit for real on 2026-08-21). Xcode's logged-in account session
-# holds account-holder power, so it succeeds where the key is refused. Fix the key's
-# role in ASC > Users and Access > Integrations to make the first path self-contained.
-if ! xcodebuild -exportArchive \
-  -archivePath "$ARCHIVE" \
-  -exportPath "$EXPORT" \
-  -exportOptionsPlist "$ROOT/build/ExportOptions-$BUILD.plist" \
-  -allowProvisioningUpdates \
-  -authenticationKeyPath "$KEY" \
-  -authenticationKeyID "$ASC_KEY_ID" \
-  -authenticationKeyIssuerID "$ASC_ISSUER_ID"; then
-  echo "==> API-key export refused (cloud signing) — retrying with Xcode's account session"
-  xcodebuild -exportArchive \
-    -archivePath "$ARCHIVE" \
-    -exportPath "$EXPORT" \
-    -exportOptionsPlist "$ROOT/build/ExportOptions-$BUILD.plist" \
-    -allowProvisioningUpdates
-fi
-
-echo
-echo "Uploaded build $BUILD."
-echo "It appears in App Store Connect > TestFlight after processing (usually 5-15 min)."
-echo "Internal testers (your team) can install immediately; external testers need a"
-echo "one-time Beta App Review."
+exec sh "$ROOT/scripts/release-testflight-asc.sh" "$@"

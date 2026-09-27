@@ -1,4 +1,5 @@
 #!/bin/sh
+# check-package-mesh-install.sh — the packaged mesh-install tarball contains every payload file the daemon and CLI need.
 
 set -eu
 

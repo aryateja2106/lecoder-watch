@@ -1,0 +1,321 @@
+<!-- 2-design.html — Stage 2 of the lifecycle: a spec written under Arya's rules, including the look, which has never been decided. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Stage 2 · Design</title>
+  <meta name="description" content="How an accepted idea becomes a spec written under your rules, and why the app's look has to be decided before anyone restyles a screen.">
+  <link rel="stylesheet" href="sdlc.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="index.html">LeSearch AI · How we build</a>
+  <nav class="site" aria-label="Site">
+    <ol class="rail">
+      <li><a href="1-plan.html"><b>1</b> Plan</a></li>
+      <li><a href="2-design.html" aria-current="page"><b>2</b> Design</a></li>
+      <li><a href="3-build.html"><b>3</b> Build</a></li>
+      <li><a href="4-test.html"><b>4</b> Test</a></li>
+      <li><a href="5-ship.html"><b>5–6</b> Ship</a></li>
+    </ol>
+    <ul class="aux">
+      <li><a href="index.html">Start</a></li>
+      <li><a href="product.html">Product</a></li>
+      <li><a href="blocks.html">Blocks</a></li>
+      <li><a href="borrowed.html">Borrowed</a></li>
+      <li><a href="glossary.html">Words</a></li>
+    </ul>
+  </nav>
+</header>
+<main>
+  <p class="eyebrow">Stage 2 of 6</p>
+  <h1>Design: agree what it is and how it looks</h1>
+  <p class="lede">Before anyone builds, one short document says what the feature is and how it
+  should look, written under your rules. For the app's look, nobody has ever written that
+  document, and customers can tell.</p>
+  <ul class="chain-chips">
+    <li><b>Reads</b> the accepted <a href="glossary.html#intent">intent</a> from <a href="1-plan.html">Stage 1</a></li>
+    <li><b>Commits</b> a <a href="glossary.html#spec">spec</a> in <code>openspec/changes/&lt;slug&gt;/</code></li>
+  </ul>
+
+  <h2 id="status">Where we are</h2>
+  <ul class="status">
+    <li data-state="done" data-proof="file:scripts/check-product-spec.sh" data-owner="agent">
+      <span class="state">Done</span>
+      <span class="label">The product spec is checked against the code
+      (<a href="../../scripts/check-product-spec.sh"><code>scripts/check-product-spec.sh</code></a>)</span>
+    </li>
+    <li data-state="in-progress" data-proof="file:openspec/changes/design-theme/proposal.md" data-owner="arya" data-block="B-06" data-asof="2026-09-27">
+      <span class="state">In progress</span>
+      <span class="label">The design theme is written as a spec
+      (<code class="missing">openspec/changes/design-theme/proposal.md</code>); the draft intent exists</span>
+      <span class="you">you</span>
+      <a class="bid" href="blocks.html#B-06">B-06</a>
+      <span class="asof">checked 2026-09-27</span>
+    </li>
+    <li data-state="not-started" data-proof="text:openspec/config.yaml|intents/" data-owner="agent">
+      <span class="state">Not started</span>
+      <span class="label">Every spec names the intent it came from (part of <a href="blocks.html#B-06">B-06</a>)</span>
+    </li>
+    <li data-state="not-started" data-proof="!text:openspec/config.yaml|LeSearch Mesh" data-owner="agent">
+      <span class="state">Not started</span>
+      <span class="label">The spec tool uses the product's current name (part of <a href="blocks.html#B-06">B-06</a>)</span>
+    </li>
+    <li data-state="not-started" data-proof="file:Shared/Theme.swift" data-owner="agent">
+      <span class="state">Not started</span>
+      <span class="label">One file holds the app's colours and spacing
+      (<code class="missing">Shared/Theme.swift</code>, part of <a href="blocks.html#B-09">B-09</a>)</span>
+    </li>
+    <li data-state="not-started" data-proof="any:intents/20*typescript-and-rust*.md|status: accepted" data-owner="arya">
+      <span class="state">Not started</span>
+      <span class="label">The TypeScript and Rust boundary is decided (one of the three intents in <a href="blocks.html#B-17">B-17</a>)</span>
+      <span class="you">you</span>
+    </li>
+  </ul>
+  <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
+
+  <h2 id="playbook">What the playbook says</h2>
+  <p class="meta">(Numbers in brackets are the playbook's section numbers.)</p>
+  <ul>
+    <li>A spec turns an accepted intent into requirements and a design. (2)</li>
+    <li>It is written under the company's own <a href="glossary.html#skill">skills</a>: brand, security, compliance and UX. (2)</li>
+    <li>So your rules are applied while the spec is written, not discovered later in review. (2)</li>
+    <li>The product owner reviews the spec against the intent; a tech lead joins when the risk is higher. (2)</li>
+    <li>Measure how long an intent takes to become a spec, and how much the spec changes after the plan. (2)</li>
+  </ul>
+
+  <h2 id="repo">In our repo today</h2>
+  <p>Specs already have a home, called <a href="glossary.html#openspec">OpenSpec</a>. The
+  product as a whole has one spec that a <a href="glossary.html#check">check</a> enforces. What
+  is missing is a written look, and a link from each spec back to the idea it came from.</p>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>Practice</th><th>Our files</th><th>What it actually does</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Specs</td>
+          <td><a href="../../openspec/config.yaml"><code>openspec/config.yaml</code></a>,
+            <a href="../../openspec/changes/local-brain-and-harness/proposal.md" data-anchor="## Why"><code>openspec/changes/local-brain-and-harness/proposal.md</code></a>,
+            <a href="../../openspec/changes/reach-my-mac-from-anywhere/proposal.md" data-anchor="## Why"><code>openspec/changes/reach-my-mac-from-anywhere/proposal.md</code></a>,
+            <a href="../../openspec/specs/terminal-sessions/spec.md"><code>openspec/specs/terminal-sessions/spec.md</code></a></td>
+          <td>Proposals with a why, options and open questions. None names an intent, and the
+            project brief still calls the product by its retired name.</td>
+        </tr>
+        <tr>
+          <td>Product spec</td>
+          <td><a href="../../docs/product/PRODUCT.md" data-anchor="## 0. How an agent uses this document"><code>docs/product/PRODUCT.md</code></a>,
+            <a href="../../scripts/check-product-spec.sh"><code>scripts/check-product-spec.sh</code></a></td>
+          <td>Enforced: a new screen or module without a line in the spec fails the check.</td>
+        </tr>
+        <tr>
+          <td>Design registry</td>
+          <td><a href="../../docs/product/design-system.md" data-anchor="## Tokens"><code>docs/product/design-system.md</code></a>,
+            <a href="../../docs/agents/UI-MAP.md"><code>docs/agents/UI-MAP.md</code></a></td>
+          <td>Lists what exists and where each screen lives. It says plainly that the apps have
+            no shared design-token file. It records; it does not decide.</td>
+        </tr>
+        <tr>
+          <td>Brand policy as a skill</td>
+          <td><a href="../../.agents/skills/meshwatch-ui-taste/SKILL.md"><code>.agents/skills/meshwatch-ui-taste/SKILL.md</code></a></td>
+          <td>Names colour roles but no colour values. It lives where Claude Code does not load it,
+            and it still describes a terminal the app no longer ships.</td>
+        </tr>
+        <tr>
+          <td>Skills that apply policy while writing</td>
+          <td><a href="../../.claude/skills/spec-driven-development/SKILL.md"><code>.claude/skills/spec-driven-development/SKILL.md</code></a>,
+            <a href="../../.claude/skills/openspec-propose/SKILL.md"><code>.claude/skills/openspec-propose/SKILL.md</code></a>,
+            <a href="../../.claude/skills/frontend-ui-engineering/SKILL.md"><code>.claude/skills/frontend-ui-engineering/SKILL.md</code></a>,
+            <a href="../../.claude/skills/security-and-hardening/SKILL.md"><code>.claude/skills/security-and-hardening/SKILL.md</code></a></td>
+          <td>Advice an agent can load. None of them knows our look, because our look is not
+            written anywhere.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="looks">The four looks already in the repo</h2>
+  <p>The playbook gives no spec template, and the real decision at this stage is visual. The
+  repo holds four looks, each made by a different agent session for a different reason. The
+  apps use none of them. The cards below are drawn from each look's own colour values, not from
+  screenshots. The fifth card is what the app shows today.</p>
+  <ul class="looks">
+    <li class="swatch" style="--sw-bg:#0A0B0D;--sw-fg:#F5F6F7;--sw-accent:#4DA3FF">
+      <p><span class="dot"></span><strong>June mockups</strong> (never merged)</p>
+      <p>Use your Mac from your wrist.</p>
+      <p>Near-black, one blue accent, Apple's own font. Lives in
+        <a href="../../.agents/design/design-system.html" data-anchor="--base:#0A0B0D"><code>.agents/design/design-system.html</code></a> and
+        <a href="../../.agents/REDESIGN-BRIEF.md" data-anchor="#4DA3FF"><code>.agents/REDESIGN-BRIEF.md</code></a>.</p>
+    </li>
+    <li class="swatch" style="--sw-bg:#191919;--sw-fg:#e9e9e7;--sw-font:var(--font-mono)">
+      <p><strong>Old brand</strong> (grey, all monospace)</p>
+      <p>Use your Mac from your wrist.</p>
+      <p>No accent colour; colour is kept for status. Lives in
+        <a href="../../web/brand/TOKENS.css" data-anchor="--lw-bg:      #191919;"><code>web/brand/TOKENS.css</code></a> and
+        <a href="../../web/privacy.html"><code>web/privacy.html</code></a>.</p>
+    </li>
+    <li class="swatch" style="--sw-bg:#0c0c0d;--sw-fg:#f2f2f0;--sw-accent:#ff7a1a">
+      <p><span class="dot"></span><strong>Today's landing page</strong></p>
+      <p>Use your Mac from your wrist.</p>
+      <p>Near-black, one orange accent, system font with mono for facts. Lives in
+        <a href="../../web/index.html" data-anchor="--accent:#ff7a1a"><code>web/index.html</code></a>.</p>
+    </li>
+    <li class="swatch" style="--sw-bg:#F3F3F0;--sw-fg:#1C1B19;--sw-accent:#000000">
+      <p><span class="dot"></span><strong>Light editorial</strong> (a screenshot only)</p>
+      <p>Use your Mac from your wrist.</p>
+      <p>Warm light grey, big bold headlines, black pill buttons. It survives only as
+        <code class="missing">next-landing.png</code> in an old commit (ce2e63f),
+        not in the current files.</p>
+    </li>
+    <li class="swatch" style="--sw-bg:#1C1C1E;--sw-fg:#FFFFFF;--sw-accent:#0A84FF">
+      <p><span class="dot"></span><strong>What the app actually uses</strong> (approximate: Apple's defaults)</p>
+      <p>Use your Mac from your wrist.</p>
+      <p>Apple's system colours, so the blue is an accident: no accent colour is set anywhere.
+        Seen in <a href="../../iOS/ContentView.swift"><code>iOS/ContentView.swift</code></a>.</p>
+    </li>
+  </ul>
+  <div class="warn">
+    <p><strong>Orange means three things today.</strong> In the app it means "an agent needs
+    you" (<a href="../../docs/product/design-system.md" data-anchor="is the de-facto"><code>docs/product/design-system.md</code></a>).
+    In chat it is Claude's colour, which paints your own message bubble
+    (<a href="../../iOS/AgentChatView.swift" data-anchor="Color(red: 0.85, green: 0.45, blue: 0.25)"><code>iOS/AgentChatView.swift</code></a>;
+    the picture is <a href="../../docs/product/shots/iphone-chat.png"><code>docs/product/shots/iphone-chat.png</code></a>).
+    On the website it is the buy button (<a href="../../web/index.html" data-anchor="--accent:#ff7a1a"><code>web/index.html</code></a>).
+    The one signal that matters most looks like decoration.</p>
+  </div>
+  <p>The 20 design questions that settle all of this are written down, with example answers, in
+  <a href="../../intents/INTERVIEW.md" data-anchor="## Appendix: the design-theme interview (20 questions)"><code>intents/INTERVIEW.md</code></a>.
+  A shorter version sits in the draft design intent,
+  <a href="../../intents/2026-09-27-bring-my-design-theme-into-the-app.md" data-anchor="## Open questions"><code>intents/2026-09-27-bring-my-design-theme-into-the-app.md</code></a>.
+  They are not copied here, so they cannot drift.</p>
+
+  <h2 id="gap">The gap</h2>
+  <div class="gap">
+    <ul>
+      <li>The design intent is written, but only as a draft; you have not accepted it, so no spec may start.</li>
+      <li>There is no design spec (<code class="missing">openspec/changes/design-theme/proposal.md</code>), so nothing you have approved says what the app looks like.</li>
+      <li>There is no token file (<code class="missing">Shared/Theme.swift</code>), so every screen types its own colours and spacing.</li>
+      <li>Nothing ties a spec to its intent, and light versus dark was never decided.</li>
+      <li>The UI skill names colour roles but no palette, so agents fall back to Apple's defaults.</li>
+    </ul>
+  </div>
+
+  <h2 id="blocks">Blocks that close it</h2>
+  <ul>
+    <li><a href="blocks.html#B-06">B-06</a> Design theme: one sitting, intent then spec</li>
+    <li><a href="blocks.html#B-09">B-09</a> Theme tokens and one restyled screen</li>
+    <li><a href="blocks.html#B-17">B-17</a> The remaining three intents (one of them decides TypeScript and Rust)</li>
+  </ul>
+
+  <h2 id="you">How you take part</h2>
+  <div class="you-part">
+    <ol>
+      <li>Read the draft design intent,
+        <a href="../../intents/2026-09-27-bring-my-design-theme-into-the-app.md"><code>intents/2026-09-27-bring-my-design-theme-into-the-app.md</code></a>.
+        It is written in your words. About 5 minutes.</li>
+      <li>Answer the 20 design questions, one at a time, with an agent asking, in the Claude
+        Code desktop app, in a session opened on this repo
+        (<a href="../../intents/INTERVIEW.md" data-anchor="## Appendix: the design-theme interview (20 questions)"><code>intents/INTERVIEW.md</code></a>).
+        Pick an example answer, combine two, name an app you like, or show a picture. About 30 minutes.</li>
+      <li>Accept the intent yourself: change <code>status: draft</code> to <code>status: accepted</code>.
+        Only you may do this (<a href="../../intents/README.md" data-anchor="## For agents"><code>intents/README.md</code></a>).
+        Then an agent writes the spec in <code>openspec/changes/design-theme/</code>, and you read and approve it (<a href="blocks.html#B-06">B-06</a>).</li>
+      <li>Later, look at a before-and-after screenshot pair of one screen in your colours and say
+        yes or no (<a href="blocks.html#B-09">B-09</a>). A few minutes.</li>
+      <li>Decide which feature, if any, you want in Rust, in
+        <a href="../../intents/2026-09-27-typescript-and-rust-module-boundaries.md" data-anchor="## Open questions"><code>intents/2026-09-27-typescript-and-rust-module-boundaries.md</code></a>
+        (<a href="blocks.html#B-17">B-17</a>). About 20 minutes. The review's advice is "not yet"
+        (<a href="references/agent-git.md" data-anchor="### Rust next to our Bun daemon: the options"><code>references/agent-git.md</code></a>).</li>
+    </ol>
+    <p class="say-this">Run the design interview with me one question at a time, then draft
+    openspec/changes/design-theme/ from my answers only. Do not choose a colour, font or mode I did
+    not choose; write open where I have not decided.</p>
+  </div>
+
+  <h2 id="history">A worked example from our own history</h2>
+  <p>Orange picked up three meanings, one at a time, and nobody decided any of them. The app
+  already used orange for "needs you". On 2026-09-04 the new chat screen
+  (<a href="../../iOS/AgentChatView.swift"><code>iOS/AgentChatView.swift</code></a>) gave
+  Claude an orange, and that colour went onto your own messages. On 2026-09-22 the relaunched
+  landing page (<a href="../../web/index.html"><code>web/index.html</code></a>) made orange its
+  one button colour. The clash was found on 2026-09-27, while mapping the repo for this site.</p>
+  <p>Each choice made sense on its own. A spec written under a brand rule would have caught the
+  clash before any of them shipped, because the rule would have said what orange is for.</p>
+
+  <h2 id="measure">What we would measure</h2>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>Playbook measure</th><th>Command that produces it</th><th>Today</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Intent to spec elapsed</td>
+          <td><code>git log --diff-filter=A --format=%ad --date=short -- &lt;file&gt;</code>, run on
+            <code>openspec/changes/&lt;slug&gt;/proposal.md</code> and on its intent; subtract the dates</td>
+          <td>Not measurable until <a href="blocks.html#B-06">B-06</a></td>
+        </tr>
+        <tr>
+          <td>Spec churn after the plan</td>
+          <td><code>git log --oneline -- openspec/changes/&lt;slug&gt;/</code>, counting commits after the plan's commit</td>
+          <td>Not measurable until <a href="blocks.html#B-06">B-06</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <details class="agents">
+    <summary>For agents</summary>
+    <p>When proposing a change, validate it, then run the intent and product-spec checks and the
+    loop gate:</p>
+    <pre><code>openspec validate design-theme
+sh scripts/check-intents.sh
+sh scripts/check-product-spec.sh
+./.claude/scripts/gates.sh fast</code></pre>
+    <p>Healthy gate line (seen 2026-09-27):</p>
+    <pre class="out">FACTORY_GATES: level=fast status=GREEN passed=2 failed=0 failing=none skipped=none misconfigured=none</pre>
+    <ul>
+      <li>Colour roles already relied on: orange means needs you, red means destructive or error,
+        green means working (<a href="../../docs/product/design-system.md" data-anchor="is the de-facto"><code>docs/product/design-system.md</code></a>).
+        A new accent that is orange or red re-decides these; do not do it silently.</li>
+      <li>Interaction rules pinned by existing checks must survive any restyle
+        (<a href="../../docs/product/design-system.md" data-anchor="## Interaction rules enforced by checks"><code>docs/product/design-system.md</code></a>).</li>
+      <li>Never choose a colour, font, mode or glass rule Arya did not choose. Write "open" instead.
+        Never set <code>status: accepted</code> on an intent.</li>
+      <li>Protected: <code>.agents/**</code> (including the UI skill), <a href="../../AGENTS.md"><code>AGENTS.md</code></a>,
+        <a href="../../CLAUDE.md"><code>CLAUDE.md</code></a>. Edit them only with Arya in the session.</li>
+      <li>Serialized, one agent at a time: <a href="../../Shared/Models.swift"><code>Shared/Models.swift</code></a>,
+        <a href="../../Shared/MeshClient.swift"><code>Shared/MeshClient.swift</code></a>,
+        <a href="../../install/payload/meshd/server.ts"><code>install/payload/meshd/server.ts</code></a>,
+        <a href="../../project.yml"><code>project.yml</code></a>
+        (<a href="../../AGENTS.md" data-anchor="**Must be serialized"><code>AGENTS.md</code></a>).</li>
+      <li>Never embed an image on this site, never link <code>Reference-images/</code>, and never copy
+        colour values out of screenshots.</li>
+      <li>Skills to load: <a href="../../.claude/skills/openspec-propose/SKILL.md"><code>openspec-propose</code></a>,
+        <a href="../../.claude/skills/spec-driven-development/SKILL.md"><code>spec-driven-development</code></a>,
+        <a href="../../.claude/skills/frontend-ui-engineering/SKILL.md"><code>frontend-ui-engineering</code></a>,
+        and for UI work <a href="../../.agents/skills/meshwatch-ui-taste/SKILL.md"><code>meshwatch-ui-taste</code></a> (partly stale).</li>
+    </ul>
+  </details>
+
+  <nav class="chain-footer" aria-label="The artifact chain">
+    <span>← Reads the accepted <b>intent</b> from <a href="1-plan.html">Stage 1 · Plan</a></span>
+    <span>Commits a <b>spec</b> in <code>openspec/changes/&lt;slug&gt;/</code></span>
+    <span>→ <a href="3-build.html">Stage 3 · Build</a> plans the work</span>
+  </nav>
+</main>
+<footer class="site-footer">
+  <p>Source of truth: this repository (<code>aryateja2106/lecoder-watch</code>), on the branch
+  you opened it from. Written on <code>sdlc/ai-native-playbook</code>. Nothing on this page
+  outranks the file it links to.</p>
+  <p>How to update: every status line carries a proof. Run <code>sh scripts/check-sdlc-status.sh</code>;
+  when it names a line, change that line's <code>data-state</code> and its state word, then run
+  it again. Agents: read <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a> first.</p>
+  <p>Playbook: <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-native SDLC playbook</a>.
+  Last verified <time data-verified datetime="2026-09-27">2026-09-27</time>.</p>
+</footer>
+</body>
+</html>

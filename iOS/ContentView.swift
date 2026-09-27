@@ -1,3 +1,4 @@
+// ContentView.swift — the phone's tab shell: Machines, attention rows, machine detail, Settings, the daemon-update and Local Network banners.
 import SwiftUI
 import UIKit
 import WebKit
@@ -7,21 +8,29 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @EnvironmentObject var store: MeshStore
     #if DEBUG
-    @State private var tab = ProcessInfo.processInfo.arguments.contains("-uiRemote") ? Tab.remote : Tab.machines
+    @State private var tab = AppTab.machines
     #else
-    @State private var tab = Tab.machines
+    @State private var tab = AppTab.machines
     #endif
 
-    enum Tab: Hashable { case machines, terminal, remote, monitor, settings }
+    enum AppTab: Hashable { case machines, terminal, apps, settings }
 
     var body: some View {
+        // Four places a thumb goes, and no more. Monitor left the bar: alerts and usage
+        // are the one thing wanted from EVERY tab, so they live behind the bell in each
+        // tab's top bar (`MonitorBell`) with the waiting count on it. Remote left too: a
+        // machine's screen IS the machine, so every Machines row carries a live thumbnail
+        // that opens Screen & control, and the Web console row went with the tab. Apps
+        // took a slot — the library of what agents built is a destination.
         TabView(selection: $tab) {
-            MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }.tag(Tab.machines)
-            TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }.tag(Tab.terminal)
-            RemoteControlTab().tabItem { Label("Remote", systemImage: "display") }.tag(Tab.remote)
-            MonitorTab().tabItem { Label("Monitor", systemImage: "bell.badge") }.tag(Tab.monitor)
-            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }.tag(Tab.settings)
+            Tab("Machines", systemImage: "server.rack", value: .machines) { MachinesTab() }
+            Tab("Terminal", systemImage: "terminal", value: .terminal) { TerminalTab() }
+            Tab("Apps", systemImage: "square.grid.2x2", value: .apps) { AppsTab() }
+            Tab("Settings", systemImage: "gearshape", value: .settings) { SettingsTab() }
         }
+        // The bar tucks away while reading a long transcript or output and comes back on
+        // the first upward scroll — the content is what the screen is for.
+        .tabBarMinimizeBehavior(.onScrollDown)
         // meshwatch://session/<host>/<name> — from the live card, and anywhere else we
         // want to land someone on the session rather than on the app in general.
         .onOpenURL { url in
@@ -43,12 +52,77 @@ struct ContentView: View {
     }
 }
 
-private struct MonitorTab: View {
+/// The bell in every tab's top bar: alerts, usage and the event log, one tap from
+/// anywhere. The count is what is waiting on you right now (agents stopped at a
+/// prompt), not the unread history — a number that goes to zero when you have acted.
+struct MonitorBell: View {
     @EnvironmentObject var store: MeshStore
-    @ObservedObject private var notifications = NotificationManager.shared
+
+    private var waiting: Int {
+        store.snapshot.map { sessionsNeedingAttention(from: $0).count } ?? 0
+    }
+
+    var body: some View {
+        NavigationLink {
+            MonitorView()
+        } label: {
+            Image(systemName: waiting > 0 ? "bell.badge.fill" : "bell")
+                .symbolRenderingMode(waiting > 0 ? .multicolor : .monochrome)
+                .accessibilityLabel(waiting > 0 ? "\(waiting) waiting on you" : "Monitor")
+                .accessibilityIdentifier("Monitor")
+        }
+    }
+}
+
+/// The Apps tab: the fleet-wide library, at the bottom of the screen where a thumb
+/// finds it. (`AppsLibraryView` is the same screen the Machines toolbar used to hide.)
+private struct AppsTab: View {
+    @EnvironmentObject var store: MeshStore
 
     var body: some View {
         NavigationStack {
+            Group {
+                if store.machines.isEmpty {
+                    ContentUnavailableView {
+                        Label("No machines yet", systemImage: "square.grid.2x2")
+                    } description: {
+                        Text("Pair a machine on the Machines tab. Every app an agent builds there shows up here.")
+                    } actions: {
+                        NavigationLink("Guides") { GuidesView() }.buttonStyle(.bordered)
+                    }
+                } else {
+                    AppsLibraryView()
+                }
+            }
+            .toolbar { MonitorBell() }
+        }
+    }
+}
+
+struct MonitorView: View {
+    @EnvironmentObject var store: MeshStore
+    @ObservedObject private var notifications = NotificationManager.shared
+    @State private var confirmingClearAll = false
+
+    /// The store owns dismissal now, so the bell's badge and the Machines tab's
+    /// "Needs you" rows clear with this list instead of outliving it.
+    private var visibleEvents: [AgentEvent] { store.visibleEvents }
+
+    private func dismiss(_ event: AgentEvent) { store.dismissEvent(event) }
+
+    private func clearAllVisible() { store.dismissAllVisibleEvents() }
+
+    /// The agent row an event belongs to, if this phone can address it — id first, then
+    /// name, the same rule the "Needs you" rows use. Nil for a Claude that ran outside a
+    /// LeSearch session: its hooks still post, but there is no pane to answer into.
+    private func session(for event: AgentEvent) -> MeshStore.SessionTarget? {
+        guard let host = event.host, let name = event.session,
+              let machine = snapshotMachineMatching(host, in: store.snapshot?.machines ?? []),
+              let agent = matchingAgent(for: event, session: name, in: machine) else { return nil }
+        return MeshStore.SessionTarget(host: machine.host, session: agent.name)
+    }
+
+    var body: some View {
             List {
                 if notifications.authorizationDenied || store.lastError != nil {
                     Section {
@@ -74,30 +148,8 @@ private struct MonitorTab: View {
                     }
                 }
                 SessionLimitsBanner()
-                Section("Events") {
-                    if store.events.isEmpty {
-                        Text("No agent events")
-                            .foregroundStyle(.secondary)
-                    }
-                    ForEach(store.events.reversed()) { event in
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack {
-                                Text(event.title).font(.headline)
-                                Spacer()
-                                Text(eventTime(event.createdISO))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if let body = event.body, !body.isEmpty {
-                                Text(body).font(.subheadline)
-                            }
-                            Text([event.host, event.source, event.session].compactMap { $0 }.joined(separator: " · "))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 3)
-                    }
-                }
+                // Usage first — session limits for Claude and Codex at a glance, no
+                // scrolling past a long Events list to find them.
                 Section("Usage") {
                     if (store.snapshot?.usage?.providers ?? []).isEmpty {
                         Text("No usage data")
@@ -105,14 +157,74 @@ private struct MonitorTab: View {
                     }
                     UsageRows()
                 }
+                Section("Events") {
+                    if visibleEvents.isEmpty {
+                        Text("No agent events")
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(visibleEvents) { event in
+                        let target = session(for: event)
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text(event.title).font(.headline)
+                                Spacer()
+                                Text(eventTime(event.createdISO))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                if target != nil {
+                                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
+                                }
+                            }
+                            if let body = event.body, !body.isEmpty {
+                                // Hooks post transcript PATHS as event bodies, and a
+                                // five-line /Users/… wall tells a phone reader nothing
+                                // the subtitle line doesn't. A body that is one bare
+                                // absolute path collapses to its filename; prose
+                                // bodies still render in full.
+                                Text(compactEventBody(body))
+                                    .font(.subheadline)
+                                    .lineLimit(4)
+                            }
+                            Text([event.host, event.source, event.session].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            if event.replyable == false && target == nil {
+                                // The case that read as "Approve does nothing": a Claude started in
+                                // a plain terminal, not in a LeSearch session. Its hooks reach us;
+                                // no pane of ours can answer it. Say so instead of offering a button.
+                                Text("Ran outside a LeSearch session — read-only. Start agents with New session to answer them from here.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                        .padding(.vertical, 3)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if let target { store.deepLinkSession = target }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) { dismiss(event) } label: {
+                                Label("Dismiss", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("Monitor")
             .toolbar {
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: "arrow.clockwise")
                 }
+                Button(role: .destructive) { confirmingClearAll = true } label: {
+                    Image(systemName: "trash")
+                }
+                .disabled(visibleEvents.isEmpty)
             }
-        }
+            .confirmationDialog("Clear all events?", isPresented: $confirmingClearAll, titleVisibility: .visible) {
+                Button("Clear all", role: .destructive) { clearAllVisible() }
+            } message: {
+                Text("This only hides them on this phone. The daemon keeps its own copy.")
+            }
     }
 }
 
@@ -128,7 +240,7 @@ private struct LocalNetworkBlockedBanner: View {
                 .foregroundStyle(.orange)
             Text("Your machines are on addresses iOS treats as a local network — a "
                  + "192.168.x home LAN, or the 100.x range a VPN like Tailscale uses. "
-                 + "LeSearch Mesh needs Local Network permission, and every request is "
+                 + "LeSearch AI needs Local Network permission, and every request is "
                  + "being dropped before it leaves the phone until it has one.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -148,6 +260,8 @@ private struct LocalNetworkBlockedBanner: View {
 private struct MachinesTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var pairing = false
+    /// The machine whose screen a thumbnail tap opened.
+    @State private var screenFor: Machine?
 
     private var attention: [LiveSessionPick] {
         store.snapshot.map { sessionsNeedingAttention(from: $0) } ?? []
@@ -198,7 +312,16 @@ private struct MachinesTab: View {
                 }
             }
             .navigationTitle("Machines")
+            .navigationDestination(item: $screenFor) { machine in RemoteScreenView(machine: machine) }
+            // `-uiRemote` opens the first machine's screen directly: the remote surface
+            // has no deep link and the simulator cannot be tapped from a check.
+            .onAppear {
+                if ProcessInfo.processInfo.arguments.contains("-uiRemote"), screenFor == nil, let first = store.machines.first {
+                    screenFor = first
+                }
+            }
             .toolbar {
+                MonitorBell()
                 Button { Task { await store.refresh() } } label: {
                     Image(systemName: store.polling ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
                 }
@@ -240,11 +363,28 @@ private struct MachinesTab: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Text(m.authError != nil ? "token"
-                                     : m.isStale ? m.statusLabel
-                                     : (m.reachable ? "\(m.agents.count) sess" : "offline"))
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text(m.authError != nil ? "token"
+                                         : m.isStale ? m.statusLabel
+                                         : (m.reachable ? "\(m.agents.count) sess" : "offline"))
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
+                                    // What is on that machine's screen right now; tap it to control.
+                                    if m.reachable, m.capabilities?.contains("screenPeek") == true,
+                                       let machine = store.machines.first(where: { $0.host == m.host }) {
+                                        Button { screenFor = machine } label: {
+                                            MachineThumbnail(machine: machine)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                store.removeMachine(host: m.host)
+                            } label: {
+                                Label("Remove", systemImage: "trash")
                             }
                         }
                     }
@@ -259,10 +399,17 @@ private struct MachinesTab: View {
 /// section below it, both saying "green", and neither being where you wanted to go.
 private struct MachineDetailView: View {
     @EnvironmentObject var store: MeshStore
+    @Environment(\.dismiss) private var dismiss
     let host: String
+    @State private var repairing = false
+    @State private var confirmingRemoval = false
 
     private var snapshot: MachineSnapshot? {
         store.snapshot?.machines.first { $0.host == host }
+    }
+
+    private var config: Machine? {
+        store.machines.first { $0.host == host }
     }
 
     /// The newest event this phone holds for a session on this machine, so a row can
@@ -271,22 +418,51 @@ private struct MachineDetailView: View {
         store.events.last { event in
             guard event.session == session else { return false }
             guard let eventHost = event.host, !eventHost.isEmpty else { return true }
-            return hostNamesMatch(eventHost, host)
+            return hostNamesMatch(eventHost, host) || snapshot?.stats.map { hostNamesMatch(eventHost, $0.host) } == true
         }
+    }
+
+    /// Diagnostics are the long tail of this screen — worth having, not worth leading with.
+    /// They open on their own only while something in them is red.
+    @State private var showDiagnostics = false
+
+    private var diagnosticsHaveAProblem: Bool {
+        guard let m = snapshot else { return false }
+        return m.isStale || m.authError != nil || m.bridgeReachable == false || hasCap(m, "events") == false
     }
 
     var body: some View {
         List {
             if let m = snapshot {
+                if m.reachable, let machine = config {
+                    // The three things a person opens a machine for. The setup report and the
+                    // service rows used to sit above these — seven green ticks before the
+                    // first session, which is not what "tap the machine" means to anyone.
+                    Section {
+                        NavigationLink { RemoteScreenView(machine: machine) } label: {
+                            Label("Screen & control", systemImage: "display")
+                        }
+                        NavigationLink { FileBrowserView(machine: machine) } label: {
+                            Label("Files", systemImage: "folder")
+                        }
+                        // Load at a glance and "how many more agents fit"; tap for the charts.
+                        if let stats = m.stats {
+                            NavigationLink { MachineStatsView(machine: machine) } label: {
+                                MachineStatsRow(stats: stats)
+                            }
+                        }
+                    }
+                }
                 if m.reachable {
-                    if let machine = store.machines.first(where: { $0.host == m.host }) {
+                    if let machine = config {
                         MachineSetupSection(machine: machine)
                     }
+                    Section(isExpanded: $showDiagnostics) {
                     ServiceStatusRow(label: "meshd", ok: !m.isStale, detail: m.statusLabel)
                     ServiceStatusRow(label: "auth", ok: m.authError == nil, detail: m.authError ?? "active")
                     if m.authError != nil {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("This machine rotated its token. Run mesh pair on it and pair again — that replaces the saved token in place.")
+                            Text("This machine rotated its token. Run mesh pair on it, then tap Pair again below and enter the code it prints — that replaces the saved token in place.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             CopyableCommand(text: "mesh pair")
@@ -317,19 +493,12 @@ private struct MachineDetailView: View {
                         StatRow(label: "Tailnet", value: tailnetError)
                     }
                     if let s = m.stats {
-                        StatRow(label: "CPU", value: String(format: "%.0f%%", s.cpuPct))
-                        StatRow(label: "Memory", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.mem.usedMB/1024, s.mem.totalMB/1024, s.mem.pct))
-                        StatRow(label: "Disk", value: String(format: "%.0f / %.0f GB (%.0f%%)", s.disk.usedGB, s.disk.totalGB, s.disk.pct))
                         StatRow(label: "Load", value: s.load.map { String(format: "%.2f", $0) }.joined(separator: " "))
-                        StatRow(label: "Sessions", value: "\(s.agentsCount)")
-                        if !s.topProcs.isEmpty {
-                            SectionLabel("Top processes")
-                            ForEach(s.topProcs.prefix(4)) { p in
-                                StatRow(label: p.cmd, value: String(format: "%.0f%% · %.0f MB", p.cpuPct, p.memMB))
-                            }
-                        }
                     } else {
                         StatRow(label: "Stats", value: "not available")
+                    }
+                    } header: {
+                        Text("Diagnostics")
                     }
                     if let machine = store.machines.first(where: { $0.host == m.host }) {
                         MachinePowerSection(machine: machine, snapshot: m)
@@ -352,13 +521,14 @@ private struct MachineDetailView: View {
                     // the subnet — was cached while the machine was still up.
                     WakeRow(host: m.host)
                 }
+                Section(m.agents.isEmpty ? "No sessions" : "Sessions") {
                 ForEach(m.agents) { a in
                     HStack {
                         Image(systemName: "terminal")
                         VStack(alignment: .leading, spacing: 3) {
                             Text(a.displayName)
                             SessionStateBadge(state: a.displayState(latestEvent: latestEvent(for: a.name)))
-                            Text(a.isCmux ? "cmux" : "\(a.windows) pane\(a.windows == 1 ? "" : "s")")
+                            Text(a.kindLabel)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -368,6 +538,9 @@ private struct MachineDetailView: View {
                             Text(sessionCost(a)).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { store.deepLinkSession = MeshStore.SessionTarget(host: m.host, session: a.name) }
+                }
                 }
                 // The installer keeps the machine's existing token, so neither of these
                 // needs one on the command line — and printing a live bearer token into
@@ -408,10 +581,45 @@ private struct MachineDetailView: View {
             } else {
                 Text("No reading for this machine yet.").foregroundStyle(.secondary)
             }
+            // Always present, whatever state the machine is in. The screen above
+            // diagnoses "token rejected" and used to tell the user to "pair again"
+            // while the only pairing UI lived behind a + button two screens away —
+            // the diagnosis and the cure have to be in the same place.
+            Section {
+                Button {
+                    repairing = true
+                } label: {
+                    Label("Pair again", systemImage: "qrcode.viewfinder")
+                }
+                Button(role: .destructive) {
+                    confirmingRemoval = true
+                } label: {
+                    Label("Remove machine", systemImage: "trash")
+                }
+            } footer: {
+                Text("Pairing the same machine replaces its saved token in place. Removing only forgets it on this phone — and it stays forgotten until you pair it again.")
+            }
         }
+        .listStyle(.sidebar)
         .navigationTitle(machineShortName(host))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { if diagnosticsHaveAProblem { showDiagnostics = true } }
         .refreshable { await store.refresh() }
+        .sheet(isPresented: $repairing) {
+            PairMachineView(prefill: config.map {
+                MeshStore.PairTarget(address: $0.ip, port: $0.port, code: "")
+            })
+            .environmentObject(store)
+        }
+        .confirmationDialog("Remove \(machineShortName(host))?",
+                            isPresented: $confirmingRemoval, titleVisibility: .visible) {
+            Button("Remove machine", role: .destructive) {
+                store.removeMachine(host: host)
+                dismiss()
+            }
+        } message: {
+            Text("The machine itself is untouched. Pair it again any time to bring it back.")
+        }
     }
 }
 
@@ -452,67 +660,38 @@ private struct MachinePowerSection: View {
     let snapshot: MachineSnapshot
 
     @State private var pending: PowerAction?
-    @State private var running: String?
+    @State private var running: PowerAction?
     @State private var failure: String?
-
-    /// One row. `action` is meshd's own vocabulary for `POST /system`, not ours, so
-    /// the string that reaches the daemon is the string written here.
-    private struct PowerAction: Identifiable, Equatable {
-        var id: String { action }
-        var action: String
-        var label: String
-        var symbol: String
-        /// Nil for the reversible ones. Present means it confirms first.
-        var confirm: (title: String, verb: String, consequence: String)?
-
-        static func == (lhs: PowerAction, rhs: PowerAction) -> Bool { lhs.action == rhs.action }
-    }
 
     /// meshd 0.5.0 added shutdown and restart. Offering them against an older daemon
     /// would be a button that 400s, so they appear only where "power" is advertised.
     private var canPowerOff: Bool { snapshot.capabilities?.contains("power") ?? false }
 
-    /// Reversible from the machine's own keyboard, so no dialog: asking "are you sure?"
-    /// about locking a screen is how people learn to dismiss the dialog that matters.
-    private let reversible: [PowerAction] = [
-        PowerAction(action: "lock", label: "Lock", symbol: "lock.fill", confirm: nil),
-        PowerAction(action: "displaysleep", label: "Sleep display", symbol: "display", confirm: nil),
-        PowerAction(action: "sleep", label: "Sleep", symbol: "moon.fill", confirm: nil),
-    ]
-
-    private var irreversible: [PowerAction] {
-        let name = machineShortName(machine.host)
-        return [
-            PowerAction(action: "restart", label: "Restart…", symbol: "arrow.clockwise.circle",
-                        confirm: (title: "Restart \(name)?",
-                                  verb: "Restart",
-                                  consequence: "Every session on it stops. Anything unsaved there is lost, and agents mid-task will not come back on their own.")),
-            PowerAction(action: "shutdown", label: "Shut Down…", symbol: "power",
-                        confirm: (title: "Shut down \(name)?",
-                                  verb: "Shut Down",
-                                  consequence: "Every session stops and the machine goes dark. After that only its own power button, or a wake packet from a machine on the same network, brings it back.")),
-        ]
-    }
-
     var body: some View {
+        // The list itself lives in Shared/PowerActions.swift — the watch reads the same
+        // one, which is the only way the two screens stop disagreeing about what a
+        // machine can be told to do.
         Section("Power") {
-            ForEach(reversible) { item in
+            ForEach(PowerAction.reversible) { item in
                 Button {
                     run(item)
                 } label: {
-                    Label(running == item.action ? "\(item.label)…" : item.label, systemImage: item.symbol)
+                    Label(running == item ? "\(item.label)…" : item.label, systemImage: item.symbol)
                 }
                 .disabled(running != nil)
             }
             if canPowerOff {
-                ForEach(irreversible) { item in
+                ForEach(PowerAction.irreversible) { item in
                     Button(role: .destructive) {
                         pending = item
                     } label: {
-                        Label(running == item.action ? "\(item.label)…" : item.label, systemImage: item.symbol)
+                        Label(running == item ? "\(item.label)…" : item.label, systemImage: item.symbol)
                     }
                     .disabled(running != nil)
                 }
+                Text("The daemon starts at login. After a restart nothing answers from the phone until someone logs in at the machine (or auto-login is on).")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             } else {
                 Text("Restart and Shut Down need a newer agent on this machine. Re-run the install command on it.")
                     .font(.caption2)
@@ -529,24 +708,24 @@ private struct MachinePowerSection: View {
                     .foregroundStyle(.red)
             }
         }
-        .confirmationDialog(pending?.confirm?.title ?? "",
+        .confirmationDialog(pending?.consequence(machineName: machineShortName(machine.host))?.title ?? "",
                             isPresented: Binding(get: { pending != nil },
                                                  set: { if !$0 { pending = nil } }),
                             titleVisibility: .visible,
                             presenting: pending) { item in
-            Button(item.confirm?.verb ?? item.label, role: .destructive) { run(item) }
+            Button(item.consequence(machineName: machineShortName(machine.host))?.verb ?? item.label, role: .destructive) { run(item) }
             Button("Cancel", role: .cancel) { pending = nil }
         } message: { item in
-            Text(item.confirm?.consequence ?? "")
+            Text(item.consequence(machineName: machineShortName(machine.host))?.consequence ?? "")
         }
     }
 
     private func run(_ item: PowerAction) {
         pending = nil
-        running = item.action
+        running = item
         failure = nil
         Task { @MainActor in
-            failure = await store.systemAction(item.action, on: machine)
+            failure = await store.systemAction(item.rawValue, on: machine)
             running = nil
         }
     }
@@ -667,9 +846,11 @@ private struct MachineSetupSection: View {
         return report.orderedChecks.contains { !$0.check.ok && DoctorReport.isRemotelyFixable($0.name) }
     }
     private var isMac: Bool { report?.platform == "darwin" }
+    /// Open by default only while a check is red; a machine that passes shows one line.
+    @State private var expanded = false
 
     var body: some View {
-        Section("Setup & permissions") {
+        Section(isExpanded: $expanded) {
             if let report {
                 ForEach(report.orderedChecks, id: \.name) { item in
                     VStack(alignment: .leading, spacing: 2) {
@@ -696,8 +877,25 @@ private struct MachineSetupSection: View {
             } else if let error {
                 Text(error).font(.caption).foregroundStyle(.secondary)
             }
+        } header: {
+            summary
         }
-        .task { await run(fix: false) }
+        .task {
+            await run(fix: false)
+            if let report, report.orderedChecks.contains(where: { !$0.check.ok }) { expanded = true }
+        }
+    }
+
+    /// "Setup · all 7 pass" or "Setup · 2 need you" — the whole report in one line, so the
+    /// seven green rows only unfold for someone who wants them.
+    private var summary: some View {
+        let failing = report?.orderedChecks.filter { !$0.check.ok }.count ?? 0
+        let total = report?.orderedChecks.count ?? 0
+        return HStack(spacing: 6) {
+            Image(systemName: failing == 0 ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(failing == 0 ? Color.green : Color.orange)
+            Text(report == nil ? "Setup" : failing == 0 ? "Setup · all \(total) pass" : "Setup · \(failing) need\(failing == 1 ? "s" : "") you")
+        }
     }
 
     private func run(fix: Bool) async {
@@ -712,7 +910,9 @@ private struct MachineSetupSection: View {
             error = nil
         } catch {
             // An older daemon has no /doctor route; say so instead of showing a raw 404.
-            if case MeshClient.MeshError.http(404) = error {
+            // Matched on the status, not the case: meshd answers an unknown route with
+            // `{"error":"not found"}`, which now arrives as .refused.
+            if (error as? MeshClient.MeshError)?.statusCode == 404 {
                 self.error = "This machine's daemon predates setup checks. Reinstall to update it."
             } else {
                 self.error = "Couldn't reach \(machineShortName(machine.host))."
@@ -857,7 +1057,7 @@ private func machineShortName(_ host: String) -> String {
 private func machineSummary(_ machine: MachineSnapshot) -> String {
     guard machine.reachable else { return machine.error ?? "unreachable" }
     let version = machine.meshdVersion.map { "meshd \($0)" } ?? "meshd active"
-    if machine.authError != nil { return "\(version) · token needed" }
+    if machine.authError != nil { return "\(version) · token rejected — pair again" }
     let bridge = machine.bridgeReachable == true ? "bridge" : "no bridge"
     // An out-of-date daemon earns the last slot ahead of "hooks". The row used to read
     // "meshd 0.4.1 · no bridge · hooks" on a daemon missing seven capabilities, which
@@ -1030,6 +1230,9 @@ private struct SettingsTab: View {
     @ObservedObject private var notifications = NotificationManager.shared
     @State private var newCommand = ""
     @State private var pairing = false
+    @State private var cloudSession = LeSearchCloud.currentSession()
+    @State private var signingOut = false
+    @FocusState private var newCommandFocused: Bool
     /// Read from ActivityKit rather than from our own controller so the row states the
     /// system's answer, not our cache of it, and follows the same stream the controller
     /// does — a permission flipped in Settings updates this without a relaunch.
@@ -1105,20 +1308,47 @@ private struct SettingsTab: View {
             List {
                 Section("App") {
                     buildRow
+                    NavigationLink { GuidesView() } label: {
+                        Label("Guides — pairing, Developer Mode, permissions", systemImage: "book")
+                    }
+                    NavigationLink { FeedbackView() } label: {
+                        Label("Report a problem", systemImage: "ladybug")
+                    }
+                }
+                Section("Account") {
+                    if let cloudSession {
+                        LabeledContent("Signed in") { Text(cloudSession.email).foregroundStyle(.secondary) }
+                        Button("Sign out", role: .destructive) {
+                            Task {
+                                signingOut = true
+                                await LeSearchCloud.signOut()
+                                self.cloudSession = nil
+                                signingOut = false
+                            }
+                        }
+                        .disabled(signingOut)
+                    } else {
+                        NavigationLink { AccountView() } label: {
+                            Label("Sign in or create an account", systemImage: "person.crop.circle")
+                        }
+                        Text("Optional. Lets us reply to your reports.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Section("Machines") {
                     ForEach($store.machines) { $m in
                         VStack(alignment: .leading, spacing: 10) {
-                            TextField("host", text: $m.host)
+                            TextField("host", text: $m.host.shellSafe)
                                 .font(.headline)
                                 .autocorrectionDisabled()
                                 .textInputAutocapitalization(.never)
-                            LabeledContent("IP") { TextField("ip", text: $m.ip).multilineTextAlignment(.trailing) }
+                            LabeledContent("IP") { TextField("ip", text: $m.ip.shellSafe).multilineTextAlignment(.trailing) }
                             LabeledContent("Port") { TextField("port", value: $m.port, format: .number).multilineTextAlignment(.trailing) }
                             LabeledContent("Bridge") {
                                 TextField("http://ip:7820", text: Binding(
                                     get: { m.bridgeURL ?? "" },
-                                    set: { m.bridgeURL = $0.isEmpty ? nil : $0 }
+                                    set: { let v = $0.shellSafePunctuation; m.bridgeURL = v.isEmpty ? nil : v }
                                 ))
                                 .multilineTextAlignment(.trailing)
                                 .autocorrectionDisabled()
@@ -1127,7 +1357,7 @@ private struct SettingsTab: View {
                             LabeledContent("VNC") {
                                 TextField("http://ip:6080/vnc.html", text: Binding(
                                     get: { m.vncURL ?? "" },
-                                    set: { m.vncURL = $0.isEmpty ? nil : $0 }
+                                    set: { let v = $0.shellSafePunctuation; m.vncURL = v.isEmpty ? nil : v }
                                 ))
                                 .multilineTextAlignment(.trailing)
                                 .autocorrectionDisabled()
@@ -1167,19 +1397,18 @@ private struct SettingsTab: View {
                     .font(.caption)
                 }
 
-                alertsSection
-
                 Section("Quick send") {
                     ForEach($store.quickCommands, id: \.self) { $cmd in
-                        TextField("command", text: $cmd)
+                        TextField("command", text: $cmd.shellSafe)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                     }
                     .onDelete { store.quickCommands.remove(atOffsets: $0); store.save() }
                     HStack {
-                        TextField("new command", text: $newCommand)
+                        TextField("new command", text: $newCommand.shellSafe)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .focused($newCommandFocused)
                         Button {
                             let trimmed = newCommand.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty else { return }
@@ -1192,6 +1421,8 @@ private struct SettingsTab: View {
                         .buttonStyle(.borderless)
                     }
                 }
+
+                alertsSection
 
                 Section {
                     Text("When a provider session limit resets, tap the alert to send continue to the pinned rmux or cmux session.")
@@ -1217,6 +1448,16 @@ private struct SettingsTab: View {
                     }
                 }
 
+                if !store.machines.isEmpty {
+                    Section {
+                        NavigationLink {
+                            ExposedSecretsScreen()
+                        } label: {
+                            Label("Exposed secrets", systemImage: "eye.trianglebadge.exclamationmark")
+                        }
+                    }
+                }
+
                 Section {
                     Toggle(isOn: $lock.enabled) {
                         Label("Require \(AppLock.methodName)", systemImage: "lock.fill")
@@ -1232,8 +1473,26 @@ private struct SettingsTab: View {
                 }
             }
             .navigationTitle("Settings")
-            .toolbar { Button("Save") { store.save(); Task { await store.refresh() } } }
+            .toolbar {
+                MonitorBell()
+                Button("Save") { store.save(); Task { await store.refresh() } }
+            }
             .sheet(isPresented: $pairing) { PairMachineView().environmentObject(store) }
+            .onReceive(NotificationCenter.default.publisher(for: .cloudSessionChanged)) { _ in
+                cloudSession = LeSearchCloud.currentSession()
+            }
+            // TabView keeps every tab mounted, so switching away from Settings never
+            // tore this view down — with no @FocusState, nothing told a focused
+            // TextField to resign, and the keyboard stayed parked over whatever tab
+            // came next until something incidental (a screenshot, a force-quit)
+            // knocked it loose. This clears the one field wired to @FocusState and
+            // asks the responder chain to resign directly, which covers every other
+            // TextField/SecureField on this screen (machine fields, quick commands,
+            // pinned limits) without wiring each one individually.
+            .onDisappear {
+                newCommandFocused = false
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
     }
 }
@@ -1296,7 +1555,7 @@ private struct PinnedLimitEditor: View {
                     Text(m.host).tag(m.host)
                 }
             }
-            TextField("rmux session or cmux:surface:N", text: $sessionName)
+            TextField("rmux session or cmux:surface:N", text: $sessionName.shellSafe)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
             HStack {
@@ -1328,88 +1587,6 @@ private struct PinnedLimitEditor: View {
         let trimmed = sessionName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !host.isEmpty, !trimmed.isEmpty else { return }
         store.updatePinnedLimit(PinnedLimitSession(providerId: providerId, host: host, sessionName: trimmed))
-    }
-}
-
-private struct RemoteControlTab: View {
-    @EnvironmentObject var store: MeshStore
-
-    private var machines: [Machine] {
-        guard let snaps = store.snapshot?.machines, !snaps.isEmpty else { return store.machines }
-        let sortedHosts = activeFirst(snaps).map(\.host)
-        let seen = Set(sortedHosts)
-        return sortedHosts.compactMap { host in store.machines.first { $0.host == host } }
-            + store.machines.filter { !seen.contains($0.host) }
-    }
-
-    private func snap(for machine: Machine) -> MachineSnapshot? {
-        store.snapshot?.machines.first { $0.host == machine.host }
-    }
-
-    var body: some View {
-        NavigationStack {
-            #if DEBUG
-            // `-uiRemote` opens this screen directly. The remote surface cannot be
-            // reached by any deep link and the simulator cannot be tapped from CI or
-            // from an agent, so without this the one screen whose whole job is aiming
-            // accuracy is the one screen nobody can look at.
-            if ProcessInfo.processInfo.arguments.contains("-uiRemote"), let first = machines.first {
-                RemoteScreenView(machine: first)
-            } else {
-                machineList
-            }
-            #else
-            machineList
-            #endif
-        }
-    }
-
-    private var machineList: some View {
-            List {
-                ForEach(machines) { machine in
-                    Section(machine.host) {
-                        NavigationLink {
-                            RemoteScreenView(machine: machine)
-                        } label: {
-                            Label("Screen & control", systemImage: "display")
-                        }
-                        .disabled(snap(for: machine)?.reachable != true)
-                        // meshd's own web console, kept because it is the only surface
-                        // that works when the native one hits something unexpected —
-                        // and because it is the same page on any browser.
-                        if let desktop = machine.desktopURL() {
-                            NavigationLink {
-                                RemoteWebScreen(title: machine.host,
-                                                urlString: desktop.absoluteString,
-                                                bearer: machine.token)
-                            } label: {
-                                Label("Web console", systemImage: "safari")
-                            }
-                            .disabled(snap(for: machine)?.reachable != true)
-                        }
-                        if let snap = snap(for: machine) {
-                            ServiceStatusRow(label: "machine", ok: snap.reachable, detail: snap.statusLabel)
-                            ServiceStatusRow(label: "input", ok: snap.capabilities?.contains("input"),
-                                             detail: (snap.capabilities?.contains("input") ?? false) ? "ready" : "needs meshd 0.2.2")
-                        }
-                        // Legacy noVNC bridge: only offered where one is actually up.
-                        if snap(for: machine)?.vncReachable == true {
-                            NavigationLink {
-                                RemoteWebScreen(title: "\(machine.host) VNC", urlString: machine.resolvedVNC)
-                            } label: {
-                                Label("Open VNC", systemImage: "rectangle.on.rectangle")
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Remote")
-            .overlay {
-                if machines.isEmpty {
-                    ContentUnavailableView("No machines", systemImage: "display",
-                                           description: Text("Pair a machine on the Machines tab. No VNC server needed — meshd captures the screen itself."))
-                }
-            }
     }
 }
 
@@ -1476,12 +1653,18 @@ private struct ControlWebView: UIViewRepresentable {
         web.scrollView.maximumZoomScale = 6
         web.scrollView.bouncesZoom = true
         web.load(request())
+        context.coordinator.requestedURL = url
         context.coordinator.lastReloadToken = reloadToken
         return web
     }
 
     func updateUIView(_ web: WKWebView, context: Context) {
-        if web.url != url || context.coordinator.lastReloadToken != reloadToken {
+        // Compare against what WE asked for, never `web.url`: that is nil until a load
+        // commits, and SwiftUI calls this on every store poll, so the old test reloaded
+        // the page every 8 s before it could finish — the console was a white screen and
+        // WebKit's log was one long "cancel". Measured 2026-09-22 on the simulator.
+        if context.coordinator.requestedURL != url || context.coordinator.lastReloadToken != reloadToken {
+            context.coordinator.requestedURL = url
             context.coordinator.lastReloadToken = reloadToken
             web.load(request())
         }
@@ -1501,6 +1684,7 @@ private struct ControlWebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         var lastReloadToken: UUID?
+        var requestedURL: URL?
         var allowedOrigin: String?
 
         func webView(_ webView: WKWebView,
@@ -1575,4 +1759,51 @@ private func resetText(_ iso: String?) -> String? {
 private func eventTime(_ iso: String) -> String {
     guard let date = parseISO(iso) else { return "" }
     return date.formatted(date: .omitted, time: .shortened)
+}
+
+/// An event body that is exactly one absolute path (hooks post transcript paths there)
+/// collapses to its filename — the subtitle already names host, source and session, and
+/// five wrapped lines of /Users/… bury the events around it. Anything with spaces or
+/// newlines is prose and passes through untouched.
+private func compactEventBody(_ body: String) -> String {
+    let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("/"), !trimmed.contains(" "), !trimmed.contains("\n"),
+          let last = trimmed.split(separator: "/").last else { return body }
+    return String(last)
+}
+
+
+/// A live glance at a machine's screen for the Machines list: a small frame every few
+/// seconds while the row is on screen, nothing when it is not. The daemon scales the
+/// frame itself (`width`), so a 3440-wide desktop costs a few KB here.
+private struct MachineThumbnail: View {
+    @EnvironmentObject var store: MeshStore
+    let machine: Machine
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Color(.tertiarySystemFill)
+                    .overlay { Image(systemName: "display").foregroundStyle(.secondary) }
+            }
+        }
+        .frame(width: 96, height: 60)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.quaternary))
+        .accessibilityLabel("Screen of \(machine.host) — tap to control")
+        .task(id: machine.id) {
+            while !Task.isCancelled {
+                if let data = try? await store.client(for: machine).screenImage(width: 320, quality: 40),
+                   let decoded = UIImage(data: data) {
+                    image = decoded
+                }
+                try? await Task.sleep(for: .seconds(5))
+            }
+        }
+    }
 }

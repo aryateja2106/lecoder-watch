@@ -99,10 +99,20 @@ IN_BETA_TESTING` is the one that means your friends have it.**
 ### The full publish
 
 ```bash
-ASC_KEY_ID=Y4MR7X24UL ASC_ISSUER_ID=<uuid> sh scripts/release-testflight.sh
+sh scripts/release-testflight-asc.sh --external
 ```
 
-Then, in App Store Connect → TestFlight → the new build:
+No `ASC_KEY_ID`/`ASC_ISSUER_ID` — `asc` holds the credentials in the keychain. `--external`
+does steps 1-3 below for you: it writes *What to Test* from `CHANGELOG.md`, adds the build
+to the **Beta** group (the group the public link points at) and *verifies the membership
+stuck*, then submits for Beta App Review. Without `--external` it stops at internal testers
+and ends with a banner saying so.
+
+`scripts/release-testflight.sh` is retired and now just forwards here — it had no group
+assignment, no version check and no smoke test. See
+[release-workflow.md](release-workflow.md).
+
+If you are doing it by hand in App Store Connect → TestFlight → the new build:
 
 1. Fill **What to Test** — the `## [Unreleased]` block of [`CHANGELOG.md`](../CHANGELOG.md)
    is written to be pasted here.

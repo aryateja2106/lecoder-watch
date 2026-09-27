@@ -1,13 +1,13 @@
 ---
 name: meshwatch-ui-taste
-description: Native Apple product-UI taste guard for MeshWatch. Use when the user asks to design, redesign, critique, polish, simplify, make premium, make native, or remove AI-generated blandness from MeshWatch watchOS, iOS, widget, terminal, monitoring, or agent-session screens.
+description: Native Apple product-UI taste guard for LeSearch Mesh. Use when the user asks to design, redesign, critique, polish, simplify, make premium, make native, or remove AI-generated blandness from LeSearch Mesh watchOS, iOS, widget, terminal, monitoring, or agent-session screens.
 ---
 
-# MeshWatch UI Taste
+# LeSearch Mesh UI Taste
 
 ## Overview
 
-Use this before changing MeshWatch UI. It compresses the useful parts of Taste Skill, Impeccable, and the linked watch resources into native SwiftUI guidance for this specific app.
+Use this before changing LeSearch Mesh UI. It compresses the useful parts of Taste Skill, Impeccable, and the linked watch resources into native SwiftUI guidance for this specific app.
 
 Sources: https://github.com/Leonxlnx/taste-skill, https://github.com/pbakaus/impeccable, https://github.com/738/awesome-apple-watch, https://github.com/mysk-research/loupe, https://github.com/cemheren/akifkeyboard.
 

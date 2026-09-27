@@ -1,4 +1,5 @@
 #!/bin/sh
+# check-mesh-self-check.sh — the self-check's ok-detection grep must not match a JSON body whose ok is false.
 set -eu
 
 tmp=$(mktemp "${TMPDIR:-/tmp}/mesh-self-check.XXXXXX")

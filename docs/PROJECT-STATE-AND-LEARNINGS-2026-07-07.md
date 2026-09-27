@@ -1,9 +1,9 @@
-# MeshWatch — Project State & Learnings (2026-07-07)
+# LeSearch Mesh — Project State & Learnings (2026-07-07)
 
 Resumption context. If you're a fresh Claude picking this up: read this, then `git log`, then continue.
 **Branch `backup/2026-07-02`. Never push. Build-green gate before every commit (below).**
 
-## What MeshWatch is
+## What LeSearch Mesh is
 iPhone + Apple Watch (+ soon a cross-platform desktop) client for driving coding agents on
 many machines over Tailscale. `meshd` (bun HTTP daemon, :8899, Bearer token) runs on each
 machine; the apps + the `mesh` CLI talk to it. Repo: `~/Projects/lecoder-watch`.

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- feedback-worker.plist — launchd job: run scripts/feedback-to-issues.ts every 10 minutes on the Mac that owns the fleet.
+     Install (paths are this checkout's; re-run after moving the tree):
+       sed "s|__ROOT__|$PWD|g; s|__HOME__|$HOME|g" scripts/feedback-worker.plist > ~/Library/LaunchAgents/ai.lesearch.feedback-worker.plist
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.lesearch.feedback-worker.plist
+     Remove:  launchctl bootout gui/$(id -u)/ai.lesearch.feedback-worker
+     Logs:    ~/.mesh/logs/feedback-worker.log
+     ponytail: a launchd job on one Mac is the whole scheduler; move to a Supabase edge function
+     on a cron once an issues-only GitHub token exists as a Supabase secret (BLOCKED.md). -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>ai.lesearch.feedback-worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>export PATH=/opt/homebrew/bin:$HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin; cd "__ROOT__" &amp;&amp; bun scripts/feedback-to-issues.ts</string>
+  </array>
+  <key>StartInterval</key><integer>600</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/.mesh/logs/feedback-worker.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/.mesh/logs/feedback-worker.log</string>
+</dict>
+</plist>

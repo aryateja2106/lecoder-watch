@@ -1,4 +1,5 @@
 #!/bin/sh
+# mesh-self-check — probe this machine's meshd (health, auth, tailnet) with correctly quoted curl arguments and report ok/false per probe.
 
 set -u
 

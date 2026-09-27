@@ -3,28 +3,52 @@
 import os from "node:os";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, chmod, mkdir, readFile } from "node:fs/promises";
 import { kbPut, kbGet, kbSearch } from "./kb";
 import { handleInput } from "./input";
 import { handleFiles } from "./files";
+import { handleBrain } from "./brain";
 import { handlePush, pushAlert, passesPushGate, notePushDecision, pushLiveActivity } from "./push";
 import { handlePair } from "./pair";
 import { isAuthorized } from "./auth";
-import { handleDoctor, tokenWeakness } from "./doctor";
+import { loopbackExempt } from "./loopback-trust";
+import { redact, redactAndRecord, record, addKnownSecrets, envSecrets, handleExposures, listExposures, type Finding } from "./redact";
+import { chatFor, outputPage } from "./chat";
+import { handleApps, serveApp } from "./apps";
+import { handleHandoff } from "./handoff";
+import { handleDoctor, tokenWeakness, AGENT_CLIS } from "./doctor";
 import { sendWake, primaryMac, primaryIPv4, magicPacket } from "./wol";
 import { initTelemetry } from "./telemetry";
+import { isHerdrAgent, herdrSessions, herdrOutput, herdrSend, herdrPanes, herdrPaneCount } from "./herdr";
+import { handlePtyUpgrade, ptyWebSocket } from "./pty";
+import { handleSessions, mirrorReadAllowed, resumedTranscript, snapshot as snapshotTranscript, startSessionMirror, startSessionSweep } from "./sessions";
+import { findClaudeTranscript, findCodexRollout } from "./chat";
 
 const PORT = Number(process.env.MESHD_PORT ?? "8899");
 const HOST = process.env.MESHD_HOST ?? "0.0.0.0";
 const TOKEN = process.env.MESHD_TOKEN ?? "";
-const VERSION = "0.5.2";
+const VERSION = "0.8.0";
 // 0.5.0 additions, all additive so a 0.4.x daemon and a 0.5 app (or the reverse)
 // keep working: screenRegion (rect+quality on /screen.jpg), openUrl (POST /open),
 // power (shutdown/restart on /system, results now truthful), laPush (POST /la/token
 // + Live Activity pushes), sessionStatus (status fields on /agents rows), paste
 // (bracketed multiline paste on /agents/<s>/send), captureJoin (join=1/plain=1 on
 // the output route). Clients must gate new behavior on these strings, not on version.
-const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin"];
+// 0.5.4 adds "herdr": panes of the herdr multiplexer are enumerated, peekable and
+// keyable under `herdr:<pane_id>` names. Clients gate the herdr row label and its
+// reduced key set on this string, not on version.
+// 0.6.0 adds "redact": secrets in event and output text are replaced before they leave
+// this machine, and GET /exposures lists what was seen (fingerprints, never values).
+// "chat": GET /agents/<s>/chat serves the session's conversation read from the agent's own
+// transcript (Claude Code, Codex), falling back to capture-pane lines as one system block.
+// "apps": GET /built-apps lists what `mesh apps` registered (/apps is the Mac app switcher);
+// web apps are served token-free at /a/<slug>-<key>/ (Safari cannot send a header);
+// POST /built-apps/<slug>/install pushes a native
+// build to the paired iPhone or a simulator through the same CLI the terminal uses.
+// "handoff": POST /agents/<s>/handoff {to} writes HANDOFF.md from the conversation and
+// relaunches the pane under another CLI agent; GET /resumable?cwd= and
+// GET /agents/<s>/resumable list the conversations each CLI can reopen, with the command.
+const CAPABILITIES = ["events", "newPane", "paneTarget", "usage", "agents", "cmux", "herdr", "tailscale", "kb", "screenPeek", "input", "files", "push", "pair", "doctor", "wake", "screenRegion", "openUrl", "power", "laPush", "sessionStatus", "paste", "captureJoin", "redact", "chat", "apps", "handoff", "brain", "captureAnsi", "chatSearch", "pty", "sessions"];
 const IS_MAC = process.platform === "darwin";
 // Multiplexer: rmux on macOS, tmux on Linux (tmux-compatible). Override with MESH_MUX.
 const MUX = process.env.MESH_MUX ?? (IS_MAC ? "rmux" : "tmux");
@@ -32,6 +56,8 @@ const CMUX = process.env.CMUX_BIN ?? "cmux";
 const CMUX_SOCKET_HINT = process.env.CMUX_SOCKET_HINT ?? "/tmp/cmux-last-socket-path";
 const CMUX_BRIDGE = process.env.CMUX_BRIDGE ?? "http://127.0.0.1:8901";
 const EVENTS_PATH = process.env.MESHD_EVENTS_PATH ?? join(homedir(), ".mesh", "agent-events.jsonl");
+// The mesh CLI, for the one thing the daemon delegates to it (installing a built app).
+const MESH_BIN = process.env.MESH_BIN ?? join(process.env.MESH_HOME ?? join(homedir(), ".mesh"), "bin", "mesh");
 
 async function sh(cmd: string): Promise<string> {
   const p = Bun.spawn(["/bin/sh", "-c", cmd], { stdout: "pipe", stderr: "ignore" });
@@ -122,16 +148,50 @@ async function topProcs(): Promise<any[]> {
     return { pid, cmd: cmdName, cpuPct, memMB: rssKB / 1024, memPct: (rssKB / 1024 / (os.totalmem() / 1048576)) * 100 };
   }).filter((p) => p.pid > 0);
 }
+/// What this machine IS, for an agent choosing where to run something: the board or chip,
+/// cores, total RAM, and the accelerator — Apple unified memory, CUDA (Jetson shares its RAM
+/// with the GPU), or none. It never changes while the daemon runs, so it is read once.
+/// Measured 2026-09-23: Mac "Apple M4 Pro" 12 cores; Pi "Raspberry Pi 5 Model B Rev 1.0";
+/// Jetson "NVIDIA Jetson Orin Nano … Super", L4T R36, CUDA 12.6 (nvcc is not on PATH there,
+/// so the version comes from /usr/local/cuda/version.json, not from running it).
+type Hardware = { board: string; cores: number; ramMB: number; arch: string; accel: { kind: "apple" | "cuda" | "none"; name?: string; version?: string; memory: "unified" | "shared" | "dedicated" | "none" } };
+let hardwareCache: Hardware | null = null;
+async function hardware(): Promise<Hardware> {
+  if (hardwareCache) return hardwareCache;
+  const cpus = os.cpus();
+  const read = (p: string) => readFile(p, "utf8").then((t) => t.replace(/\0/g, "").trim()).catch(() => "");
+  let board = cpus[0]?.model?.trim() ?? "";
+  let accel: Hardware["accel"] = { kind: "none", memory: "none" };
+  if (IS_MAC) {
+    board = (await sh("sysctl -n machdep.cpu.brand_string 2>/dev/null")).trim() || board;
+    if (process.arch === "arm64") accel = { kind: "apple", name: `${board} GPU`, memory: "unified" };
+  } else {
+    board = (await read("/proc/device-tree/model")) || board;
+    const cuda = await read("/usr/local/cuda/version.json");
+    if (cuda) {
+      let version = "";
+      try { version = JSON.parse(cuda)?.cuda?.version ?? ""; } catch { /* keep blank */ }
+      // A Jetson's GPU has no memory of its own: it takes from the same RAM the CPU uses.
+      const tegra = await read("/etc/nv_tegra_release");
+      accel = { kind: "cuda", name: tegra ? "NVIDIA Tegra (integrated)" : "NVIDIA", version, memory: tegra ? "shared" : "dedicated" };
+    }
+  }
+  hardwareCache = { board, cores: cpus.length, ramMB: Math.round(os.totalmem() / 1048576), arch: process.arch, accel };
+  return hardwareCache;
+}
+
 async function getStats() {
-  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount] = await Promise.all([
+  const [cpuPct, mem, dsk, procs, rmuxCount, cmuxCount, herdrCount, hw] = await Promise.all([
     IS_MAC ? macCpuPct() : linuxCpuPct(),
     IS_MAC ? macMem() : linuxMem(),
     disk(),
     topProcs(),
     rmuxSessions().then((s) => s.length).catch(() => 0),
     cmuxSessions().then((s) => s.length).catch(() => 0),
+    herdrPaneCount().catch(() => 0),
+    hardware(),
   ]);
-  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount };
+  return { host: os.hostname(), platform: process.platform, cpuPct, load: os.loadavg(), mem, disk: dsk, topProcs: procs, agentsCount: rmuxCount + cmuxCount + herdrCount, hw };
 }
 
 // ---------- agents (rmux) ----------
@@ -176,15 +236,18 @@ async function rmuxSessions(): Promise<any[]> {
   const rows = out.trim().split("\n").map((l) => l.split("|"));
   const sessions = [] as any[];
   const HIDDEN = new Set(["meshd", "rmux-bridge"]); // infra, not user agents
-  const table = await procTable();
+  const [table, cmds] = await Promise.all([procTable(), cmdTable()]);
   for (const r of rows) {
     const name = r[0];
     if (HIDDEN.has(name)) continue;
-    // One pass over this session's panes: agent type (first pane) + all pane pids.
+    // One pass over this session's panes: agent type + all pane pids. The agent is
+    // found in the process tree of any pane (see agentFromTree); the pane command
+    // name is only the fallback.
     const panesOut = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{pane_pid}|#{pane_current_command}' 2>/dev/null`);
     const paneRows = panesOut.trim().split("\n").filter(Boolean).map((l) => l.split("|"));
     const panePids = paneRows.map((p) => num(p[0])).filter((n) => n > 0);
-    const agentType = paneRows[0]?.[1] ? mapAgent(paneRows[0][1]) : undefined;
+    const found = panePids.map((pid) => agentFromTree(pid, cmds)).find(Boolean);
+    const agentType = found ? agentLabel(found) : paneRows[0]?.[1] ? mapAgent(paneRows[0][1]) : undefined;
     const { memMB, cpuPct } = sumSubtrees(panePids, table);
     sessions.push({
       name,
@@ -198,10 +261,16 @@ async function rmuxSessions(): Promise<any[]> {
   }
   return sessions;
 }
+/// The row label for an agent basename from agentFromTree: the three the phone knows
+/// keep their 0.5 spellings, the rest are shown as their command name.
+function agentLabel(agent: string): string {
+  return agent === "claude" ? "Claude" : agent === "codex" ? "Codex" : agent === "cursor-agent" ? "Cursor" : agent;
+}
 function mapAgent(cmd: string): string {
   const c = cmd.toLowerCase();
   if (c.includes("claude")) return "Claude";
   if (c.includes("codex")) return "Codex";
+  if (c.includes("cursor")) return "Cursor";
   if (c.includes("node") || c.includes("bun")) return "Node";
   if (c.includes("python")) return "Python";
   return "shell";
@@ -351,12 +420,31 @@ async function cmuxSessions(): Promise<any[]> {
   return sessions;
 }
 
+/// herdr reports pane ids, not pids, so the subtree walk it needs is the same one the
+/// rmux lane does — one ps snapshot, shared across every pane, rather than a ps per row.
+async function listHerdr(): Promise<any[]> {
+  try {
+    const table = await procTable();
+    return await herdrSessions((pids) => sumSubtrees(pids, table));
+  } catch {
+    // A machine without herdr must still get its rmux and cmux rows.
+    return [];
+  }
+}
+
 async function listAgents() {
-  const [rmux, cmux] = await Promise.all([rmuxSessions(), cmuxSessions()]);
+  const [rmux, cmux, herdr] = await Promise.all([rmuxSessions(), cmuxSessions(), listHerdr()]);
   // Additive per-row status from the event index — old clients never look at the
   // extra keys, new clients stop deriving "is it stuck?" from pane heuristics.
   const now = Date.now();
-  return [...rmux, ...cmux].map((s) => ({ ...s, ...sessionStatusFields(s.name, Boolean(s.attached), now) }));
+  return [...rmux, ...cmux, ...herdr].map((s) => {
+    const fields = sessionStatusFields(s.name, Boolean(s.attached), now);
+    // herdr panes carry herdr's own agent verdict; the event index never hears about
+    // them (no hook posts under herdr:* names), so its heuristic would badge a
+    // grinding agent "idle". herdrStatus stays out of the wire row itself.
+    const { herdrStatus, ...row } = s as any;
+    return { ...row, ...fields, ...(herdrStatus ? { status: herdrStatus } : {}) };
+  });
 }
 
 async function cmuxPanes(name: string) {
@@ -389,6 +477,11 @@ async function cmuxPanes(name: string) {
   };
 }
 
+/// `null` when the surface does not resolve, so the route can 404 it. This used to
+/// return an empty line array either way: a surface that had gone away read exactly
+/// like a surface sitting at a blank prompt, and the phone printed "No output yet" over
+/// a session that no longer existed. Measured on the live daemon before the fix —
+/// GET /agents/cmux:no-such-ref/output answered 200 {"lines":[]}.
 async function cmuxOutput(name: string, lines: number) {
   const ref = cmuxSurfaceRef(name);
   try {
@@ -407,8 +500,12 @@ async function cmuxOutput(name: string, lines: number) {
       return { name, lines: arr.slice(-lines) };
     }
   } catch { /* fall through */ }
-  const out = await sh(`${await cmuxEnvPrefix()}${CMUX} read-screen --surface ${shq(ref)} --lines ${Math.max(1, lines)} 2>/dev/null`);
-  const arr = out.split("\n").map(cleanCmuxLine).filter((l) => l.trim().length > 0);
+  // shChecked, not sh: the exit code is the only thing that separates "this surface is
+  // gone" from "this surface is quiet", and sh() discards it along with stderr.
+  const r = await shChecked(`${await cmuxEnvPrefix()}${CMUX} read-screen --surface ${shq(ref)} --lines ${Math.max(1, lines)}`)
+    .catch(() => ({ out: "", err: "", code: 1 }));
+  if (r.code !== 0) return null;
+  const arr = r.out.split("\n").map(cleanCmuxLine).filter((l) => l.trim().length > 0);
   return { name, lines: arr.slice(-lines) };
 }
 
@@ -431,20 +528,29 @@ async function cmuxSend(name: string, text?: string, key?: string): Promise<{ ok
     body: JSON.stringify({ args }),
   }).then((r) => r.ok);
 
+  // Both fallbacks used to be fire-and-forget: when the bridge was down AND the CLI
+  // failed, this still answered ok:true and the phone showed a sent keystroke that
+  // reached nothing. Measured on the live daemon before the fix — POST to
+  // /agents/cmux:no-such-ref/send answered 200 {"ok":true}.
   if (text) {
     if (await bridgeArgs(["send", "--surface", ref, text]).catch(() => false)) return { ok: true };
-    await sh(`${await cmuxEnvPrefix()}${CMUX} send --surface ${shq(ref)} ${shq(text)}`);
+    const r = await shChecked(`${await cmuxEnvPrefix()}${CMUX} send --surface ${shq(ref)} ${shq(text)}`)
+      .catch(() => ({ out: "", err: "", code: 1 }));
+    if (r.code !== 0) return { ok: false, error: r.err || "session not addressable" };
   }
   if (key) {
     const mapped = CMUX_KEYS[key];
     if (!mapped) return { ok: false, error: `unsupported key: ${key}` };
     if (await bridgeArgs(["send-key", "--surface", ref, mapped]).catch(() => false)) return { ok: true };
-    await sh(`${await cmuxEnvPrefix()}${CMUX} send-key --surface ${shq(ref)} ${mapped}`);
+    const r = await shChecked(`${await cmuxEnvPrefix()}${CMUX} send-key --surface ${shq(ref)} ${mapped}`)
+      .catch(() => ({ out: "", err: "", code: 1 }));
+    if (r.code !== 0) return { ok: false, error: r.err || "session not addressable" };
   }
   return { ok: true };
 }
 
 async function agentPanes(name: string) {
+  if (isHerdrAgent(name)) return herdrPanes(name);
   if (isCmuxAgent(name)) return cmuxPanes(name);
   const has = await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`);
   if (!has.trim().endsWith("0")) return null;
@@ -486,7 +592,26 @@ function plainLine(line: string): string {
   return line.replace(/[\u2500-\u257F\u2800-\u28FF]/g, "").replace(/ {2,}/g, " ").trimEnd();
 }
 
-async function agentOutput(name: string, lines: number, pane?: string, join = false, plain = false) {
+/// Every line the phone or watch will show passes through redact(); the same secret
+/// sitting on screen across many polls is counted once per ten minutes, not per poll.
+const OUTPUT_DEDUPE_MS = 10 * 60_000;
+async function redactOutput<T extends { lines: string[] } | null>(res: T): Promise<T> {
+  if (!res) return res;
+  const findings: Finding[] = [];
+  const lines = res.lines.map((line) => { const r = redact(line); findings.push(...r.findings); return r.text; });
+  if (findings.length) record(findings, "output", OUTPUT_DEDUPE_MS).catch(() => {});
+  return { ...res, lines };
+}
+async function agentOutput(name: string, lines: number, pane?: string, join = false, plain = false, ansi = false) {
+  return redactOutput(await agentOutputRaw(name, lines, pane, join, plain, ansi));
+}
+/// `ansi` keeps the pane's SGR colour escapes (`capture-pane -e`) and adds the cursor cell,
+/// so a real terminal emulator on the phone can paint the screen instead of a text blob.
+async function agentOutputRaw(name: string, lines: number, pane?: string, join = false, plain = false, ansi = false) {
+  if (isHerdrAgent(name)) {
+    const res = await herdrOutput(name, lines, join);
+    return plain && res ? { ...res, lines: res.lines.map(plainLine) } : res;
+  }
   if (isCmuxAgent(name)) {
     const res = await cmuxOutput(name, lines);
     // cmux read-screen has no join concept; plain still applies.
@@ -496,13 +621,19 @@ async function agentOutput(name: string, lines: number, pane?: string, join = fa
   if (!has.trim().endsWith("0")) return null;
   const target = pane ? shq(pane) : shq(name);
   const joinFlag = join && (await muxSupportsJoin()) ? " -J" : "";
-  const out = await sh(`${MUX} capture-pane -p${joinFlag} -t ${target} 2>/dev/null`);
+  // `ansi` also asks for history: the phone's terminal repaints from this on daemons
+  // without the pty stream, and with only the visible screen it could never scroll back.
+  const scrollback = ansi ? ` -S -${Math.min(5000, Math.max(0, lines))}` : "";
+  const out = await sh(`${MUX} capture-pane -p${ansi ? " -e" : ""}${joinFlag}${scrollback} -t ${target} 2>/dev/null`);
   let arr = out.replace(/\n+$/, "").split("\n");
   if (plain) arr = arr.map(plainLine);
-  return { name, lines: arr.slice(-lines) };
+  if (!ansi) return { name, lines: arr.slice(-lines) };
+  const cur = (await sh(`${MUX} display-message -p -t ${target} '#{cursor_x} #{cursor_y} #{pane_width} #{pane_height}' 2>/dev/null`)).trim().split(" ").map(Number);
+  return { name, lines: arr.slice(-lines), cursor: cur.length === 4 && cur.every(Number.isFinite) ? { x: cur[0], y: cur[1], cols: cur[2], rows: cur[3] } : undefined };
 }
 const INFRA = new Set(["meshd", "rmux-bridge"]); // never killable over the wire
 async function agentKill(name: string): Promise<{ ok: boolean; error?: string }> {
+  if (isHerdrAgent(name)) return { ok: false, error: "herdr panes cannot be closed from meshd" };
   if (isCmuxAgent(name)) return { ok: false, error: "cmux sessions cannot be killed from meshd" };
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
@@ -512,12 +643,14 @@ async function agentKill(name: string): Promise<{ ok: boolean; error?: string }>
   return { ok: true };
 }
 async function agentKillPane(name: string, paneId: string): Promise<{ ok: boolean; error?: string }> {
+  if (isHerdrAgent(name)) return { ok: false, error: "herdr panes cannot be closed from meshd" };
   if (isCmuxAgent(name)) return { ok: false, error: "cmux panes cannot be killed from meshd" };
   if (INFRA.has(name)) return { ok: false, error: "infra session is protected" };
   await sh(`${MUX} kill-pane -t ${shq(paneId)}`);
   return { ok: true };
 }
 async function agentNewPane(name: string, dir?: string, cwd?: string): Promise<{ ok: boolean; error?: string }> {
+  if (isHerdrAgent(name)) return { ok: false, error: "herdr panes do not support splitting via meshd" };
   if (isCmuxAgent(name)) return { ok: false, error: "cmux sessions do not support new panes via meshd" };
   if (!(await sh(`${MUX} has-session -t ${shq(name)} 2>&1; echo $?`)).trim().endsWith("0")) {
     return { ok: false, error: "no such session" };
@@ -554,15 +687,32 @@ const KEY_SEND_KEYS: Record<string, string> = {
   end: "End",
   "page-up": "PPage",
   "page-down": "NPage",
+  "shift-tab": "BTab",
+  // Claude Code's newline-without-submit is meta+return (ESC CR); tmux spells that M-Enter.
+  "shift-enter": "M-Enter",
 };
 
+/// `ctrl-a`…`ctrl-y` / `alt-a`…`alt-z`: what the phone's sticky Ctrl/Alt keys produce.
+/// Fifty-two table rows would each demand a watch chip; a pattern says the same thing.
+///
+/// `ctrl-z` is deliberately not one of them: over this route there is no client to resume
+/// a suspended job, so it would strand whatever the pane was running. A phone attached to
+/// the pty stream can still send the raw byte — it has a terminal to resume it with.
+function modifierKey(key: string): string | undefined {
+  const m = /^(ctrl|alt)-([a-z])$/.exec(key);
+  if (!m || key === "ctrl-z") return undefined;
+  return `${m[1] === "ctrl" ? "C" : "M"}-${m[2]}`;
+}
 async function agentSend(name: string, text?: string, key?: string, pane?: string, paste?: boolean): Promise<{ ok: boolean; error?: string }> {
+  // paste travels: a literal write of newline bytes IS the submit-per-line problem,
+  // so herdrSend wraps multi-line pastes in bracketed-paste markers itself.
+  if (isHerdrAgent(name)) return herdrSend(name, text, key, paste === true);
   if (isCmuxAgent(name)) return cmuxSend(name, text, key);
   const hasText = typeof text === "string" && text.length > 0;
   const hasKey = typeof key === "string" && key.length > 0;
   if (!hasText && !hasKey) return { ok: false, error: "text or key required" };
 
-  const sendKey = hasKey ? KEY_SEND_KEYS[key] : undefined;
+  const sendKey = hasKey ? (KEY_SEND_KEYS[key] ?? modifierKey(key)) : undefined;
   if (hasKey && !sendKey) return { ok: false, error: `unsupported key: ${key}` };
 
   // send-keys to a name the mux cannot resolve fails on stderr we discard, so
@@ -602,7 +752,17 @@ async function agentSend(name: string, text?: string, key?: string, pane?: strin
       }
     }
   }
-  if (sendKey) await sh(`${MUX} send-keys -t ${target} ${sendKey}`);
+  if (sendKey) {
+    // A pane target the mux cannot resolve (renumbered, stale event, rmux spelling) used to
+    // vanish into sh()'s discarded stderr and still answer ok:true — "Approve" showed Sent
+    // and Claude stayed on its prompt. Retry on the session itself before giving up.
+    const r = await shChecked(`${MUX} send-keys -t ${target} ${sendKey}`).catch(() => ({ code: 1, out: "", err: "" }));
+    if (r.code !== 0) {
+      if (!pane) return { ok: false, error: `send-keys failed: ${r.err.trim() || r.code}` };
+      const again = await shChecked(`${MUX} send-keys -t ${shq(name)} ${sendKey}`).catch(() => ({ code: 1, out: "", err: "" }));
+      if (again.code !== 0) return { ok: false, error: `send-keys failed: ${again.err.trim() || again.code}` };
+    }
+  }
   return { ok: true };
 }
 
@@ -690,6 +850,12 @@ type AgentEvent = {
   // Exact mux pane (#S:#I.#P) the event came from; a reply sent with this as the
   // pane target lands in the agent's pane even when another pane is active.
   pane?: string;
+  // 0.6: what the hook actually knew, kept structured instead of flattened into the
+  // title — the chat route reads the transcript at transcriptPath; toolName and
+  // hookEvent let a client draw a card without parsing prose.
+  transcriptPath?: string;
+  toolName?: string;
+  hookEvent?: string;
   // The identity the AGENT owns — Claude Code's session_id, Codex's thread id — which
   // exists whether or not the session is inside a multiplexer. `session` above is only
   // ever what the hook could resolve locally, and outside a pane that is a directory,
@@ -706,7 +872,9 @@ async function readEvents(since?: string | null): Promise<AgentEvent[]> {
     .map((line) => {
       try { return JSON.parse(line) as AgentEvent; } catch { return null; }
     })
-    .filter((event): event is AgentEvent => Boolean(event));
+    .filter((event): event is AgentEvent => Boolean(event))
+    // Events appended before 0.6 were stored unredacted; clean them on the way out.
+    .map((event) => ({ ...event, title: redact(event.title).text, body: event.body ? redact(event.body).text : event.body }));
   const filtered = since ? events.filter((event) => event.createdISO > since) : events;
   return filtered.slice(-100);
 }
@@ -716,7 +884,7 @@ async function readEvents(since?: string | null): Promise<AgentEvent[]> {
 // row from it, so both clients read one truth over the endpoint they already poll.
 // Warmed once at boot from the tail of the JSONL so a daemon restart does not blank
 // every row to "idle".
-type LastSessionEvent = { level?: string; title: string; iso: string; atMs: number };
+type LastSessionEvent = { level?: string; title: string; iso: string; atMs: number; sessionId?: string };
 const lastEventBySession = new Map<string, LastSessionEvent>();
 // Sessions whose current wait was announced with a Live Activity push — the set that
 // still owes the Lock Screen an "end" once the wait clears.
@@ -736,13 +904,139 @@ function noteSessionEvent(event: AgentEvent) {
   if (prev && prev.atMs > atMs) return;
   // Re-insert so the Map's insertion order tracks recency; the oldest row leaves.
   lastEventBySession.delete(event.session);
-  lastEventBySession.set(event.session, { level: event.level, title: event.title, iso: event.createdISO, atMs });
+  lastEventBySession.set(event.session, { level: event.level, title: event.title, iso: event.createdISO, atMs, sessionId: event.sessionId ?? prev?.sessionId });
   while (lastEventBySession.size > MAX_TRACKED_SESSIONS) {
     const oldest = lastEventBySession.keys().next().value;
     if (oldest === undefined) break;
     lastEventBySession.delete(oldest);
     laActiveSessions.delete(oldest);
   }
+}
+
+/// The transcript file the last hook event named for each session — the chat route's first
+/// choice, because it is the agent saying which conversation this pane is.
+const transcriptBySession = new Map<string, string>();
+
+/// What the chat route needs from the mux: the pane's cwd and what runs in it.
+/// herdr panes are where this machine's long-lived agents actually run; their rows already
+/// carry the pane's cwd and agent type (herdr.ts), so the chat route reads those instead of
+/// asking a mux that does not know them. cmux sessions expose neither and fall back to output.
+async function herdrRow(name: string): Promise<any | undefined> {
+  try { return (await listAgents()).find((s: any) => s?.name === name); } catch { return undefined; }
+}
+async function paneCwd(name: string): Promise<string | null> {
+  if (isCmuxAgent(name)) return null;
+  if (isHerdrAgent(name)) {
+    const cwd = (await herdrRow(name))?.cwd;
+    return typeof cwd === "string" && cwd.startsWith("/") ? cwd : null;
+  }
+  const out = (await sh(`${MUX} display -p -t ${shq(name)} '#{pane_current_path}' 2>/dev/null`)).trim();
+  return out.startsWith("/") ? out : null;
+}
+async function paneAgentType(name: string): Promise<string | undefined> {
+  if (isCmuxAgent(name)) return undefined;
+  if (isHerdrAgent(name)) {
+    const t = (await herdrRow(name))?.agentType;
+    return typeof t === "string" ? t.toLowerCase() : undefined;
+  }
+  const panes = await paneAgents(name);
+  const hit = panes?.map((p) => p.agent).find((a) => a === "claude" || a === "codex" || a === "cursor-agent");
+  return hit === "cursor-agent" ? "cursor" : hit;
+}
+
+/// The CLI agents this daemon recognises in a process tree, by the basename of the
+/// command's first word. Order matters only for the label; one process, one agent.
+// AGENT_CLIS imported from doctor.ts
+
+/// Which agent runs under a pane, walking the pane process and its descendants.
+/// The pane's own command name is not enough: Claude Code's shows as its version
+/// number ("2.1.260"), cursor-agent's as "node" — both read as "shell" by name alone,
+/// which is why the phone badged live agents idle.
+function agentFromTree(root: number, table: Map<number, { ppid: number; cmd: string }>): string | undefined {
+  const children = new Map<number, number[]>();
+  for (const [pid, p] of table) children.set(p.ppid, [...(children.get(p.ppid) ?? []), pid]);
+  const stack = [root];
+  const seen = new Set<number>();
+  while (stack.length) {
+    const pid = stack.shift()!;
+    if (seen.has(pid)) continue;
+    seen.add(pid);
+    const first = (table.get(pid)?.cmd ?? "").trim().split(/\s+/)[0] ?? "";
+    const base = first.split("/").pop() ?? "";
+    if (AGENT_CLIS.includes(base as any)) return base;
+    for (const c of children.get(pid) ?? []) stack.push(c);
+  }
+  return undefined;
+}
+
+async function cmdTable(): Promise<Map<number, { ppid: number; cmd: string }>> {
+  const out = await sh(`ps -A -o pid=,ppid=,command= 2>/dev/null`);
+  const t = new Map<number, { ppid: number; cmd: string }>();
+  for (const line of out.split("\n")) {
+    const m = line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/);
+    if (m) t.set(num(m[1]), { ppid: num(m[2]), cmd: m[3] });
+  }
+  return t;
+}
+
+/// Every pane of a mux session with the agent found in it (see handoff.ts PaneInfo).
+/// null for sessions the daemon cannot enumerate this way (herdr, cmux).
+async function paneAgents(name: string): Promise<{ id: string; active: boolean; agent?: string }[] | null> {
+  if (isCmuxAgent(name) || isHerdrAgent(name)) return null;
+  const out = await sh(`${MUX} list-panes -s -t ${shq(name)} -F '#{pane_id}|#{pane_pid}|#{pane_active}|#{pane_current_command}' 2>/dev/null`);
+  const rows = out.split("\n").filter(Boolean).map((l) => l.split("|"));
+  if (!rows.length) return null;
+  const table = await cmdTable();
+  return rows.map((r) => {
+    const byName = mapAgent(r[3] ?? "");
+    const agent = agentFromTree(num(r[1]), table) ?? (byName === "Claude" ? "claude" : byName === "Codex" ? "codex" : byName === "Cursor" ? "cursor-agent" : undefined);
+    return { id: r[0], active: r[2] === "1", agent };
+  });
+}
+
+/// Replace a pane's process with `cmd` in `cwd`. `-k` makes the multiplexer kill what
+/// runs there first — the one interrupt no agent can swallow. Whatever the old pane's
+/// process tree left behind (a wrapper's child that missed the hangup) is ended too,
+/// so a handed-off agent never keeps working blind in the background.
+async function respawnPane(pane: string, cwd: string, cmd: string): Promise<{ ok: boolean; error?: string }> {
+  const before = await cmdTable();
+  const panePid = num((await sh(`${MUX} display -p -t ${shq(pane)} '#{pane_pid}' 2>/dev/null`)).trim());
+  const old = panePid > 0 ? subtreePids(panePid, before) : [];
+  const r = await shChecked(`${MUX} respawn-pane -k -t ${shq(pane)} -c ${shq(cwd)} ${shq(cmd)}`).catch((e) => ({ code: 1, out: "", err: String(e) }));
+  if (r.code !== 0) return { ok: false, error: `respawn-pane failed: ${r.err.trim().split("\n").pop() || r.code}` };
+  if (old.length) {
+    await new Promise((res) => setTimeout(res, 700));
+    const alive = (pids: number[]) => pids.filter((p) => { try { process.kill(p, 0); return true; } catch { return false; } });
+    for (const p of alive(old)) { try { process.kill(p, "SIGTERM"); } catch { /* gone */ } }
+    await new Promise((res) => setTimeout(res, 1500));
+    for (const p of alive(old)) { try { process.kill(p, "SIGKILL"); } catch { /* gone */ } }
+  }
+  return { ok: true };
+}
+
+/// A pid and every descendant, from one ps snapshot.
+function subtreePids(root: number, table: Map<number, { ppid: number }>): number[] {
+  const children = new Map<number, number[]>();
+  for (const [pid, p] of table) children.set(p.ppid, [...(children.get(p.ppid) ?? []), pid]);
+  const out: number[] = [];
+  const stack = [root];
+  while (stack.length) {
+    const pid = stack.pop()!;
+    if (out.includes(pid)) continue;
+    out.push(pid);
+    for (const c of children.get(pid) ?? []) stack.push(c);
+  }
+  return out;
+}
+async function agentChat(name: string, since: string | null, limit: number | null) {
+  const structured = await chatFor(name, since, limit, {
+    transcriptHint: (s) => transcriptBySession.get(s) ?? resumedTranscript(s),
+    cwdOf: paneCwd,
+    agentTypeOf: paneAgentType,
+  }).catch(() => null);
+  if (structured) return structured;
+  const raw = await agentOutputRaw(name, 200, undefined, true, true);
+  return raw ? outputPage(name, raw.lines) : null;
 }
 
 const ERROR_LEVELS = new Set(["error", "failed", "failure"]);
@@ -753,7 +1047,7 @@ const WAITING_LEVELS = new Set(["warning", "needs-input", "needs_input", "needsi
 /// question nobody answered all morning is stale, not actionable); "working" means
 /// someone is attached or an event landed in the last five minutes; everything
 /// else — including a finished turn once its five minutes lapse — is "idle".
-function sessionStatusFields(name: string, attached: boolean, nowMs: number): { status: "working" | "waiting" | "error" | "idle"; lastEventLevel?: string; lastEventISO?: string } {
+function sessionStatusFields(name: string, attached: boolean, nowMs: number): { status: "working" | "waiting" | "error" | "idle"; lastEventLevel?: string; lastEventISO?: string; sessionId?: string } {
   const last = lastEventBySession.get(name);
   const ageMin = last ? (nowMs - last.atMs) / 60000 : Infinity;
   const level = String(last?.level ?? "").toLowerCase();
@@ -762,7 +1056,11 @@ function sessionStatusFields(name: string, attached: boolean, nowMs: number): { 
   else if (last && ageMin < 60 && (WAITING_LEVELS.has(level) || /needs[ _-](attention|input)/i.test(last.title))) status = "waiting";
   else if (attached || (last && ageMin < 5)) status = "working";
   else status = "idle";
-  return { status, lastEventLevel: last?.level, lastEventISO: last?.iso };
+  // sessionId: the agent's own conversation id from its last hook event. The phone matches
+  // a needs-attention event to a row by this id FIRST (Shared/Models.swift matchingAgent) and
+  // never falls back to the name when the event carries one — so a row without it could not
+  // own any Claude Code event, and the Monitor tab never showed an Approve for one.
+  return { status, lastEventLevel: last?.level, lastEventISO: last?.iso, ...(last?.sessionId ? { sessionId: last.sessionId } : {}) };
 }
 
 /// The Live Activity card's changing half. Keys mirror ContentState in
@@ -780,26 +1078,35 @@ function laContentState(event: AgentEvent, stateRaw?: string): Record<string, un
 
 async function addEvent(input: any): Promise<AgentEvent> {
   const now = new Date().toISOString();
+  // Redaction happens here, before the disk append, the APNs alert and the Live
+  // Activity below — the one place every producer (mesh-hook, mesh-event, a direct
+  // POST) funnels through. A secret an agent printed never leaves this function intact.
+  const title = await redactAndRecord(String(input.title ?? "Agent event"), "event");
+  const body = input.body ? await redactAndRecord(String(input.body), "event") : undefined;
   const event: AgentEvent = {
     id: sanitize(input.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
     host: os.hostname(),
     source: input.source ? String(input.source) : undefined,
     session: input.session ? String(input.session) : undefined,
     level: input.level ? String(input.level) : undefined,
-    title: String(input.title ?? "Agent event").slice(0, 120),
-    body: input.body ? String(input.body).slice(0, 500) : undefined,
+    title: title.slice(0, 120),
+    body: body ? body.slice(0, 500) : undefined,
     createdISO: input.createdISO ? String(input.createdISO) : now,
     replyable: typeof input.replyable === "boolean" ? input.replyable : undefined,
     pane: input.pane ? String(input.pane) : undefined,
     sessionId: input.sessionId ? String(input.sessionId).slice(0, 200) : undefined,
     cwd: input.cwd ? String(input.cwd).slice(0, 500) : undefined,
+    transcriptPath: input.transcriptPath ? String(input.transcriptPath).slice(0, 500) : undefined,
+    toolName: input.toolName ? String(input.toolName).slice(0, 80) : undefined,
+    hookEvent: input.hookEvent ? String(input.hookEvent).slice(0, 80) : undefined,
   };
   // The directory the events actually live in — not ~/.mesh unconditionally, which
   // both touched the real home under a redirected MESHD_EVENTS_PATH and failed to
   // create the directory the append below needs.
   await mkdir(dirname(EVENTS_PATH), { recursive: true, mode: 0o700 });
-  await appendFile(EVENTS_PATH, `${JSON.stringify(event)}\n`);
+  await appendFile(EVENTS_PATH, `${JSON.stringify(event)}\n`, { mode: 0o600 });
   noteSessionEvent(event);
+  if (event.session && event.transcriptPath) transcriptBySession.set(event.session, event.transcriptPath);
   // The flood fix: every event is stored for the pollers above, but only the ones a
   // person can act on — warnings, errors, needs-input — become an APNs buzz. It used
   // to push unconditionally, which made every turn end of every session a full
@@ -811,15 +1118,28 @@ async function addEvent(input: any): Promise<AgentEvent> {
     pushAlert(event.title, event.body, { level: event.level, session: event.session, host: event.host, replyable: event.replyable }).catch(() => {});
     if (event.session) {
       const session = event.session;
-      const contentState = laContentState(event);
       const alert = { title: event.title, body: event.body };
       const attributes = { host: (event.host ?? os.hostname()).replace(/\.local$/i, ""), session };
       laActiveSessions.add(session);
-      // Start conjures the card on a pocketed phone; the update refreshes a card
-      // already live for this session. iOS treats a start for a live identity as an
-      // update, so sending both is convergence, not duplication.
-      pushLiveActivity("start", { attributes, contentState, alert }).catch(() => {});
-      pushLiveActivity("update", { session, contentState, alert }).catch(() => {});
+      // A push-started card used to carry 3 of the 9 ContentState fields, so it
+      // rendered visibly thinner than a card the app started itself. cpu/mem for the
+      // session are knowable here; the lookup rides the same fire-and-forget lane as
+      // the push, so a slow enumeration can never block event ingestion. Fleet counts
+      // stay out — this daemon only knows itself, and a wrong "1/1 online" is worse
+      // than the card hiding that line.
+      (async () => {
+        const contentState = laContentState(event);
+        try {
+          const row = (await listAgents()).find((s: any) => s?.name === session);
+          if (typeof row?.cpuPct === "number") contentState.cpuPct = row.cpuPct;
+          if (typeof row?.memMB === "number") contentState.memLabel = `${Math.round(row.memMB)} MB`;
+        } catch { /* the thin card still beats no card */ }
+        // Start conjures the card on a pocketed phone; the update refreshes a card
+        // already live for this session. iOS treats a start for a live identity as an
+        // update, so sending both is convergence, not duplication.
+        pushLiveActivity("start", { attributes, contentState, alert }).catch(() => {});
+        pushLiveActivity("update", { session, contentState, alert }).catch(() => {});
+      })().catch(() => {});
     }
   } else if (event.session && laActiveSessions.has(event.session)) {
     // The wait cleared (a calm event followed the alerting one): dismiss the card
@@ -864,22 +1184,30 @@ function json(data: any, status = 200) {
 // anything, so demanding a bearer token from 127.0.0.1 protects nothing while
 // blocking this Mac's own browser from /desktop. Decided from the socket peer
 // address via server.requestIP — never from a header, which a remote client controls.
-function isLoopback(server: any, req: Request): boolean {
-  const address = server?.requestIP?.(req)?.address ?? "";
-  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
-}
+// A reverse proxy on this box (Tailscale Serve for wireless app installs, Caddy, …)
+// also connects from 127.0.0.1 — on behalf of someone who is NOT on this box. Every such
+// proxy stamps X-Forwarded-For, so its presence withdraws the exemption. A header can
+// only ever take the exemption away here, never grant it, so a client forging one gains
+// nothing.
 // A request a browser marks cross-site cannot be one of our clients: URLSession and
 // the mesh CLI send neither header, and the /desktop page fetches same-origin. So a
 // present Origin, or a cross-site Sec-Fetch-Site, is a page attacking the loopback
 // interface — rejected before the exemption or the token can wave it through.
 function isBrowserCrossSite(req: Request): boolean {
   const site = req.headers.get("sec-fetch-site");
-  if (site && site !== "same-origin" && site !== "none") return true;
-  return req.headers.get("origin") !== null;
+  if (site) return site !== "same-origin" && site !== "none";
+  const origin = req.headers.get("origin");
+  if (origin === null) return false;
+  // Browsers stamp Origin on every POST, same-origin included, so "any Origin" blocked
+  // the console page this daemon served itself: /desktop rendered frames and every click
+  // it posted to /input came back 401 — measured 2026-09-22 on the Mac's own browser and
+  // the phone's Web console. A page can only carry THIS origin if meshd served it.
+  const host = req.headers.get("host");
+  return !host || origin.toLowerCase() !== `${new URL(req.url).protocol}//${host}`.toLowerCase();
 }
 function authed(req: Request, server?: any): boolean {
   if (isBrowserCrossSite(req)) return false;
-  if (isLoopback(server, req)) return true;
+  if (loopbackExempt(server, req)) return true;
   return isAuthorized(TOKEN, req.headers.get("authorization") ?? "");
 }
 
@@ -1012,12 +1340,51 @@ Bun.serve({
       const net = primaryIPv4();
       return json({ ok: true, host: os.hostname(), platform: process.platform, arch: process.arch, uptimeSec: Math.round(os.uptime()), meshdVersion: VERSION, capabilities: CAPABILITIES, mac: primaryMac(), ipv4: net?.address ?? null, netmask: net?.netmask ?? null });
     }
-    // Pairing is the one route that must answer without a token — it is how the
-    // phone gets one. See pair.ts for why that is safe.
+    // A web app an agent built, or a native app's wireless-install folder: token-free by
+    // necessity (Safari, Add to Home Screen, iOS's installer), gated by the unguessable
+    // key in the path instead. See apps.ts.
+    if (path.startsWith("/a/") && req.method === "GET") {
+      const served = await serveApp(path, req);
+      if (served) return served;
+    }
+    if (isBrowserCrossSite(req)) return json({ error: "unauthorized" }, 401);
+    // Claiming is token-free because the short-lived code is the credential. Minting goes
+    // through authed(): the bearer, or the loopback exemption while MESHD_TRUST_LOOPBACK is
+    // on (the default — check-token-rotate.sh and `mesh pair` on a fresh box rely on it).
+    // With MESHD_TRUST_LOOPBACK=0 a local process can no longer mint a code without the
+    // token (SEC-03). Flipping the default is a decision + a test edit for a human.
+    if (path === "/pair/new" && !authed(req, server)) return json({ error: "unauthorized" }, 401);
     const paired = await handlePair(req, url, server, { port: PORT, token: TOKEN });
     if (paired) return paired;
-    if (!authed(req, server)) return json({ error: "unauthorized" }, 401);
+    if (!authed(req, server)) {
+      // The always-on machine's mirror token: session list, index and redacted chunks only.
+      if (await mirrorReadAllowed(req, url)) return (await handleSessions(req, url, server)) ?? json({ error: "not found" }, 404);
+      return json({ error: "unauthorized" }, 401);
+    }
     try {
+      // A terminal emulator's byte stream: the session attached in a pty over a WebSocket.
+      const pty = await handlePtyUpgrade(req, url, server, { mux: MUX, shq });
+      if (pty !== null) return pty;
+      // Lossless version history of this machine's agent transcripts.
+      const sessions = await handleSessions(req, url, server);
+      if (sessions) return sessions;
+      // Secrets seen in agent/terminal text — fingerprints and counts, never values.
+      const exposures = await handleExposures(req, url);
+      if (exposures) return exposures;
+      // Apps an agent built for this owner — list, and install a native build.
+      const apps = await handleApps(req, url, { host: primaryIPv4()?.address ?? "127.0.0.1", port: PORT, meshBin: MESH_BIN });
+      if (apps) return apps;
+      // Hand a task to another agent, or list what can be resumed (see handoff.ts).
+      const handed = await handleHandoff(req, url, {
+        cwdOf: paneCwd,
+        transcriptHint: (s) => transcriptBySession.get(s) ?? resumedTranscript(s),
+        chat: (s) => agentChat(s, null, 60),
+        send: (s, text, key, pane) => agentSend(s, text, key, pane),
+        which: (bin) => Bun.which(bin),
+        panes: paneAgents,
+        respawn: respawnPane,
+      });
+      if (handed) return handed;
       // Setup truth: what this daemon can actually do right now — see doctor.ts.
       // The token is judged here and only a verdict travels on, so a doctor report can
       // never leak the thing it is reporting on.
@@ -1025,11 +1392,14 @@ Bun.serve({
         tokenSet: Boolean(TOKEN),
         tokenWeak: TOKEN ? (tokenWeakness(TOKEN) ?? undefined) : undefined,
         bind: HOST, port: PORT, version: VERSION, mux: MUX,
+        exposuresOpen: (await listExposures().catch(() => ({ open: 0 }))).open,
       });
       if (doc) return doc;
       // Mac remote control (cursor/keys/scroll/clipboard/volume) — see input.ts.
       const remote = await handleInput(req, url);
       if (remote) return remote;
+      const brain = await handleBrain(req, url);
+      if (brain) return brain;
       const files = await handleFiles(req, url);
       if (files) return files;
       // APNs device registration + status + test — see push.ts.
@@ -1052,7 +1422,21 @@ Bun.serve({
       if (path === "/agents") return json(await listAgents());
       if (path === "/usage") return json(await getUsage());
       if (path === "/events" && req.method === "GET") return json(await readEvents(url.searchParams.get("since")));
-      if (path === "/events" && req.method === "POST") return json(await addEvent((await req.json().catch(() => ({}))) as any), 201);
+      if (path === "/events" && req.method === "POST") {
+        const input = (await req.json().catch(() => ({}))) as any;
+        // claude-mem's observer is a background Claude that runs a turn after every turn of a
+        // real session; its Stop hooks doubled the Monitor list with "Claude stopped" rows nobody
+        // asked for. Nothing a person can act on ever comes from that cwd.
+        if (typeof input.cwd === "string" && input.cwd.includes("/.claude-mem/")) return json({ ok: true, ignored: "observer" }, 202);
+        // A turn just ended: snapshot that session now, before the next turn can compact it.
+        // Fire-and-forget; the ten-minute sweep catches anything this misses.
+        if (typeof input.cwd === "string" && input.cwd) {
+          Promise.all([findClaudeTranscript(input.cwd), findCodexRollout(input.cwd)])
+            .then((paths) => Promise.all(paths.filter(Boolean).map((p) => snapshotTranscript(p!))))
+            .catch(() => {});
+        }
+        return json(await addEvent(input), 201);
+      }
       if (path === "/kb" && (req.method === "PUT" || req.method === "POST")) {
         try { return json(kbPut((await req.json().catch(() => ({}))) as any, os.hostname()), 201); }
         catch (e: any) { return json({ error: String(e?.message ?? e) }, 400); }
@@ -1081,6 +1465,16 @@ Bun.serve({
         const res = await agentNewPane(decodeURIComponent(panesM[1]), body.dir, body.cwd);
         return json(res, res.ok ? 201 : 404);
       }
+      // The conversation, structured, from the agent's transcript (see chat.ts). 404 only
+      // when the session itself is gone; a session with no transcript answers with its
+      // capture-pane lines as one `system` message, so a client renders one shape.
+      const chatM = path.match(/^\/agents\/([^/]+)\/chat$/);
+      if (chatM && req.method === "GET") {
+        const name = decodeURIComponent(chatM[1]);
+        const limit = url.searchParams.get("limit");
+        const pageOut = await agentChat(name, url.searchParams.get("since"), limit ? Number(limit) : null);
+        return pageOut ? json(pageOut) : json({ error: "no such session" }, 404);
+      }
       const outM = path.match(/^\/agents\/([^/]+)\/output$/);
       if (outM && req.method === "GET") {
         const res = await agentOutput(
@@ -1089,6 +1483,7 @@ Bun.serve({
           url.searchParams.get("pane") ?? undefined,
           url.searchParams.get("join") === "1",
           url.searchParams.get("plain") === "1",
+          url.searchParams.get("ansi") === "1",
         );
         return res ? json(res) : json({ error: "no such session" }, 404);
       }
@@ -1123,7 +1518,14 @@ Bun.serve({
         const rows = Number.isFinite(rowsN) && rowsN > 0 ? Math.min(200, Math.max(5, rowsN)) : null;
         const size = `${cols ? `-x ${cols} ` : ""}${rows ? `-y ${rows} ` : ""}`;
         const base = `new-session -d -s ${shq(name)} ${b.cwd ? `-c ${shq(b.cwd)} ` : ""}`;
-        const tail = b.cmd ? shq(b.cmd) : "";
+        // fx's default permission mode is `auto`: it reviews its own tool calls and never
+        // opens a human prompt, so a phone would have nothing to approve. Started from
+        // here it asks (FX_PERMISSION_MODE=ask, fx.sh/docs/configure-fx/permissions) unless
+        // the caller set the mode themselves.
+        const cmdText = typeof b.cmd === "string" && /^\s*fx(\s|$)/.test(b.cmd) && !/FX_PERMISSION_MODE=/.test(b.cmd)
+          ? `env FX_PERMISSION_MODE=ask ${b.cmd}`
+          : b.cmd;
+        const tail = cmdText ? shq(cmdText) : "";
         if (size) {
           // rmux's -x/-y support is unverified: try sized, and if the session never
           // appeared, create it plain and ask resize-window afterwards — whose own
@@ -1137,7 +1539,18 @@ Bun.serve({
           await sh(`${MUX} ${base}${tail}`);
         }
         if (b.initialText) {
-          await new Promise((resolve) => setTimeout(resolve, 900));
+          // Poll the fresh pane for a drawn prompt instead of tolling everyone 900ms:
+          // the flat sleep was 943ms of the measured 989ms /agents/new round trip
+          // (issue #117). Ready = capture-pane shows any non-blank byte, which a shell
+          // prompt produces within ~100ms. The old sleep survives only as the ceiling —
+          // a custom cmd that draws nothing still gets its text at 1200ms, bounded,
+          // instead of a keystroke typed into a pane with no reader.
+          const deadline = Date.now() + 1200;
+          while (Date.now() < deadline) {
+            const screen = await sh(`${MUX} capture-pane -p -t ${shq(name)} 2>/dev/null`);
+            if (screen.trim().length > 0) break;
+            await new Promise((r) => setTimeout(r, 50));
+          }
           await agentSend(name, String(b.initialText));
         }
         return json({ ok: true, name });
@@ -1147,9 +1560,18 @@ Bun.serve({
     }
     return json({ error: "not found" }, 404);
   },
+  websocket: ptyWebSocket({ mux: MUX, shq }),
 });
+// Exact-match redaction targets: this daemon's token, every peer token in hosts.json,
+// and the process's secret-shaped env. Values stay inside redact.ts; only hints leave.
+addKnownSecrets([["MESHD_TOKEN", TOKEN], ...envSecrets()]);
+peerHosts().then((peers) => addKnownSecrets([...peers.values()].flatMap((h) => (h.token ? [["hosts.json", h.token] as [string, string]] : [])))).catch(() => {});
+// The events file predates the mode on appendFile above; pin it once at boot.
+chmod(EVENTS_PATH, 0o600).catch(() => {});
 console.log(`meshd ${VERSION} on http://${HOST}:${PORT}  (host=${os.hostname()} platform=${process.platform})`);
 initTelemetry(VERSION);
+startSessionSweep();
+startSessionMirror();
 // Warm the per-session status index from the stored tail, and settle the capture-pane
 // -J question once, before the first client asks. Both are best-effort: an empty
 // index just means rows start as idle/working until events arrive.

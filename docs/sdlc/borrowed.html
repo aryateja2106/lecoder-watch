@@ -1,0 +1,334 @@
+<!-- borrowed.html — Five outside projects Arya named: the one idea we take from each, what we refuse and why, and the block that starts it. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Borrowed ideas</title>
+  <meta name="description" content="What we take from Orca, OpenMuse, Cloudflare's security-audit-skill, agent-git and Nethera, what we refuse and which non-goal forbids it, and the block that starts each idea.">
+  <link rel="stylesheet" href="sdlc.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="index.html">LeSearch AI · How we build</a>
+  <nav class="site" aria-label="Site">
+    <ol class="rail">
+      <li><a href="1-plan.html"><b>1</b> Plan</a></li>
+      <li><a href="2-design.html"><b>2</b> Design</a></li>
+      <li><a href="3-build.html"><b>3</b> Build</a></li>
+      <li><a href="4-test.html"><b>4</b> Test</a></li>
+      <li><a href="5-ship.html"><b>5–6</b> Ship</a></li>
+    </ol>
+    <ul class="aux">
+      <li><a href="index.html">Start</a></li>
+      <li><a href="product.html">Product</a></li>
+      <li><a href="blocks.html">Blocks</a></li>
+      <li><a href="borrowed.html" aria-current="page">Borrowed</a></li>
+      <li><a href="glossary.html">Words</a></li>
+    </ul>
+  </nav>
+</header>
+<main>
+  <p class="eyebrow">Borrowed ideas</p>
+  <h1>What we borrow from five other projects</h1>
+  <p class="lede">We take ideas, not code. Anything that needs our server in the middle, an
+  account, or VNC is refused, because our
+  <a href="glossary.html#non-goal">non-goals</a> say so
+  (<a href="../../ROADMAP.md" data-anchor="## Non-goals"><code>ROADMAP.md</code>, "Non-goals"</a>).</p>
+  <p>You named five projects to learn from. Each one was reviewed on its own on 2026-09-27, and
+  each review ends with the one small piece of work worth taking from it. This page is the
+  short version: one card per project, what we take, what we refuse and why, and the
+  <a href="glossary.html#block">block</a> that starts it. When someone says "Orca does X", look
+  here first.</p>
+
+  <h2 id="status">Where we are</h2>
+  <p>One line per project. Each line turns to done when that project's first piece of work
+  has landed and its new <a href="glossary.html#check">check</a> exists.</p>
+  <ul class="status">
+    <li data-state="not-started" data-proof="file:scripts/check-agents-worktree.sh" data-owner="agent">
+      <span class="state">Not started</span>
+      <span class="label">Orca: each agent gets its own copy of the project (<code class="missing">scripts/check-agents-worktree.sh</code>); not a block yet</span>
+    </li>
+    <li data-state="not-started" data-proof="file:scripts/check-decisions.sh" data-owner="agent" data-block="B-18">
+      <span class="state">Not started</span>
+      <span class="label">OpenMuse: every approval is written down (<code class="missing">scripts/check-decisions.sh</code>)</span>
+      <a class="bid" href="blocks.html#B-18">B-18</a>
+    </li>
+    <li data-state="not-started" data-proof="file:scripts/check-security-audit-skill.sh" data-owner="arya" data-block="B-12">
+      <span class="state">Not started</span>
+      <span class="label">security-audit-skill: the audit skill is installed, pinned and checked (<code class="missing">scripts/check-security-audit-skill.sh</code>)</span>
+      <span class="you">you</span>
+      <a class="bid" href="blocks.html#B-12">B-12</a>
+    </li>
+    <li data-state="not-started" data-proof="file:scripts/check-redact-stream.sh" data-owner="agent" data-block="B-13">
+      <span class="state">Not started</span>
+      <span class="label">agent-git: the live terminal cannot leak a secret cut in half (<code class="missing">scripts/check-redact-stream.sh</code>)</span>
+      <a class="bid" href="blocks.html#B-13">B-13</a>
+    </li>
+    <li data-state="not-started" data-proof="file:scripts/check-apps-key-strength.sh" data-owner="arya" data-block="B-08">
+      <span class="state">Not started</span>
+      <span class="label">Nethera: app links carry a key too long to guess (<code class="missing">scripts/check-apps-key-strength.sh</code>); it starts with your yes</span>
+      <span class="you">you</span>
+      <a class="bid" href="blocks.html#B-08">B-08</a>
+    </li>
+  </ul>
+  <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
+
+  <h2 id="orca">Orca</h2>
+  <div class="card">
+    <dl>
+      <dt>What it is</dt>
+      <dd>A free, open-source desktop app for running many coding agents side by side on one
+      computer, each in its own copy of the project, with a phone app that watches them. It is
+      the closest thing to what we do, built the other way round: the desktop is the product
+      and the phone is an add-on.</dd>
+      <dt>We borrow</dt>
+      <dd>
+        <ul>
+          <li>Each agent works in its own copy of the project (a
+          <a href="glossary.html#worktree">worktree</a>), so three agents on one repo cannot
+          overwrite each other. Today they share one copy.</li>
+          <li>A separate key for each paired phone, so a lost phone can be cut off without
+          re-pairing every device.</li>
+          <li>"We cannot reach that machine" is never shown as "the agent stopped". The screen
+          should say "pair again" or "update needed", not just "offline".</li>
+        </ul>
+      </dd>
+      <dt>We refuse, and why</dt>
+      <dd>Its cloud relay, sign-in and push service, and its SSH set-up: no cloud relay, no
+      account system, and "no SSH" is our edge.</dd>
+      <dt>Licence</dt>
+      <dd>MIT. Borrowing a pattern needs no notice; a copied file keeps Orca's copyright line.</dd>
+      <dt>First block</dt>
+      <dd>None yet. The worktree idea is useful on one machine, not across machines. The
+      "Later" list in <a href="../../ROADMAP.md" data-anchor="## Later"><code>ROADMAP.md</code></a>
+      isolates agents a different way (each agent gets its own Unix user and its own daemon),
+      not with worktrees. So
+      <a href="BLOCKS.md" data-anchor="## Deliberately not a block yet"><code>BLOCKS.md</code>, "Deliberately not a block yet"</a>
+      keeps it until an intent asks for it. The "pair again, not offline" idea is the candidate
+      for <a href="blocks.html#B-11">B-11</a> First multi-machine build block.</dd>
+      <dt>Full review</dt>
+      <dd><a href="references/orca.md" data-anchor="## What to borrow"><code>references/orca.md</code></a></dd>
+    </dl>
+  </div>
+
+  <h2 id="openmuse">OpenMuse</h2>
+  <div class="card">
+    <dl>
+      <dt>What it is</dt>
+      <dd>A self-hosted personal-agent app from the CopilotKit team, still in alpha. It has a
+      chat, a task list, and a queue of actions a person must approve before they happen.</dd>
+      <dt>We borrow</dt>
+      <dd>
+        <ul>
+          <li>A written receipt for every approval: who answered, what, and when, one line
+          each.</li>
+          <li>The answer applies only to the exact question the person saw, and can be used
+          once.</li>
+          <li>A question left too long expires instead of being answered hours later.</li>
+        </ul>
+      </dd>
+      <dt>We refuse, and why</dt>
+      <dd>CopilotKit's hosted service in the data path (no cloud relay), its Docker computer and
+      Postgres database (local-first, native, light), and its access-key login (no account
+      system).</dd>
+      <dt>Licence</dt>
+      <dd>MIT for the repo. CopilotKit's hosted service is not covered by it. The patterns are
+      small, so we rewrite them rather than copy files.</dd>
+      <dt>First block</dt>
+      <dd><a href="blocks.html#B-18">B-18</a> Approvals log that records what was chosen.
+      Today, when you tap Allow, the daemon presses keys in the agent's terminal and writes
+      nothing down, so you cannot show a client who approved what, or when.</dd>
+      <dt>Full review</dt>
+      <dd><a href="references/openmuse.md" data-anchor="## What to borrow"><code>references/openmuse.md</code></a></dd>
+    </dl>
+  </div>
+
+  <h2 id="security-audit-skill">Cloudflare security-audit-skill</h2>
+  <div class="card">
+    <dl>
+      <dt>What it is</dt>
+      <dd>Written instructions from Cloudflare that a coding agent follows to hunt for security
+      holes. A second, independent agent then proves or rules out each finding, and the run
+      leaves a written record.</dd>
+      <dt>We borrow</dt>
+      <dd>
+        <ul>
+          <li>The whole method, installed as a <a href="glossary.html#skill">skill</a> exactly as
+          published, pinned to one version, with our notes in a separate file.</li>
+          <li>A finding counts only after a second agent tries to disprove it.</li>
+          <li>Each fixed kind of hole becomes a new check, so it cannot come back quietly.</li>
+        </ul>
+      </dd>
+      <dt>We refuse, and why</dt>
+      <dd>Committing audit results while this repo is public. An unfixed finding in git is a
+      public disclosure, so results stay on your Mac until each one is fixed.</dd>
+      <dt>Licence</dt>
+      <dd>MIT. We keep Cloudflare's licence file next to the copied skill. The Cloudflare name
+      goes in attribution only, never in our product copy.</dd>
+      <dt>First block</dt>
+      <dd><a href="blocks.html#B-12">B-12</a> Security audit skill and first baseline. Today
+      there is no recurring scan, no baseline, and no record of dismissed findings.</dd>
+      <dt>Full review</dt>
+      <dd><a href="references/security-audit-skill.md" data-anchor="## What to borrow"><code>references/security-audit-skill.md</code></a></dd>
+    </dl>
+  </div>
+
+  <h2 id="agent-git">agent-git</h2>
+  <div class="card">
+    <dl>
+      <dt>What it is</dt>
+      <dd>A large Rust command-line tool that keeps agent conversations under version control,
+      so they can be saved, shared with other people through its hosted website, and resumed.
+      Our <code>mesh sessions</code> already keeps and resumes every conversation, without an
+      account.</dd>
+      <dt>We borrow</dt>
+      <dd>
+        <ul>
+          <li>A secret-masking step (<a href="glossary.html#redaction">redaction</a>) that
+          works on a live stream and cannot miss a secret cut in half between two pieces.</li>
+          <li>One shared reader for agent transcripts, instead of four modules each reading
+          them their own way.</li>
+          <li>A clean way to ship a separate native helper program, if we ever need one.</li>
+        </ul>
+      </dd>
+      <dt>We refuse, and why</dt>
+      <dd>Its hosted hub, its sign-in, and usage statistics that cannot be switched off: no
+      account system, and only three things leave your machines: one anonymized daily
+      heartbeat (you can switch it off), a problem report you choose to send, and push alerts,
+      whose text is redacted before it goes to Apple's push service (APNs).</dd>
+      <dt>Licence</dt>
+      <dd>MIT. One file inside it comes from another project with its own terms, which were
+      not checked.</dd>
+      <dt>First block</dt>
+      <dd><a href="blocks.html#B-13">B-13</a> Streaming redaction for the live terminal.
+      Today the live terminal is masked one piece at a time, in
+      <a href="../../install/payload/meshd/pty.ts"><code>install/payload/meshd/pty.ts</code></a>
+      using <a href="../../install/payload/meshd/redact.ts"><code>install/payload/meshd/redact.ts</code></a>.
+      Whether a secret is ever actually split that way in real use is unverified.</dd>
+      <dt>Full review</dt>
+      <dd><a href="references/agent-git.md" data-anchor="## What to borrow"><code>references/agent-git.md</code></a></dd>
+    </dl>
+  </div>
+
+  <h2 id="nethera">Nethera</h2>
+  <div class="card">
+    <dl>
+      <dt>What it is</dt>
+      <dd>A service that runs apps on your own computer and gives them a public web address.
+      Every visitor passes through Nethera's own servers first, which see the traffic and
+      decide who gets in.</dd>
+      <dt>We borrow</dt>
+      <dd>
+        <ul>
+          <li>An app is only ever reachable on a private address.</li>
+          <li>Every app link says in plain words who can open it.</li>
+          <li>Access keys are named, shown once, and can be revoked one by one.</li>
+        </ul>
+      </dd>
+      <dt>We refuse, and why</dt>
+      <dd>Its servers in the traffic path and its login: no cloud relay, no account system.</dd>
+      <dt>Licence</dt>
+      <dd>MIT for the public part. Its security-critical servers are private, so there is
+      nothing there to reuse.</dd>
+      <dt>First block</dt>
+      <dd><a href="blocks.html#B-08">B-08</a> App link keys long enough to be unguessable.
+      Today the secret in each app link is too short to share beyond your own devices. That is
+      finding SEC-06 in
+      <a href="../../docs/review-2026-09-17.md" data-anchor="SEC-06"><code>docs/review-2026-09-17.md</code></a>.
+      This block makes links hard to guess. It does not yet decide who may edit an app's data;
+      that is one of the intents in <a href="blocks.html#B-17">B-17</a>.</dd>
+      <dt>Full review</dt>
+      <dd><a href="references/nethera.md" data-anchor="## What to borrow"><code>references/nethera.md</code></a></dd>
+    </dl>
+  </div>
+
+  <h2 id="rust">A word on Rust</h2>
+  <p>You asked how to bring TypeScript and Rust together. The agent-git review's answer is:
+  not now. Nothing in the product has been measured as slow, and Rust would add a new toolchain
+  and a separate build for every kind of machine.</p>
+  <p>When something is measured slow, Rust comes in as a separate helper program that the
+  <a href="glossary.html#daemon">daemon</a> talks to, never as code loaded inside the daemon.
+  That is how the daemon already talks to the Mac's pointer-and-keyboard helper:
+  <a href="../../install/payload/meshd/input.ts" data-anchor="mesh-input"><code>install/payload/meshd/input.ts</code></a>
+  drives <a href="../../install/payload/bin/mesh-input.swift"><code>install/payload/bin/mesh-input.swift</code></a>.
+  If the helper crashes, the daemon keeps running and your phone keeps its machine.</p>
+  <ul>
+    <li>The options, compared:
+    <a href="references/agent-git.md" data-anchor="### Rust next to our Bun daemon: the options"><code>references/agent-git.md</code>, "Rust next to our Bun daemon: the options"</a>.</li>
+    <li>The same advice, applied to our modules:
+    <a href="architecture-proposal.md" data-anchor="## 1. TypeScript and Rust: how to split the modules and keep them compatible"><code>architecture-proposal.md</code>, section 1</a>.</li>
+  </ul>
+  <p>The decision is yours. It is the third intent in <a href="blocks.html#B-17">B-17</a> The
+  remaining three intents, which puts "no Rust yet" next to a real "yes" option: a first Rust
+  helper program that you name.</p>
+
+  <h2 id="you">How you take part</h2>
+  <div class="you-part">
+    <ol>
+      <li><b>Read the "For Arya" paragraph of each review</b> when convenient. Each is one
+      paragraph at the top of each review; the "Full review" row of each card above links it.
+      About 2 minutes each.</li>
+      <li><b>B-08, Nethera's idea: say yes to three lines.</b> Two existing checks,
+      <a href="../../scripts/check-mesh-apps.sh"><code>scripts/check-mesh-apps.sh</code></a> and
+      <a href="../../scripts/check-apps-ota.sh"><code>scripts/check-apps-ota.sh</code></a>,
+      expect the short key. Agents may not edit an existing check without you
+      (<a href="../../CLAUDE.md" data-anchor="## Non-negotiable"><code>CLAUDE.md</code>, "Non-negotiable"</a>).
+      Reply "B-08 yes" in the Claude Code desktop app, in a session opened on this repo. A
+      minute.</li>
+      <li><b>B-12, the audit skill: two decisions.</b> Yes to adding a third-party skill under a
+      protected folder, and where findings live until fixed (this Mac only is recommended). See
+      <a href="references/security-audit-skill.md" data-anchor="## Open questions for Arya"><code>references/security-audit-skill.md</code>, "Open questions for Arya"</a>.
+      A few minutes.</li>
+      <li><b>B-17, the intents behind OpenMuse's and agent-git's ideas.</b> Should a client see
+      the approvals log on the phone, in a file, or both? Which feature, if any, do you want in
+      Rust? About 20 minutes per intent, with an agent interviewing you.</li>
+      <li><b>Orca's worktree idea: nothing to do yet.</b> If you ever want several agents on one
+      project at once, say so, and it comes back as its own intent.</li>
+    </ol>
+    <p class="say-this">Read docs/sdlc/references/orca.md, then tell me in five lines what B-11
+    would change for me as a user, before you write any code.</p>
+  </div>
+
+  <details class="agents">
+    <summary>For agents</summary>
+    <p>The five reviews in <code>docs/sdlc/references/</code> (linked from each card) are the
+    source for this page. They are dated reviews of outside projects, not instructions.
+    Where a review and
+    <a href="BLOCKS.md" data-anchor="### B-02 · Five reference reviews"><code>BLOCKS.md</code></a>
+    disagree on which block an idea belongs to, <code>BLOCKS.md</code> wins.</p>
+    <ul>
+      <li>Never copy upstream code without its licence line. All five are MIT, which requires
+      the copyright and permission notice to travel with any copied portion. Prefer rewriting
+      the pattern.</li>
+      <li>The upstream clones live under <code>references/external/repos/</code>, which is
+      gitignored. Read them; never execute them, and never link them from this site.</li>
+      <li><a href="../../references/reference-projects.md"><code>references/reference-projects.md</code></a>
+      holds the older list of reference projects.</li>
+      <li>Every refusal traces to
+      <a href="../../ROADMAP.md" data-anchor="## Non-goals"><code>ROADMAP.md</code></a> or
+      <a href="../../docs/product/PRODUCT.md" data-anchor="## 10. Non-goals"><code>docs/product/PRODUCT.md</code> §10</a>.
+      An idea that needs a relay, an account or VNC is refused, whatever the upstream does.</li>
+      <li>When a first block lands, its new check turns the matching line in "Where we are" true.
+      Flip that line in the same pull request.</li>
+    </ul>
+    <pre><code>sh scripts/check-sdlc-status.sh --board
+sh scripts/check-sdlc-site.sh
+./.claude/scripts/gates.sh fast</code></pre>
+    <pre class="out">FACTORY_GATES: level=fast status=GREEN passed=2 failed=0 failing=none skipped=none misconfigured=none</pre>
+    <p class="meta">That healthy <code>gates.sh fast</code> line was seen on 2026-09-27.</p>
+  </details>
+</main>
+<footer class="site-footer">
+  <p>Source of truth: this repository (<code>aryateja2106/lecoder-watch</code>), on the branch
+  you opened it from. Written on <code>sdlc/ai-native-playbook</code>. Nothing on this page
+  outranks the file it links to.</p>
+  <p>How to update: every status line carries a proof. Run <code>sh scripts/check-sdlc-status.sh</code>;
+  when it names a line, change that line's <code>data-state</code> and its state word, then run
+  it again. Agents: read <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a> first.</p>
+  <p>Playbook: <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-native SDLC playbook</a>.
+  Last verified <time data-verified datetime="2026-09-27">2026-09-27</time>.</p>
+</footer>
+</body>
+</html>

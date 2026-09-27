@@ -1,0 +1,128 @@
+diff --git a/src/edge0/engine/ling.py b/src/edge0/engine/ling.py
+index 936803c..006589f 100644
+--- a/src/edge0/engine/ling.py
++++ b/src/edge0/engine/ling.py
+@@ -343,7 +343,7 @@ class Ling8BEngine(Edge0Engine):
+             ).from_string(src)
+         return self._chat_tpl
+ 
+-    def encode_chat(self, messages, think=None) -> list:
++    def encode_chat(self, messages, think=None, tools=None) -> list:
+         """Tokenize chat messages with the deployment chat template.
+ 
+         ``think`` mirrors THINK_MODE: True renders "detailed thinking on"
+@@ -366,7 +366,7 @@ class Ling8BEngine(Edge0Engine):
+             messages=msgs,
+             add_generation_prompt=True,
+             enable_thinking=bool(think),
+-            tools=None,
++            tools=tools or None,
+         )
+         # transformers encode would prepend/append special tokens by
+         # default; the template text is already complete.
+diff --git a/src/edge0/server/app.py b/src/edge0/server/app.py
+index 9d94b1b..e2985ce 100644
+--- a/src/edge0/server/app.py
++++ b/src/edge0/server/app.py
+@@ -12,6 +12,7 @@ from __future__ import annotations
+ import json
+ import queue
+ import threading
++import re
+ import time
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ from urllib.parse import urlparse
+@@ -47,6 +48,30 @@ def _split_think(text: str, think: bool):
+     return "", text
+ 
+ 
++
++_TOOL_CALL = re.compile(r"<tool_call>\s*([^\s<]+)(.*?)</tool_call>", re.S)
++_TOOL_ARG = re.compile(r"<arg_key>(.*?)</arg_key>\s*<arg_value>(.*?)</arg_value>", re.S)
++
++
++def _extract_tool_calls(content: str):
++    """Turn the template's <tool_call>name<arg_key>k</arg_key><arg_value>v</arg_value></tool_call>
++    blocks into OpenAI ``tool_calls`` entries; the remaining text stays as content."""
++    calls = []
++    for i, m in enumerate(_TOOL_CALL.finditer(content or "")):
++        name, body = m.group(1).strip(), m.group(2)
++        args = {}
++        for k, v in _TOOL_ARG.findall(body):
++            v = v.strip()
++            try:
++                args[k.strip()] = json.loads(v)
++            except Exception:  # noqa: BLE001 — bare strings are the common case
++                args[k.strip()] = v
++        calls.append({"id": f"call_{int(time.time() * 1000)}_{i}", "type": "function",
++                      "function": {"name": name, "arguments": json.dumps(args)}})
++    rest = _TOOL_CALL.sub("", content or "").strip() if calls else content
++    return calls, rest
++
++
+ def _chat_once(server: QueueServer, payload: dict):
+     req = parse_chat_request(payload)
+     tokens, meta = server.chat(req)
+@@ -54,6 +79,7 @@ def _chat_once(server: QueueServer, payload: dict):
+     think = bool(req.enable_thinking if req.enable_thinking is not None
+                  else getattr(server.engine, "think", False))
+     reasoning, content = _split_think(text, think)
++    tool_calls, content = _extract_tool_calls(content) if payload.get("tools") else ([], content)
+     return {
+         "id": f"chatcmpl-{int(time.time() * 1000)}",
+         "object": "chat.completion",
+@@ -65,8 +91,9 @@ def _chat_once(server: QueueServer, payload: dict):
+                 "role": "assistant",
+                 "content": content,
+                 "reasoning_content": reasoning,
++                **({"tool_calls": tool_calls} if tool_calls else {}),
+             },
+-            "finish_reason": "stop",
++            "finish_reason": "tool_calls" if tool_calls else "stop",
+         }],
+         "usage": meta["usage"],
+     }
+diff --git a/src/edge0/server/chat.py b/src/edge0/server/chat.py
+index a1502bd..0daf5ec 100644
+--- a/src/edge0/server/chat.py
++++ b/src/edge0/server/chat.py
+@@ -81,8 +81,13 @@ class ChatSession:
+             think = self.req.enable_thinking
+             if think is None:
+                 think = getattr(self.engine, "think", False)
+-            return encode(
+-                [m.__dict__ for m in self.req.messages], think=bool(think))
++            try:
++                return encode(
++                    [m.__dict__ for m in self.req.messages], think=bool(think),
++                    tools=self.req.raw.get("tools") or None)
++            except TypeError:  # an engine whose encode_chat predates tools
++                return encode(
++                    [m.__dict__ for m in self.req.messages], think=bool(think))
+         if hasattr(tok, "apply_chat_template"):
+             # The qwen35 template supports ``enable_thinking``: False
+             # renders the canonical no-think prompt — an EMPTY think
+@@ -95,18 +100,21 @@ class ChatSession:
+             # <think> leaking into content, then empty/garbled replies).
+             # ``_chat_text()`` is a last resort, never the success path.
+             msgs = [m.__dict__ for m in self.req.messages]
++            # OpenAI-style function calling: hand the declared tools to the chat template
++            # (the bundled Qwen/Ling templates render them in <tools> tags).
++            tools = self.req.raw.get("tools") or None
+             think = self.req.enable_thinking
+             if think is None:
+                 think = False
+             try:
+                 text = tok.apply_chat_template(
+                     msgs, tokenize=False, add_generation_prompt=True,
+-                    enable_thinking=bool(think))
++                    enable_thinking=bool(think), tools=tools)
+             except TypeError:
+                 # tokenizer template without the kwarg: plain render
+                 try:
+                     text = tok.apply_chat_template(
+-                        msgs, tokenize=False, add_generation_prompt=True)
++                        msgs, tokenize=False, add_generation_prompt=True, tools=tools)
+                 except Exception:  # noqa: BLE001
+                     text = self._chat_text()
+             except Exception:  # noqa: BLE001 — render failed: last resort

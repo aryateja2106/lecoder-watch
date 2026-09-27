@@ -1,4 +1,5 @@
 #!/bin/sh
+# mesh-event — post a small agent notification (source, title, body) to the local meshd /events feed; defaults level to info.
 
 set -eu
 

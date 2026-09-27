@@ -1,6 +1,6 @@
 # PROGRESS — clean watch app that controls the whole Mac
 
-Goal (2026-08-19, overnight): MeshWatch on the wrist drives the MacBook end to end —
+Goal (2026-08-19, overnight): LeSearch Mesh on the wrist drives the MacBook end to end —
 pointer, keyboard, media, apps, windows, system — through `meshd`, with a UI worth
 using daily. One slice at a time, full build gate, commit only when green.
 
@@ -241,7 +241,7 @@ using daily. One slice at a time, full build gate, commit only when green.
 
 ## In the morning
 
-1. Open **MeshWatch on the watch**. If it isn't there: iPhone → Watch app → My Watch →
+1. Open **LeSearch Mesh on the watch**. If it isn't there: iPhone → Watch app → My Watch →
    Available Apps → Install.
 2. Tap **Control arya-macbook-pro** — the first row.
 3. Display chips `1` `2` switch which screen you're driving. Tap the preview to place the

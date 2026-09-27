@@ -1,0 +1,43 @@
+c6823f25e81ba7b0fd70761ede3fd7aedd7ee044
+check-shell-startup: a wedged bridge (accepts, never answers) costs 1124ms (budget 2500ms)
+check-shell-startup: OK
+check-sim-fleet: SKIP (set MESH_SIM_LIVE=1 to launch on the simulators)
+check-tmux-restart: OK (session names carry no dots, so the restart can find and replace its own session)
+check-token-rotate: OK (file+backup+modes, hosts preserved, push/LA devices forgotten, daemon restarted on the NEW token, no token in any argv)
+check-trackpad-drag: the long press fails once the finger travels (12 pt)
+check-trackpad-drag: OK
+check-usage-alert-identity: ok
+check-voice-accumulate: OK
+check-watch-smoke: OK — com.lecoder.meshwatch.watchkitapp pid 87110 alive on Watch27-test (3D78C4CC-DBAD-4182-8A12-A7D676898269)
+check-watch-terminal-wiring: watch reaches every key meshd accepts (except: delete, allowed)
+check-watch-terminal-wiring: cwd travels on the direct route and the phone relay
+check-watch-terminal-wiring: the watch can launch an arbitrary command
+check-watch-terminal-wiring: the watch has a help affordance
+check-watch-terminal-wiring: width reaches the daemon with or without a display
+check-watch-terminal-wiring: the watch's refresh is single flight
+check-watch-terminal-wiring: dictation goes to the mic and resolves its controller at tap time
+check-watch-terminal-wiring: the terminal offers Reader and Raw, and gates the daemon flags on captureJoin
+check-watch-terminal-wiring: key chips are >=42x38 at 8pt spacing, with the font chips in overflow
+check-watch-terminal-wiring: relayed sends are acknowledged, with a haptic and an honest failure line
+check-watch-terminal-wiring: 0.5.0 features are capability-gated and the capabilities are wired in
+check-watch-terminal-wiring: the iPhone's clipboard can be typed into a session, and both sides agree on the wire shape
+check-watch-terminal-wiring: Approve/Decline/Reply/Stop route through respondToAgent, pane and all
+check-watch-terminal-wiring: OK
+check-web-docs: OK — getting-started rendered from the doc, screenshots real, landing links present
+check-wol: OK (primaryMac -> null)
+check-wol: server.ts wired
+All self-checks passed.
+[32mPASS  test[0m
+
+=== gate: build ===
+gate-build: MeshWatch ... ok
+gate-build: MeshWatch Watch App ... ok
+gate-build: MeshDesktop ... ok
+gate-build: OK — iOS, watchOS and macOS targets all build
+[32mPASS  build[0m
+
+---------------------------------------------
+[32mGATES GREEN (4 passed)[0m
+FACTORY_GATES: level=full status=GREEN passed=4 failed=0 failing=none skipped=none misconfigured=none
+
+[exited with code 0]

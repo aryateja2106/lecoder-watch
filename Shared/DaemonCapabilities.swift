@@ -72,6 +72,13 @@ enum DaemonCapabilities {
                   feature: "Faster screen capture",
                   symptom: "Overlapping screen requests each pay full price, so frames arrive slower."),
     ]
+    // `captureAnsi` and `pty` (0.8) are deliberately NOT here. This list is the
+    // "your agent is out of date" warning, and check-daemon-gaps.swift pins it against a
+    // literal 0.5.0 capability snapshot: anything added here accuses every daemon in that
+    // snapshot of being stale. The terminal already degrades on its own (stream → colour
+    // polls → the old text path), so there is nothing for the row to warn about.
+    // `chatSearch` stays out for the same reason: ChatSearchView asks only machines that
+    // advertise it, and when none do it shows `upgradeCommand` itself.
 
     /// The gaps for a machine, given what its daemon advertised.
     ///

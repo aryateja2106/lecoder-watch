@@ -8,6 +8,15 @@
 #     `–flag` and "x" into curly quotes on the way to bash. The command fails, nothing on
 #     screen says why, and the daemon takes the blame.
 #
+#     The first fix for this was a UITextField.appearance() proxy set at launch, and it
+#     CRASHED THE APP: UIKit replays a stored appearance invocation onto every field
+#     entering a window, and replaying any UITextInputTraits setter onto a UITextField
+#     throws — so every screen with a TextField died. Measured on iOS 26.5 and 27.0, for
+#     smartQuotesType / smartDashesType / smartInsertDeleteType / autocorrectionType
+#     alike. This check used to REQUIRE those lines. Now it forbids them, and asserts the
+#     per-field replacement instead. UITests/SmokeTests.swift covers what no grep can:
+#     that a text field can actually appear.
+#
 #  2. The idle timer. Holding it is one line; releasing it is the line that gets lost in
 #     a refactor, and a phone that never sleeps again is a worse bug than the dim. So we
 #     assert the pairing, not the presence.
@@ -31,19 +40,39 @@ for f in "$APP" "$TERM" "$XTERM"; do
 done
 [ "$fail" = "0" ] || { echo "check-phone-input-and-wake: FAILED"; exit 1; }
 
-# ---- 1. smart punctuation is off wherever autocorrect is off ----
-# The app-wide proxy is what makes those .autocorrectionDisabled() sites honest. If
-# fields keep being added and the proxy goes away, the fields silently regress.
+# ---- 1. smart punctuation is handled per field, and NOT via the appearance proxy ----
 sites=$(grep -rc 'autocorrectionDisabled' "$ROOT/iOS" | awk -F: '{n+=$2} END {print n+0}')
 [ "$sites" -gt 0 ] || bad "no .autocorrectionDisabled() left in iOS/ — has input hygiene been removed wholesale?"
-ok=1
-for cls in UITextField UITextView; do
-  for trait in smartQuotesType smartDashesType smartInsertDeleteType; do
-    grep -q "$cls.appearance().$trait = .no" "$APP" \
-      || { bad "$cls.appearance().$trait is not disabled in MeshRelayApp.init() — $sites autocorrect-free fields still get rewritten punctuation"; ok=0; }
-  done
-done
-[ "$ok" = "1" ] && note "smart quotes/dashes/insert-delete are off app-wide, covering $sites autocorrect-free fields"
+
+# The proxy is a crash, not a style preference. Any UITextInputTraits setter on either
+# appearance proxy brings back the bug that shipped in 0.5.0.
+proxy=$(grep -rn '(UITextField|UITextView)\.appearance\(\)\.(smart[A-Za-z]*Type|autocorrectionType)' \
+          -E "$ROOT/iOS" 2>/dev/null || true)
+if [ -n "$proxy" ]; then
+  bad "a UITextInputTraits setter is back on an appearance proxy — this crashed every screen with a TextField in 0.5.0:"
+  echo "$proxy" | sed 's/^/    /'
+fi
+
+# Every TextField carrying a host, path, URL, session name or command must normalise its
+# own text. Numeric fields (format:) have no punctuation to rewrite.
+# A TextField's binding may span several lines (the get:/set: form), so judge the
+# declaration plus the next 4 lines, not the one line the match landed on.
+raw=$(awk '
+  FILENAME != prev { prev = FILENAME; n = 0 }
+  { for (i = 1; i <= n; i++) buf[i] = buf[i+1] }
+  /TextField\(/ && $0 !~ /format: \.number/ {
+    block = $0; ln = FNR; f = FILENAME
+    for (i = 1; i <= 4; i++) { if ((getline nxt) > 0) { block = block nxt; push[i] = nxt } else break }
+    if (block !~ /shellSafe/) printf "%s:%d:%s\n", f, ln, $0
+  }
+' $(find "$ROOT/iOS" -name '*.swift') 2>/dev/null || true)
+if [ -n "$raw" ]; then
+  bad "these TextFields reach a shell but do not normalise smart punctuation (add .shellSafe):"
+  echo "$raw" | sed 's/^/    /'
+else
+  covered=$(grep -rc 'shellSafe' "$ROOT/iOS" | awk -F: '{n+=$2} END {print n+0}')
+  note "smart punctuation is normalised per field ($covered bindings), with no appearance proxy to crash on"
+fi
 
 # ---- 1b. the WKWebView terminal is NOT relying on that proxy ----
 # xterm types into its own hidden textarea inside WKWebView, which the UIKit appearance

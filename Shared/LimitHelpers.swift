@@ -1,3 +1,4 @@
+// LimitHelpers.swift — pure formatting of an agent's usage-limit status (available / near / hit) for the phone and the watch.
 import Foundation
 
 enum LimitStatus: String {

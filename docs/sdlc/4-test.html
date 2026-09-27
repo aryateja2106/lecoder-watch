@@ -1,0 +1,283 @@
+<!-- 4-test.html — Stage 4 of the lifecycle: the one command that says yes or no, and why yes only counts when the change was run, not just built. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Stage 4 · Test</title>
+  <meta name="description" content="How work is checked in this repo: one command gives a yes or no, and a yes only counts when the change was actually run.">
+  <link rel="stylesheet" href="sdlc.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="index.html">LeSearch AI · How we build</a>
+  <nav class="site" aria-label="Site">
+    <ol class="rail">
+      <li><a href="1-plan.html"><b>1</b> Plan</a></li>
+      <li><a href="2-design.html"><b>2</b> Design</a></li>
+      <li><a href="3-build.html"><b>3</b> Build</a></li>
+      <li><a href="4-test.html" aria-current="page"><b>4</b> Test</a></li>
+      <li><a href="5-ship.html"><b>5–6</b> Ship</a></li>
+    </ol>
+    <ul class="aux">
+      <li><a href="index.html">Start</a></li>
+      <li><a href="product.html">Product</a></li>
+      <li><a href="blocks.html">Blocks</a></li>
+      <li><a href="borrowed.html">Borrowed</a></li>
+      <li><a href="glossary.html">Words</a></li>
+    </ul>
+  </nav>
+</header>
+<main>
+  <p class="eyebrow">Stage 4 of 6</p>
+  <h1>Test: one command says yes or no</h1>
+  <p class="lede">Before you look at anything, the agent checks its own work with one command. A
+  yes only counts when the change was actually run, not just built.</p>
+  <ul class="chain-chips">
+    <li><b>Reads</b> the plan's Proof from <a href="3-build.html">Stage 3</a></li>
+    <li><b>Commits</b> a green gate line and a new <code>scripts/check-*</code></li>
+  </ul>
+
+  <h2 id="status">Where we are</h2>
+  <ul class="status">
+    <li data-state="done" data-proof="file:.claude/scripts/gates.sh" data-owner="agent">
+      <span class="state">Done</span>
+      <span class="label">One command gives a verdict (<a href="../../.claude/scripts/gates.sh"><code>.claude/scripts/gates.sh</code></a>)</span>
+    </li>
+    <li data-state="done" data-proof="file:.factory/scripts/prove-test.sh" data-owner="agent">
+      <span class="state">Done</span>
+      <span class="label">A test can prove it fails without the fix (<a href="../../.factory/scripts/prove-test.sh"><code>.factory/scripts/prove-test.sh</code></a>)</span>
+    </li>
+    <li data-state="done" data-proof="file:scripts/product-shots.sh" data-owner="agent">
+      <span class="state">Done</span>
+      <span class="label">Screens can be captured for a visual check (<a href="../../scripts/product-shots.sh"><code>scripts/product-shots.sh</code></a>)</span>
+    </li>
+    <li data-state="not-started" data-proof="text:CLAUDE.md|## Verifying your work" data-owner="agent" data-block="B-20">
+      <span class="state">Not started</span>
+      <span class="label">The healthy output is written where agents read it</span>
+      <a class="bid" href="blocks.html#B-20">B-20</a>
+    </li>
+    <li data-state="not-started" data-proof="!text:.factory/gates.conf|test audit architecture" data-owner="arya">
+      <span class="state">Not started</span>
+      <span class="label">The deepest check level can actually pass (your pick, part of <a href="blocks.html#B-20">B-20</a>)</span>
+      <span class="you">you</span>
+    </li>
+    <li data-state="not-started" data-proof="live:ci-latest-green" data-owner="agent" data-block="B-19" data-asof="2026-09-27">
+      <span class="state">Not started</span>
+      <span class="label">The latest CI run is green</span>
+      <a class="bid" href="blocks.html#B-19">B-19</a>
+      <span class="asof">checked 2026-09-27</span>
+    </li>
+    <li data-state="not-started" data-proof="file:evals/cases.jsonl" data-owner="agent">
+      <span class="state">Not started</span>
+      <span class="label">Agents are tested on real past tasks (<code class="missing">evals/cases.jsonl</code>; deliberately <a href="blocks.html#later">later</a>)</span>
+    </li>
+  </ul>
+  <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
+
+  <h2 id="playbook">What the playbook says</h2>
+  <p class="meta">(Numbers in brackets are the playbook's section numbers.)</p>
+  <ul>
+    <li>The agent checks its own work before a person sees it (4).</li>
+    <li>One command wraps all the checking, and its healthy output is written in <code>CLAUDE.md</code> under "Verifying your work" (4).</li>
+    <li>A bug fix starts with a test that fails. The agent may not edit that test to make it pass (4).</li>
+    <li>A change to a screen gets a visual check, not just a passing build (4).</li>
+    <li>Run 20 to 50 real tasks as <a href="glossary.html#eval">evals</a> in CI, on every change to the agents' rules and every night (4.1).</li>
+    <li>Every problem found after release becomes a permanent eval (4.1).</li>
+  </ul>
+
+  <h2 id="repo">In our repo today</h2>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>Practice</th><th>Our files</th><th>What it actually does</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>4 One command</td>
+          <td><a href="../../.claude/scripts/gates.sh"><code>.claude/scripts/gates.sh</code></a>, <a href="../../.factory/gates.conf"><code>.factory/gates.conf</code></a>, <a href="../../package.json"><code>package.json</code></a>, <a href="../../scripts/gate-types.sh"><code>scripts/gate-types.sh</code></a>, <a href="../../scripts/gate-lint.sh"><code>scripts/gate-lint.sh</code></a>, <a href="../../scripts/gate-build.sh"><code>scripts/gate-build.sh</code></a>, <a href="../../scripts/check-all.sh"><code>scripts/check-all.sh</code></a></td>
+          <td><code>fast</code> is types and lint. <code>full</code> adds every self-check and three app builds, and takes minutes. <code>deep</code> adds an audit that cannot pass, because there is no lockfile.</td>
+        </tr>
+        <tr>
+          <td>4 Self-checks</td>
+          <td><a href="../../scripts/INDEX.md"><code>scripts/INDEX.md</code></a>, <a href="../../docs/agents/CHECKS.md"><code>docs/agents/CHECKS.md</code></a></td>
+          <td>Each <a href="glossary.html#check">check</a> came from something that broke. They run as part of <code>full</code>.</td>
+        </tr>
+        <tr>
+          <td>4 Failing test first</td>
+          <td><a href="../../.factory/scripts/prove-test.sh"><code>.factory/scripts/prove-test.sh</code></a>, <a href="../../docs/factory/CHARTER.md" data-anchor="covered by a test that fails without it"><code>docs/factory/CHARTER.md</code></a></td>
+          <td>Removes the fix and shows the test then fails. The charter's done rule asks for it; nothing forces a run to use it.</td>
+        </tr>
+        <tr>
+          <td>4 Visual check</td>
+          <td><a href="../../scripts/product-shots.sh"><code>scripts/product-shots.sh</code></a>, <a href="../../UITests/SmokeTests.swift"><code>UITests/SmokeTests.swift</code></a></td>
+          <td>Captures exist, taken from the real app on a simulator. There is no approved picture to compare them against.</td>
+        </tr>
+        <tr>
+          <td>4.1 Evals</td>
+          <td><a href="../../intent/cases.jsonl"><code>intent/cases.jsonl</code></a>, <a href="../../scripts/check-intent.sh"><code>scripts/check-intent.sh</code></a>, <a href="../../docs/factory-eval-2026-09-08.md"><code>docs/factory-eval-2026-09-08.md</code></a></td>
+          <td>The only eval-shaped suite. It tests the product's on-device model, not the coding agents. The September report was a one-off comparison.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="template">The template, side by side</h2>
+  <div class="pair">
+    <div>
+      <h3>The playbook's template</h3>
+<pre>## Verifying your work
+- Build: [command] (expected: [output])
+- Test: [command] (all green; never modify)
+- Lint: [command]
+Run all before reporting done; paste output.</pre>
+    </div>
+    <div>
+      <h3>Our nearest file</h3>
+      <p><a href="../../CLAUDE.md"><code>CLAUDE.md</code></a></p>
+      <ul>
+        <li><a href="../../CLAUDE.md" data-anchor="## The gate"><code>## The gate</code></a></li>
+      </ul>
+      <p>It lists the three commands but not their healthy output. <code>## Verifying your
+      work</code> does not exist yet. <a href="blocks.html#B-20">B-20</a> adds it.</p>
+    </div>
+  </div>
+  <p>The two healthy outputs we already know. The first is the last line of the loop
+  <a href="glossary.html#gate">gate</a>, seen 2026-09-27:</p>
+<pre class="out">FACTORY_GATES: level=fast status=GREEN passed=2 failed=0 failing=none skipped=none misconfigured=none</pre>
+  <p>The second is the last line of <a href="../../scripts/check-all.sh"><code>scripts/check-all.sh</code></a> when every self-check passes:</p>
+<pre class="out">All self-checks passed.</pre>
+
+  <h2 id="gap">The gap</h2>
+  <div class="gap">
+    <ul>
+      <li>The healthy output is not written in <code>CLAUDE.md</code>, so an agent cannot tell a good run from a bad one without guessing.</li>
+      <li><code>deep</code> can never be green: <code>npm audit</code> fails with <code>ENOLOCK</code> because there is no lockfile, and its architecture rule is empty.</li>
+      <li>The full run quietly needs the Pi, the Jetson and the local model servers. The only way to skip them is <code>MESH_OVERNIGHT_SKIP</code> in <a href="../../scripts/check-overnight.sh"><code>scripts/check-overnight.sh</code></a>, and <code>CLAUDE.md</code> does not mention it.</li>
+      <li>Generated maps go stale whenever files are added: at the commit that added this site (2026-09-27), <a href="../../scripts/check-codemap.sh"><code>scripts/check-codemap.sh</code></a> and <a href="../../scripts/check-folder-docs.sh"><code>scripts/check-folder-docs.sh</code></a> were red for that reason, so <code>full</code> started red. <a href="glossary.html#ci">CI</a> was red on the newest <a href="glossary.html#integration-branch">integration branch</a> too (cause unverified). Run <code>sh scripts/check-all.sh</code> to see where it stands now.</li>
+      <li>No suite tests the coding agents themselves (<code class="missing">evals/cases.jsonl</code>).</li>
+    </ul>
+  </div>
+
+  <h2 id="blocks">Blocks that close it</h2>
+  <ul>
+    <li><a href="blocks.html#B-03">B-03</a> Green baseline, and agent notes never ship</li>
+    <li><a href="blocks.html#B-20">B-20</a> Write down what "healthy" looks like, and decide the deep gate</li>
+    <li><a href="blocks.html#B-19">B-19</a> CI: find out why the iPhone build fails, then fix it</li>
+  </ul>
+  <p>Agent evals in CI are deliberately not a block yet. A real eval runs an agent and pays for
+  model calls, so it waits until agents run unattended on a green CI
+  (<a href="blocks.html#later">later, and why</a>).</p>
+
+  <h2 id="you">How you take part</h2>
+  <div class="you-part">
+    <ol>
+      <li><strong>Pick the way out for the deep gate.</strong> One word in chat (the Claude Code
+      desktop app, in a session opened on this repo), about 2 minutes:
+      add a lockfile, point the audit at the daemon's real dependencies, or drop the gate. The
+      agent records your pick in
+      <a href="../../docs/factory/DECISIONS.md"><code>docs/factory/DECISIONS.md</code></a>
+      (<a href="blocks.html#B-20">B-20</a>).</li>
+      <li><strong>Pick the CI fix and read the diff.</strong> After an agent writes down why the
+      iPhone build fails, you choose the option and read the change to
+      <a href="../../.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a>. About 10
+      minutes (<a href="blocks.html#B-19">B-19</a>).</li>
+      <li><strong>Do the checks only your devices can do.</strong> The watch mic, the buttons on a
+      notification, the crown. Agents cannot drive your real iPhone or watch
+      (<a href="../../AGENTS.md" data-anchor="## What an agent cannot verify"><code>AGENTS.md</code></a>).
+      A few minutes per change that touches them.</li>
+      <li><strong>When an agent says "done", ask for the pasted gate line.</strong> No line, not
+      done. A <code>RED</code> or <code>MISCONFIGURED</code> line is also not done. Ten seconds.</li>
+    </ol>
+    <p class="say-this">Run ./.claude/scripts/gates.sh fast and paste the FACTORY_GATES line
+    exactly. Then hand the change to the factory-verifier agent; you may not grade your own work.</p>
+  </div>
+
+  <h2 id="history">A worked example from our own history</h2>
+  <p>In August 2026, version 0.5.0 shipped an iPhone app that crashed on any screen with a text
+  box. It compiled, and it passed every check that reads source code. Only running the app and
+  putting a text field on screen could catch it.</p>
+  <p><a href="../../UITests/SmokeTests.swift"><code>UITests/SmokeTests.swift</code></a> exists
+  because of it; its header comment tells the story. The lesson became rule 1 in
+  <a href="../../AGENTS.md" data-anchor="## The rules that have actually cost days"><code>AGENTS.md</code></a>:
+  "verify by running, not by building". That is why a green build alone is never a yes here.</p>
+
+  <h2 id="measure">What we would measure</h2>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>Playbook measure</th><th>Command that produces it</th><th>Today</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>First-pass CI success</td>
+          <td><code>gh run list --workflow ci.yml --limit 20 --json conclusion</code></td>
+          <td>See the "latest CI run is green" line in <a href="#status">Where we are</a></td>
+        </tr>
+        <tr>
+          <td>Eval pass rate</td>
+          <td>a CI job that runs the agent evals</td>
+          <td>Not measurable until agent evals exist (<a href="blocks.html#later">later</a>)</td>
+        </tr>
+        <tr>
+          <td>Regressions caught in CI versus after release</td>
+          <td>incidents in <a href="../../MEMORY.md"><code>MEMORY.md</code></a> compared with CI failures</td>
+          <td>Not measurable until <a href="blocks.html#B-19">B-19</a> makes CI green</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <details class="agents">
+    <summary>For agents</summary>
+    <p><strong>Loop gate while you work.</strong> Quote the final line verbatim. <code>RED</code>
+    and <code>MISCONFIGURED</code> both block.</p>
+<pre><code>./.claude/scripts/gates.sh fast</code></pre>
+<pre class="out">FACTORY_GATES: level=fast status=GREEN passed=2 failed=0 failing=none skipped=none misconfigured=none</pre>
+    <p><strong><code>full</code> is a pre-PR gate, not a loop gate.</strong> It runs
+    <a href="../../scripts/check-ios-smoke.sh"><code>scripts/check-ios-smoke.sh</code></a>, which
+    drives <code>xcodebuild</code> against a simulator, and it reaches the live fleet through
+    <code>scripts/check-overnight.sh</code>. Healthy ends with the line below. It was red on
+    2026-09-27 until <a href="blocks.html#B-03">B-03</a> lands.</p>
+<pre><code>sh scripts/check-all.sh</code></pre>
+<pre class="out">All self-checks passed.</pre>
+    <p><strong>Do not use <code>deep</code> as a verdict</strong> until
+    <a href="blocks.html#B-20">B-20</a> records a decision. It cannot be green today.</p>
+    <p><strong>A bug fix starts with a failing check.</strong> Prove it fails without the fix:</p>
+<pre><code>./.factory/scripts/prove-test.sh &lt;base-ref&gt; --test-path &lt;path&gt; -- &lt;test command...&gt;</code></pre>
+    <p><strong>Protected files.</strong> Never modify an existing <code>scripts/check-*</code> in
+    an unattended run
+    (<a href="../../CLAUDE.md" data-anchor="## Non-negotiable"><code>CLAUDE.md</code></a>). Adding a
+    new one is encouraged. <code>.claude/scripts/gates.sh</code>,
+    <a href="../../.factory/gates.conf"><code>.factory/gates.conf</code></a> and <code>CLAUDE.md</code>
+    change only with Arya in the session.</p>
+    <p><strong>Serialized files.</strong> None specific to this stage. The four in
+    <a href="3-build.html#serialized">Stage 3</a> still apply.</p>
+    <p><strong>You never grade your own work.</strong> Hand verification to a fresh
+    <a href="glossary.html#subagent">subagent</a>:
+    <a href="../../.claude/agents/factory-verifier.md"><code>.claude/agents/factory-verifier.md</code></a>.</p>
+    <p><strong>Skills to load for this stage:</strong>
+    <a href="../../.claude/skills/test-driven-development/SKILL.md"><code>test-driven-development</code></a>,
+    <a href="../../.claude/skills/tdd/SKILL.md"><code>tdd</code></a>,
+    <a href="../../.claude/skills/factory-verify/SKILL.md"><code>factory-verify</code></a>.</p>
+  </details>
+
+  <nav class="chain-footer" aria-label="The artifact chain">
+    <span>← Reads the plan's <b>Proof</b> from <a href="3-build.html">Stage 3 · Build</a></span>
+    <span>Commits a green <b>gate line</b> and a new <code>scripts/check-*</code></span>
+    <span>→ <a href="5-ship.html">Stages 5–6 · Ship</a> ship it</span>
+  </nav>
+</main>
+<footer class="site-footer">
+  <p>Source of truth: this repository (<code>aryateja2106/lecoder-watch</code>), on the branch
+  you opened it from. Written on <code>sdlc/ai-native-playbook</code>. Nothing on this page
+  outranks the file it links to.</p>
+  <p>How to update: every status line carries a proof. Run <code>sh scripts/check-sdlc-status.sh</code>;
+  when it names a line, change that line's <code>data-state</code> and its state word, then run
+  it again. Agents: read <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a> first.</p>
+  <p>Playbook: <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-native SDLC playbook</a>.
+  Last verified <time data-verified datetime="2026-09-27">2026-09-27</time>.</p>
+</footer>
+</body>
+</html>

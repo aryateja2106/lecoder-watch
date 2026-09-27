@@ -1,10 +1,7 @@
 // LocalDaemon.swift — the entire network layer of the Mac menu bar app.
 //
-// Every call here goes to this same Mac's daemon over loopback, which is why there is
-// no token anywhere in this file. meshd treats a request arriving from 127.0.0.1 as
-// authorised (server.ts `authed`), and /pair/new refuses to mint a code for anyone
-// else. Asking the user to paste a token would be inventing a step the daemon does not
-// have.
+// Every call here goes to this same Mac's daemon over loopback. The bearer comes from
+// ~/.mesh/token so pairing still works when the loopback exemption is disabled.
 //
 // The wire types are copied from Shared/Models.swift on purpose rather than shared:
 // this target deliberately compiles nothing but MeshDesktop/, because Shared/ carries
@@ -124,6 +121,12 @@ enum LocalDaemon {
         var req = URLRequest(url: url(path))
         req.httpMethod = method
         req.timeoutInterval = timeout
+        let tokenURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".mesh/token")
+        if let token = try? String(contentsOf: tokenURL, encoding: .utf8)
+            .components(separatedBy: .newlines).first?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         let data: Data
         let response: URLResponse
         do {

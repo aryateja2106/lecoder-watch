@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import UserNotifications
 
 /// Usage limit lifecycle notifications: budget tiers at 50% and 25% left, hit at
@@ -78,6 +79,12 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
     /// Approve lands in the agent's own pane rather than whichever pane the session
     /// happens to have active.
     var onAgentAction: ((_ host: String, _ session: String, _ text: String?, _ key: String?, _ pane: String?) -> Void)?
+
+    /// A plain tap on an agent banner — not a button, the banner itself. Routes to the
+    /// session the alert is about. Before this existed the default tap opened the app
+    /// and went nowhere, which read as "notifications are broken" even though every
+    /// button worked: the most natural gesture was the only one that did nothing.
+    var onOpenSession: ((_ host: String, _ session: String) -> Void)?
 
     private override init() {
         // Defaults before `super.init()` because they are stored properties with
@@ -696,6 +703,15 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         let info = response.notification.request.content.userInfo
         let action = info["action"] as? String
+        // `mesh apps push <slug>`: the Mac built an app and serves it wirelessly. The
+        // banner carries the itms-services link; iOS itself asks to install it. Works
+        // from any network the phone can reach APNs and the manifest from — no cable,
+        // no shared Wi-Fi, no Xcode.
+        if action == "installApp", let raw = info["url"] as? String, let url = URL(string: raw) {
+            UIApplication.shared.open(url)
+            completionHandler()
+            return
+        }
         let providerId = info["providerId"] as? String
         if let providerId,
            action == "limitReset" || action == "limitAvailable" {
@@ -715,6 +731,13 @@ final class NotificationManager: NSObject, ObservableObject, UNUserNotificationC
            ) {
             onAgentAction?(target.host, target.session, cmd.text, cmd.key,
                            AgentNotification.pane(from: info))
+        } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+                  let target = AgentNotification.target(from: info) {
+            // The banner itself was tapped. `command(for:)` deliberately returns nil
+            // here — a bare tap must never SEND anything — but it must still LAND
+            // somewhere: on the session the alert is about, same as the Live
+            // Activity's widgetURL.
+            onOpenSession?(target.host, target.session)
         }
         completionHandler()
     }

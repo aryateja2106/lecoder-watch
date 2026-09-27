@@ -58,7 +58,15 @@ enum SecureStore {
     /// Keychain, exactly once. Returns the data either way so callers can keep
     /// reading through a single path.
     static func migrateFromUserDefaults(key: String, defaults: UserDefaults = .standard) -> Data? {
-        if let existing = load(key) { return existing }
+        if let existing = load(key) {
+            // Clear the plaintext copy on every launch that sees one, not only on the
+            // launch that happened to perform the migration. The early return used to
+            // skip this, so a device whose Keychain was already populated kept an
+            // unencrypted, backed-up copy of every machine token forever — which is the
+            // exact thing this type exists to prevent. Measured on a real phone.
+            defaults.removeObject(forKey: key)
+            return existing
+        }
         guard let legacy = defaults.data(forKey: key) else { return nil }
         // Only drop the plaintext copy once the Keychain write is confirmed.
         if save(legacy, for: key) {
@@ -72,7 +80,10 @@ enum SecureStore {
     /// a plist string, so the Data-shaped migration above would silently skip it
     /// and leave the plaintext behind.
     static func migrateStringFromUserDefaults(key: String, defaults: UserDefaults = .standard) -> String? {
-        if let existing = string(key) { return existing }
+        if let existing = string(key) {
+            defaults.removeObject(forKey: key)   // same leak, same fix
+            return existing
+        }
         guard let legacy = defaults.string(forKey: key), !legacy.isEmpty else { return nil }
         if save(legacy, for: key) {
             defaults.removeObject(forKey: key)

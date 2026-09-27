@@ -1,0 +1,13 @@
+{
+  "name": "lesearch-mesh",
+  "private": true,
+  "description": "Task runner for the factory gate. No dependencies: .claude/scripts/gates.sh reads these script names to decide what 'types', 'lint', 'test' and 'build' mean in this repo.",
+  "scripts": {
+    "typecheck": "sh scripts/gate-types.sh",
+    "lint": "sh scripts/gate-lint.sh",
+    "test": "sh scripts/check-all.sh",
+    "build": "sh scripts/gate-build.sh",
+    "codemap": "sh scripts/codemap.sh",
+    "repo-status": "sh scripts/repo-status.sh"
+  }
+}
