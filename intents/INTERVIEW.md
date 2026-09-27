@@ -17,21 +17,23 @@ of his head and onto the page.
 ## 1. Where you work, and check the tree first
 
 - Repository: `/Users/aryateja/Projects/lecoder-watch`
-- Branch: `sdlc/ai-native-playbook`. Work on this branch only. Do not switch branches, and do
-  not use `git checkout`, `git stash` or `git reset`.
+- Branch: `sdlc/ai-native-playbook`, or a worktree branch the desktop app forked from it
+  (the "Flush out my plans" chip opens one; its name will differ, and that is fine as long as
+  `git merge-base --is-ancestor sdlc/ai-native-playbook HEAD` exits 0). Do not switch
+  branches, and do not use `git checkout`, `git stash` or `git reset`.
 - Before you touch any file, follow AGENTS.md rule 2 ("check your worktree is current"):
 
   ```sh
   cd /Users/aryateja/Projects/lecoder-watch
-  git branch --show-current          # must print sdlc/ai-native-playbook
+  git branch --show-current          # sdlc/ai-native-playbook, or a branch forked from it
+  git merge-base --is-ancestor sdlc/ai-native-playbook HEAD && echo "forked from the sdlc branch: ok"
   git log -1 --date=short --format='%h %cd %s'
   git status --short
   ```
 
-  The last commit should be dated 2026-09-27 or later. It was `5710d51` when this prompt was
-  written. If the branch is wrong or the date is weeks old, stop and ask Arya before you do
-  anything else. `git status` should list the seven `intents/2026-09-27-*.md` files. They may
-  still be untracked, which means they are drafts that nobody has committed yet.
+  The last commit should be dated 2026-09-27 or later. If the ancestor check fails or the
+  date is weeks old, stop and ask Arya before you do anything else. The seven
+  `intents/2026-09-27-*.md` files are committed (`git log --oneline -1 -- intents/`).
 
 ## 2. What `intents/` is
 
