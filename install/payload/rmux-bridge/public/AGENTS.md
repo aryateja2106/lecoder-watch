@@ -8,5 +8,5 @@
 - The server serves exactly `/`, `/xterm/xterm.css`, `/xterm/xterm.js`, `/xterm/addon-fit.js` (`../src/server.ts:445-456`); a new asset needs a route.
 - `mesh upgrade` copies this whole folder to users (`bin/mesh:1048-1066`), so any file here ships.
 - See `../AGENTS.md`: the phone may no longer open this page.
-**SDLC stage:** Build — UI of a legacy service.
+**SDLC stage:** Build — the web page of a legacy service (see [docs/sdlc/3-build.html](../../../../docs/sdlc/3-build.html))
 **Map:** see the file list above.

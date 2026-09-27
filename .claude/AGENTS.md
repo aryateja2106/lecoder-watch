@@ -10,7 +10,7 @@
 - `worktrees/` holds full stale checkouts (git-excluded, `.git/info/exclude:13`); exclude it from every grep (AGENTS.md rule 2).
 - `settings.json` has an uncommitted change (`Edit(AGENTS.md)` → `Edit(./AGENTS.md)`); do not commit it unasked.
 - `settings.local.json` is machine-local and globally git-ignored; never rely on it for shared policy.
-**SDLC stage:** Build (skills, hooks, subagents) and Test (the gate) — it is how every agent session is constrained and verified.
+**SDLC stage:** Build, Test — skills, hooks and subagents constrain every Claude Code session, and `scripts/gates.sh` verifies it (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html), [docs/sdlc/4-test.html](../docs/sdlc/4-test.html))
 **Map:**
 | path | what |
 |---|---|

@@ -10,5 +10,5 @@
 - The useful part is `config.yaml:102-113`: a proposal names the owner's complaint, Non-goals and user skill level; every task ends in a runnable proof; device-only tasks are marked for Arya.
 - Nothing has ever been archived (no `changes/archive/`). Both open changes are 30 days old: 1/16 and 0/11 tasks ticked (`openspec list`).
 - Playbook intents go in `intents/`, not here and not in `intent/` (see `intents/AGENTS.md`).
-**SDLC stage:** Design — `specs/` holds accepted requirements; `changes/` holds proposals that blend Plan (why, open questions) and Design (options, requirements) with a task list close to a Build plan.
+**SDLC stage:** Design — `specs/` holds accepted requirements; `changes/` holds proposals that mix Plan (why) and Design (requirements) with a task list close to a Build plan (see [docs/sdlc/2-design.html](../docs/sdlc/2-design.html))
 **Map:** see the file list above (3 entries: `config.yaml`, `changes/`, `specs/`)

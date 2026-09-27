@@ -9,7 +9,7 @@
 - `rules/factory.mdc:29` says `gates.sh deep` adds "auth surface"; `gates.sh:178-213` has no such gate.
 - `commands/factory.md:16` says the charter caps pending reviews at two; `docs/factory/CHARTER.md:151` says more than 3.
 - `hooks/state/` is ignored harness output (`.gitignore:42`).
-**SDLC stage:** Build (rules, skills) for the Cursor harness.
+**SDLC stage:** Build — rules and skills for the Cursor harness (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html))
 **Map:**
 | path | what |
 |---|---|

@@ -10,5 +10,5 @@
 - `mesh uninstall` does not stop this service (`bin/mesh:2232-2244` handles meshd only); read, not run.
 - Imports `../../meshd/redact` (`src/server.ts:10`); it cannot run without the meshd tree beside it.
 - `package.json:8-9` scripts point at files that do not exist; default session `spine-test` (`src/server.ts:457`) is a leftover.
-**SDLC stage:** Build / Maintain — a live service with an unclear future.
+**SDLC stage:** Build — code of a legacy terminal bridge still shipped to users, with an unclear future (see [docs/sdlc/3-build.html](../../../docs/sdlc/3-build.html))
 **Map:** see the file list above; `docs/agents/CODEMAP.md` section `install/payload/rmux-bridge/`

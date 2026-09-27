@@ -8,5 +8,5 @@
 - Diverged from the Cursor copies: `.cursor/rules/graphify.mdc:8` makes graphify MANDATORY before any Read/Grep; `graphify.md:11` here is advisory. Pick one wording.
 - Files here are rules; this `AGENTS.md` may itself be loaded as a rule by the consuming tool (unverified which tool reads this folder — `trigger: always_on` suggests Antigravity).
 - `graphify.md:11` assumes `graphify-out/graph.json` exists; it is generated, not committed (only `GRAPH_REPORT.md` is, per `.gitignore:56`).
-**SDLC stage:** Build (3.2 institutional knowledge) — cheap navigation before reading source.
+**SDLC stage:** Build — institutional knowledge (playbook 3.2): cheap navigation before reading source (see [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html))
 **Map:** see the file list above: `codemap.md` (18 lines), `graphify.md` (14 lines).

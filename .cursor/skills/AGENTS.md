@@ -9,5 +9,5 @@
 - `openspec-*` (6) are real copies, identical to `.claude/skills/` and `.codex/skills/` today.
 - `factory-status`, `factory-tune` differ from `.agents/skills/` twins only in the title line.
 - `meshwatch-ui-taste` is not here, so Cursor has no native-UI taste skill.
-**SDLC stage:** Build (3.3 skills for the Cursor harness).
+**SDLC stage:** Build — skills (playbook 3.3) for the Cursor harness, mostly links to the Claude Code copies (see [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html))
 **Map:** INDEX.md (71 tracked entries; generate from `readlink`).

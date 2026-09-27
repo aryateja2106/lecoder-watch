@@ -1,0 +1,321 @@
+<!-- product.html — the product map: the surfaces a customer touches, the folder each lives in, and the command that proves each one works. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>The product map</title>
+  <meta name="description" content="The parts of LeSearch AI a customer touches, the folder each one lives in, and the command that proves each one works.">
+  <link rel="stylesheet" href="sdlc.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="index.html">LeSearch AI · How we build</a>
+  <nav class="site" aria-label="Site">
+    <ol class="rail">
+      <li><a href="1-plan.html"><b>1</b> Plan</a></li>
+      <li><a href="2-design.html"><b>2</b> Design</a></li>
+      <li><a href="3-build.html"><b>3</b> Build</a></li>
+      <li><a href="4-test.html"><b>4</b> Test</a></li>
+      <li><a href="5-ship.html"><b>5–6</b> Ship</a></li>
+    </ol>
+    <ul class="aux">
+      <li><a href="index.html">Start</a></li>
+      <li><a href="product.html" aria-current="page">Product</a></li>
+      <li><a href="blocks.html">Blocks</a></li>
+      <li><a href="borrowed.html">Borrowed</a></li>
+      <li><a href="glossary.html">Words</a></li>
+    </ul>
+  </nav>
+</header>
+<main>
+  <p class="eyebrow">The product map</p>
+  <h1>What we sell, and where it lives</h1>
+  <p class="lede">"Use your Mac from your wrist." The product spec,
+  <a href="../../docs/product/PRODUCT.md" data-anchor="## 1. What it is"><code>docs/product/PRODUCT.md</code></a>,
+  names two loops, in this order:</p>
+  <ol>
+    <li><b>Reach your machines from anywhere:</b> pointer, keyboard, screen, files, shell.</li>
+    <li><b>Run agents 24/7 and answer them when they get stuck:</b> the wrist buzzes, you answer in one tap.</li>
+  </ol>
+  <p>The spec says the second loop is what sets us apart. This page shows each part a customer
+  touches (a <a href="glossary.html#surface">surface</a>), the folder it lives in, and the
+  command that proves it works.</p>
+
+  <h2 id="status">Where we are</h2>
+  <ul class="status">
+    <li data-state="in-progress" data-proof="!text:docs/product/PRODUCT.md|built, not distributed" data-owner="arya" data-asof="2026-09-27">
+      <span class="state">In progress</span>
+      <span class="label">The Mac app can be downloaded by customers (built, not yet distributed; your decision in <a href="../../docs/product/PRODUCT.md" data-anchor="## 12. Open decisions (owner: Arya)"><code>PRODUCT.md</code> §12</a>)</span>
+      <span class="you">you</span>
+      <span class="asof">checked 2026-09-27</span>
+    </li>
+    <li data-state="not-started" data-proof="!text:PUBLISHED.md|still serves the 2026-08-27 build" data-owner="arya" data-block="B-05">
+      <span class="state">Not started</span>
+      <span class="label">Strangers get the newest phone app from the public TestFlight link</span>
+      <span class="you">you</span>
+      <a class="bid" href="blocks.html#B-05">B-05</a>
+    </li>
+    <li data-state="not-started" data-proof="file:scripts/check-payload-no-agent-docs.sh" data-owner="agent" data-block="B-03">
+      <span class="state">Not started</span>
+      <span class="label">The installer never ships agent notes to users (<code class="missing">scripts/check-payload-no-agent-docs.sh</code>)</span>
+      <a class="bid" href="blocks.html#B-03">B-03</a>
+    </li>
+  </ul>
+  <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
+
+  <h2 id="surfaces">The surfaces</h2>
+  <p>Seven things a customer touches, plus one they never see but everything depends on. Each
+  card has the same four rows. "Prove it" gives a fast command first, then the slow one or the
+  one that needs a device.</p>
+  <ul class="cards">
+    <li class="card">
+      <h3>Apple Watch app and complication</h3>
+      <dl>
+        <dt>What it does for a customer</dt>
+        <dd>Lists your machines, shows which agents are stuck waiting for you and lets you answer
+        them, follow a live terminal, and move the Mac's pointer from the wrist. The watch-face
+        <a href="glossary.html#complication">complication</a> shows how many agents are waiting
+        without opening the app.</dd>
+        <dt>Folder</dt>
+        <dd><a href="../../Watch/AGENTS.md"><code>Watch/</code></a>,
+        <a href="../../WatchWidgets/AGENTS.md"><code>WatchWidgets/</code></a>
+        (the complication: <a href="../../WatchWidgets/WatchGlanceWidget.swift"><code>WatchGlanceWidget.swift</code></a>)</dd>
+        <dt>Spec</dt>
+        <dd><a href="../../docs/product/PRODUCT.md" data-anchor="### 7.2 Apple Watch"><code>PRODUCT.md</code> §7.2 Apple Watch</a></dd>
+        <dt>Prove it</dt>
+        <dd>Fast: <code>./.claude/scripts/gates.sh fast</code>. Slow: <code>MESH_SMOKE_REQUIRED=1 sh scripts/check-watch-smoke.sh</code> (needs a watch simulator).
+        The mic, the notification buttons and the crown can only be checked on your real watch
+        (<a href="../../AGENTS.md" data-anchor="## What an agent cannot verify"><code>AGENTS.md</code>, "What an agent cannot verify"</a>).</dd>
+      </dl>
+    </li>
+    <li class="card">
+      <h3>iPhone app and Lock Screen card</h3>
+      <dl>
+        <dt>What it does for a customer</dt>
+        <dd>Pairs your machines, lists them, opens a terminal on any of them, controls a Mac's
+        screen with your thumb, and sends a problem report. It also carries the watch's requests,
+        and the Lock Screen card (a <a href="glossary.html#live-activity">Live Activity</a>) says
+        "an agent is waiting on you".</dd>
+        <dt>Folder</dt>
+        <dd><a href="../../iOS/AGENTS.md"><code>iOS/</code></a>
+        (<a href="../../iOS/INDEX.md"><code>iOS/INDEX.md</code></a>),
+        <a href="../../MeshWatchWidgets/AGENTS.md"><code>MeshWatchWidgets/</code></a>,
+        <a href="../../UITests/AGENTS.md"><code>UITests/</code></a></dd>
+        <dt>Spec</dt>
+        <dd><a href="../../docs/product/PRODUCT.md" data-anchor="### 7.1 iPhone"><code>PRODUCT.md</code> §7.1 iPhone</a></dd>
+        <dt>Prove it</dt>
+        <dd>Fast: <code>./.claude/scripts/gates.sh fast</code>. Slow: <code>MESH_SMOKE_REQUIRED=1 sh scripts/check-ios-smoke.sh</code> (opens the real app in a simulator and taps every tab).</dd>
+      </dl>
+    </li>
+    <li class="card">
+      <h3>The shared dictionary (phone, watch, widgets)</h3>
+      <dl>
+        <dt>What it does for a customer</dt>
+        <dd>Customers never see it. It is the one set of words the phone, the watch, the Lock
+        Screen card and the complication share, including the one piece of logic that decides
+        which agent needs you right now. A mistake here shows up everywhere at once.</dd>
+        <dt>Folder</dt>
+        <dd><a href="../../Shared/AGENTS.md"><code>Shared/</code></a>
+        (<a href="../../Shared/INDEX.md"><code>Shared/INDEX.md</code></a>); the "who needs me"
+        logic is <a href="../../Shared/Models.swift" data-anchor="sessionsNeedingAttention"><code>sessionsNeedingAttention</code> in <code>Shared/Models.swift</code></a></dd>
+        <dt>Spec</dt>
+        <dd><a href="../../docs/product/PRODUCT.md" data-anchor="### 7.5 Shared"><code>PRODUCT.md</code> §7.5 Shared</a></dd>
+        <dt>Prove it</dt>
+        <dd>Fast: <code>./.claude/scripts/gates.sh fast</code> (its <code>types</code> gate compiles <code>Shared/</code>). Slow: <code>sh scripts/check-all.sh</code>.</dd>
+      </dl>
+    </li>
+    <li class="card">
+      <h3>Mac menu-bar app</h3>
+      <dl>
+        <dt>What it does for a customer</dt>
+        <dd>A small dot at the top of the screen shows whether the LeSearch AI service is running
+        on this Mac. One window asks macOS for the permissions the service needs; another shows
+        the QR code your iPhone scans to pair.</dd>
+        <dt>Folder</dt>
+        <dd><a href="../../MeshDesktop/AGENTS.md"><code>MeshDesktop/</code></a>
+        (the app starts in <a href="../../MeshDesktop/MeshDesktopApp.swift"><code>MeshDesktopApp.swift</code></a>)</dd>
+        <dt>Spec</dt>
+        <dd><a href="../../docs/product/PRODUCT.md" data-anchor="### 7.3 Mac menu bar"><code>PRODUCT.md</code> §7.3 Mac menu bar</a></dd>
+        <dt>Prove it</dt>
+        <dd>Fast: none. Slow: <code>sh scripts/gate-build.sh</code> (builds the apps with Xcode, takes minutes).</dd>
+      </dl>
+    </li>
+    <li class="card">
+      <h3>The daemon (<code>meshd</code>)</h3>
+      <dl>
+        <dt>What it does for a customer</dt>
+        <dd>The small background program on each of your computers that the phone and watch
+        actually talk to. It lists your agents, types into their terminals, controls the screen,
+        sends alerts and keeps each agent conversation's history. Its front door is the most
+        important security boundary in the product.
+        (<a href="glossary.html#daemon">What "daemon" means</a>.)</dd>
+        <dt>Folder</dt>
+        <dd><a href="../../install/payload/meshd/AGENTS.md"><code>install/payload/meshd/</code></a>
+        (<a href="../../install/payload/meshd/INDEX.md"><code>INDEX.md</code></a>). Key files:
+        <a href="../../install/payload/meshd/server.ts"><code>server.ts</code></a> (every route),
+        <a href="../../install/payload/meshd/auth.ts"><code>auth.ts</code></a> (the front door),
+        <a href="../../install/payload/meshd/redact.ts"><code>redact.ts</code></a> (masks secrets before they leave the machine)</dd>
+        <dt>Spec</dt>
+        <dd><a href="../../docs/product/PRODUCT.md" data-anchor="## 5. The daemon"><code>PRODUCT.md</code> §5 The daemon</a></dd>
+        <dt>Prove it</dt>
+        <dd>Fast: <code>sh scripts/check-host-guard.sh</code>, <code>sh scripts/check-redact.sh</code>. Slow: <code>sh scripts/check-mesh-auth.sh</code> (starts throwaway daemons on spare ports).</dd>
+      </dl>
+    </li>
+    <li class="card">
+      <h3>The command line (<code>mesh</code>)</h3>
+      <dl>
+        <dt>What it does for a customer</dt>
+        <dd>The tool you and your agents use on a machine to pair, check health
+        (<code>mesh doctor</code>, <code>mesh status</code>), upgrade, rotate a leaked key and
+        uninstall cleanly. (<a href="glossary.html#mesh">What <code>mesh</code> means</a>.)</dd>
+        <dt>Folder</dt>
+        <dd><a href="../../install/payload/bin/AGENTS.md"><code>install/payload/bin/</code></a>; the tool itself is
+        <a href="../../install/payload/bin/mesh"><code>install/payload/bin/mesh</code></a></dd>
+        <dt>Spec</dt>
+        <dd><a href="../../docs/product/PRODUCT.md" data-anchor="## 6. The command line"><code>PRODUCT.md</code> §6 The command line</a></dd>
+        <dt>Prove it</dt>
+        <dd>Fast: <code>sh scripts/check-mesh-upgrade.sh</code>. Slow: <code>mesh doctor</code> on a real machine.</dd>
+      </dl>
+    </li>
+    <li class="card">
+      <h3>Installer</h3>
+      <dl>
+        <dt>What it does for a customer</dt>
+        <dd>One pasted command puts the daemon, the <code>mesh</code> tool and the agent alert
+        helpers into <code>~/.mesh</code>, starts them at boot, and ends by showing the pairing
+        QR code. What customers run is whatever was last published, so the release path is the
+        main risk here.</dd>
+        <dt>Folder</dt>
+        <dd><a href="../../install/AGENTS.md"><code>install/</code></a>; the script is
+        <a href="../../install/install.sh"><code>install/install.sh</code></a>, packed by
+        <a href="../../scripts/package-mesh-install.sh"><code>scripts/package-mesh-install.sh</code></a></dd>
+        <dt>Spec</dt>
+        <dd><a href="../../docs/product/PRODUCT.md" data-anchor="## 3. Surfaces and the install contract"><code>PRODUCT.md</code> §3 Surfaces and the install contract</a></dd>
+        <dt>Prove it</dt>
+        <dd>Fast: <code>sh scripts/check-package-mesh-install.sh</code>. Slow: <code>sh scripts/check-install-idempotent.sh</code>.</dd>
+      </dl>
+    </li>
+    <li class="card">
+      <h3>Landing site</h3>
+      <dl>
+        <dt>What it does for a customer</dt>
+        <dd>The public website: what the product is, and the install command. Its checks pass
+        today, but every deploy is done by hand.</dd>
+        <dt>Folder</dt>
+        <dd><a href="../../web/AGENTS.md"><code>web/</code></a>; the page is
+        <a href="../../web/index.html"><code>web/index.html</code></a></dd>
+        <dt>Spec</dt>
+        <dd><a href="../../docs/product/PRODUCT.md" data-anchor="## 3. Surfaces and the install contract"><code>PRODUCT.md</code> §3</a> (its live address is listed there)</dd>
+        <dt>Prove it</dt>
+        <dd>Fast: <code>sh scripts/check-links.sh</code>, <code>sh scripts/check-brand.sh</code>. Slow: <code>MESH_PUBLISHED=1 sh scripts/check-published.sh</code> (live; this is the finish line for a release).</dd>
+      </dl>
+    </li>
+  </ul>
+
+  <h2 id="one-command">The one command for everything</h2>
+  <p>One command answers "is the product still healthy?" in about 40 seconds, with no phone and
+  no simulator. It is the fast level of the <a href="glossary.html#gate">gate</a>,
+  <a href="../../.claude/scripts/gates.sh"><code>.claude/scripts/gates.sh</code></a>.</p>
+  <pre><code>./.claude/scripts/gates.sh fast</code></pre>
+  <p class="meta">Healthy output, seen 2026-09-27:</p>
+  <pre class="out">FACTORY_GATES: level=fast status=GREEN passed=2 failed=0 failing=none skipped=none misconfigured=none</pre>
+  <p><code>full</code> takes minutes and a simulator, so it runs before a pull request, not
+  while an agent is working.</p>
+
+  <h2 id="behind">Behind the scenes</h2>
+  <p>Things customers never see, but that keep the product honest:</p>
+  <ul>
+    <li><a href="../../scripts/INDEX.md"><code>scripts/INDEX.md</code></a>: the self-checks, each
+    written after something real broke. Count them yourself:
+    <code>find scripts -maxdepth 1 -name 'check-*' | wc -l</code></li>
+    <li><a href="../../docs/agents/CHECKS.md"><code>docs/agents/CHECKS.md</code></a>: what each check proves, in one line each (generated).</li>
+    <li><a href="../../docs/agents/UI-MAP.md"><code>docs/agents/UI-MAP.md</code></a>: every screen on the iPhone and the watch, and where it lives.</li>
+    <li><a href="../../docs/agents/CODEMAP.md"><code>docs/agents/CODEMAP.md</code></a>: the map of the code that agents read first (generated).</li>
+    <li><a href="../../install/payload/meshd/telemetry.ts"><code>install/payload/meshd/telemetry.ts</code></a>: the one anonymous
+    <a href="glossary.html#heartbeat">heartbeat</a> a day. Apart from a problem report you choose to send, nothing else leaves your machines.</li>
+    <li><a href="../../scripts/feedback-to-issues.ts"><code>scripts/feedback-to-issues.ts</code></a>: problem reports sent from the app become GitHub issues.</li>
+    <li><a href="../../index.md"><code>index.md</code></a>: the agents' start page.</li>
+  </ul>
+
+  <h2 id="trap">Two folders with almost the same name</h2>
+  <div class="warn">
+    <p><a href="../../intent/cases.jsonl"><code>intent/</code></a> (singular) is test data for
+    the small on-device model that turns a phrase like "tell claude yes" into an action.</p>
+    <p><a href="../../intents/README.md"><code>intents/</code></a> (plural) is where new ideas
+    are written down. That is Stage 1, <a href="1-plan.html">Plan</a>.</p>
+  </div>
+
+  <h2 id="drift">Where the spec and reality disagree today</h2>
+  <div class="note">
+    <p>Found on 2026-09-27:</p>
+    <ul>
+      <li>The product spec's install table
+      (<a href="../../docs/product/PRODUCT.md" data-anchor="## 3. Surfaces and the install contract"><code>docs/product/PRODUCT.md</code> §3</a>)
+      still named <code>mesh-install</code> v0.5.2 as shipped, while the publish ledger,
+      <a href="../../PUBLISHED.md"><code>PUBLISHED.md</code></a>, recorded 0.8.0 as published.</li>
+      <li>The spec's own check was red, with "INDEX.md is not named" and "__pycache__ is not
+      named". The new generated <code>INDEX.md</code> files and a local Python cache under
+      <code>install/payload/bin/</code> trip its file pattern. Run it to see where it stands now:
+      <pre><code>sh scripts/check-product-spec.sh</code></pre></li>
+    </ul>
+    <p>Both need a small fix with you in the session, because one touches the spec and the other
+    an existing check.</p>
+  </div>
+
+  <h2 id="not">What is not in the product, on purpose</h2>
+  <p><a href="../../ROADMAP.md" data-anchor="## Non-goals"><code>ROADMAP.md</code>, "Non-goals"</a>
+  is the list of things we have decided not to build.</p>
+  <p><a href="../../docs/product/PRODUCT.md" data-anchor="## 10. Non-goals"><code>docs/product/PRODUCT.md</code> §10 Non-goals</a>
+  is the same idea at the level of the product spec. Read them before asking for a feature
+  that sounds like one of them.</p>
+
+  <h2 id="you">How you take part</h2>
+  <div class="you-part">
+    <p>Two decisions about the surfaces are yours alone. Both are listed in
+    <a href="../../docs/product/PRODUCT.md" data-anchor="## 12. Open decisions (owner: Arya)"><code>docs/product/PRODUCT.md</code> §12 Open decisions</a>.</p>
+    <ol>
+      <li><b>How the Mac app reaches customers.</b> The spec lists the options. It is a choice,
+      not a build; once you pick, an agent does the work.</li>
+      <li><b>Submit the newest TestFlight build for
+      <a href="glossary.html#beta-app-review">Beta App Review</a></b>, so the public link stops
+      serving the August build. Small in your time, plus Apple's review wait. Details and the
+      two choices inside it are in <a href="blocks.html#B-05">B-05</a>.</li>
+    </ol>
+    <p class="say-this">Show me the watch app working: run its fast proof command from
+    docs/sdlc/product.html and paste the output. Do not touch the live daemon on port 8899.</p>
+  </div>
+
+  <details class="agents">
+    <summary>For agents</summary>
+    <p>Four files are <a href="glossary.html#serialized">serialized</a>: one agent at a time
+    (<a href="../../AGENTS.md" data-anchor="**Must be serialized"><code>AGENTS.md</code>, "Must be serialized"</a>):</p>
+    <ul>
+      <li><a href="../../Shared/Models.swift"><code>Shared/Models.swift</code></a></li>
+      <li><a href="../../Shared/MeshClient.swift"><code>Shared/MeshClient.swift</code></a></li>
+      <li><a href="../../install/payload/meshd/server.ts"><code>install/payload/meshd/server.ts</code></a></li>
+      <li><a href="../../project.yml"><code>project.yml</code></a></li>
+    </ul>
+    <p><code>docs/product/PRODUCT.md</code> must change in the same pull request as a new
+    screen, daemon module, <code>mesh</code> verb or capability
+    (<a href="../../docs/product/PRODUCT.md" data-anchor="## 0. How an agent uses this document"><code>PRODUCT.md</code> §0</a>).</p>
+    <p>Daemon tests run on a throwaway port. Never restart or redeploy the live daemon on
+    <code>:8899</code>; the owner's phone is paired to it.</p>
+    <pre><code>./.claude/scripts/gates.sh fast
+sh scripts/check-product-spec.sh
+sh scripts/check-sdlc-status.sh</code></pre>
+  </details>
+</main>
+<footer class="site-footer">
+  <p>Source of truth: this repository (<code>aryateja2106/lecoder-watch</code>), on the branch
+  you opened it from. Written on <code>sdlc/ai-native-playbook</code>. Nothing on this page
+  outranks the file it links to.</p>
+  <p>How to update: every status line carries a proof. Run <code>sh scripts/check-sdlc-status.sh</code>;
+  when it names a line, change that line's <code>data-state</code> and its state word, then run
+  it again. Agents: read <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a> first.</p>
+  <p>Playbook: <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-native SDLC playbook</a>.
+  Last verified <time data-verified datetime="2026-09-27">2026-09-27</time>.</p>
+</footer>
+</body>
+</html>

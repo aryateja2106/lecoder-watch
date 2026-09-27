@@ -8,5 +8,5 @@
 - Written 2026-08-24; the key map has grown since. `server.ts:674-692` also accepts `shift-tab` and `shift-enter`, plus `ctrl-*`/`alt-*` patterns (`server.ts:695-696`); `spec.md:63-66` lists fewer. The check, not this prose, is the truth.
 - `spec.md:72-82` says output is text, not pixels. The phone now also has a native PTY terminal (`pty` capability, `docs/agents/CONTRACTS.md:128`); read CONTRACTS.md before treating this spec as a description of the phone.
 - "Known gaps" (`spec.md:96-107`) are owner decisions, not bugs to patch.
-**SDLC stage:** Design + Maintain — the accepted contract for the terminal capability.
+**SDLC stage:** Design — the accepted contract for the terminal capability, enforced by `scripts/check-watch-terminal-wiring.sh` (see [docs/sdlc/2-design.html](../../../docs/sdlc/2-design.html))
 **Map:** see the file list above (one file)

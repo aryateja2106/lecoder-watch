@@ -63,7 +63,7 @@ only agents benefit from.
 | B-04 | Protect `main` on GitHub | 5 Deploy (approval gate) | needs-arya | no | S | none |
 | B-05 | Put 0.8.0 on the public TestFlight link | 5 Deploy | needs-arya | **yes** | S | B-03 |
 | B-06 | Design theme: one sitting, intent then spec | 1 Plan → 2 Design | needs-arya | **yes** (decides the look) | M | none |
-| B-07 | Teaching pages under `docs/sdlc/` | cross-cutting | not-started | no | M | B-03 |
+| B-07 | Teaching pages under `docs/sdlc/` | cross-cutting | done | no | M | B-03 |
 | B-08 | App link keys long enough to be unguessable | 3 Build (security) | needs-arya | partly (safer links) | S | B-03 |
 | B-09 | Theme tokens and one restyled screen | 3 Build / 4 Test | not-started | **yes** | M | B-06, B-03 |
 | B-10 | Multi-machine intent: what breaks today | 1 Plan | needs-arya | no | S | none |
@@ -260,8 +260,10 @@ only agents benefit from.
 
 ### B-07 · Teaching pages under `docs/sdlc/`
 
-- **Stage:** cross-cutting (teaching). **Status:** not-started. No page exists in the tree
-  on 2026-09-27. Whether another session is already building them is unverified.
+- **Stage:** cross-cutting (teaching). **Status:** done. The ten pages, `sdlc.css`,
+  `docs/sdlc/AGENTS.md` and `scripts/check-sdlc-status.sh` landed on 2026-09-27, later the
+  same day this list was written; `sh scripts/check-sdlc-site.sh` prints `ok (10 pages)`.
+  Arya's sign-off (open `index.html`, find one module) is still his to give.
 - **Why now:** you asked for HTML pages that teach the lifecycle using this project's own
   modules, so you can navigate the codebase yourself. `intents/README.md` already links to
   `docs/sdlc/index.html`, and that link is dead today.

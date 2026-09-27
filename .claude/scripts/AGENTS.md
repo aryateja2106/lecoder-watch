@@ -10,5 +10,5 @@
 - `.cursor/rules/factory.mdc:29` says `deep` adds an "auth surface" gate; none exists here.
 - Quote the `FACTORY_GATES:` line verbatim (`gates.sh:237-240`); RED and MISCONFIGURED both block.
 - A green gate is not proof a feature works (AGENTS.md rule 1).
-**SDLC stage:** Test — the single verification command the playbook asks for.
+**SDLC stage:** Test — the single verification command the playbook asks for (see [docs/sdlc/4-test.html](../../docs/sdlc/4-test.html))
 **Map:** see the file list above (1 file, 242 lines).

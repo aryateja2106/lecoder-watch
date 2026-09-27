@@ -1,0 +1,196 @@
+<!-- index.html — The lifecycle as six hand-offs: where LeSearch AI stands on each stage, and Arya's three moves this week. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Lifecycle at a glance</title>
+  <meta name="description" content="The lifecycle as six hand-offs: where LeSearch AI stands on each stage, and Arya's three moves this week.">
+  <link rel="stylesheet" href="sdlc.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="index.html">LeSearch AI · How we build</a>
+  <nav class="site" aria-label="Site">
+    <ol class="rail">
+      <li><a href="1-plan.html"><b>1</b> Plan</a></li>
+      <li><a href="2-design.html"><b>2</b> Design</a></li>
+      <li><a href="3-build.html"><b>3</b> Build</a></li>
+      <li><a href="4-test.html"><b>4</b> Test</a></li>
+      <li><a href="5-ship.html"><b>5–6</b> Ship</a></li>
+    </ol>
+    <ul class="aux">
+      <li><a href="index.html" aria-current="page">Start</a></li>
+      <li><a href="product.html">Product</a></li>
+      <li><a href="blocks.html">Blocks</a></li>
+      <li><a href="borrowed.html">Borrowed</a></li>
+      <li><a href="glossary.html">Words</a></li>
+    </ul>
+  </nav>
+</header>
+<main>
+  <p class="eyebrow">LeSearch AI · How we build</p>
+  <h1>Six hand-offs, one product</h1>
+  <p class="lede">Code is no longer the slow part. Deciding what to build, reviewing it and
+  shipping it safely are. This site teaches that idea using our own repository as the worked
+  example.</p>
+
+  <h2 id="status">Where we are</h2>
+  <p>One line per stage. Each line says whether the stage's hand-off exists in the repo yet.
+  Lines tagged <span class="you">you</span> are waiting on you, not on an agent.</p>
+  <ul class="status">
+    <li data-state="not-started" data-proof="any:intents/20*.md|status: accepted" data-owner="arya" data-block="B-06">
+      <span class="state">Not started</span>
+      <span class="label"><a href="1-plan.html">1 Plan</a>: you have accepted at least one intent</span>
+      <span class="you">you</span>
+      <a class="bid" href="blocks.html#B-06">B-06</a>
+    </li>
+    <li data-state="not-started" data-proof="file:openspec/changes/design-theme/proposal.md" data-owner="arya" data-block="B-06">
+      <span class="state">Not started</span>
+      <span class="label"><a href="2-design.html">2 Design</a>: the design theme is written as a spec</span>
+      <span class="you">you</span>
+      <a class="bid" href="blocks.html#B-06">B-06</a>
+    </li>
+    <li data-state="not-started" data-proof="file:scripts/check-run-plans.sh" data-owner="agent" data-block="B-16">
+      <span class="state">Not started</span>
+      <span class="label"><a href="3-build.html">3 Build</a>: every run writes its plan before code</span>
+      <a class="bid" href="blocks.html#B-16">B-16</a>
+    </li>
+    <li data-state="not-started" data-proof="text:CLAUDE.md|## Verifying your work" data-owner="agent" data-block="B-20">
+      <span class="state">Not started</span>
+      <span class="label"><a href="4-test.html">4 Test</a>: the one command's healthy output is written down</span>
+      <a class="bid" href="blocks.html#B-20">B-20</a>
+    </li>
+    <li data-state="not-started" data-proof="live:main-protected" data-owner="arya" data-block="B-04" data-asof="2026-09-27">
+      <span class="state">Not started</span>
+      <span class="label"><a href="5-ship.html">5 Ship</a>: <code>main</code> refuses changes nobody reviewed</span>
+      <span class="you">you</span>
+      <a class="bid" href="blocks.html#B-04">B-04</a>
+      <span class="asof">checked 2026-09-27</span>
+    </li>
+    <li data-state="not-started" data-proof="any:*bands.yaml" data-owner="agent">
+      <span class="state">Not started</span>
+      <span class="label"><a href="5-ship.html">6 Watch</a>: one number has a normal band (deliberately not a block yet)</span>
+    </li>
+  </ul>
+  <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
+
+  <h2 id="this-week" data-asof="2026-09-27">This week</h2>
+  <section class="week" data-asof="2026-09-27">
+    <p>Three moves. Each one is yours: no agent can make these for you. None of them needs any code.</p>
+    <ol>
+      <li><b>Put your ideas in your own words.</b> Sit with an agent that interviews you from
+      <a href="../../intents/INTERVIEW.md"><code>intents/INTERVIEW.md</code></a>, one question at a
+      time. The <a href="glossary.html#intent">intents</a> in
+      <a href="../../intents/README.md"><code>intents/</code></a> dated 2026-09-27 are drafts an agent
+      wrote for you. Only your "accepted" makes one real. Start with the design theme. About 20
+      minutes per intent, about an hour for the design sitting.
+      <a class="bid" href="blocks.html#B-06">B-06</a></li>
+      <li><b>Turn on GitHub protection for <code>main</code>.</b> About 2 minutes in GitHub →
+      Settings → Rules. After that, GitHub itself refuses a change nobody reviewed.
+      <a class="bid" href="blocks.html#B-04">B-04</a></li>
+      <li><b>Decide what happens to the unreviewed Cursor pull requests.</b> On 22–23 September
+      2026 an unattended Cursor loop opened 123 pull requests (counted on 2026-09-27). Close all,
+      keep a few, or park them. Reply with the block id and your choice.
+      <a class="bid" href="blocks.html#B-15">B-15</a></li>
+    </ol>
+  </section>
+
+  <h2 id="chain">The chain</h2>
+  <p>Each stage ends by writing one thing down. The next stage starts by reading it. After a
+  release, what we learn comes back as a new idea, so the chain is a loop.</p>
+  <svg class="rail-chain" viewBox="0 0 960 120" role="img" aria-label="The chain: intent, then spec, then plan, then pull request, then release, then findings. Findings loop back to a new intent.">
+    <rect x="2" y="8" width="136" height="44" rx="8"/>
+    <rect x="166" y="8" width="136" height="44" rx="8"/>
+    <rect x="330" y="8" width="136" height="44" rx="8"/>
+    <rect x="494" y="8" width="136" height="44" rx="8"/>
+    <rect x="658" y="8" width="136" height="44" rx="8"/>
+    <rect x="822" y="8" width="136" height="44" rx="8"/>
+    <text x="70" y="35" text-anchor="middle">Intent</text>
+    <text x="234" y="35" text-anchor="middle">Spec</text>
+    <text x="398" y="35" text-anchor="middle">Plan</text>
+    <text x="562" y="35" text-anchor="middle">Pull request</text>
+    <text x="726" y="35" text-anchor="middle">Release</text>
+    <text x="890" y="35" text-anchor="middle">Findings</text>
+    <text x="70" y="72" text-anchor="middle">intents/</text>
+    <text x="234" y="72" text-anchor="middle">openspec/</text>
+    <text x="398" y="72" text-anchor="middle">run records</text>
+    <text x="562" y="72" text-anchor="middle">GitHub, draft</text>
+    <text x="726" y="72" text-anchor="middle">PUBLISHED.md</text>
+    <text x="890" y="72" text-anchor="middle">new intents</text>
+    <path class="arrow" d="M141 30 H163 M157 25 L163 30 L157 35"/>
+    <path class="arrow" d="M305 30 H327 M321 25 L327 30 L321 35"/>
+    <path class="arrow" d="M469 30 H491 M485 25 L491 30 L485 35"/>
+    <path class="arrow" d="M633 30 H655 M649 25 L655 30 L649 35"/>
+    <path class="arrow" d="M797 30 H819 M813 25 L819 30 L813 35"/>
+    <path class="arrow" d="M950 52 V110 H10 V55 M5 61 L10 55 L15 61"/>
+    <text x="480" y="104" text-anchor="middle">what we learn after release becomes a new intent</text>
+  </svg>
+  <ol>
+    <li><b>Intent</b>, the why, in your words: <a href="../../intents/TEMPLATE.md"><code>intents/TEMPLATE.md</code></a></li>
+    <li><b><a href="glossary.html#spec">Spec</a></b>, what exactly gets built and how it looks: <a href="../../openspec/config.yaml"><code>openspec/config.yaml</code></a></li>
+    <li><b><a href="glossary.html#plan">Plan</a></b>, the files that change and the proof, written before code: <a href="../../docs/factory/runs/README.md"><code>docs/factory/runs/README.md</code></a></li>
+    <li><b><a href="glossary.html#pr">Pull request</a></b>, a draft that a human merges, never an agent: <a href="../../docs/factory/CONTRACT.md" data-anchor="## Live queue protocol"><code>docs/factory/CONTRACT.md</code></a></li>
+    <li><b>Release</b>, recorded with its date: <a href="../../PUBLISHED.md"><code>PUBLISHED.md</code></a></li>
+    <li><b>Findings</b>, problems after release, written back as new intents: <a href="../../intents/README.md" data-anchor="## What happens next (the chain)"><code>intents/README.md</code></a></li>
+  </ol>
+
+  <h2 id="read">How to read this site</h2>
+  <p>Start with the <a href="product.html">product map</a>, so you know what each folder is for.
+  Then read the five stage pages in order, from <a href="1-plan.html">Plan</a> to
+  <a href="5-ship.html">Ship</a>. Every stage page has the same parts, and the part called
+  "How you take part" is yours.</p>
+
+  <h2 id="rules">Rules that outrank everything</h2>
+  <p>These files win over anything on this site. They are linked, not copied, so they cannot drift.</p>
+  <ul>
+    <li><a href="../../ROADMAP.md" data-anchor="## Non-goals"><code>ROADMAP.md</code></a>, the
+    <a href="glossary.html#non-goal">non-goals</a>: no cloud relay, no VNC, no account system.
+    Nothing of yours leaves your machines except one anonymous daily heartbeat.</li>
+    <li><a href="../../AGENTS.md" data-anchor="## The rules that have actually cost days"><code>AGENTS.md</code></a>,
+    the rules for every agent, each one learned from a mistake that cost days.</li>
+    <li><a href="../../CLAUDE.md" data-anchor="## Non-negotiable"><code>CLAUDE.md</code></a>,
+    the non-negotiables: an agent never merges and never pushes <code>main</code>.</li>
+    <li><a href="../../docs/factory/CHARTER.md"><code>docs/factory/CHARTER.md</code></a>, the
+    rules for agents' freedom (the <a href="glossary.html#charter">charter</a>). It is still an
+    unfilled template, so no agent may run on its own yet.
+    <a class="bid" href="blocks.html#B-16">B-16</a></li>
+  </ul>
+
+  <h2 id="true">How this site stays true</h2>
+  <p>Every status line carries a <a href="glossary.html#proof">proof</a>: a file, a phrase in a
+  file, or a question to GitHub. <code>sh scripts/check-sdlc-status.sh</code> goes red when a line
+  disagrees with the repo, and names the exact word to change. The colours on this site are
+  placeholders until you decide the design theme (<a href="blocks.html#B-06">B-06</a>).</p>
+
+  <details class="agents">
+    <summary>For agents</summary>
+    <p>Read the state of every status line on every page from one command instead of parsing
+    the HTML. It is written by <code class="missing">scripts/check-sdlc-status.sh</code>, which
+    does not exist yet.</p>
+    <pre><code>sh scripts/check-sdlc-status.sh --board</code></pre>
+    <p>Before editing this folder, read the folder brief
+    <code class="missing">docs/sdlc/AGENTS.md</code> (not written yet). Before committing, run both checks:</p>
+    <pre><code>sh scripts/check-sdlc-status.sh
+sh scripts/check-sdlc-site.sh</code></pre>
+    <p>Block ids on this page come from <a href="BLOCKS.md"><code>docs/sdlc/BLOCKS.md</code></a>.
+    When you land a block, flip its line here in the same pull request.</p>
+    <p>Name trap: <a href="../../intent/cases.jsonl"><code>intent/</code></a> (singular) is test
+    data for the on-device model. <a href="../../intents/README.md"><code>intents/</code></a>
+    (plural) is Stage 1, Arya's ideas. Never mark an intent <code>status: accepted</code>; that
+    word is Arya's.</p>
+  </details>
+</main>
+<footer class="site-footer">
+  <p>Source of truth: this repository (<code>aryateja2106/lecoder-watch</code>), on the branch
+  you opened it from. Written on <code>sdlc/ai-native-playbook</code>. Nothing on this page
+  outranks the file it links to.</p>
+  <p>How to update: every status line carries a proof. Run <code>sh scripts/check-sdlc-status.sh</code>;
+  when it names a line, change that line's <code>data-state</code> and its state word, then run
+  it again. Agents: read <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a> first.</p>
+  <p>Playbook: <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-native SDLC playbook</a>.
+  Last verified <time data-verified datetime="2026-09-27">2026-09-27</time>.</p>
+</footer>
+</body>
+</html>

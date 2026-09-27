@@ -10,5 +10,5 @@
 - Grants and RLS (row-level security) must both say insert-only (`migrations/20260922100000_feedback.sql:51-63`).
 - Telemetry columns must match `web/privacy.html` and `telemetry.ts` (AGENTS.md design principle 2).
 - Never print or commit the service-role key; only the feedback worker holds it (`20260922100000_feedback.sql:11-12`).
-**SDLC stage:** Deploy and Maintain — the only cloud piece; turns user feedback into GitHub issues.
+**SDLC stage:** Deploy, Maintain — the only cloud piece; it turns user feedback into GitHub issues (see [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
 **Map:** see the file list above; migrations in `supabase/migrations/AGENTS.md`

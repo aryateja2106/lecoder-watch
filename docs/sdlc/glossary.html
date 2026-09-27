@@ -1,0 +1,225 @@
+<!-- glossary.html — every word the lifecycle site uses, in one plain sentence each, pointing at the file in this repo where you can see it. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Words used here</title>
+  <meta name="description" content="Every term on this site in one plain sentence, each with a link to the file in our repo where you can see it.">
+  <link rel="stylesheet" href="sdlc.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="index.html">LeSearch AI · How we build</a>
+  <nav class="site" aria-label="Site">
+    <ol class="rail">
+      <li><a href="1-plan.html"><b>1</b> Plan</a></li>
+      <li><a href="2-design.html"><b>2</b> Design</a></li>
+      <li><a href="3-build.html"><b>3</b> Build</a></li>
+      <li><a href="4-test.html"><b>4</b> Test</a></li>
+      <li><a href="5-ship.html"><b>5–6</b> Ship</a></li>
+    </ol>
+    <ul class="aux">
+      <li><a href="index.html">Start</a></li>
+      <li><a href="product.html">Product</a></li>
+      <li><a href="blocks.html">Blocks</a></li>
+      <li><a href="borrowed.html">Borrowed</a></li>
+      <li><a href="glossary.html" aria-current="page">Words</a></li>
+    </ul>
+  </nav>
+</header>
+<main>
+  <h1>Words, in plain English</h1>
+  <p class="lede">Every word this site uses, in one sentence, with a link to the place in our own repo where you can see it.</p>
+
+  <dl class="words">
+    <dt id="index-md">AGENTS.md and INDEX.md</dt>
+    <dd>Each folder has an <code>AGENTS.md</code>, a short hand-written brief on what the folder is for and how to prove a change, and big folders also get an <code>INDEX.md</code>, a file list that a script writes and nobody edits by hand.
+      <span class="see">See it: <a href="../../scripts/folder-index.py"><code>scripts/folder-index.py</code></a> (writes the INDEX files) and <a href="../../intents/AGENTS.md"><code>intents/AGENTS.md</code></a> (an example brief)</span></dd>
+
+    <dt id="artifact">Artifact</dt>
+    <dd>The one document each stage writes down and commits, so the next stage reads it instead of relying on anyone's memory.
+      <span class="see">See it: <a href="../../intents/README.md" data-anchor="## What happens next (the chain)"><code>intents/README.md</code></a></span></dd>
+
+    <dt id="beta-app-review">Beta App Review</dt>
+    <dd>Apple's check of a test build before it may reach testers outside your own team; until it approves a build, people with the public link do not get it, because uploading is not publishing.
+      <span class="see">See it: <a href="../../docs/updating.md"><code>docs/updating.md</code></a></span></dd>
+
+    <dt id="block">Block</dt>
+    <dd>One piece of work in our ordered list, with who acts on it and the proof that says it is finished.
+      <span class="see">See it: <a href="blocks.html">the blocks page</a> and <a href="BLOCKS.md"><code>docs/sdlc/BLOCKS.md</code></a></span></dd>
+
+    <dt id="branch-protection">Branch protection (ruleset)</dt>
+    <dd>A GitHub setting that makes the main line refuse any change that did not come through an approved pull request; it was off on this repo when checked on 2026-09-27.
+      <span class="see">See it: <a href="../../docs/factory/CONTRACT.md" data-anchor="## Non-negotiable rules"><code>docs/factory/CONTRACT.md</code></a></span></dd>
+
+    <dt id="charter">Charter</dt>
+    <dd>The file where you, the human, write down how much freedom agents get and when they must stop; when checked on 2026-09-27 it still said <code>CHARTER_STATUS: incomplete</code>.
+      <span class="see">See it: <a href="../../docs/factory/CHARTER.md" data-anchor="CHARTER_STATUS"><code>docs/factory/CHARTER.md</code></a></span></dd>
+
+    <dt id="check">Check (self-check)</dt>
+    <dd>A small script named <code>check-something</code> that tests one fact about the repo and prints either "ok" or what is wrong; <a href="../../scripts/check-all.sh"><code>scripts/check-all.sh</code></a> runs all of them.
+      <span class="see">See it: <a href="../../scripts/INDEX.md"><code>scripts/INDEX.md</code></a></span></dd>
+
+    <dt id="ci">CI (continuous integration)</dt>
+    <dd>GitHub running our checks automatically every time a change is pushed.
+      <span class="see">See it: <a href="../../.github/workflows/ci.yml"><code>.github/workflows/ci.yml</code></a></span></dd>
+
+    <dt id="complication">Complication</dt>
+    <dd>The small live element on the watch face; ours shows how many agents are waiting, which session, and the question it is asking.
+      <span class="see">See it: <a href="../../WatchWidgets/WatchGlanceWidget.swift" data-anchor="WatchGlanceWidget"><code>WatchWidgets/WatchGlanceWidget.swift</code></a></span></dd>
+
+    <dt id="control-band">Control band</dt>
+    <dd>The normal range of a number, such as how often CI fails, worked out from its own history, so only unusual movement asks for attention.
+      <span class="see">See it: <a href="5-ship.html#template">Stages 5–6, the template</a></span></dd>
+
+    <dt id="daemon">Daemon (<code>meshd</code>)</dt>
+    <dd>The background program that runs on each of your machines and that the phone and the watch talk to.
+      <span class="see">See it: <a href="../../install/payload/meshd/AGENTS.md"><code>install/payload/meshd/</code></a></span></dd>
+
+    <dt id="dora">DORA metrics</dt>
+    <dd>Four standard delivery numbers: how often you release, how long a change takes to reach users, how often a release breaks, and how fast you recover.
+      <span class="see">See it: <a href="5-ship.html#measure">Stages 5–6, what we would measure</a></span></dd>
+
+    <dt id="draft-pr">Draft pull request</dt>
+    <dd>A pull request marked "not ready to accept"; the factory only ever opens these, so a human always makes the final call.
+      <span class="see">See it: <a href="../../docs/factory/CONTRACT.md"><code>docs/factory/CONTRACT.md</code></a></span></dd>
+
+    <dt id="eval">Eval</dt>
+    <dd>A saved test task with a known right answer, re-run often to catch something getting worse; the only one in our repo on 2026-09-27 tests how the product's own voice model turns a phrase into an action, not how coding agents behave.
+      <span class="see">See it: <a href="../../intent/cases.jsonl"><code>intent/cases.jsonl</code></a></span></dd>
+
+    <dt id="factory">Factory</dt>
+    <dd>This repo's name for agents taking one GitHub issue at a time, doing it, proving it, and opening a draft pull request.
+      <span class="see">See it: <a href="../../docs/factory/CONTRACT.md"><code>docs/factory/CONTRACT.md</code></a></span></dd>
+
+    <dt id="gate">Gate</dt>
+    <dd>An automatic check that must say green before work moves on; its last line, starting <code>FACTORY_GATES:</code>, is the verdict.
+      <span class="see">See it: <a href="../../.claude/scripts/gates.sh"><code>.claude/scripts/gates.sh</code></a></span></dd>
+
+    <dt id="heartbeat">Heartbeat (telemetry)</dt>
+    <dd>The one anonymous message a day the daemon may send out, holding only a version, a platform and a few counters, never anything you typed or saw; it can be turned off.
+      <span class="see">See it: <a href="../../install/payload/meshd/telemetry.ts"><code>install/payload/meshd/telemetry.ts</code></a></span></dd>
+
+    <dt id="hook">Hook</dt>
+    <dd>A small script the agent tool runs automatically before an action, used to block dangerous actions whatever the agent intends.
+      <span class="see">See it: <a href="../../.claude/hooks/block-merge.sh"><code>.claude/hooks/block-merge.sh</code></a></span></dd>
+
+    <dt id="intent">Intent</dt>
+    <dd>A short note in your own words saying what problem you want solved, for whom, and what "done" looks like, written before anyone designs anything.
+      <span class="see">See it: <a href="../../intents/TEMPLATE.md"><code>intents/TEMPLATE.md</code></a></span></dd>
+
+    <dt id="intent-vs-intents"><code>intent/</code> versus <code>intents/</code></dt>
+    <dd>Two folders with nearly the same name: <code>intent/</code> (singular) holds test phrases for the product's local voice model, and <code>intents/</code> (plural) is where your Stage 1 intents live.
+      <span class="see">See it: <a href="../../intent/cases.jsonl"><code>intent/cases.jsonl</code></a> and <a href="../../intents/AGENTS.md"><code>intents/</code></a></span></dd>
+
+    <dt id="live-activity">Live Activity</dt>
+    <dd>The live card on the iPhone Lock Screen, the Dynamic Island and the watch Smart Stack that shows which agent is waiting on you.
+      <span class="see">See it: <a href="../../MeshWatchWidgets/AGENTS.md"><code>MeshWatchWidgets/</code></a></span></dd>
+
+    <dt id="load-bearing">Load-bearing path</dt>
+    <dd>A file or folder so important (sign-in, policy, CI) that no agent may change it without a human reading the change.
+      <span class="see">See it: <a href="../../docs/factory/CHARTER.md" data-anchor="## 2. Load-bearing paths"><code>docs/factory/CHARTER.md</code></a></span></dd>
+
+    <dt id="merge">Merge</dt>
+    <dd>Accepting a pull request so its change becomes part of the main line; in this repo agents are blocked from doing it.
+      <span class="see">See it: <a href="../../.claude/hooks/block-merge.sh"><code>.claude/hooks/block-merge.sh</code></a></span></dd>
+
+    <dt id="mesh"><code>mesh</code> (the command line)</dt>
+    <dd>The command you type on a machine to pair a phone, upgrade the daemon or start an agent.
+      <span class="see">See it: <a href="../../install/payload/bin/mesh"><code>install/payload/bin/mesh</code></a></span></dd>
+
+    <dt id="non-goal">Non-goal</dt>
+    <dd>Something we have decided on purpose not to build, such as a cloud relay or an account system, which outranks any new idea.
+      <span class="see">See it: <a href="../../ROADMAP.md" data-anchor="## Non-goals"><code>ROADMAP.md</code></a></span></dd>
+
+    <dt id="openspec">OpenSpec</dt>
+    <dd>The folder where bigger product changes are written up as proposals and requirements before anyone builds them.
+      <span class="see">See it: <a href="../../openspec/AGENTS.md"><code>openspec/</code></a></span></dd>
+
+    <dt id="pairing">Pairing and token</dt>
+    <dd>Pairing brings a phone onto your machines with a short code instead of a long secret, and the token is that secret, which the daemon checks on every request and refuses when it is missing.
+      <span class="see">See it: <a href="../../install/payload/meshd/pair.ts"><code>install/payload/meshd/pair.ts</code></a> and <a href="../../install/payload/meshd/auth.ts"><code>install/payload/meshd/auth.ts</code></a></span></dd>
+
+    <dt id="plan">Plan</dt>
+    <dd>The list of files that will change, in what order, what could go wrong, and how we will prove it worked, written before any code.
+      <span class="see">See it: <a href="../../openspec/changes/reach-my-mac-from-anywhere/tasks.md"><code>openspec/changes/reach-my-mac-from-anywhere/tasks.md</code></a> (our nearest file)</span></dd>
+
+    <dt id="proof">Proof (status line)</dt>
+    <dd>The fact written into every "Where we are" line on this site, which a script tests so the line cannot say "done" while the repo says otherwise.
+      <span class="see">See it: <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a></span></dd>
+
+    <dt id="published">Publish ledger</dt>
+    <dd>The file that lists what was actually released, where every line is evidence produced by running something, not by describing it.
+      <span class="see">See it: <a href="../../PUBLISHED.md"><code>PUBLISHED.md</code></a>, read by <a href="../../scripts/check-published.sh"><code>scripts/check-published.sh</code></a></span></dd>
+
+    <dt id="pr">Pull request (PR)</dt>
+    <dd>A proposed change shown as a before and after, which a human reads and then accepts ("merges") or rejects.
+      <span class="see">See it: <a href="../../docs/factory/CONTRACT.md" data-anchor="## Live queue protocol"><code>docs/factory/CONTRACT.md</code></a></span></dd>
+
+    <dt id="redaction">Redaction</dt>
+    <dd>Blanking out secrets, such as passwords and keys that agents print, from every piece of text before it leaves your Mac for a phone, a watch or Apple's push servers.
+      <span class="see">See it: <a href="../../install/payload/meshd/redact.ts"><code>install/payload/meshd/redact.ts</code></a></span></dd>
+
+    <dt id="relay">Relay (phone for the watch)</dt>
+    <dd>When the watch cannot reach a machine directly, the phone passes its requests along and brings the answers back.
+      <span class="see">See it: <a href="../../Watch/AGENTS.md"><code>Watch/</code></a></span></dd>
+
+    <dt id="rollback">Rollback</dt>
+    <dd>Putting the previous working version back; on 2026-09-27 there was no one-command rollback, but <code>mesh upgrade</code> keeps the old daemon in a backups folder instead of deleting it.
+      <span class="see">See it: <a href="../../install/payload/bin/mesh" data-anchor="rollback"><code>install/payload/bin/mesh</code></a></span></dd>
+
+    <dt id="runbook">Runbook</dt>
+    <dd>A pre-written, pre-approved step-by-step fix for a known kind of problem, for example "roll back the daemon".
+      <span class="see">See it: <a href="5-ship.html#template">Stages 5–6, the template</a></span></dd>
+
+    <dt id="serialized">Serialized file</dt>
+    <dd>A shared file that only one agent may edit at a time, because two agents changing it at once would break each other's work.
+      <span class="see">See it: <a href="3-build.html#serialized">Stage 3, serialized files</a></span></dd>
+
+    <dt id="sigma">σ (sigma)</dt>
+    <dd>The usual amount a number wiggles; "2σ" means twice the usual wiggle, which is rare enough to look into.
+      <span class="see">See it: <a href="5-ship.html#template">Stages 5–6, the template</a></span></dd>
+
+    <dt id="skill">Skill</dt>
+    <dd>A written instruction pack an agent loads for one kind of task, such as a security review; it advises and does not enforce.
+      <span class="see">See it: <a href="../../.claude/skills/INDEX.md"><code>.claude/skills/INDEX.md</code></a></span></dd>
+
+    <dt id="source-of-truth">Source of truth</dt>
+    <dd>The one file or place that wins when two documents disagree about the same thing.
+      <span class="see">See it: <a href="../../index.md"><code>index.md</code></a> (the repo's start-here map)</span></dd>
+
+    <dt id="spec">Spec</dt>
+    <dd>The agreed description of what will be built and how it should look and behave, written from an intent and checked against your rules.
+      <span class="see">See it: <a href="../../openspec/changes/reach-my-mac-from-anywhere/proposal.md"><code>openspec/changes/reach-my-mac-from-anywhere/proposal.md</code></a></span></dd>
+
+    <dt id="subagent">Subagent</dt>
+    <dd>A second agent started with a clean memory to do one job, such as checking the first agent's work without trusting its story.
+      <span class="see">See it: <a href="../../.claude/agents/factory-verifier.md"><code>.claude/agents/factory-verifier.md</code></a></span></dd>
+
+    <dt id="surface">Surface</dt>
+    <dd>One of the things a customer actually touches, such as the iPhone app, the watch app or the command line.
+      <span class="see">See it: <a href="product.html">the product map</a></span></dd>
+
+    <dt id="testflight">TestFlight</dt>
+    <dd>Apple's app for installing test builds; it is how new versions of our iPhone app reach testers, and the watch app rides along inside it.
+      <span class="see">See it: <a href="../../docs/updating.md"><code>docs/updating.md</code></a></span></dd>
+
+    <dt id="worktree">Worktree</dt>
+    <dd>A second copy of the project folder on disk, on its own branch, so two agents can work at once without overwriting each other.
+      <span class="see">See it: <a href="references/orca.md" data-anchor="## What to borrow"><code>docs/sdlc/references/orca.md</code></a></span></dd>
+  </dl>
+</main>
+<footer class="site-footer">
+  <p>Source of truth: this repository (<code>aryateja2106/lecoder-watch</code>), on the branch
+  you opened it from. Written on <code>sdlc/ai-native-playbook</code>. Nothing on this page
+  outranks the file it links to.</p>
+  <p>How to update: every status line carries a proof. Run <code>sh scripts/check-sdlc-status.sh</code>;
+  when it names a line, change that line's <code>data-state</code> and its state word, then run
+  it again. Agents: read <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a> first.</p>
+  <p>Playbook: <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-native SDLC playbook</a>.
+  Last verified <time data-verified datetime="2026-09-27">2026-09-27</time>.</p>
+</footer>
+</body>
+</html>

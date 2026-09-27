@@ -7,5 +7,5 @@
 **Traps:**
 - `graphify.md:8` says "follow the graphify skill" but no graphify skill exists under `.agents/skills/`; the only copy is `.claude/skills/graphify/`.
 - This folder's consumer is unverified (likely Antigravity); an `AGENTS.md` here may be listed as a workflow.
-**SDLC stage:** Maintain — keeps the navigation graph current.
+**SDLC stage:** Build — rebuilds the code knowledge graph agents navigate by (playbook 3.2 institutional knowledge) (see [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html))
 **Map:** see the file list above (1 file, 10 lines).

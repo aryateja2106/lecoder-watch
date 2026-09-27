@@ -7,5 +7,5 @@
 **Traps:**
 - `backlog.json` is 1351 lines; `scripts/sync-issues.sh:17` turns it into GitHub issues — running that creates real issues.
 - No `CODEOWNERS`, no PR template, no root `REVIEW.md`: review rules live only in skills and `CLAUDE.md`.
-**SDLC stage:** Plan (backlog) and Deploy (CI).
+**SDLC stage:** Plan, Deploy — `backlog.json` is plan-like backlog material and `workflows/ci.yml` is the pre-merge pipeline (see [docs/sdlc/1-plan.html](../docs/sdlc/1-plan.html), [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
 **Map:** see the file list above: `backlog.json`, `workflows/ci.yml`.

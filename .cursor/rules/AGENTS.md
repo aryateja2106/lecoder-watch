@@ -9,5 +9,5 @@
 - `graphify.mdc:8` makes graphify MANDATORY before any read; `.agents/rules/graphify.md:11` is advisory. They were meant to match.
 - All three are `alwaysApply: true` — every token here is paid on every Cursor request; keep them short.
 - Cursor may also treat a plain `.md` here as a rule (unverified); this `AGENTS.md` could be loaded as one.
-**SDLC stage:** Build (3.2 institutional knowledge) and Deploy (5.2, advisory only — Cursor has no hook).
+**SDLC stage:** Build, Deploy — institutional knowledge (playbook 3.2) and the merge policy (5.2), advisory only because Cursor has no hook (see [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html), [docs/sdlc/5-ship.html](../../docs/sdlc/5-ship.html))
 **Map:** see the file list above: `factory.mdc` (63 lines), `codemap.mdc` (15), `graphify.mdc` (21).

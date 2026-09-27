@@ -8,5 +8,5 @@
 - Sourced by EVERY interactive zsh on a Mac with cmux (`install/install.sh:520-527`); any port kill must be `lsof -ti "tcp:$port" -sTCP:LISTEN` (`cmux-bridge.zsh:37-42`, AGENTS.md rule 8), or opening a terminal kills meshd.
 - Hardcodes `/opt/homebrew/bin/bun` (`cmux-bridge.zsh:44`) while the installer puts bun in `~/.bun/bin` (`install/install.sh:125-137`).
 - Not `install/hooks/` (examples). `docs/playbooks/daemon-and-mesh.md:15` wrongly says this is not in the install payload.
-**SDLC stage:** Maintain — keeps a local helper service alive.
+**SDLC stage:** Build — product code shipped to users: a shell snippet that starts the cmux bridge in every new terminal (see [docs/sdlc/3-build.html](../../../docs/sdlc/3-build.html))
 **Map:** see the file list above (1 file).

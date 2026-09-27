@@ -18,5 +18,5 @@
 - check-published.sh hardcodes branch `feat/lesearch-ai-overnight-2026-09-21` and PR 133 (:43-44), and every `## ` heading in BLOCKED.md must appear in PUBLISHED.md or check-all goes red (:106-110).
 - Live checks boot throwaway daemons on side ports and never kill a listener. Keep it that way (AGENTS.md rules 5 and 8; check-approve-path.sh:24).
 
-**SDLC stage:** Test (the Stage 4 "one command" is `gates.sh full` → `check-all.sh`), Deploy (`check-published.sh`, `release-*.sh`), Maintain (`feedback-to-issues.ts`, live fleet probes).
+**SDLC stage:** Test, Deploy, Maintain — the Stage 4 "one command" is `gates.sh full` → `check-all.sh`; `check-published.sh` and `release-*.sh` ship; `feedback-to-issues.ts` and live fleet probes are Stage 6 signals (see [docs/sdlc/4-test.html](../docs/sdlc/4-test.html), [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
 **Map:** scripts/INDEX.md once generated (125 tracked files); until then docs/agents/CHECKS.md

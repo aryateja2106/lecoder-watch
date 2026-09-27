@@ -10,5 +10,5 @@
 - It is defence in depth only (`block-merge.sh:4-6`); GitHub branch protection is the real boundary. Cursor has no equivalent hook.
 - `stop-published.sh` is dormant: it says it is wired from `settings.local.json` (`:5`) but nothing references it now. Wiring it into shared `settings.json` would hold every session in a publish loop (`:81-87`).
 - Blocks are not logged anywhere (`block-merge.sh:26-32` writes stderr only).
-**SDLC stage:** Build (deterministic guardrails) and Deploy (approval gate on merges and protected branches).
+**SDLC stage:** Build, Deploy — deterministic guardrails (playbook 3.4) and the approval gate on merges and protected branches (5.2) (see [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html), [docs/sdlc/5-ship.html](../../docs/sdlc/5-ship.html))
 **Map:** see the file list above: `block-merge.sh` (65 lines), `stop-published.sh` (88 lines).

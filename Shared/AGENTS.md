@@ -17,5 +17,5 @@
 - A call that needs a newer daemon must gate on `supports("x")` (`MeshClient.swift:31`) and be listed in `DaemonCapabilities` — an old daemon answers 200 with the old shape (AGENTS.md rule 6).
 - `AgentNotification.attentionCategory` (`AgentNotifications.swift:19`) is string-matched against `meshd/push.ts` by `check-mesh-push.sh:135`; renaming it strands pending alerts without buttons (`AgentNotifications.swift:15-17`).
 
-**SDLC stage:** Design + Build (the wire contract every client and meshd agree on), Test (the pure logic the self-checks link against).
+**SDLC stage:** Design, Build, Test — the wire contract every client and meshd agree on, and the pure logic the self-checks link against (see [docs/sdlc/2-design.html](../docs/sdlc/2-design.html), [docs/sdlc/3-build.html](../docs/sdlc/3-build.html), [docs/sdlc/4-test.html](../docs/sdlc/4-test.html))
 **Map:** `Shared/INDEX.md` (17 tracked files; to be generated) — until then `docs/agents/CODEMAP.md` §`Shared/`

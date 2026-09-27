@@ -7,5 +7,5 @@
 **Traps:**
 - Copied to `~/.mesh/share` by `install/install.sh:518`; NOT refreshed by `mesh upgrade` (`bin/mesh:1179-1181`), so an edit here reaches existing users only via a fresh install (`install.sh --force`).
 - `install.sh --uninstall` removes `~/.mesh/share` (`install.sh:649`), but `mesh uninstall` leaves `~/.agents/skills` (`bin/mesh:2246-2300`; read, not run).
-**SDLC stage:** Build (skills as policy for users' agents) and Maintain (man page).
+**SDLC stage:** Build — skills that act as policy for users' agents, plus the `mesh` man page (see [docs/sdlc/3-build.html](../../../docs/sdlc/3-build.html))
 **Map:** see the file list above: `man/`, `skills/`, `skills-staged/`

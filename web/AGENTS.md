@@ -11,5 +11,5 @@
 - Deploy is manual: `vercel deploy --prod` from `web/` to Vercel project `lesearch-website` (`docs/overnight/2026-09-21/HANDOFF-2026-09-22-publish.md:16-17`). Publishing is Arya's call; no CI deploys this folder (unverified beyond `.github/workflows/ci.yml` having no web step).
 - `docs/agents/CODEMAP.md:27` still says mesh.lesearch.ai; the live domain is lesearch.ai (`check-published.sh:45`).
 - `shots/iphone-remote-pi.png` is referenced by no page (git grep) — dead weight on the site.
-**SDLC stage:** Deploy (the public face; `check-published.sh` gates release) and Maintain (privacy page kept true).
+**SDLC stage:** Deploy, Maintain — the public face; `check-published.sh` gates the release and keeps asserting the live site afterwards (see [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
 **Map:** INDEX.md (10 direct entries; generate with `python3 scripts/folder-index.py`)

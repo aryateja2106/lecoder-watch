@@ -13,5 +13,5 @@
 - `mesh-tools.json` is hand-maintained. PRODUCT.md:396 says it is "generated from this document", but no generator exists (`git grep mesh-tools` finds only docs and the check), and it has drifted: it adds `copy_file` (:359) and `search_knowledge` (:392) and lacks `switch_machine` from PRODUCT.md:400.
 - `send_key` allows `y` and `n` (`mesh-tools.json:68-69`), which are not daemon keys (`install/payload/meshd/server.ts:674-693`). "Every tool is an existing daemon route" (`check-intent.sh:4`) is not fully true; the mapping layer is unbuilt.
 - Nothing in the apps or daemon reads these files yet (no Swift/TS consumer found); this is a measurement, not a live feature. Root AGENTS.md rule 1 applies before claiming the wrist understands a phrase.
-**SDLC stage:** Test — a 28-case eval suite for one model (the playbook's "20–50 real tasks with acceptance checks").
+**SDLC stage:** Test — a 28-case eval suite for one model (the playbook's "20–50 real tasks with acceptance checks") (see [docs/sdlc/4-test.html](../docs/sdlc/4-test.html))
 **Map:** see the file list above (`mesh-tools.json`: 16 tools; `cases.jsonl`: 28 cases)

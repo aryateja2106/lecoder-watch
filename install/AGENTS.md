@@ -14,5 +14,5 @@
 - Whatever install.sh writes, `mesh uninstall` must remove (AGENTS.md design principle 5). It does not remove the rmux-bridge service or `~/.agents/skills` today (`payload/bin/mesh:2181-2244`; read, not run).
 - Never print the token; the install summary prints only its location (`docs/mesh-cli-and-remote-install.md:134-136`).
 - tmux session names must not contain a dot (`install.sh:169`, `docs/playbooks/daemon-and-mesh.md:121-136`).
-**SDLC stage:** Deploy (the only path onto a machine) and Maintain (upgrade, repair, uninstall).
+**SDLC stage:** Deploy — the only path onto a user's machine; `mesh upgrade` keeps the old tree as the rollback (see [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
 **Map:** `docs/agents/CODEMAP.md` section `install/`; `hooks/` and `payload/` each have an AGENTS.md.

@@ -9,5 +9,5 @@
 - `meshd/` is the ONE daemon copy (AGENTS.md rule 4) and has its own area map. `rmux-bridge` imports `../../meshd/redact` (`rmux-bridge/src/server.ts:10`), so the bridge cannot run without it.
 - `mesh upgrade` moves only `meshd/`, `bin/`, `hooks/`, `rmux-bridge/public/` (`bin/mesh:1179-1181`); `rmux-bridge/src/` and `share/` reach users only through a fresh install.
 - Users run the last `mesh-install` release, not this tree (AGENTS.md rule 6): `curl -s http://127.0.0.1:8899/health` before debugging a real machine.
-**SDLC stage:** Deploy — this directory is the release artifact.
+**SDLC stage:** Deploy — this directory is the release artifact (see [docs/sdlc/5-ship.html](../../docs/sdlc/5-ship.html))
 **Map:** `docs/agents/CODEMAP.md` sections `install/payload/meshd/`, `install/payload/bin/`, `install/payload/rmux-bridge/`

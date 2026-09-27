@@ -16,5 +16,5 @@
 - This folder is not in `docs/agents/CODEMAP.md` or `CHECKS.md`; `scripts/codemap-index.py` does not scan it.
 - Do not edit `scripts/check-ios-smoke.sh` in an unattended run (CLAUDE.md non-negotiable 3).
 
-**SDLC stage:** Test, Deploy — the launch gate before TestFlight (`scripts/release-testflight-asc.sh` exports `MESH_SMOKE_REQUIRED=1`).
+**SDLC stage:** Test, Deploy — the launch gate before TestFlight (`scripts/release-testflight-asc.sh` exports `MESH_SMOKE_REQUIRED=1`) (see [docs/sdlc/4-test.html](../docs/sdlc/4-test.html), [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
 **Map:** see the file list above (3 tracked files)

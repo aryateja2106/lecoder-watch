@@ -10,5 +10,5 @@
 - The live half needs at least 4 committed `2026-09-21/shots/*.png` (`check-published.sh:166-167`). A plain `sh scripts/check-all.sh` rewrites those PNGs (sim-fleet check), dirtying the tree; only `MESH_SHOTS_DIR=<tmp>` avoids it (`:120-122,141-146`). Do not commit the rewritten PNGs by accident.
 - `STATE.md:3` names a worktree and branch (`feat/lesearch-ai-overnight-2026-09-21`) that were right that night; do not take branches from it (AGENTS.md rule 2).
 - `folder-index.py` skips `docs/overnight` for AGENTS.md but will generate `2026-09-21/INDEX.md` (12 entries); its header links an AGENTS.md that folder does not have.
-**SDLC stage:** Maintain (audit trail of autonomous runs) and Test (committed gate logs are the proof quoted in PUBLISHED.md).
+**SDLC stage:** Build, Test — logbooks of unattended build nights; their committed gate logs are the proof `PUBLISHED.md` quotes (see [docs/sdlc/3-build.html](../sdlc/3-build.html), [docs/sdlc/4-test.html](../sdlc/4-test.html))
 **Map:** see the file list above; `2026-09-21/INDEX.md` once generated.

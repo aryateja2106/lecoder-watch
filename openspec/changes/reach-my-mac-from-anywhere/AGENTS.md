@@ -10,5 +10,5 @@
 - Transport security is still absent: `grep -c tls install/payload/meshd/server.ts` = 0 while `grep -c .` = 1517, so the file is not binary-skipped (AGENTS.md rule 3). `specs/connectivity/spec.md:41-54` blocks any off-network reach until pinned TLS exists.
 - Watch networking limits (`proposal.md:47-53`: HTTP data tasks only) rule out WebRTC, QUIC and WireGuard on the wrist. Re-read before proposing one.
 - Several tasks need Arya's iPhone on cellular (`tasks.md:20-21`); an agent cannot prove them.
-**SDLC stage:** Plan + Design — options and requirements waiting on the owner; Build is blocked on the decision point.
+**SDLC stage:** Plan, Design — options and requirements waiting on the owner; Build is blocked on the decision point (see [docs/sdlc/1-plan.html](../../../docs/sdlc/1-plan.html), [docs/sdlc/2-design.html](../../../docs/sdlc/2-design.html))
 **Map:** see the file list above (`proposal.md`, `tasks.md`, `specs/connectivity/spec.md`)

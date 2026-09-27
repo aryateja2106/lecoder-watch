@@ -8,5 +8,5 @@
 - Token comes from `MESHD_TOKEN` or `~/.mesh/token` (`server.ts:186-189`); the installer does not put it in the service env (`install/install.sh:836-843`).
 - Not synced by `mesh upgrade` (`bin/mesh:1179-1181`).
 - Imports `../../meshd/redact` (`server.ts:10`).
-**SDLC stage:** Build / Maintain.
+**SDLC stage:** Build — the legacy bridge server's code; its auth is serialized (see [docs/sdlc/3-build.html](../../../../docs/sdlc/3-build.html))
 **Map:** see the file list above (1 file).

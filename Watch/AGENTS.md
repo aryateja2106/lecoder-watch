@@ -15,5 +15,5 @@
 - Scrollback size is capped by WatchConnectivity's 262,144-byte context that throws silently (`scripts/check-watch-scrollback.swift:5-8`); the watch asks for 300 lines (`Watch/WatchMeshStore.swift:562`).
 - `WCSession.isReachable` flaps every few seconds; the UI must key off `connectionPhase`, not `phoneReachable` (`Watch/WatchMeshStore.swift:39-45`).
 - The machine cache carries meshd tokens: Keychain via `SecureStore` only, never UserDefaults (`Watch/WatchMeshStore.swift:245-248`). New send keys go in both clients (AGENTS.md:192).
-**SDLC stage:** Build, Test — the watch client code and the structural checks that pin it; Design lives in `docs/agents/UI-MAP.md`.
+**SDLC stage:** Build, Test — the watch client code and the structural checks that pin it; Design lives in `docs/agents/UI-MAP.md` (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html), [docs/sdlc/4-test.html](../docs/sdlc/4-test.html))
 **Map:** `Watch/INDEX.md` (to be generated: 9 tracked files); until then `docs/agents/CODEMAP.md` § `Watch/` and `docs/agents/UI-MAP.md` § Apple Watch

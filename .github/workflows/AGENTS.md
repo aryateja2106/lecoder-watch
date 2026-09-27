@@ -10,5 +10,5 @@
 - `MESH_SMOKE_REQUIRED: '1'` (`:125`) turns a missing simulator into a failure on purpose; do not remove it to get green.
 - Never add a second smoke / `xcodebuild test` step: two runs on one simulator kill each other (`:162-169`).
 - `MESH_LINKS_REQUIRED=1` (`:111`) makes an offline runner fail, not skip.
-**SDLC stage:** Deploy (5.3) — the pre-merge check; no deploy job and no AI step in CI.
+**SDLC stage:** Deploy — the pre-merge check (playbook 5.3); no deploy job and no AI step in CI (see [docs/sdlc/5-ship.html](../../docs/sdlc/5-ship.html))
 **Map:** see the file list above (1 file, 171 lines).

@@ -1,0 +1,235 @@
+<!-- 1-plan.html — Stage 1 of the lifecycle: an idea is written as an intent in five headings under intents/ before anyone designs it. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Stage 1 · Plan</title>
+  <meta name="description" content="How an idea becomes a written intent in five plain headings under intents/, before anyone designs or builds it, and where LeSearch AI stands on that today.">
+  <link rel="stylesheet" href="sdlc.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="index.html">LeSearch AI · How we build</a>
+  <nav class="site" aria-label="Site">
+    <ol class="rail">
+      <li><a href="1-plan.html" aria-current="page"><b>1</b> Plan</a></li>
+      <li><a href="2-design.html"><b>2</b> Design</a></li>
+      <li><a href="3-build.html"><b>3</b> Build</a></li>
+      <li><a href="4-test.html"><b>4</b> Test</a></li>
+      <li><a href="5-ship.html"><b>5–6</b> Ship</a></li>
+    </ol>
+    <ul class="aux">
+      <li><a href="index.html">Start</a></li>
+      <li><a href="product.html">Product</a></li>
+      <li><a href="blocks.html">Blocks</a></li>
+      <li><a href="borrowed.html">Borrowed</a></li>
+      <li><a href="glossary.html">Words</a></li>
+    </ul>
+  </nav>
+</header>
+<main>
+  <p class="eyebrow">Stage 1 of 6</p>
+  <h1>Plan: write down why, before anything else</h1>
+  <p class="lede">Before anyone designs or builds anything, the idea is written down in five plain
+  headings: what hurts, what done looks like, who it touches, what must not change, and what is
+  still open.</p>
+  <ul class="chain-chips">
+    <li><b>Reads</b> your words, in a conversation</li>
+    <li><b>Commits</b> <code>intents/YYYY-MM-DD-&lt;slug&gt;.md</code></li>
+  </ul>
+
+  <h2 id="status">Where we are</h2>
+  <ul class="status">
+    <li data-state="done" data-proof="file:intents/TEMPLATE.md" data-owner="agent" data-block="B-01">
+      <span class="state">Done</span>
+      <span class="label">A home for intents, with a template (<a href="../../intents/TEMPLATE.md"><code>intents/TEMPLATE.md</code></a>)</span>
+      <a class="bid" href="blocks.html#B-01">B-01</a>
+    </li>
+    <li data-state="done" data-proof="file:scripts/check-intents.sh" data-owner="agent">
+      <span class="state">Done</span>
+      <span class="label">Every intent's shape is checked automatically (<a href="../../scripts/check-intents.sh"><code>scripts/check-intents.sh</code></a>)</span>
+    </li>
+    <li data-state="done" data-proof="any:intents/20*.md" data-owner="agent">
+      <span class="state">Done</span>
+      <span class="label">At least one intent is written down, as a draft</span>
+    </li>
+    <li data-state="not-started" data-proof="any:intents/20*.md|status: accepted" data-owner="arya" data-block="B-06">
+      <span class="state">Not started</span>
+      <span class="label">At least one intent is accepted by you</span>
+      <span class="you">you</span>
+      <a class="bid" href="blocks.html#B-06">B-06</a>
+    </li>
+    <li data-state="not-started" data-proof="any:intents/20*.md|source: monitor" data-owner="agent">
+      <span class="state">Not started</span>
+      <span class="label">Problems found after release come back as intents</span>
+    </li>
+  </ul>
+  <p class="meta">Each line is checked by <code>sh scripts/check-sdlc-status.sh</code>.</p>
+
+  <h2 id="playbook">What the playbook says</h2>
+  <ul>
+    <li>Every idea is captured as an <a href="glossary.html#intent">intent</a> with five headings: Problem, Proposed outcome, Affected users and systems, Constraints, Open questions. (1)</li>
+    <li>The person with the idea drafts it with Claude; the product owner commits it. (1)</li>
+    <li>The committed intent is the one <a href="glossary.html#artifact">artifact</a> that Stage 2 reads to write a <a href="glossary.html#spec">spec</a>. (1)</li>
+    <li>Measure the days from first conversation to committed intent, and how many intents survive. (1)</li>
+    <li>Humans own the intent; after release, problems found by monitoring come back as new intents. (6.1)</li>
+  </ul>
+
+  <h2 id="repo">In our repo today</h2>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>Practice</th><th>Our files</th><th>What it actually does</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>A home for intents</td>
+          <td><a href="../../intents/README.md" data-anchor="## What happens next (the chain)"><code>intents/README.md</code></a>, <a href="../../intents/TEMPLATE.md"><code>intents/TEMPLATE.md</code></a>, <a href="../../intents/AGENTS.md"><code>intents/AGENTS.md</code></a>, <a href="../../scripts/check-intents.sh"><code>scripts/check-intents.sh</code></a></td>
+          <td>Explains what an intent is and the chain after it. The check fails when a file lacks the front matter, one of the five headings, or a dated file name.</td>
+        </tr>
+        <tr>
+          <td>Draft intents from your own words</td>
+          <td><a href="../../intents/2026-09-27-bring-my-design-theme-into-the-app.md"><code>…-bring-my-design-theme-into-the-app.md</code></a>, <a href="../../intents/2026-09-27-first-customers-what-the-product-must-show.md"><code>…-first-customers-what-the-product-must-show.md</code></a>, <a href="../../intents/2026-09-27-many-machines-one-screen.md"><code>…-many-machines-one-screen.md</code></a>, <a href="../../intents/2026-09-27-security-paramount-with-auditability.md"><code>…-security-paramount-with-auditability.md</code></a>, <a href="../../intents/2026-09-27-serve-my-own-apps-securely.md"><code>…-serve-my-own-apps-securely.md</code></a>, <a href="../../intents/2026-09-27-typescript-and-rust-module-boundaries.md"><code>…-typescript-and-rust-module-boundaries.md</code></a>, <a href="../../intents/2026-09-27-adopt-ai-native-lifecycle.md"><code>…-adopt-ai-native-lifecycle.md</code></a></td>
+          <td>Prepared on 2026-09-27 from what you said in chat, each with <code>status: draft</code>. Their open questions are yours to answer. Whether any is accepted is the status line above.</td>
+        </tr>
+        <tr>
+          <td>The plans interview</td>
+          <td><a href="../../intents/INTERVIEW.md" data-anchor="## 5. Accepting an intent is Arya's word, not yours"><code>intents/INTERVIEW.md</code></a></td>
+          <td>A ready prompt for a fresh session: it asks you one question at a time and writes each answer under <code>## Decisions</code> in the intent. It never marks an intent accepted for you.</td>
+        </tr>
+        <tr>
+          <td>Older plan-like material</td>
+          <td><a href="../../ROADMAP.md" data-anchor="## Non-goals"><code>ROADMAP.md</code></a>, <a href="../../docs/factory/PLAN-0.6.md"><code>docs/factory/PLAN-0.6.md</code></a>, <a href="../../TASKS-2026-09-04.md"><code>TASKS-2026-09-04.md</code></a>, <a href="../../.github/backlog.json"><code>.github/backlog.json</code></a></td>
+          <td>The roadmap gives the order of work and the <a href="glossary.html#non-goal">non-goals</a>. The plan and task board are older owner briefs. The backlog is the source of the open issues; they are review findings, not intents, and none links back to a why.</td>
+        </tr>
+        <tr>
+          <td>Interview <a href="glossary.html#skill">skills</a></td>
+          <td><a href="../../.claude/skills/interview-me/SKILL.md"><code>.claude/skills/interview-me/SKILL.md</code></a>, <a href="../../.claude/skills/grill-with-docs/SKILL.md"><code>.claude/skills/grill-with-docs/SKILL.md</code></a>, <a href="../../.claude/skills/idea-refine/SKILL.md"><code>.claude/skills/idea-refine/SKILL.md</code></a></td>
+          <td>Nothing on their own, it is advice. An agent loads one to interview you well.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="template">The template, side by side</h2>
+  <div class="pair">
+    <div>
+      <h3>The playbook's template</h3>
+<pre><code># Intent: [title]
+## Problem
+## Proposed outcome
+## Affected users and systems
+## Constraints
+## Open questions</code></pre>
+    </div>
+    <div>
+      <h3>Our nearest file</h3>
+      <p><a href="../../intents/TEMPLATE.md"><code>intents/TEMPLATE.md</code></a></p>
+      <ul>
+        <li><a href="../../intents/TEMPLATE.md" data-anchor="# Intent:"><code># Intent:</code></a></li>
+        <li><a href="../../intents/TEMPLATE.md" data-anchor="## Problem"><code>## Problem</code></a></li>
+        <li><a href="../../intents/TEMPLATE.md" data-anchor="## Proposed outcome"><code>## Proposed outcome</code></a></li>
+        <li><a href="../../intents/TEMPLATE.md" data-anchor="## Affected users and systems"><code>## Affected users and systems</code></a></li>
+        <li><a href="../../intents/TEMPLATE.md" data-anchor="## Constraints"><code>## Constraints</code></a></li>
+        <li><a href="../../intents/TEMPLATE.md" data-anchor="## Open questions"><code>## Open questions</code></a></li>
+      </ul>
+      <p>Same five headings, plus front matter (<code>status</code>, <code>owner</code>, <code>source</code>, <code>date</code>) so the chain can be followed.</p>
+    </div>
+  </div>
+
+  <h2 id="gap">The gap</h2>
+  <div class="gap">
+    <ul>
+      <li>No intent is accepted yet, so no spec may start from one.</li>
+      <li>The drafts were prepared from your chat on 2026-09-27; until you answer their open questions and accept them, they are a first guess at your words.</li>
+      <li>Nothing links an open GitHub issue back to the intent it serves.</li>
+      <li>No problem found after release comes back as an intent (<code>source: monitor</code>), because nothing monitors yet; <a href="BLOCKS.md" data-anchor="## Deliberately not a block yet"><code>docs/sdlc/BLOCKS.md</code></a> leaves that for later.</li>
+    </ul>
+  </div>
+
+  <h2 id="blocks">Blocks that close it</h2>
+  <ul>
+    <li><a href="blocks.html#B-06">B-06</a> Design theme: one sitting, intent then spec</li>
+    <li><a href="blocks.html#B-10">B-10</a> Multi-machine intent: what breaks today</li>
+    <li><a href="blocks.html#B-17">B-17</a> The remaining three intents</li>
+  </ul>
+
+  <h2 id="you">How you take part</h2>
+  <div class="you-part">
+    <ol>
+      <li><strong>Talk.</strong> An agent interviews you, one question at a time, using <a href="../../intents/INTERVIEW.md"><code>intents/INTERVIEW.md</code></a>. About 20 minutes per intent.</li>
+      <li><strong>Read the draft.</strong> Open the intent file the answers went into, under <a href="../../intents/AGENTS.md"><code>intents/</code></a>. Check that the Problem is in your words and the outcome says what is true, not how it is built.</li>
+      <li><strong>Commit it,</strong> or tell the agent to. The commit is the record of who asked and when.</li>
+      <li><strong>Accept it.</strong> Only you change <code>status: draft</code> to <code>status: accepted</code> (<a href="../../intents/README.md" data-anchor="## For agents"><code>intents/README.md</code></a>). A spec may start only after that.</li>
+    </ol>
+    <p class="say-this">Interview me with the interview-me skill, one question at a time, and write intents/YYYY-MM-DD-&lt;slug&gt;.md from intents/TEMPLATE.md with status: draft. Do not mark it accepted.</p>
+  </div>
+
+  <h2 id="history">A worked example from our own history</h2>
+  <p>On 2026-09-27 you described the design problem in chat: you were
+  “compromising on design elements because they are functional”, and it was stopping you
+  from getting new clients. Until that day those words lived only in a conversation, where no agent could find
+  them. The same day they were put under <code>## Problem</code> in
+  <a href="../../intents/2026-09-27-bring-my-design-theme-into-the-app.md" data-anchor="## Problem"><code>intents/2026-09-27-bring-my-design-theme-into-the-app.md</code></a>,
+  as a draft. Once you accept it, the design spec can start (<a href="blocks.html#B-06">B-06</a>).</p>
+  <p>Compare the open GitHub issues. They were all created on 2026-08-27 and 2026-08-28 as review
+  findings, from <a href="../../.github/backlog.json"><code>.github/backlog.json</code></a>. They say
+  what is missing, but never why it matters to a customer. That is the gap an intent closes.</p>
+
+  <h2 id="measure">What we would measure</h2>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>Playbook measure</th><th>Command that produces it</th><th>Today</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Days from first conversation to committed intent</td>
+          <td><code>git log --diff-filter=A --format=%ad --date=short -- intents/&lt;file&gt;</code>, compared with the file's <code>date:</code></td>
+          <td>Not measurable until <a href="blocks.html#B-06">B-06</a> (the first intent you accept)</td>
+        </tr>
+        <tr>
+          <td>Survival rate (intents that reach accepted or later)</td>
+          <td><code>grep -l '^status: \(accepted\|in-progress\|shipped\)' intents/20*.md</code></td>
+          <td>Not measurable until <a href="blocks.html#B-06">B-06</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <details class="agents">
+    <summary>For agents</summary>
+    <p>Prove any change to <code>intents/</code> with the shape check. A green run prints an
+    <code>ok</code> line; a red one names the file and what is missing.</p>
+<pre><code>sh scripts/check-intents.sh</code></pre>
+    <ul>
+      <li>Never set <code>status: accepted</code> or <code>status: closed</code>. That is Arya's word (<a href="../../intents/README.md" data-anchor="## For agents"><code>intents/README.md</code></a>).</li>
+      <li>Findings from reviews, monitoring or security scans that need more than a one-file fix land here as <code>status: draft</code> with <code>source:</code> naming what found them.</li>
+      <li>When running the plans interview, follow <a href="../../intents/INTERVIEW.md" data-anchor="## 4. Writing the answers down"><code>intents/INTERVIEW.md</code></a>: answers go under <code>## Decisions</code>, and the five original headings are never renamed.</li>
+      <li>The trap: <a href="../../intent/cases.jsonl"><code>intent/</code></a> (singular) is test data for the product's on-device model. Playbook intents go in <a href="../../intents/AGENTS.md"><code>intents/</code></a> (plural) only. See <a href="glossary.html#intent-vs-intents">the glossary entry</a>.</li>
+      <li>Protected files this stage must not touch: <a href="../../AGENTS.md"><code>AGENTS.md</code></a>, <a href="../../CLAUDE.md" data-anchor="## Non-negotiable"><code>CLAUDE.md</code></a>, <a href="../../docs/factory/CHARTER.md"><code>docs/factory/CHARTER.md</code></a>, <a href="../../.factory/gates.conf"><code>.factory/gates.conf</code></a>, <a href="../../.claude/scripts/gates.sh"><code>.claude/scripts/gates.sh</code></a>.</li>
+      <li>Serialized files: none in <code>intents/</code>, but only Arya changes an intent's status.</li>
+      <li>Skills to load for an interview: <a href="../../.claude/skills/interview-me/SKILL.md"><code>interview-me</code></a>, <a href="../../.claude/skills/grill-with-docs/SKILL.md"><code>grill-with-docs</code></a>, <a href="../../.claude/skills/idea-refine/SKILL.md"><code>idea-refine</code></a>.</li>
+    </ul>
+  </details>
+
+  <nav class="chain-footer" aria-label="The artifact chain">
+    <span>← Reads <b>your words</b>, in a conversation</span>
+    <span>Commits an <b>intent</b> in <code>intents/</code></span>
+    <span>→ <a href="2-design.html">Stage 2 · Design</a> turns it into a spec</span>
+  </nav>
+</main>
+<footer class="site-footer">
+  <p>Source of truth: this repository (<code>aryateja2106/lecoder-watch</code>), on the branch
+  you opened it from. Written on <code>sdlc/ai-native-playbook</code>. Nothing on this page
+  outranks the file it links to.</p>
+  <p>How to update: every status line carries a proof. Run <code>sh scripts/check-sdlc-status.sh</code>;
+  when it names a line, change that line's <code>data-state</code> and its state word, then run
+  it again. Agents: read <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a> first.</p>
+  <p>Playbook: <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-native SDLC playbook</a>.
+  Last verified <time data-verified datetime="2026-09-27">2026-09-27</time>.</p>
+</footer>
+</body>
+</html>

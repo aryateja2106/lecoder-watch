@@ -34,6 +34,8 @@ those three.
 | [agents/codebase-map.md](agents/codebase-map.md) | Understanding the map's three layers; wiring a new agent harness | The generated map, codegraph, graphify: what each answers and costs; `sh scripts/codemap.sh`; what each of Claude Code / Codex / Cursor / Antigravity reads. |
 | [self-serve-apps.md](self-serve-apps.md) | Building or changing the describe-it-anywhere → build-on-Mac → run-everywhere flow | The user-facing story for `mesh apps`; pairs with local-first-ade.md underneath it. |
 | [playbooks/](playbooks/README.md) | Before touching Xcode, simulators, devices, releases, asc, or the daemon from any agent harness | Six imperative playbooks; every trap in them was paid for at least once here. |
+| [AGENTS.md](AGENTS.md) | Landing in `docs/` cold | The folder brief: read-first, what proves a docs change, traps. Every folder has one now; big ones also have a generated [INDEX.md](INDEX.md). |
+| [INDEX.md](INDEX.md) | Looking for a file by name | Generated one-line-per-file map (`python3 scripts/folder-index.py`); do not edit. |
 | [mac-remote-control.md](mac-remote-control.md) | Touching pointer, keyboard, media, windows or power | The control surface, end to end. Referenced from CONTEXT.md. |
 | [mesh-cli-and-remote-install.md](mesh-cli-and-remote-install.md) | Adding a machine, the `mesh` CLI, upgrade/uninstall | Start here for anything installer-shaped. |
 | [local-first-ade.md](local-first-ade.md) | Building or changing the app-building skills, or `mesh apps`/`mesh skills` | The two build routes (native via Xcode+devicectl, PWA via `mesh apps publish`) and the daemon underneath both. |

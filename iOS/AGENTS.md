@@ -18,5 +18,5 @@
 - Every file's first comment line is its CODEMAP purpose; `scripts/check-codemap.sh` goes red when the map is stale — run `python3 scripts/codemap-index.py` after adding a file.
 - `MeshWatch.entitlements` declares only `aps-environment` = development (`MeshWatch.entitlements:5-6`); a new capability needs `sh scripts/check-entitlements.sh` and `project.yml` (serialized).
 
-**SDLC stage:** Build, Test, Maintain — the shipping phone client; most features land here and are proven through its launch test.
+**SDLC stage:** Build, Test — the shipping phone client; most features land here and are proven through its launch test (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html), [docs/sdlc/4-test.html](../docs/sdlc/4-test.html))
 **Map:** INDEX.md (29 tracked files)

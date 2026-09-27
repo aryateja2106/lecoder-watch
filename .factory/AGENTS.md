@@ -8,5 +8,5 @@
 - `gates.conf` is `source`d as shell (`gates.sh:41`): anything but plain assignments executes.
 - A gate name outside `types lint test build audit mutation architecture` makes the verdict MISCONFIGURED (`gates.sh:50-59`).
 - Load-bearing (`docs/factory/CHARTER.md:51`); `block-merge.sh:59` blocks shell writes that name `.factory/gates.conf`.
-**SDLC stage:** Test — defines what "verified" means for every factory run.
+**SDLC stage:** Test — defines what "verified" means for every factory run (see [docs/sdlc/4-test.html](../docs/sdlc/4-test.html))
 **Map:** see the file list above: `gates.conf` (10 lines), `scripts/` (3 scripts).

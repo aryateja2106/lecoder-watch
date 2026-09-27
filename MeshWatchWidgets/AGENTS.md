@@ -14,5 +14,5 @@
 - Deep link `meshwatch://session/<host>/<session>` (`SessionLiveActivity.swift:59-66`): the comment says URLComponents encodes a slash, but `path` leaves `/` as-is and `iOS/MeshStore.swift:1068` requires exactly two parts — a session name with `/` would open nothing (read, not run).
 - Extension version must equal the app's or App Store Connect rejects the upload (`project.yml:153-156`); device family stays "1" (`project.yml:162-164`).
 
-**SDLC stage:** Build, Deploy — ships inside the iPhone app; its content is driven by daemon pushes at runtime.
+**SDLC stage:** Build — product code for the live card; it ships inside the iPhone app and `scripts/check-live-card.swift` tests which session gets it (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html))
 **Map:** see the file list above (5 tracked files; CODEMAP § `MeshWatchWidgets/`)

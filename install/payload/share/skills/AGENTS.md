@@ -10,5 +10,5 @@
 - Five skills, not four: `AGENTS.md:124` and `check-mesh-skills.sh:2` still say four; `mesh-knowledge` was added 2026-09-23.
 - `mesh upgrade` does not refresh skills (`bin/mesh:1179-1181`); users get edits only from a fresh install. `mesh uninstall` leaves `~/.agents/skills` behind (read, not run).
 - One AGENTS.md here only; each skill folder is described by its own `SKILL.md` (`scripts/folder-index.py:164`).
-**SDLC stage:** Build — policy-as-code the product hands to its users' agents; Design/Build guidance for this repo through the symlinks.
+**SDLC stage:** Build — policy as code the product hands to its users' agents; this repo's own agents load them through symlinks (see [docs/sdlc/3-build.html](../../../../docs/sdlc/3-build.html))
 **Map:** the five `*/SKILL.md` `description:` lines; `apple-native-apis/references/` holds 8 topic files.

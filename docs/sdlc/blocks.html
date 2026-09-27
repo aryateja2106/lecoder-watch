@@ -1,0 +1,591 @@
+<!-- blocks.html — every block of lifecycle work (B-01 to B-22) in one ordered list, grouped by who acts, each with its proof. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>The ordered blocks</title>
+  <meta name="description" content="Every piece of lifecycle work in one ordered list, grouped by who acts next, each with the proof that shows it is done.">
+  <link rel="stylesheet" href="sdlc.css">
+</head>
+<body>
+<header class="top">
+  <a class="home" href="index.html">LeSearch AI · How we build</a>
+  <nav class="site" aria-label="Site">
+    <ol class="rail">
+      <li><a href="1-plan.html"><b>1</b> Plan</a></li>
+      <li><a href="2-design.html"><b>2</b> Design</a></li>
+      <li><a href="3-build.html"><b>3</b> Build</a></li>
+      <li><a href="4-test.html"><b>4</b> Test</a></li>
+      <li><a href="5-ship.html"><b>5–6</b> Ship</a></li>
+    </ol>
+    <ul class="aux">
+      <li><a href="index.html">Start</a></li>
+      <li><a href="product.html">Product</a></li>
+      <li><a href="blocks.html" aria-current="page">Blocks</a></li>
+      <li><a href="borrowed.html">Borrowed</a></li>
+      <li><a href="glossary.html">Words</a></li>
+    </ul>
+  </nav>
+</header>
+<main>
+  <h1>The blocks, in order</h1>
+  <p class="lede">A block is one piece of work small enough to finish and prove on its own. Work
+  top to bottom, one at a time.</p>
+
+  <h2 id="how">How a block works</h2>
+  <p>One <a href="glossary.html#intent">intent</a> leads to one change, and that change has one
+  check that fails without it. The change arrives as a
+  <a href="glossary.html#draft-pr">draft pull request</a>, and a human merges it, never an agent.
+  Each block below shows its stage, its size (S is one day or less, M is up to three days), who
+  signs it off and what it waits for. Its status line carries a proof, so the line turns green
+  only when the repo really changes. Lines marked <span class="you">you</span> are yours to act
+  on. The full text of every block, with the files it touches and what happens if you say no,
+  is in <a href="BLOCKS.md" data-anchor="## For Arya: how to read this"><code>docs/sdlc/BLOCKS.md</code></a>.</p>
+  <p>There are two lanes that run at the same time: yours, and the agents'. Inside each lane,
+  work top to bottom. To answer a block, reply in chat with its id and one word, for example
+  "B-04 yes" or "B-15 option a". Only a yes you type in chat counts.</p>
+
+  <h2 id="done">Already done</h2>
+  <ol class="blocks">
+    <li class="block" id="B-01">
+      <h3>B-01 · A home for intents</h3>
+      <dl>
+        <dt>Stage</dt><dd>1 Plan</dd>
+        <dt>Size</dt><dd>S</dd>
+        <dt>Who signs off</dt><dd>An agent built it; the folder is yours</dd>
+        <dt>Waits for</dt><dd>Nothing</dd>
+      </dl>
+      <p>Why now: every idea needs a written "why" before anyone designs or builds it, and until
+      2026-09-27 there was nowhere to put one (<a href="../../intents/README.md"><code>intents/README.md</code></a>).
+      Seven draft intents were written into it the same day.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-01">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="done" data-proof="file:scripts/check-intents.sh" data-owner="agent" data-block="B-01">
+          <span class="state">Done</span>
+          <span class="label">The intents folder has its template and its check (<a href="../../scripts/check-intents.sh"><code>scripts/check-intents.sh</code></a>)</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-02">
+      <h3>B-02 · Five reference reviews</h3>
+      <dl>
+        <dt>Stage</dt><dd>2 Design (research)</dd>
+        <dt>Size</dt><dd>S</dd>
+        <dt>Who signs off</dt><dd>You read them when convenient</dd>
+        <dt>Waits for</dt><dd>Nothing</dd>
+      </dl>
+      <p>Why now: you named five outside projects to learn from, and each review ends with the one
+      small block worth taking from it (see <a href="borrowed.html">Borrowed ideas</a>, or start
+      with <a href="references/orca.md" data-anchor="## The first block"><code>references/orca.md</code></a>).</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-02">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="done" data-proof="any:docs/sdlc/references/*.md|## The first block" data-owner="agent" data-block="B-02">
+          <span class="state">Done</span>
+          <span class="label">The reviews exist, each ending with its first block</span>
+        </li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2 id="yours">Only you can start these</h2>
+  <p>Each of these needs a decision, a yes, or some minutes of your time. An agent may prepare
+  it for you, but must not do it for you. When <code>BLOCKS.md</code> was written on 2026-09-27,
+  it suggested only three for the first week: <a href="blocks.html#B-04">B-04</a> (2 minutes),
+  <a href="blocks.html#B-05">B-05</a> (the TestFlight decision) and
+  <a href="blocks.html#B-06">B-06</a> (the design sitting). The rest can wait until you have
+  the time.</p>
+  <ol class="blocks">
+    <li class="block" id="B-04">
+      <h3>B-04 · Protect <code>main</code> on GitHub</h3>
+      <dl>
+        <dt>Stage</dt><dd>5 Deploy (approval gate)</dd>
+        <dt>Size</dt><dd>S (about 2 minutes in GitHub settings)</dd>
+        <dt>Who signs off</dt><dd>You. An agent must not do it, because it changes account settings</dd>
+        <dt>Waits for</dt><dd>Nothing</dd>
+      </dl>
+      <p>Why now: the repo is public, and on 2026-09-27 <code>main</code> had no GitHub protection,
+      so "an agent can never merge" rested on a local script
+      (<a href="../../.claude/hooks/block-merge.sh"><code>.claude/hooks/block-merge.sh</code></a>)
+      that cloud agents such as Cursor's never run.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-04">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="live:main-protected" data-owner="arya" data-block="B-04" data-asof="2026-09-27">
+          <span class="state">Not started</span>
+          <span class="label"><code>main</code> refuses changes nobody reviewed</span>
+          <span class="you">you</span>
+          <span class="asof">checked 2026-09-27</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-05">
+      <h3>B-05 · Put 0.8.0 on the public TestFlight link</h3>
+      <dl>
+        <dt>Stage</dt><dd>5 Deploy</dd>
+        <dt>Size</dt><dd>S of your time, plus Apple's review wait</dd>
+        <dt>Who signs off</dt><dd>You</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a></dd>
+      </dl>
+      <p>Why now: the website describes 0.8.0, but the publish ledger
+      (<a href="../../PUBLISHED.md" data-anchor="still serves the 2026-08-27 build"><code>PUBLISHED.md</code></a>)
+      records that the public TestFlight link still serves the 2026-08-27 build, so every
+      prospect you send there sees an app that does not match the page. The steps and the
+      version-downgrade decision are in <a href="../../BLOCKED.md"><code>BLOCKED.md</code></a>.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-05">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="!text:PUBLISHED.md|still serves the 2026-08-27 build" data-owner="arya" data-block="B-05">
+          <span class="state">Not started</span>
+          <span class="label">Strangers get the newest phone app from the public TestFlight link</span>
+          <span class="you">you</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-06">
+      <h3>B-06 · Design theme: one sitting, intent then spec</h3>
+      <dl>
+        <dt>Stage</dt><dd>1 Plan, then 2 Design</dd>
+        <dt>Size</dt><dd>M (mostly your answers; about an hour of you)</dd>
+        <dt>Who signs off</dt><dd>You</dd>
+        <dt>Waits for</dt><dd>Nothing</dd>
+      </dl>
+      <p>Why now: you said that settling for functional design is stopping you from getting new
+      clients, and the repo holds four competing looks that nobody ever chose. An agent wrote the
+      draft intent on 2026-09-27
+      (<a href="../../intents/2026-09-27-bring-my-design-theme-into-the-app.md"><code>intents/2026-09-27-bring-my-design-theme-into-the-app.md</code></a>);
+      you answer its questions, accept it, and then approve the spec.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-06">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="in-progress" data-proof="file:openspec/changes/design-theme/proposal.md" data-owner="arya" data-block="B-06" data-asof="2026-09-27">
+          <span class="state">In progress</span>
+          <span class="label">The design theme is written as a spec (<code class="missing">openspec/changes/design-theme/proposal.md</code>); the draft intent exists</span>
+          <span class="you">you</span>
+          <span class="asof">checked 2026-09-27</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-08">
+      <h3>B-08 · App link keys long enough to be unguessable</h3>
+      <dl>
+        <dt>Stage</dt><dd>3 Build (security)</dd>
+        <dt>Size</dt><dd>S, attended</dd>
+        <dt>Who signs off</dt><dd>You OK three edited lines in existing checks; then the agent and a fresh verifier</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a>, and your yes on three lines in <a href="../../scripts/check-mesh-apps.sh"><code>scripts/check-mesh-apps.sh</code></a> and <a href="../../scripts/check-apps-ota.sh"><code>scripts/check-apps-ota.sh</code></a></dd>
+      </dl>
+      <p>Why now: the secret inside each app link is short enough to guess, a known finding with a
+      known fix (<a href="../../docs/review-2026-09-17.md" data-anchor="SEC-06"><code>docs/review-2026-09-17.md</code></a>,
+      SEC-06); it makes links hard to guess, but it does not stop someone who already has a link.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-08">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="file:scripts/check-apps-key-strength.sh" data-owner="arya" data-block="B-08">
+          <span class="state">Not started</span>
+          <span class="label">App links carry a long key (<code class="missing">scripts/check-apps-key-strength.sh</code>)</span>
+          <span class="you">you</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-10">
+      <h3>B-10 · Multi-machine intent: what breaks today</h3>
+      <dl>
+        <dt>Stage</dt><dd>1 Plan</dd>
+        <dt>Size</dt><dd>S (about 20 minutes)</dd>
+        <dt>Who signs off</dt><dd>You</dd>
+        <dt>Waits for</dt><dd>Nothing</dd>
+      </dl>
+      <p>Why now: running agents across your machines is what you called the core use, and the one
+      thing that breaks or confuses you today is not written down yet. A draft exists
+      (<a href="../../intents/2026-09-27-many-machines-one-screen.md"><code>intents/2026-09-27-many-machines-one-screen.md</code></a>);
+      your answer and your acceptance finish it.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-10">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="in-progress" data-proof="any:intents/20*many-machines*.md|status: accepted" data-owner="arya" data-block="B-10" data-asof="2026-09-27">
+          <span class="state">In progress</span>
+          <span class="label">You have accepted the multi-machine intent (a draft exists)</span>
+          <span class="you">you</span>
+          <span class="asof">checked 2026-09-27</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-12">
+      <h3>B-12 · Security audit skill and first baseline</h3>
+      <dl>
+        <dt>Stage</dt><dd>6 Maintain (security)</dd>
+        <dt>Size</dt><dd>S to add the skill, M for the first run</dd>
+        <dt>Who signs off</dt><dd>You</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a>, and your yes on adding an outside skill under a protected folder</dd>
+      </dl>
+      <p>Why now: you named security as paramount, and there is no recurring scan, no baseline and
+      no record of dismissed findings; the findings stay on your Mac and never go into git while
+      the repo is public (<a href="references/security-audit-skill.md" data-anchor="## The first block"><code>references/security-audit-skill.md</code></a>).</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-12">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="file:scripts/check-security-audit-skill.sh" data-owner="arya" data-block="B-12">
+          <span class="state">Not started</span>
+          <span class="label">The audit skill is added and checked (<code class="missing">scripts/check-security-audit-skill.sh</code>)</span>
+          <span class="you">you</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-15">
+      <h3>B-15 · Decide the Cursor pull-request pile</h3>
+      <dl>
+        <dt>Stage</dt><dd>5 Deploy (review)</dd>
+        <dt>Size</dt><dd>S</dd>
+        <dt>Who signs off</dt><dd>You decide; an agent closes pull requests only after your yes in chat, because closing them is public</dd>
+        <dt>Waits for</dt><dd>Nothing</dd>
+      </dl>
+      <p>Why now: on 22–23 September 2026 an unattended Cursor loop opened 123 pull requests
+      (counted on 2026-09-27), most of them stacked on each other, which breaks the stop rule in
+      <a href="../../docs/factory/CHARTER.md"><code>docs/factory/CHARTER.md</code></a> many times
+      over, so no agent run can honestly start until you choose: close all, keep a few, or park them.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-15">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="text:docs/factory/DECISIONS.md|Cursor PR pile" data-owner="arya" data-block="B-15">
+          <span class="state">Not started</span>
+          <span class="label">Your decision is recorded in <a href="../../docs/factory/DECISIONS.md"><code>docs/factory/DECISIONS.md</code></a> under a heading with the words "Cursor PR pile"</span>
+          <span class="you">you</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-16">
+      <h3>B-16 · Fill in the factory charter</h3>
+      <dl>
+        <dt>Stage</dt><dd>Policy (all stages)</dd>
+        <dt>Size</dt><dd>S (a 15-minute interview)</dd>
+        <dt>Who signs off</dt><dd>You</dd>
+        <dt>Waits for</dt><dd>Nothing</dd>
+      </dl>
+      <p>Why now: the <a href="glossary.html#charter">charter</a> still says
+      <a href="../../docs/factory/CHARTER.md" data-anchor="CHARTER_STATUS: incomplete"><code>CHARTER_STATUS: incomplete</code></a>,
+      and its own rule is that silence means stop, so until it is filled every agent block runs
+      only while you are in the session.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-16">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="file:scripts/check-charter.sh" data-owner="arya" data-block="B-16">
+          <span class="state">Not started</span>
+          <span class="label">The charter is filled in and checked (<code class="missing">scripts/check-charter.sh</code>)</span>
+          <span class="you">you</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-17">
+      <h3>B-17 · The remaining three intents</h3>
+      <dl>
+        <dt>Stage</dt><dd>1 Plan</dd>
+        <dt>Size</dt><dd>S each (about 20 minutes)</dd>
+        <dt>Who signs off</dt><dd>You</dd>
+        <dt>Waits for</dt><dd>Nothing</dd>
+      </dl>
+      <p>Why now: three of your asks need a "why" you have accepted, and
+      <a href="blocks.html#B-18">B-18</a> cannot start until the first one is. Drafts were written
+      on 2026-09-27:
+      <a href="../../intents/2026-09-27-security-paramount-with-auditability.md"><code>security-paramount-with-auditability</code></a>,
+      <a href="../../intents/2026-09-27-serve-my-own-apps-securely.md"><code>serve-my-own-apps-securely</code></a> and
+      <a href="../../intents/2026-09-27-typescript-and-rust-module-boundaries.md"><code>typescript-and-rust-module-boundaries</code></a>.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-17">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="in-progress" data-proof="any:intents/20*security*.md|status: accepted" data-owner="arya" data-block="B-17" data-asof="2026-09-27">
+          <span class="state">In progress</span>
+          <span class="label">You have accepted the security intent, the one B-18 waits for (drafts of all three exist)</span>
+          <span class="you">you</span>
+          <span class="asof">checked 2026-09-27</span>
+        </li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2 id="agent">An agent can do these once you say go</h2>
+  <p>Until the charter is filled in (<a href="blocks.html#B-16">B-16</a>), every one of these
+  runs attended: in a session you are part of, never overnight on its own. Blocks that touch the
+  same serialized file run one after another, never together. Some need one yes from you along
+  the way; the "Waits for" line says which.</p>
+  <ol class="blocks">
+    <li class="block" id="B-03">
+      <h3>B-03 · Green baseline, and agent notes never ship</h3>
+      <dl>
+        <dt>Stage</dt><dd>4 Test and 5 Deploy</dd>
+        <dt>Size</dt><dd>S</dd>
+        <dt>Who signs off</dt><dd>The agent, then a fresh verifier</dd>
+        <dt>Waits for</dt><dd>Nothing. It must land before any release (<a href="blocks.html#B-05">B-05</a>, <a href="blocks.html#B-14">B-14</a>)</dd>
+      </dl>
+      <p>Why now: on 2026-09-27 the new folder notes turned three self-checks red, and the same
+      notes (<code>AGENTS.md</code> and <code>INDEX.md</code> files) would ship to every user
+      inside the next installer unless
+      <a href="../../scripts/package-mesh-install.sh"><code>scripts/package-mesh-install.sh</code></a>
+      learns to skip them.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-03">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="in-progress" data-proof="file:scripts/check-payload-no-agent-docs.sh" data-owner="agent" data-block="B-03" data-asof="2026-09-27">
+          <span class="state">In progress</span>
+          <span class="label">The installer is checked for agent notes (<code class="missing">scripts/check-payload-no-agent-docs.sh</code>)</span>
+          <span class="asof">checked 2026-09-27</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-07">
+      <h3>B-07 · Teaching pages under <code>docs/sdlc/</code></h3>
+      <dl>
+        <dt>Stage</dt><dd>All stages (teaching)</dd>
+        <dt>Size</dt><dd>M</dd>
+        <dt>Who signs off</dt><dd>An agent builds it; you confirm you can find your way with it</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a>, and <code>BLOCKS.md</code></dd>
+      </dl>
+      <p>Why now: you asked for pages that teach the lifecycle with this project's own files, so you
+      can navigate the codebase yourself; this page is one of them.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-07">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="done" data-proof="file:scripts/check-sdlc-status.sh" data-owner="agent" data-block="B-07">
+          <span class="state">Done</span>
+          <span class="label">The ten pages are written and <a href="../../scripts/check-sdlc-status.sh"><code>scripts/check-sdlc-status.sh</code></a> keeps every status line on them true; your part is to open <a href="index.html">index.html</a> and find one module on your own</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-09">
+      <h3>B-09 · Theme tokens and one restyled screen</h3>
+      <dl>
+        <dt>Stage</dt><dd>3 Build, with the Stage 4 visual check</dd>
+        <dt>Size</dt><dd>M, attended (it can grow if the simulators misbehave)</dd>
+        <dt>Who signs off</dt><dd>The agent; you approve the before-and-after screenshots</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-06">B-06</a>, <a href="blocks.html#B-03">B-03</a>; needs your yes on the screenshot pair and on the protected <a href="../../.agents/skills/meshwatch-ui-taste/SKILL.md"><code>.agents/skills/meshwatch-ui-taste/SKILL.md</code></a></dd>
+      </dl>
+      <p>Why now: it is the first time you see your theme in the real app, on the screen a new
+      customer sees first (<a href="../../iOS/ContentView.swift"><code>iOS/ContentView.swift</code></a>,
+      unless your design answers name another screen).</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-09">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="file:scripts/check-theme-tokens.sh" data-owner="agent" data-block="B-09">
+          <span class="state">Not started</span>
+          <span class="label">Restyled screens use only the theme's colours (<code class="missing">scripts/check-theme-tokens.sh</code>)</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-11">
+      <h3>B-11 · First multi-machine build block</h3>
+      <dl>
+        <dt>Stage</dt><dd>3 Build</dd>
+        <dt>Size</dt><dd>S for the likely candidate; resized if your intent names something else</dd>
+        <dt>Who signs off</dt><dd>The agent, a fresh verifier, then you on a real device</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-10">B-10</a> accepted, <a href="blocks.html#B-03">B-03</a>; a spec first, because customers will see it</dd>
+      </dl>
+      <p>Why now: it turns your multi-machine answer into the first thing you can feel across
+      machines, and the likely candidate is a machine status that says "pair again" or "update
+      needed" instead of just "offline" (<a href="references/orca.md" data-anchor="## The first block"><code>references/orca.md</code></a>).</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-11">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="any:openspec/changes/*|many-machines-one-screen" data-owner="agent" data-block="B-11">
+          <span class="state">Not started</span>
+          <span class="label">First step: a spec that cites the multi-machine intent exists</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-13">
+      <h3>B-13 · Streaming redaction for the live terminal</h3>
+      <dl>
+        <dt>Stage</dt><dd>3 Build (security)</dd>
+        <dt>Size</dt><dd>S</dd>
+        <dt>Who signs off</dt><dd>The agent, then a fresh verifier</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a>; preferably after <a href="blocks.html#B-12">B-12</a></dd>
+      </dl>
+      <p>Why now: the daemon hides secrets in the live terminal one piece of output at a time, so a
+      token cut across two pieces could slip through
+      (<a href="../../install/payload/meshd/redact.ts"><code>install/payload/meshd/redact.ts</code></a>,
+      <a href="../../install/payload/meshd/pty.ts"><code>install/payload/meshd/pty.ts</code></a>);
+      whether that happens in real use is unverified.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-13">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="file:scripts/check-redact-stream.sh" data-owner="agent" data-block="B-13">
+          <span class="state">Not started</span>
+          <span class="label">A secret split at any point is still hidden (<code class="missing">scripts/check-redact-stream.sh</code>)</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-14">
+      <h3>B-14 · Ship the daemon fixes to users</h3>
+      <dl>
+        <dt>Stage</dt><dd>5 Deploy</dd>
+        <dt>Size</dt><dd>S</dd>
+        <dt>Who signs off</dt><dd>You say yes in chat before it publishes, because a release is public; an agent runs it</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a>, <a href="blocks.html#B-08">B-08</a>; <a href="blocks.html#B-13">B-13</a> goes in if it is done</dd>
+      </dl>
+      <p>Why now: fixes that sit in git reach nobody until a release is cut, and daemon releases do
+      not go through App Review, so this one is fast
+      (<a href="../../scripts/release-mesh-install.sh"><code>scripts/release-mesh-install.sh</code></a>,
+      then a dated line in <a href="../../PUBLISHED.md"><code>PUBLISHED.md</code></a>).</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-14">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="!text:PUBLISHED.md|# PUBLISHED — LeSearch AI 0.8.0" data-owner="agent" data-block="B-14">
+          <span class="state">Not started</span>
+          <span class="label">The publish ledger names a release newer than the 0.8.0 of 2026-09-22</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-18">
+      <h3>B-18 · Approvals log that records what was chosen</h3>
+      <dl>
+        <dt>Stage</dt><dd>3 Build (auditability)</dd>
+        <dt>Size</dt><dd>M</dd>
+        <dt>Who signs off</dt><dd>The agent and a fresh verifier; you approve the spec</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-17">B-17</a> (the security intent accepted, and its spec), <a href="blocks.html#B-03">B-03</a></dd>
+      </dl>
+      <p>Why now: when you tap Allow on your phone, the daemon presses keys in the agent's terminal
+      and writes nothing down, so you cannot show a client who approved what, or when
+      (<a href="references/openmuse.md" data-anchor="## The first block"><code>references/openmuse.md</code></a>).</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-18">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="file:scripts/check-decisions.sh" data-owner="agent" data-block="B-18">
+          <span class="state">Not started</span>
+          <span class="label">Every approval leaves a receipt naming the option chosen (<code class="missing">scripts/check-decisions.sh</code>)</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-19">
+      <h3>B-19 · CI: find out why the iPhone build fails, then fix it</h3>
+      <dl>
+        <dt>Stage</dt><dd>4 Test</dd>
+        <dt>Size</dt><dd>S to diagnose; the fix is sized afterwards</dd>
+        <dt>Who signs off</dt><dd>An agent diagnoses; you pick the fix and read the workflow change</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a>; needs your yes on the fix option and on the change to <a href="../../.github/workflows/ci.yml" data-anchor="Build MeshWatch (iOS)"><code>.github/workflows/ci.yml</code></a></dd>
+      </dl>
+      <p>Why now: on 2026-09-27 <a href="glossary.html#ci">CI</a> was red on the integration branch
+      at the step "Build MeshWatch (iOS)", and a CI that is always red teaches everyone to ignore
+      it; the cause is unverified.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-19">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="live:ci-latest-green" data-owner="agent" data-block="B-19" data-asof="2026-09-27">
+          <span class="state">Not started</span>
+          <span class="label">The newest CI run succeeded</span>
+          <span class="asof">checked 2026-09-27</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-20">
+      <h3>B-20 · Write down what "healthy" looks like, and decide the deep gate</h3>
+      <dl>
+        <dt>Stage</dt><dd>4 Test</dd>
+        <dt>Size</dt><dd>S</dd>
+        <dt>Who signs off</dt><dd>An agent writes it; you pick the option</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a>; needs your yes on one of three ways out for the deep gate</dd>
+      </dl>
+      <p>Why now: <a href="../../CLAUDE.md"><code>CLAUDE.md</code></a> lists the check commands but
+      not what healthy output looks like, and on 2026-09-27 the <code>deep</code> gate could never
+      pass, although the file makes it sound harmless.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-20">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="text:CLAUDE.md|## Verifying your work" data-owner="agent" data-block="B-20">
+          <span class="state">Not started</span>
+          <span class="label"><code>CLAUDE.md</code> has a "Verifying your work" block with the expected output</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-21">
+      <h3>B-21 · A <code>REVIEW.md</code> that a reviewer actually reads</h3>
+      <dl>
+        <dt>Stage</dt><dd>5 Deploy (review policy)</dd>
+        <dt>Size</dt><dd>S</dd>
+        <dt>Who signs off</dt><dd>An agent writes it; you approve the change to the reviewer agent</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-16">B-16</a> (soft); needs your yes on the protected <a href="../../.claude/agents/factory-critic.md"><code>.claude/agents/factory-critic.md</code></a></dd>
+      </dl>
+      <p>Why now: there is no written rule for what a reviewer must flag, so reviews either drown
+      you in small comments or miss what matters.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-21">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="file:REVIEW.md" data-owner="agent" data-block="B-21">
+          <span class="state">Not started</span>
+          <span class="label">Review rules are written down (<code class="missing">REVIEW.md</code>)</span>
+        </li>
+      </ul>
+    </li>
+    <li class="block" id="B-22">
+      <h3>B-22 · One source of truth per kind of document</h3>
+      <dl>
+        <dt>Stage</dt><dd>Playbook sidebar (source of truth)</dd>
+        <dt>Size</dt><dd>S</dd>
+        <dt>Who signs off</dt><dd>The agent</dd>
+        <dt>Waits for</dt><dd><a href="blocks.html#B-03">B-03</a></dd>
+      </dl>
+      <p>Why now: several documents claim to be "the current state", and old ones such as
+      <a href="../../HANDOFF.md"><code>HANDOFF.md</code></a> still point agents at a July branch,
+      so agents start from the wrong page.</p>
+      <p><a href="BLOCKS.md" data-anchor="### B-22">Full block in BLOCKS.md</a></p>
+      <ul class="status">
+        <li data-state="not-started" data-proof="text:index.md|Source of truth" data-owner="agent" data-block="B-22">
+          <span class="state">Not started</span>
+          <span class="label"><a href="../../index.md"><code>index.md</code></a> has one "Source of truth" table</span>
+        </li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2 id="later">Later, and why later</h2>
+  <p>These came up and were left out on purpose. Each one returns as its own intent when the
+  reason below stops being true (<a href="BLOCKS.md" data-anchor="## Deliberately not a block yet"><code>BLOCKS.md</code></a>).</p>
+  <ul>
+    <li><b>A separate project copy per agent (worktrees).</b> It helps several agents on one machine, not across machines, and <a href="../../ROADMAP.md" data-anchor="## Later"><code>ROADMAP.md</code></a> puts it under Later; done properly it is too big for a block.</li>
+    <li><b>Agent evals in CI and a CI-health control band.</b> A real eval runs an agent on paid model calls with a key in a public repo's workflow, and it only pays off once agents run unattended on a green CI.</li>
+    <li><b>A plan section inside run records.</b> A plan written at the end of a run cannot prove it came first; the charter's plan-before-code rule replaces it.</li>
+    <li><b>Per-device tokens.</b> They touch pairing and sign-in, the most sensitive code, so they need their own intent.</li>
+    <li><b>A read-open, write-gated proxy for apps agents build.</b> Only if the app-serving intent says those apps need a backend at all.</li>
+    <li><b>A secrets-in-diff hook, and the false alarms in <a href="../../.claude/hooks/block-merge.sh"><code>.claude/hooks/block-merge.sh</code></a>.</b> Both live in a protected folder, and they are worth doing after the first security baseline shows what it finds.</li>
+    <li><b>Rules for the empty "architecture" gate.</b> No rule is known yet to put in it.</li>
+    <li><b>Agent triage in CI, on-call chat, managed settings.</b> There are no customers, no pager and no second person yet.</li>
+    <li><b>The <code>factory:*</code> labels and a re-triage of the open issues.</b> The labels were never created (<a href="../../.factory/scripts/bootstrap-github.sh"><code>.factory/scripts/bootstrap-github.sh</code></a> was never applied), and the issues date from 2026-08-27/28; re-triage them after your intents are accepted.</li>
+    <li><b>Skills clean-up.</b> Skills are advice only; prune one when a run shows it being ignored.</li>
+    <li><b>The other "Now" items in <code>ROADMAP.md</code></b> (terminal gestures, hold-to-talk, model picker, Mac permissions at setup, friendly app addresses). They are product features, not lifecycle work, and each enters as an intent.</li>
+    <li><b>The brain probe order</b> in <a href="../../install/payload/meshd/brain.ts"><code>install/payload/meshd/brain.ts</code></a> (see <a href="../../BLOCKED.md"><code>BLOCKED.md</code></a>). A product slice, not lifecycle work.</li>
+    <li><b><code class="missing">CONSTRAINTS.md</code>.</b> <a href="../../docs/product/PRODUCT.md"><code>docs/product/PRODUCT.md</code></a> calls it "the floor", but no such file exists at the repo root. Flagged, not planned.</li>
+    <li><b>The dormant <a href="../../.claude/hooks/stop-published.sh"><code>.claude/hooks/stop-published.sh</code></a>.</b> It is not wired, and the publish mission it served has ended.</li>
+  </ul>
+
+  <h2 id="questions">Questions only you can answer</h2>
+  <p>From <a href="BLOCKS.md" data-anchor="## Open questions for Arya"><code>BLOCKS.md</code></a>.
+  Answer in chat with the block id.</p>
+  <ol>
+    <li><a href="blocks.html#B-04">B-04</a>: protect <code>main</code> only, or also <code>backup/2026-07-02</code>?</li>
+    <li><a href="blocks.html#B-05">B-05</a>: accept the version downgrade from the stray <code>1.0</code>? And where should the website's GitHub links point?</li>
+    <li><a href="blocks.html#B-10">B-10</a>: what is the one thing that breaks or confuses you when you run agents on the Mac, the Pi and the Jetson together?</li>
+    <li><a href="blocks.html#B-15">B-15</a>: close all, keep a subset, or park? Where is the Cursor background agent switched off? And does <code>ROADMAP.md</code> ("no account system") or <code>docs/product/PRODUCT.md</code> §10 (an optional account for problem reports) govern the account pull requests?</li>
+    <li><a href="blocks.html#B-16">B-16</a>: which tier for the charter? And do you accept that each load-bearing path makes the matching blocks attended and deep-gated?</li>
+    <li><a href="blocks.html#B-17">B-17</a>: should a client see the approvals log on the phone, in a file, or both? Which feature, if any, do you want in Rust?</li>
+    <li><a href="blocks.html#B-19">B-19</a>: if the iPhone build needs Xcode 27 and GitHub does not offer it, which option?</li>
+    <li><a href="blocks.html#B-20">B-20</a>: which of the three ways out for the deep gate?</li>
+    <li><a href="blocks.html#B-22">B-22</a>: what should <code>main</code> be, and do you approve the repo consolidation described in <code>BLOCKED.md</code>?</li>
+  </ol>
+
+  <details class="agents">
+    <summary>For agents</summary>
+    <p>The ids, names, order and full text come from <a href="BLOCKS.md"><code>docs/sdlc/BLOCKS.md</code></a>
+    alone. If it is renumbered, this page changes in the same commit. Read the state of every
+    status line on the site with the board, not by parsing HTML
+    (<code class="missing">scripts/check-sdlc-status.sh</code> is being written):</p>
+    <pre><code>sh scripts/check-sdlc-status.sh --board
+sh scripts/check-sdlc-status.sh
+sh scripts/check-sdlc-site.sh</code></pre>
+    <ul>
+      <li>A block is done when its proof is true, and the checker tells you which word to flip:
+      change the chip's <code>data-state</code> and its state word in the same pull request that
+      lands the block, and turn any <code>&lt;code class="missing"&gt;</code> for a file you created
+      into a link.</li>
+      <li>A block's own new <code>scripts/check-*</code> is its proof, so
+      <a href="../../scripts/check-all.sh"><code>scripts/check-all.sh</code></a> keeps it green
+      afterwards through its glob. Never modify an existing <code>scripts/check-*</code> without
+      Arya's yes in the session.</li>
+      <li>Never set <code>status: accepted</code> on an intent; that word is Arya's
+      (<a href="../../intents/README.md" data-anchor="## For agents"><code>intents/README.md</code></a>).</li>
+      <li>Proofs of work are re-run by a fresh verifier
+      (<a href="../../.claude/agents/factory-verifier.md"><code>.claude/agents/factory-verifier.md</code></a>);
+      the writer never grades its own block.</li>
+    </ul>
+  </details>
+</main>
+<footer class="site-footer">
+  <p>Source of truth: this repository (<code>aryateja2106/lecoder-watch</code>), on the branch
+  you opened it from. Written on <code>sdlc/ai-native-playbook</code>. Nothing on this page
+  outranks the file it links to.</p>
+  <p>How to update: every status line carries a proof. Run <code>sh scripts/check-sdlc-status.sh</code>;
+  when it names a line, change that line's <code>data-state</code> and its state word, then run
+  it again. Agents: read <a href="AGENTS.md"><code>docs/sdlc/AGENTS.md</code></a> first.</p>
+  <p>Playbook: <a href="https://claude.com/blog/the-ai-native-sdlc-playbook">The AI-native SDLC playbook</a>.
+  Last verified <time data-verified datetime="2026-09-27">2026-09-27</time>.</p>
+</footer>
+</body>
+</html>
