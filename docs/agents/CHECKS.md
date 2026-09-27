@@ -41,6 +41,7 @@
 | `check-file-browser-filter.swift` | Run via `sh scripts/check-all.sh`, which compiles every check-*.swift against the full Shared/ dependency set |
 | `check-fleet-map.sh` | `mesh fleet` is what an agent reads before deciding which machine to run on, so the fields it depends on have… |
 | `check-fleet.sh` | every machine in ~/.mesh/hosts.json runs THIS tree's meshd and is usable |
+| `check-folder-docs.sh` | every folder an agent may land in has an AGENTS.md, and every big folder's INDEX.md matches the tree |
 | `check-glance.swift` | A complication is the most-seen and least-interactive surface in the product: it is on the watch face all day… |
 | `check-handoff.sh` | handoff.ts self-check: HANDOFF.md carries the last assistant message, the recent turns and the tool activity |
 | `check-harness-picker.sh` | scripts/check-harness-picker.sh — verify agent CLI lists and usage |
@@ -49,6 +50,7 @@
 | `check-inspect-crop.sh` | Inspect mode: does the watch draw a cropped frame as the viewport it already is, and can a side tap actually… |
 | `check-install-idempotent.sh` | re-running the one-liner does not reinstall on top of itself, an older install still upgrades, and an unset… |
 | `check-intent.sh` | Needle 2 turns wrist phrases into the right daemon call (PRODUCT.md §9, slice 1) |
+| `check-intents.sh` | every file in intents/ is a well-formed Stage 1 intent: front matter with a known status, the five playbook… |
 | `check-ios-smoke.sh` | Launch the iOS app and put a text field on screen |
 | `check-kb-federation.sh` | Proves mesh KB CLI wiring locally and, when opted in, federation across the live fleet |
 | `check-launchable.swift` | scripts/check-launchable.swift — verify DoctorReport.launchable logic |
@@ -96,6 +98,7 @@
 | `check-risk.swift` | Continue" on a watch sends Return, and Return takes whichever option the agent has highlighted |
 | `check-roundtrip.sh` | The notification round-trip: an event an agent hook posts must carry a session name the reply route can… |
 | `check-screen-zoom.swift` | Aiming is the whole product on this screen |
+| `check-sdlc-site.sh` | the lifecycle teaching site under docs/sdlc/ points only at files that exist, and every block in… |
 | `check-session-snapshots.sh` | Lossless session history (meshd sessions.ts) keeps every version of an agent transcript after the runtime… |
 | `check-session-state.swift` | Run: swiftc Shared/Models.swift scripts/check-session-state.swift -o /tmp/css && /tmp/css |
 | `check-shell-quoting.swift` | shellQuotedArgument() single-quotes anything a shell would split or interpret, and leaves plain paths alone |
@@ -115,6 +118,7 @@
 | `codemap-index.py` | generate the committed codebase map from the tree itself |
 | `codemap.sh` | rebuild the codebase map every agent reads before it greps |
 | `feedback-to-issues.ts` | the feedback pipeline: unprocessed public.feedback rows become deduped GitHub issues labeled from-users on… |
+| `folder-index.py` | generate INDEX.md in every big folder, and check that every folder |
 | `gate-build.sh` | the factory "build" gate (gates.sh full): the three apps compile for their simulators, the way CI builds them |
 | `gate-lint.sh` | the factory "lint" gate (gates.sh fast) |
 | `gate-types.sh` | the factory "types" gate (gates.sh fast): does the daemon typecheck, and do the shared models the phone, the… |
