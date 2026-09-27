@@ -10,4 +10,4 @@
 - `factory-status`, `factory-tune` differ from `.agents/skills/` twins only in the title line.
 - `meshwatch-ui-taste` is not here, so Cursor has no native-UI taste skill.
 **SDLC stage:** Build — skills (playbook 3.3) for the Cursor harness, mostly links to the Claude Code copies (see [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html))
-**Map:** INDEX.md (71 tracked entries; generate from `readlink`).
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py)

@@ -10,4 +10,4 @@
 - Xcode Cloud stamps `CFBundleVersion` into `iOS-Info.plist` and `Watch-Info.plist` only (`ci_scripts/ci_pre_xcodebuild.sh:42-44`); widget plists keep `$(CURRENT_PROJECT_VERSION)`, though `project.yml:153-154` says they must match.
 - `GENERATE_INFOPLIST_FILE: NO` (`project.yml:21`): a usage string missing here is missing from the app.
 **SDLC stage:** Build, Deploy — version, name and permission strings Apple reads at upload and install (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html), [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
-**Map:** see the file list above (3 files)
+**Map:** 4 tracked files; run `git ls-files Generated` to list them

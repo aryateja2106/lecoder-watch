@@ -9,4 +9,4 @@
 - Only `feedback` (`iOS/LeSearchCloud.swift:117`, `scripts/feedback-to-issues.ts:171`) and `telemetry_events` (`install/payload/meshd/telemetry.ts:103`) have callers; `profiles`, `nodes`, `agent_sessions`, `usage_daily`, `api_keys` and the resume columns have none, and `20260712000000_api_keys.sql:2` cites a "key-auth edge function" that does not exist.
 - Every new public table: RLS on, plus explicit `revoke`/`grant` (`20260922100000_feedback.sql:51-55`); anon never gets `select` on user data.
 **SDLC stage:** Design, Deploy — the data contract, shipped by hand (see [docs/sdlc/2-design.html](../../docs/sdlc/2-design.html), [docs/sdlc/5-ship.html](../../docs/sdlc/5-ship.html))
-**Map:** see the file list above (5 migrations)
+**Map:** 6 tracked files; run `git ls-files supabase/migrations` to list them (5 migrations)

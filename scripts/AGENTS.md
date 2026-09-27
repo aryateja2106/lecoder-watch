@@ -4,7 +4,7 @@
 **Surface:** checks
 **Serialized (one agent at a time):** `check-all.sh` (its `DEPS` line at :14 is also read by `gate-types.sh:33`), `gate-*.sh` (wired to the factory gate by package.json:6-9), `check-published.sh` (release finish line; reads PUBLISHED.md and BLOCKED.md)
 **Prove a change:**
-- Loop: `./.claude/scripts/gates.sh fast` (about 6 s: meshd `tsc`, Shared/ typecheck, script syntax, published links)
+- Loop: `./.claude/scripts/gates.sh fast` (under a minute: meshd `tsc`, Shared/ typecheck, script syntax, published links)
 - One check: `sh scripts/check-<name>.sh`, or for Swift: `DEPS=(Shared/Models.swift …); swiftc -Onone -o /tmp/c scripts/check-<name>.swift "${DEPS[@]}" && /tmp/c`
 - New or renamed file: `sh scripts/check-codemap.sh` (red → `python3 scripts/codemap-index.py`)
 - Before a PR: `./.claude/scripts/gates.sh full` (minutes; runs check-all + three xcodebuilds). Quote the `FACTORY_GATES:` line verbatim.
@@ -19,4 +19,4 @@
 - Live checks boot throwaway daemons on side ports and never kill a listener. Keep it that way (AGENTS.md rules 5 and 8; check-approve-path.sh:24).
 
 **SDLC stage:** Test, Deploy, Maintain — the Stage 4 "one command" is `gates.sh full` → `check-all.sh`; `check-published.sh` and `release-*.sh` ship; `feedback-to-issues.ts` and live fleet probes are Stage 6 signals (see [docs/sdlc/4-test.html](../docs/sdlc/4-test.html), [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
-**Map:** scripts/INDEX.md once generated (125 tracked files); until then docs/agents/CHECKS.md
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py)

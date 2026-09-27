@@ -9,4 +9,4 @@
 - An intent describes the outcome, never the implementation. If a draft names files or functions, it has become a plan; move that text to `openspec/changes/<slug>/tasks.md`.
 - Findings from reviews, monitoring or security scans that need more than a one-file fix land here as `status: draft` with `source:` set; they do not skip to code.
 **SDLC stage:** Plan — this folder is Stage 1: one intent file per idea, written before any design (see [docs/sdlc/1-plan.html](../docs/sdlc/1-plan.html))
-**Map:** see the file list above
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py)

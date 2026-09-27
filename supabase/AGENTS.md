@@ -11,4 +11,4 @@
 - Telemetry columns must match `web/privacy.html` and `telemetry.ts` (AGENTS.md design principle 2).
 - Never print or commit the service-role key; only the feedback worker holds it (`20260922100000_feedback.sql:11-12`).
 **SDLC stage:** Deploy, Maintain — the only cloud piece; it turns user feedback into GitHub issues (see [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
-**Map:** see the file list above; migrations in `supabase/migrations/AGENTS.md`
+**Map:** 9 tracked files; run `git ls-files supabase` to list them; migrations in `supabase/migrations/AGENTS.md`

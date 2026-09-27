@@ -8,4 +8,4 @@
 - `prove-test.sh` needs a clean working tree and rewrites it temporarily (`prove-test.sh:2-3`); never run it with uncommitted work.
 - `bootstrap-github.sh --apply` creates GitHub labels (`:7`); without `--apply` it only previews. Needs `gh` signed in (`:9-15`).
 **SDLC stage:** Build, Test — `prove-test.sh` proves a test fails without the fix; `bootstrap-github.sh` creates the queue labels the claim protocol needs (see [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html), [docs/sdlc/4-test.html](../../docs/sdlc/4-test.html))
-**Map:** see the file list above: `bootstrap-github.sh` (44 lines), `doctor.sh` (71), `prove-test.sh` (107).
+**Map:** 4 tracked files; run `git ls-files .factory/scripts` to list them — `bootstrap-github.sh` (44 lines), `doctor.sh` (71), `prove-test.sh` (107).

@@ -8,4 +8,4 @@
 - Third identical copy (also `.claude/skills/openspec-*`, `.cursor/skills/openspec-*`); an edit here alone forks them.
 - Codex may read `.agents/skills/` instead of this folder (unverified; root `CLAUDE.md:59-60` names `.agents/skills/` for Codex).
 **SDLC stage:** Design — the OpenSpec skills Codex uses to write spec proposals under `openspec/changes/` (see [docs/sdlc/2-design.html](../../docs/sdlc/2-design.html))
-**Map:** see the file list above: `openspec-{apply-change,archive-change,explore,propose,sync-specs,update-change}`.
+**Map:** 7 tracked files; run `git ls-files .codex/skills` to list them — `openspec-{apply-change,archive-change,explore,propose,sync-specs,update-change}`.

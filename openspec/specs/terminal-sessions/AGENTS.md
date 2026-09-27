@@ -9,4 +9,4 @@
 - `spec.md:72-82` says output is text, not pixels. The phone now also has a native PTY terminal (`pty` capability, `docs/agents/CONTRACTS.md:128`); read CONTRACTS.md before treating this spec as a description of the phone.
 - "Known gaps" (`spec.md:96-107`) are owner decisions, not bugs to patch.
 **SDLC stage:** Design — the accepted contract for the terminal capability, enforced by `scripts/check-watch-terminal-wiring.sh` (see [docs/sdlc/2-design.html](../../../docs/sdlc/2-design.html))
-**Map:** see the file list above (one file)
+**Map:** 2 tracked files; run `git ls-files openspec/specs/terminal-sessions` to list them

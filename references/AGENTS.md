@@ -10,5 +10,5 @@
 - The six checklists are generic (e.g. `security-checklist.md:3` "web application security"), not written for this product. Skills cite them as `../../references/*.md` (`.claude/skills/security-and-hardening/SKILL.md:77`), which from `.claude/skills/<name>/` resolves to `.claude/references/` — a path that does not exist. Treat those links as pointing here (unverified whether any harness rewrites them).
 - `patches/0002-edge0-openai-tool-calls.patch` applies to a gitignored clone (`patches/README-0002.md:17-18`); the streaming path is unpatched.
 - Before building something a listed project already solved, write the ADR first and cite the file (`reference-projects.md:18`).
-**SDLC stage:** Design, Build — checklists feed the skills; reference projects feed design decisions (see [docs/sdlc/2-design.html](../docs/sdlc/2-design.html), [docs/sdlc/3-build.html](../docs/sdlc/3-build.html))
-**Map:** INDEX.md (9 tracked direct entries; generate with `python3 scripts/folder-index.py`)
+**SDLC stage:** Design, Maintain — reference material for specs and the security baseline (see [docs/sdlc/2-design.html](../docs/sdlc/2-design.html), [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py)

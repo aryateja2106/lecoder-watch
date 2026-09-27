@@ -16,4 +16,4 @@
 - Built product is `MeshWatch.app` (`project.yml:139`), same name as the iOS app; Mac build is `build/DerivedData/Build/Products/Debug/`, phone is `Debug-iphonesimulator/` (`scripts/check-sim-fleet.sh:47-48`).
 - Notifications permission is requested (`PermissionsView.swift:241-249`) but nothing here ever posts one.
 **SDLC stage:** Build — product code for the Mac setup surface; its only Test coverage is compile and the opt-in launch check (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html))
-**Map:** see the file list above (4 files); purposes in `docs/agents/CODEMAP.md` section `MeshDesktop/`
+**Map:** 5 tracked files; run `git ls-files MeshDesktop` to list them; purposes in `docs/agents/CODEMAP.md` section `MeshDesktop/`

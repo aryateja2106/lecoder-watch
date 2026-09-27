@@ -17,4 +17,4 @@
 - `/health` is unauthenticated and returns hostname, MAC, IPv4, netmask (`server.ts:1341`). Default bind `0.0.0.0`, plain HTTP (`server.ts:28`, `:1327-1329`): the LAN can reach it; only Tailscale encrypts the bearer in transit.
 - `cmux-bridge.ts` is a second, token-less listener on 127.0.0.1:8901 guarded only by Origin/Sec-Fetch-Site (`cmux-bridge.ts:41-44`), started by `install/payload/hooks/cmux-bridge.zsh:44`, not by `server.ts`. Never sweep-kill its port (AGENTS.md rule 8).
 **SDLC stage:** Build, Test, Maintain — the product's core runtime; its telemetry heartbeat and exposures ledger are the Stage 6 signals, and it is the first security-baseline target (see [docs/sdlc/3-build.html](../../../docs/sdlc/3-build.html), [docs/sdlc/4-test.html](../../../docs/sdlc/4-test.html), [docs/sdlc/5-ship.html](../../../docs/sdlc/5-ship.html))
-**Map:** `INDEX.md` (to be generated; 28 tracked files) · until then `docs/agents/CODEMAP.md` section `install/payload/meshd/` (line 121)
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py)

@@ -10,4 +10,4 @@
 - `meshwatch` in the file names is a retired brand, but renaming the Claude example breaks `scripts/check-package-mesh-install.sh:22`, and existing checks may not be edited unattended (CLAUDE.md non-negotiable 3).
 - `mesh upgrade` never refreshes these (`payload/bin/mesh:1027-1035` syncs `payload/hooks/` only).
 **SDLC stage:** Deploy — onboarding examples shipped for a user's own agents (see [docs/sdlc/5-ship.html](../../docs/sdlc/5-ship.html))
-**Map:** see the file list above (3 files).
+**Map:** 4 tracked files; run `git ls-files install/hooks` to list them.

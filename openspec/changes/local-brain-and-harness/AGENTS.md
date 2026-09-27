@@ -10,4 +10,4 @@
 - The requirement that matters (`specs/agent-brain/spec.md:7-24`): any agent runtime runs through the persistent multiplexer sessions, never per-command process spawning.
 - `specs/agent-brain/spec.md:54-62`: README and `web/index.html` must not call the product locally powered while the default brain is hosted. Check `web/` copy against it before publishing.
 **SDLC stage:** Plan, Design — a research-backed proposal and requirements; no Build yet (see [docs/sdlc/1-plan.html](../../../docs/sdlc/1-plan.html), [docs/sdlc/2-design.html](../../../docs/sdlc/2-design.html))
-**Map:** see the file list above (`proposal.md`, `tasks.md`, `specs/agent-brain/spec.md`)
+**Map:** 4 tracked files; run `git ls-files openspec/changes/local-brain-and-harness` to list them (`proposal.md`, `tasks.md`, `specs/agent-brain/spec.md`)

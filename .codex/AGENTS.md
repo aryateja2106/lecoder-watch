@@ -9,4 +9,4 @@
 - Load-bearing: `docs/factory/CHARTER.md:54`.
 - `config.toml:4` needs the `codegraph` CLI on PATH; built by `sh scripts/codemap.sh`.
 **SDLC stage:** Build, Deploy — the Codex harness's hook (playbook 3.4) and merge gate (5.2) (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html), [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
-**Map:** see the file list above: `config.toml`, `hooks.json`, `skills/` (6 OpenSpec skills).
+**Map:** 10 tracked files; run `git ls-files .codex` to list them — `config.toml`, `hooks.json`, `skills/` (6 OpenSpec skills).

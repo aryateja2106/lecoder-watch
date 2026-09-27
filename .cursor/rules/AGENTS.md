@@ -10,4 +10,4 @@
 - All three are `alwaysApply: true` — every token here is paid on every Cursor request; keep them short.
 - Cursor may also treat a plain `.md` here as a rule (unverified); this `AGENTS.md` could be loaded as one.
 **SDLC stage:** Build, Deploy — institutional knowledge (playbook 3.2) and the merge policy (5.2), advisory only because Cursor has no hook (see [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html), [docs/sdlc/5-ship.html](../../docs/sdlc/5-ship.html))
-**Map:** see the file list above: `factory.mdc` (63 lines), `codemap.mdc` (15), `graphify.mdc` (21).
+**Map:** 4 tracked files; run `git ls-files .cursor/rules` to list them — `factory.mdc` (63 lines), `codemap.mdc` (15), `graphify.mdc` (21).

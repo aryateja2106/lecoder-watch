@@ -12,4 +12,4 @@
 - `docs/agents/CODEMAP.md:27` still says mesh.lesearch.ai; the live domain is lesearch.ai (`check-published.sh:45`).
 - `shots/iphone-remote-pi.png` is referenced by no page (git grep) — dead weight on the site.
 **SDLC stage:** Deploy, Maintain — the public face; `check-published.sh` gates the release and keeps asserting the live site afterwards (see [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
-**Map:** INDEX.md (10 direct entries; generate with `python3 scripts/folder-index.py`)
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py)

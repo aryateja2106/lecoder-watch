@@ -12,8 +12,8 @@
 - Logic written in `Watch/` cannot be unit-checked: `scripts/check-all.sh:14` links Swift checks against `Shared/` only. Testable watch math lives in Shared (`airMouseDelta` `Shared/Models.swift:1325`, `connectionPhase` `Shared/Models.swift:642`); `firstLink`/`lastLink` (`Watch/WatchLinks.swift:16,37`) have no check.
 - Eleven existing checks name these files by path (e.g. `scripts/check-watch-terminal-wiring.sh:17-18,131-133`, `scripts/check-mesh-input.sh:12`). Renaming or splitting a file turns them red, and existing checks may not be edited unattended (CLAUDE.md non-negotiable 3).
 - A new `WatchCommandKind` needs a case in `iOS/MeshStore.swift` `handle(_:)`, or it is acked as a silent tick (`docs/agents/CONTRACTS.md:133`).
-- Scrollback size is capped by WatchConnectivity's 262,144-byte context that throws silently (`scripts/check-watch-scrollback.swift:5-8`); the watch asks for 300 lines (`Watch/WatchMeshStore.swift:562`).
+- Scrollback size is capped by WatchConnectivity's 262,144-byte context that throws silently (`scripts/check-watch-scrollback.swift:9,20`); the watch asks for 300 lines (`Watch/WatchMeshStore.swift:562`).
 - `WCSession.isReachable` flaps every few seconds; the UI must key off `connectionPhase`, not `phoneReachable` (`Watch/WatchMeshStore.swift:39-45`).
 - The machine cache carries meshd tokens: Keychain via `SecureStore` only, never UserDefaults (`Watch/WatchMeshStore.swift:245-248`). New send keys go in both clients (AGENTS.md:192).
 **SDLC stage:** Build, Test — the watch client code and the structural checks that pin it; Design lives in `docs/agents/UI-MAP.md` (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html), [docs/sdlc/4-test.html](../docs/sdlc/4-test.html))
-**Map:** `Watch/INDEX.md` (to be generated: 9 tracked files); until then `docs/agents/CODEMAP.md` § `Watch/` and `docs/agents/UI-MAP.md` § Apple Watch
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py)

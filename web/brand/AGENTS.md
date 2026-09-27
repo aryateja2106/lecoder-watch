@@ -9,4 +9,4 @@
 - The contrast table (`TOKENS.css:20-26`) is hand-computed; change a colour and it is wrong until recomputed.
 - Brand lives in several places (`docs/product/RESET-2026-09-06.md:54-55`); `docs/product/design-system.md` is the app-side reference.
 **SDLC stage:** Design — brand policy an agent should apply while writing, not find in review (see [docs/sdlc/2-design.html](../../docs/sdlc/2-design.html))
-**Map:** see the file list above (2 files)
+**Map:** 3 tracked files; run `git ls-files web/brand` to list them

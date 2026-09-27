@@ -11,4 +11,4 @@
 - `STATE.md:3` names a worktree and branch (`feat/lesearch-ai-overnight-2026-09-21`) that were right that night; do not take branches from it (AGENTS.md rule 2).
 - `folder-index.py` skips `docs/overnight` for AGENTS.md but will generate `2026-09-21/INDEX.md` (12 entries); its header links an AGENTS.md that folder does not have.
 **SDLC stage:** Build, Test — logbooks of unattended build nights; their committed gate logs are the proof `PUBLISHED.md` quotes (see [docs/sdlc/3-build.html](../sdlc/3-build.html), [docs/sdlc/4-test.html](../sdlc/4-test.html))
-**Map:** see the file list above; `2026-09-21/INDEX.md` once generated.
+**Map:** 37 tracked files; run `git ls-files docs/overnight` to list them; `2026-09-21/INDEX.md` is generated (regenerate with python3 scripts/folder-index.py).

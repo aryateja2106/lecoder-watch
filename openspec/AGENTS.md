@@ -11,4 +11,4 @@
 - Nothing has ever been archived (no `changes/archive/`). Both open changes are 30 days old: 1/16 and 0/11 tasks ticked (`openspec list`).
 - Playbook intents go in `intents/`, not here and not in `intent/` (see `intents/AGENTS.md`).
 **SDLC stage:** Design — `specs/` holds accepted requirements; `changes/` holds proposals that mix Plan (why) and Design (requirements) with a task list close to a Build plan (see [docs/sdlc/2-design.html](../docs/sdlc/2-design.html))
-**Map:** see the file list above (3 entries: `config.yaml`, `changes/`, `specs/`)
+**Map:** 14 tracked files; run `git ls-files openspec` to list them (`config.yaml`, `changes/`, `specs/`)

@@ -9,4 +9,4 @@
 - Not synced by `mesh upgrade` (`bin/mesh:1179-1181`).
 - Imports `../../meshd/redact` (`server.ts:10`).
 **SDLC stage:** Build — the legacy bridge server's code; its auth is serialized (see [docs/sdlc/3-build.html](../../../../docs/sdlc/3-build.html))
-**Map:** see the file list above (1 file).
+**Map:** 2 tracked files; run `git ls-files install/payload/rmux-bridge/src` to list them.

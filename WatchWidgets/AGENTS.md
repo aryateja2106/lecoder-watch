@@ -10,4 +10,4 @@
 - `Info.plist` is written by xcodegen from `project.yml:207-213`; edit `project.yml`, not the plist. The extension version must match the parent app or App Store Connect rejects it (`project.yml:210-211`).
 - The bundle id ends `.glance` because a deleted App ID (`…complication`) can never be reused (`CONTEXT.md:97-99`).
 **SDLC stage:** Build, Test — the complication view and timeline; its data contract is tested in `scripts/check-glance.swift` (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html), [docs/sdlc/4-test.html](../docs/sdlc/4-test.html))
-**Map:** see the file list above (4 tracked files: `WatchGlanceWidget.swift`, `Info.plist`, `WatchWidgets.entitlements`, `PrivacyInfo.xcprivacy`); `docs/agents/CODEMAP.md` § `WatchWidgets/`
+**Map:** 5 tracked files; run `git ls-files WatchWidgets` to list them (`WatchGlanceWidget.swift`, `Info.plist`, `WatchWidgets.entitlements`, `PrivacyInfo.xcprivacy`); `docs/agents/CODEMAP.md` § `WatchWidgets/`

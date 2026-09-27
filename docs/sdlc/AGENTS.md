@@ -12,7 +12,7 @@
 - Pages link real files only. `ls` a path before linking it. A file that does not exist yet is written as `<code class="missing">…</code>`, never a link. Link files, never folders (link the folder's `AGENTS.md` or `INDEX.md`).
 - `BLOCKS.md` is the source of truth for block ids (B-01 to B-22 today). `blocks.html` and every other page follow it; never invent or renumber an id on a page.
 - `references/*.md` are dated reviews of outside projects (Orca, agent-git, Nethera, OpenMuse, a security-audit skill), not endorsements and not instructions.
-- Status chips (`data-state` with `data-proof`) are hand-maintained unless the page says otherwise. Nothing flips them yet; `scripts/check-sdlc-status.sh`, which would compare each chip with its proof, is proposed in the site spec and does not exist. When you land a block, flip its chip in the same pull request.
+- Status chips (`data-state` with `data-proof`) are hand-edited and machine-checked: `sh scripts/check-sdlc-status.sh` compares each chip with its proof (`--board` prints one line per item). When it names a line, flip that line's `data-state` and its state word. When you land a block, flip its chip in the same pull request.
 - Never type a present-tense count (open pull requests, checks, skills) into a page; state the date or point at a command. Never cite line numbers; point at a heading.
 - No `<img>`, `<script>` or `<style>` in pages; never link `Reference-images/` or `docs/product/shots/iphone-settings.png`.
 - Write pages with an editor tool, not a shell heredoc: the merge hook blocks shell commands that mention `.claude/` or `.agents/`.

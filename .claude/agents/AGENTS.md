@@ -8,5 +8,5 @@
 - Claude Code loads every `*.md` here as a subagent definition; this `AGENTS.md` has no frontmatter and may be skipped or warned about (documented convention, not tested here). Move it out if it causes noise.
 - Both agents get `Bash` and `WebFetch` (`factory-verifier.md:4`, `factory-critic.md:4`); they are read-only by instruction, not by tool list.
 - The verifier must be given the diff, not the implementer's story (`factory-verifier.md:22`); passing a summary defeats it (AGENTS.md rule 1).
-**SDLC stage:** Test, Deploy — fresh-context verification and adversarial review before a human sees a PR (see [docs/sdlc/4-test.html](../../docs/sdlc/4-test.html), [docs/sdlc/5-ship.html](../../docs/sdlc/5-ship.html))
-**Map:** see the file list above (2 files).
+**SDLC stage:** Test, Deploy — the fresh-context verifier and the adversarial critic (see [docs/sdlc/4-test.html](../../docs/sdlc/4-test.html), [docs/sdlc/5-ship.html](../../docs/sdlc/5-ship.html))
+**Map:** 3 tracked files; run `git ls-files .claude/agents` to list them.

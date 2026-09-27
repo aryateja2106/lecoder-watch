@@ -11,4 +11,4 @@
 - Smoke test may SKIP and the hook only warns (`ci_pre_xcodebuild.sh:67-80`): an archive here is not a launched app (AGENTS.md rule 1).
 - Whether an Xcode Cloud workflow is enabled is unverified from the tree.
 **SDLC stage:** Test, Deploy — the TestFlight lane, which runs every self-check before archiving (see [docs/sdlc/4-test.html](../docs/sdlc/4-test.html), [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
-**Map:** see the file list above (2 files)
+**Map:** 3 tracked files; run `git ls-files ci_scripts` to list them

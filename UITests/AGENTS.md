@@ -17,4 +17,4 @@
 - Do not edit `scripts/check-ios-smoke.sh` in an unattended run (CLAUDE.md non-negotiable 3).
 
 **SDLC stage:** Test, Deploy — the launch gate before TestFlight (`scripts/release-testflight-asc.sh` exports `MESH_SMOKE_REQUIRED=1`) (see [docs/sdlc/4-test.html](../docs/sdlc/4-test.html), [docs/sdlc/5-ship.html](../docs/sdlc/5-ship.html))
-**Map:** see the file list above (3 tracked files)
+**Map:** 4 tracked files; run `git ls-files UITests` to list them

@@ -11,4 +11,4 @@
 - `daemon-and-mesh.md:75-77` documents the sanctioned restart path (`svc` skill); that is for when Arya asks. To test a change, boot a side-port daemon instead (AGENTS.md rule 5, `daemon-and-mesh.md:4`).
 - Anything whose proof is on the physical iPhone or Watch (`device-install.md`) must be handed back to Arya ("What an agent cannot verify", AGENTS.md).
 **SDLC stage:** Build, Deploy — the exact commands to compile, install and release (see [docs/sdlc/3-build.html](../sdlc/3-build.html), [docs/sdlc/5-ship.html](../sdlc/5-ship.html))
-**Map:** see the file list above (6 files).
+**Map:** 7 tracked files; run `git ls-files docs/playbooks` to list them.

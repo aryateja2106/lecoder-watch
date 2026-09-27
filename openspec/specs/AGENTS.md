@@ -8,4 +8,4 @@
 - One capability here vs the whole product in `docs/product/PRODUCT.md`: two places define behaviour and only PRODUCT.md is checked (`scripts/check-product-spec.sh`). When they disagree, PRODUCT.md wins; fix the spec here.
 - Specs change only when a change in `../changes/` is archived, and none ever has been.
 **SDLC stage:** Design — accepted requirements that later changes are checked against (see [docs/sdlc/2-design.html](../../docs/sdlc/2-design.html))
-**Map:** see the file list above
+**Map:** 3 tracked files; run `git ls-files openspec/specs` to list them

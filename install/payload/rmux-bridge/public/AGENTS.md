@@ -9,4 +9,4 @@
 - `mesh upgrade` copies this whole folder to users (`bin/mesh:1048-1066`), so any file here ships.
 - See `../AGENTS.md`: the phone may no longer open this page.
 **SDLC stage:** Build — the web page of a legacy service (see [docs/sdlc/3-build.html](../../../../docs/sdlc/3-build.html))
-**Map:** see the file list above.
+**Map:** 6 tracked files; run `git ls-files install/payload/rmux-bridge/public` to list them.

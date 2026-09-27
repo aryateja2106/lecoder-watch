@@ -9,4 +9,4 @@
 - Hardcodes `/opt/homebrew/bin/bun` (`cmux-bridge.zsh:44`) while the installer puts bun in `~/.bun/bin` (`install/install.sh:125-137`).
 - Not `install/hooks/` (examples). `docs/playbooks/daemon-and-mesh.md:15` wrongly says this is not in the install payload.
 **SDLC stage:** Build — product code shipped to users: a shell snippet that starts the cmux bridge in every new terminal (see [docs/sdlc/3-build.html](../../../docs/sdlc/3-build.html))
-**Map:** see the file list above (1 file).
+**Map:** 2 tracked files; run `git ls-files install/payload/hooks` to list them.

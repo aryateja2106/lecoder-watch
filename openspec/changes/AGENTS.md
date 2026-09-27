@@ -10,4 +10,4 @@
 - Create new changes with the `openspec-propose` skill (`.claude/skills/openspec-propose/`), not by hand; close them with `openspec-archive-change`.
 - A proposal is not a playbook `intent.md`: it has no "Affected users and systems" or "Constraints" heading. New asks start in `intents/`.
 **SDLC stage:** Plan, Design, Build — `proposal.md` ≈ intent plus design options, `specs/*/spec.md` ≈ spec deltas, `tasks.md` ≈ the Build-stage plan with proofs (see [docs/sdlc/1-plan.html](../../docs/sdlc/1-plan.html), [docs/sdlc/2-design.html](../../docs/sdlc/2-design.html), [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html))
-**Map:** see the file list above (2 change folders)
+**Map:** 9 tracked files; run `git ls-files openspec/changes` to list them (2 change folders)

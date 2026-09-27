@@ -15,4 +15,4 @@
 - Extension version must equal the app's or App Store Connect rejects the upload (`project.yml:153-156`); device family stays "1" (`project.yml:162-164`).
 
 **SDLC stage:** Build — product code for the live card; it ships inside the iPhone app and `scripts/check-live-card.swift` tests which session gets it (see [docs/sdlc/3-build.html](../docs/sdlc/3-build.html))
-**Map:** see the file list above (5 tracked files; CODEMAP § `MeshWatchWidgets/`)
+**Map:** 6 tracked files; run `git ls-files MeshWatchWidgets` to list them; CODEMAP § `MeshWatchWidgets/`

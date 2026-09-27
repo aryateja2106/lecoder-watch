@@ -12,4 +12,4 @@
 - Overlaps with no router rule: `tdd`/`test-driven-development`, `grill-me`/`grilling`/`grill-with-docs`, `code-review`/`code-review-and-quality`, `triage`/`factory-triage`, `ask-matt`/`using-agent-skills`.
 - `overnight-slice/SKILL.md:12-20` gates on building, not running, and reverts with `git checkout -- .` — conflicts with AGENTS.md rule 1.
 **SDLC stage:** Build — skills are the playbook's advisory policy as code (3.3), used at every stage; `../hooks/` holds the must-hold rules (see [docs/sdlc/3-build.html](../../docs/sdlc/3-build.html))
-**Map:** INDEX.md (133 tracked files; one row per skill: real or symlink target, one-line purpose).
+**Map:** [INDEX.md](INDEX.md) (generated; regenerate with python3 scripts/folder-index.py)
