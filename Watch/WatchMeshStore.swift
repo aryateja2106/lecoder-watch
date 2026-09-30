@@ -588,41 +588,61 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    // One serial chain for single keystrokes. `send` used to spawn a fresh Task per
+    // call, so two fast key-bar taps raced at the daemon and could land out of order
+    // ("Left Right" arriving as "Right Left"). Each call now awaits the previous one —
+    // exactly what `sendKeys` does for a known list, the only difference being that these
+    // arrive one tap at a time. The redraw poll is debounced separately (`schedulePoll`)
+    // so a burst of keys redraws once, not once per key.
+    private var sendChain: Task<Void, Never>?
+    private var pollDebounce: Task<Void, Never>?
+
     func send(text: String? = nil, key: String? = nil) {
         guard let w = watching else { return }
+        sending = true
+        lastError = nil
+        let prev = sendChain
+        sendChain = Task { [weak self] in
+            _ = await prev?.value
+            guard let self, !Task.isCancelled else { return }
+            await self.deliverOne(text: text, key: key, target: w)
+            self.schedulePoll()
+        }
+    }
+
+    /// Deliver one keystroke, direct if reachable else via the phone relay. No trailing
+    /// poll here — `schedulePoll` owns that, so a run of keys does not pay 300ms each.
+    private func deliverOne(text: String?, key: String?, target w: WatchTarget) async {
         if directReachable(w.host), let c = client(for: w.host) {
-            sending = true
-            lastError = nil
-            Task {
-                do {
-                    try await c.send(agent: w.agent, text: text, key: key, pane: w.pane)
-                    // No success haptic on this path deliberately. A key chip is
-                    // pressed in runs — ten Downs to scroll a list — and ten buzzes
-                    // for ten keys is not feedback, it is a vibrating watch. The
-                    // direct path answers in well under the 300ms below, so the
-                    // output redrawing IS the confirmation. Failure still buzzes:
-                    // that one is rare and worth interrupting for.
-                } catch {
-                    lastError = "send failed"
-                    WKInterfaceDevice.current().play(.failure)
-                }
-                try? await Task.sleep(for: .milliseconds(300))
-                await pollOutput()
-                sending = false
+            // No success haptic on this path deliberately. A key chip is pressed in runs
+            // — ten Downs to scroll a list — and ten buzzes for ten keys is not feedback,
+            // it is a vibrating watch. The redraw IS the confirmation. Failure still
+            // buzzes: that one is rare and worth interrupting for.
+            do {
+                try await c.send(agent: w.agent, text: text, key: key, pane: w.pane)
+            } catch {
+                lastError = "send failed"
+                WKInterfaceDevice.current().play(.failure)
             }
         } else {
-            sending = true
-            lastError = nil
-            Task {
-                // Not queued: a keystroke delivered ten minutes late lands on whatever
-                // is on screen then, which is worse than losing it.
-                let ack = await WatchLink.shared.acknowledge(
-                    WatchCommand(kind: .agentSend, host: w.host, agent: w.agent,
-                                 text: text, key: key, pane: w.pane))
-                apply(ack, verb: "send")
-                await pollOutput()
-                sending = false
-            }
+            // Not queued: a keystroke delivered ten minutes late lands on whatever is on
+            // screen then, which is worse than losing it.
+            let ack = await WatchLink.shared.acknowledge(
+                WatchCommand(kind: .agentSend, host: w.host, agent: w.agent,
+                             text: text, key: key, pane: w.pane))
+            apply(ack, verb: "send")
+        }
+    }
+
+    /// One redraw after the burst settles, not one per key: cancel the pending poll and
+    /// start a fresh 300ms timer, so ten fast taps redraw once — 300ms after the last.
+    private func schedulePoll() {
+        pollDebounce?.cancel()
+        pollDebounce = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard let self, !Task.isCancelled else { return }
+            await self.pollOutput()
+            self.sending = false
         }
     }
 

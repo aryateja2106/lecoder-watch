@@ -108,6 +108,10 @@ final class RemoteControl: ObservableObject {
     /// Preview magnification. A 44mm watch showing a 15" display is the most extreme
     /// version of the aiming problem in the whole product.
     @Published var previewZoom: CGFloat = 1
+    /// Bumped on every discrete action (click / key / scroll / snap) so the view can pull
+    /// one fresh frame ~400ms later — the 2s preview loop is far too slow to answer "did
+    /// that land?". A `.task(id:)` on this value coalesces a burst into a single refresh.
+    @Published var actionTick = 0
     private var fetchingScreen = false
 
     private var activeDisplayInfo: DisplayInfo? { displays.first { $0.index == activeDisplay } }
@@ -129,6 +133,7 @@ final class RemoteControl: ObservableObject {
     }
     func scroll(_ amount: Double) {
         if horizontalScroll { pendingScrollX += amount } else { pendingScroll += amount }
+        actionTick &+= 1   // a crown turn ends with one refresh, not a frame per tick
     }
 
     func perform(_ events: [InputEvent]) {
@@ -136,6 +141,7 @@ final class RemoteControl: ObservableObject {
         // Confirm at the wrist, not on the Mac: the screen preview is two seconds
         // behind, so without a tap you cannot tell a click from a missed touch.
         WKInterfaceDevice.current().play(events.contains { $0.t == "click" } ? .click : .success)
+        actionTick &+= 1   // ask the view for one fresh frame once this burst settles
         Task { await flush() }
     }
 
@@ -510,6 +516,21 @@ struct RemoteView: View {
                     await remote.refreshScreen()
                 }
                 try? await Task.sleep(for: .seconds(2))
+            }
+        }
+        .task(id: remote.actionTick) {
+            // After you act, the 2s loop is far too slow to answer "did that land?". Wait
+            // for the burst to settle, then pull ONE fresh frame. `.task(id:)` cancels and
+            // restarts every time you act again, so a run of taps or a crown scroll
+            // coalesces into a single refresh instead of a frame per event.
+            guard remote.actionTick > 0 else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            if remote.viaRelay {
+                store.requestScreen(host: remote.machine.host,
+                                    display: remote.displays.count > 1 ? remote.activeDisplay : nil)
+            } else {
+                await remote.refreshScreen()
             }
         }
         .task {
