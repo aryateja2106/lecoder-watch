@@ -16,6 +16,7 @@
 // Tailscale Serve name — and never from the plain-HTTP LAN address.
 //
 // The CLI (install/payload/bin/mesh) owns writing ~/.mesh/apps; this file only reads it.
+import { timingSafeEqual } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { pushInstall } from "./push";
 import { homedir } from "node:os";
@@ -88,6 +89,17 @@ ${note}`;
 }
 const SLUG = /^[a-z0-9][a-z0-9-]{1,40}$/;
 const KEY = /^[0-9a-f]{8}$/;
+
+// Constant-time key compare. This key gates token-free app serving, so comparing it with
+// `!==` (which returns at the first differing character) leaks its bytes to a timing
+// attacker. Equal-length only; timingSafeEqual throws on a length mismatch, so bail first.
+// (The key's 32-bit width is a separate, tracked hardening — see docs/security.)
+function keyEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -227,7 +239,7 @@ export async function serveApp(pathname: string, req?: Request): Promise<Respons
   const [, slug, key, rest] = m;
   if (!KEY.test(key)) return json({ error: "not found" }, 404);
   const meta = await readMeta(slug);
-  if (!meta || !meta.key || meta.key !== key) return json({ error: "not found" }, 404);
+  if (!meta || !meta.key || !keyEqual(meta.key, key)) return json({ error: "not found" }, 404);
   if (meta.kind === "native" && !meta.ipa) return json({ error: "not found" }, 404);
   if (rest === undefined) {
     // Relative asset URLs in the page need the trailing slash.
