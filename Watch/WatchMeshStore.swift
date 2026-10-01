@@ -23,6 +23,14 @@ final class WatchMeshStore: ObservableObject {
     @Published var usage: UsageSnapshot?
     @Published var watching: WatchTarget?
     @Published private var directOutput: [String] = []
+    /// Structured chat transcript for the watched session (meshd 0.6+ "chat"), oldest
+    /// first. Empty when the daemon lacks the capability, when the host is reachable
+    /// only through the phone relay, or when meshd fell back to capture-pane — in every
+    /// one of those cases the view shows `output` exactly as before. See `pollChat`.
+    @Published var chatMessages: [ChatMessage] = []
+    /// Opaque cursor from the last /chat poll; the next poll passes it back so the
+    /// daemon returns only messages we have not seen (appended by id, never replaced).
+    private var chatCursor: String?
     @Published var sending = false
     @Published var phoneReachable = false
     @Published var lastError: String?
@@ -125,6 +133,16 @@ final class WatchMeshStore: ObservableObject {
             return relayed?.watchedOutput ?? []
         }
         return directOutput
+    }
+
+    /// Whether the watched session has a structured transcript to show instead of raw
+    /// capture-pane text — true only on a chat-capable daemon reached DIRECTLY that has
+    /// actually produced turns. False on the phone relay (which carries capture-pane, so
+    /// off the tailnet we show that), on an older daemon, and on a plain shell. The
+    /// terminal view keys its rendering off this.
+    var hasChatTurns: Bool {
+        guard let w = watching, directReachable(w.host) else { return false }
+        return !chatMessages.isEmpty
     }
 
     private func directReachable(_ host: String) -> Bool {
@@ -524,6 +542,10 @@ final class WatchMeshStore: ObservableObject {
     func watch(host: String, agent: String, pane: String? = nil) {
         watching = WatchTarget(host: host, agent: agent, pane: pane)
         directOutput = []
+        // A new session (or pane) starts with an empty transcript and a fresh cursor,
+        // or the next /chat poll would graft the previous session's turns onto this one.
+        chatMessages = []
+        chatCursor = nil
         // Ask the phone to relay this agent's output too (used if direct fails).
         WatchLink.shared.send(WatchCommand(kind: .agentOutput, host: host, agent: agent, text: nil, key: nil,
                                            pane: pane, reader: readerOutput))
@@ -531,6 +553,9 @@ final class WatchMeshStore: ObservableObject {
         outputTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.pollOutput()
+                // Rides the same reader task at the same cadence; a no-op against a
+                // daemon without "chat", so an old box just keeps using capture-pane.
+                await self?.pollChat()
                 try? await Task.sleep(for: .milliseconds(1500))
             }
         }
@@ -540,6 +565,8 @@ final class WatchMeshStore: ObservableObject {
         outputTask?.cancel(); outputTask = nil
         WatchLink.shared.send(WatchCommand(kind: .agentOutput, host: nil, agent: nil, text: nil, key: nil))
         watching = nil
+        chatMessages = []
+        chatCursor = nil
     }
 
     private func pollOutput() async {
@@ -562,6 +589,30 @@ final class WatchMeshStore: ObservableObject {
         if let out = try? await c.output(agent: w.agent, lines: 300, pane: w.pane,
                                          join: cleaned, plain: cleaned) {
             directOutput = out.lines
+        }
+    }
+
+    /// meshd 0.6+ ("chat"): the structured transcript for the watched session, polled
+    /// on the same reader task as `pollOutput` and the same direct-only path — the phone
+    /// relay carries capture-pane lines, not chat turns, so a watch off the tailnet, an
+    /// older daemon, or a plain shell meshd could not parse all fall back to `output`.
+    /// Messages are appended by id per the /chat contract; a transient failure leaves
+    /// the transcript exactly as it was rather than blanking it.
+    private func pollChat() async {
+        guard let w = watching, directReachable(w.host), let c = client(for: w.host),
+              c.supports("chat") else { return }
+        guard let feed = try? await c.chat(agent: w.agent, since: chatCursor, limit: 200) else { return }
+        chatCursor = feed.cursor
+        if feed.source == "output" {
+            // The daemon has "chat" but found no Claude/Codex transcript here (a plain
+            // shell) — drop back to the capture-pane view.
+            chatMessages = []
+        } else {
+            let known = Set(chatMessages.map(\.id))
+            chatMessages.append(contentsOf: feed.messages.filter { !known.contains($0.id) })
+            // Cap the running total for a session left open for hours; the daemon
+            // already caps a single poll at `limit`.
+            if chatMessages.count > 500 { chatMessages.removeFirst(chatMessages.count - 500) }
         }
     }
 
