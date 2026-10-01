@@ -126,6 +126,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The app targets iOS 26 and uses iOS-26 SwiftUI APIs (e.g. tabBarMinimizeBehavior on
+      # ContentView). The macos-15 runner's default Xcode predates that SDK, so the build
+      # failed on symbols a current toolchain has. Select the newest Xcode the image ships
+      # (and print it, so the log says what the runner actually has).
+      - name: Select the newest installed Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$latest" ]; then sudo xcode-select -s "$latest/Contents/Developer"; fi
+          xcodebuild -version
+
       - name: Install XcodeGen
         run: brew install xcodegen
 

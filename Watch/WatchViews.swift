@@ -1042,6 +1042,9 @@ struct AgentLiveView: View {
                                     .font(.caption.bold())
                                     .foregroundStyle(decisionRisk.isDestructive ? .red : .green)
                             }
+                            // Double Tap answers a blocked agent one-handed — but never a
+                            // destructive one, which must be a deliberate tap.
+                            .primaryActionGesture(!decisionRisk.isDestructive)
                             Button {
                                 WKInterfaceDevice.current().play(.click)
                                 store.send(key: "escape")
@@ -1096,6 +1099,9 @@ struct AgentLiveView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(continueBlocked)
+                    // Double Tap keeps a coding agent going when nothing is pending — the
+                    // decision card claims the gesture instead while a decision is waiting.
+                    .primaryActionGesture(!awaitingDecision)
                     Text("Types \"continue\" into \(currentAgent?.agentType ?? agent)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -1282,7 +1288,8 @@ struct AgentLiveView: View {
     private var terminalScreen: some View {
         NavigationStack {
             Group {
-                if store.readerOutput { readerTerminal } else { rawTerminal }
+                if store.hasChatTurns { chatTranscript }
+                else if store.readerOutput { readerTerminal } else { rawTerminal }
             }
             .navigationTitle(currentAgent?.displayName ?? agent)
             .navigationBarTitleDisplayMode(.inline)
@@ -1356,6 +1363,31 @@ struct AgentLiveView: View {
             .onChange(of: store.output) { _, _ in
                 guard followTail else { return }
                 withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("tail", anchor: .bottomLeading) }
+            }
+        }
+    }
+
+    /// Structured transcript for a coding agent (meshd "chat"): clean turns instead of
+    /// capture-pane text. Shown only when the store has real turns (direct, chat-capable,
+    /// non-empty) — a plain shell or an older daemon keeps the reader/raw views above.
+    private var chatTranscript: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(store.chatMessages) { msg in
+                        ChatTurnRow(message: msg, fontSize: fontSize)
+                    }
+                    Color.clear.frame(height: 1).id("tail")
+                }
+                .padding(.horizontal, 6)
+                .padding(.bottom, 4)
+            }
+            .background(Color.black)
+            .modifier(FollowsTail(following: $followTail))
+            .onAppear { followTail = true; proxy.scrollTo("tail", anchor: .bottom) }
+            .onChange(of: store.chatMessages) { _, _ in
+                guard followTail else { return }
+                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("tail", anchor: .bottom) }
             }
         }
     }
@@ -1725,4 +1757,57 @@ private struct MenuOptionRow: View {
         .buttonStyle(.bordered)
         .tint(highlighted ? Color.accentColor : Color.gray)
     }
+}
+
+extension View {
+    /// Claim Double Tap (watchOS 11+, Series 9 / Ultra 2 and later) for this control's
+    /// primary action — but only when `when` is true, so a screen never arms two primary
+    /// actions at once and a destructive Approve is never one accidental pinch away.
+    @ViewBuilder func primaryActionGesture(_ when: Bool) -> some View {
+        if #available(watchOS 11.0, *), when {
+            self.handGestureShortcut(.primaryAction)
+        } else {
+            self
+        }
+    }
+}
+
+/// One turn of a structured agent transcript, sized for the wrist: a short colored role
+/// label and the text. Thinking / system turns read as secondary so the answer stands out.
+private struct ChatTurnRow: View {
+    let message: ChatMessage
+    let fontSize: Double
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(roleLabel)
+                .font(.caption2.bold())
+                .foregroundStyle(roleColor)
+            if !message.text.isEmpty {
+                Text(message.text)
+                    .font(.system(size: CGFloat(fontSize), design: message.role == "tool" ? .monospaced : .default))
+                    .foregroundStyle(isSecondary ? .secondary : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private var roleLabel: String {
+        switch message.role {
+        case "user": return "You"
+        case "assistant", "result": return "Agent"
+        case "thinking": return "Thinking"
+        case "tool": return message.tool?.name ?? "Tool"
+        case "system": return "System"
+        default: return message.role.capitalized
+        }
+    }
+    private var roleColor: Color {
+        switch message.role {
+        case "user": return .blue
+        case "assistant", "result": return .green
+        case "tool": return .orange
+        default: return .secondary
+        }
+    }
+    private var isSecondary: Bool { message.role == "thinking" || message.role == "system" }
 }

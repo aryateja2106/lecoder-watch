@@ -63,8 +63,13 @@ targets:
     type: application
     platform: iOS
     sources:
+      # Docs (AGENTS.md / INDEX.md) live in every source folder for the agents, but they
+      # are not build inputs: two folders' AGENTS.md would collide at the same bundle path
+      # ("Multiple commands produce …/AGENTS.md"). Keep them on disk, out of the build.
       - path: Shared
+        excludes: ["**/*.md"]
       - path: iOS
+        excludes: ["**/*.md"]
       - path: Assets.xcassets
     info:
       path: Generated/iOS-Info.plist
@@ -123,6 +128,7 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - path: MeshDesktop
+        excludes: ["**/*.md"]
     info:
       path: Generated/Desktop-Info.plist
       properties:
@@ -145,7 +151,9 @@ targets:
     platform: iOS
     sources:
       - path: Shared
+        excludes: ["**/*.md"]
       - path: MeshWatchWidgets
+        excludes: ["**/*.md"]
     info:
       path: MeshWatchWidgets/Info.plist
       properties:
@@ -172,7 +180,9 @@ targets:
     platform: watchOS
     sources:
       - path: Shared
+        excludes: ["**/*.md"]
       - path: Watch
+        excludes: ["**/*.md"]
       - path: Assets.xcassets
     info:
       path: Generated/Watch-Info.plist
@@ -203,7 +213,9 @@ targets:
     platform: watchOS
     sources:
       - path: Shared
+        excludes: ["**/*.md"]
       - path: WatchWidgets
+        excludes: ["**/*.md"]
     info:
       path: WatchWidgets/Info.plist
       properties:

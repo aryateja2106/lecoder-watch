@@ -23,6 +23,14 @@ final class WatchMeshStore: ObservableObject {
     @Published var usage: UsageSnapshot?
     @Published var watching: WatchTarget?
     @Published private var directOutput: [String] = []
+    /// Structured chat transcript for the watched session (meshd 0.6+ "chat"), oldest
+    /// first. Empty when the daemon lacks the capability, when the host is reachable
+    /// only through the phone relay, or when meshd fell back to capture-pane — in every
+    /// one of those cases the view shows `output` exactly as before. See `pollChat`.
+    @Published var chatMessages: [ChatMessage] = []
+    /// Opaque cursor from the last /chat poll; the next poll passes it back so the
+    /// daemon returns only messages we have not seen (appended by id, never replaced).
+    private var chatCursor: String?
     @Published var sending = false
     @Published var phoneReachable = false
     @Published var lastError: String?
@@ -125,6 +133,16 @@ final class WatchMeshStore: ObservableObject {
             return relayed?.watchedOutput ?? []
         }
         return directOutput
+    }
+
+    /// Whether the watched session has a structured transcript to show instead of raw
+    /// capture-pane text — true only on a chat-capable daemon reached DIRECTLY that has
+    /// actually produced turns. False on the phone relay (which carries capture-pane, so
+    /// off the tailnet we show that), on an older daemon, and on a plain shell. The
+    /// terminal view keys its rendering off this.
+    var hasChatTurns: Bool {
+        guard let w = watching, directReachable(w.host) else { return false }
+        return !chatMessages.isEmpty
     }
 
     private func directReachable(_ host: String) -> Bool {
@@ -524,6 +542,10 @@ final class WatchMeshStore: ObservableObject {
     func watch(host: String, agent: String, pane: String? = nil) {
         watching = WatchTarget(host: host, agent: agent, pane: pane)
         directOutput = []
+        // A new session (or pane) starts with an empty transcript and a fresh cursor,
+        // or the next /chat poll would graft the previous session's turns onto this one.
+        chatMessages = []
+        chatCursor = nil
         // Ask the phone to relay this agent's output too (used if direct fails).
         WatchLink.shared.send(WatchCommand(kind: .agentOutput, host: host, agent: agent, text: nil, key: nil,
                                            pane: pane, reader: readerOutput))
@@ -531,6 +553,9 @@ final class WatchMeshStore: ObservableObject {
         outputTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.pollOutput()
+                // Rides the same reader task at the same cadence; a no-op against a
+                // daemon without "chat", so an old box just keeps using capture-pane.
+                await self?.pollChat()
                 try? await Task.sleep(for: .milliseconds(1500))
             }
         }
@@ -540,6 +565,8 @@ final class WatchMeshStore: ObservableObject {
         outputTask?.cancel(); outputTask = nil
         WatchLink.shared.send(WatchCommand(kind: .agentOutput, host: nil, agent: nil, text: nil, key: nil))
         watching = nil
+        chatMessages = []
+        chatCursor = nil
     }
 
     private func pollOutput() async {
@@ -562,6 +589,30 @@ final class WatchMeshStore: ObservableObject {
         if let out = try? await c.output(agent: w.agent, lines: 300, pane: w.pane,
                                          join: cleaned, plain: cleaned) {
             directOutput = out.lines
+        }
+    }
+
+    /// meshd 0.6+ ("chat"): the structured transcript for the watched session, polled
+    /// on the same reader task as `pollOutput` and the same direct-only path — the phone
+    /// relay carries capture-pane lines, not chat turns, so a watch off the tailnet, an
+    /// older daemon, or a plain shell meshd could not parse all fall back to `output`.
+    /// Messages are appended by id per the /chat contract; a transient failure leaves
+    /// the transcript exactly as it was rather than blanking it.
+    private func pollChat() async {
+        guard let w = watching, directReachable(w.host), let c = client(for: w.host),
+              c.supports("chat") else { return }
+        guard let feed = try? await c.chat(agent: w.agent, since: chatCursor, limit: 200) else { return }
+        chatCursor = feed.cursor
+        if feed.source == "output" {
+            // The daemon has "chat" but found no Claude/Codex transcript here (a plain
+            // shell) — drop back to the capture-pane view.
+            chatMessages = []
+        } else {
+            let known = Set(chatMessages.map(\.id))
+            chatMessages.append(contentsOf: feed.messages.filter { !known.contains($0.id) })
+            // Cap the running total for a session left open for hours; the daemon
+            // already caps a single poll at `limit`.
+            if chatMessages.count > 500 { chatMessages.removeFirst(chatMessages.count - 500) }
         }
     }
 
@@ -588,41 +639,61 @@ final class WatchMeshStore: ObservableObject {
         }
     }
 
+    // One serial chain for single keystrokes. `send` used to spawn a fresh Task per
+    // call, so two fast key-bar taps raced at the daemon and could land out of order
+    // ("Left Right" arriving as "Right Left"). Each call now awaits the previous one —
+    // exactly what `sendKeys` does for a known list, the only difference being that these
+    // arrive one tap at a time. The redraw poll is debounced separately (`schedulePoll`)
+    // so a burst of keys redraws once, not once per key.
+    private var sendChain: Task<Void, Never>?
+    private var pollDebounce: Task<Void, Never>?
+
     func send(text: String? = nil, key: String? = nil) {
         guard let w = watching else { return }
+        sending = true
+        lastError = nil
+        let prev = sendChain
+        sendChain = Task { [weak self] in
+            _ = await prev?.value
+            guard let self, !Task.isCancelled else { return }
+            await self.deliverOne(text: text, key: key, target: w)
+            self.schedulePoll()
+        }
+    }
+
+    /// Deliver one keystroke, direct if reachable else via the phone relay. No trailing
+    /// poll here — `schedulePoll` owns that, so a run of keys does not pay 300ms each.
+    private func deliverOne(text: String?, key: String?, target w: WatchTarget) async {
         if directReachable(w.host), let c = client(for: w.host) {
-            sending = true
-            lastError = nil
-            Task {
-                do {
-                    try await c.send(agent: w.agent, text: text, key: key, pane: w.pane)
-                    // No success haptic on this path deliberately. A key chip is
-                    // pressed in runs — ten Downs to scroll a list — and ten buzzes
-                    // for ten keys is not feedback, it is a vibrating watch. The
-                    // direct path answers in well under the 300ms below, so the
-                    // output redrawing IS the confirmation. Failure still buzzes:
-                    // that one is rare and worth interrupting for.
-                } catch {
-                    lastError = "send failed"
-                    WKInterfaceDevice.current().play(.failure)
-                }
-                try? await Task.sleep(for: .milliseconds(300))
-                await pollOutput()
-                sending = false
+            // No success haptic on this path deliberately. A key chip is pressed in runs
+            // — ten Downs to scroll a list — and ten buzzes for ten keys is not feedback,
+            // it is a vibrating watch. The redraw IS the confirmation. Failure still
+            // buzzes: that one is rare and worth interrupting for.
+            do {
+                try await c.send(agent: w.agent, text: text, key: key, pane: w.pane)
+            } catch {
+                lastError = "send failed"
+                WKInterfaceDevice.current().play(.failure)
             }
         } else {
-            sending = true
-            lastError = nil
-            Task {
-                // Not queued: a keystroke delivered ten minutes late lands on whatever
-                // is on screen then, which is worse than losing it.
-                let ack = await WatchLink.shared.acknowledge(
-                    WatchCommand(kind: .agentSend, host: w.host, agent: w.agent,
-                                 text: text, key: key, pane: w.pane))
-                apply(ack, verb: "send")
-                await pollOutput()
-                sending = false
-            }
+            // Not queued: a keystroke delivered ten minutes late lands on whatever is on
+            // screen then, which is worse than losing it.
+            let ack = await WatchLink.shared.acknowledge(
+                WatchCommand(kind: .agentSend, host: w.host, agent: w.agent,
+                             text: text, key: key, pane: w.pane))
+            apply(ack, verb: "send")
+        }
+    }
+
+    /// One redraw after the burst settles, not one per key: cancel the pending poll and
+    /// start a fresh 300ms timer, so ten fast taps redraw once — 300ms after the last.
+    private func schedulePoll() {
+        pollDebounce?.cancel()
+        pollDebounce = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard let self, !Task.isCancelled else { return }
+            await self.pollOutput()
+            self.sending = false
         }
     }
 

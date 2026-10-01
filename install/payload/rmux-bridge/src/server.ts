@@ -3,7 +3,7 @@ import { unlink } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
-import { homedir, tmpdir } from "node:os";
+import { homedir, tmpdir, networkInterfaces, hostname } from "node:os";
 // Redaction lives in meshd's tree; ../../meshd resolves in the repo (install/payload/)
 // and in the installed layout (~/.mesh/) alike, so the bridge stays a sibling that
 // needs nothing but bun.
@@ -214,8 +214,57 @@ function cookieValue(header: string | null, name: string): string {
   return "";
 }
 
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+function localIPs(): Set<string> {
+  const set = new Set<string>();
+  for (const list of Object.values(networkInterfaces())) {
+    for (const i of list ?? []) if (i.address) set.add(i.address);
+  }
+  return set;
+}
+
+// This machine's own names, so it answers to its own hostname as well as to loopback.
+const OWN_NAMES = new Set<string>([
+  hostname().toLowerCase(),
+  hostname().toLowerCase().replace(/\.local$/, ""),
+]);
+
+// Parity with meshd's hostAllowed. A browser reaching the bridge under a foreign Host
+// header is a DNS-rebinding attempt — refuse it (421). No Host = not a browser; the auth
+// gate below still applies.
+function hostAllowed(req: Request): boolean {
+  const raw = req.headers.get("host");
+  if (!raw) return true;
+  const h = raw.replace(/:\d+$/, "").toLowerCase();
+  if (LOOPBACK_HOSTS.has(h)) return true;
+  if (/\.ts\.net$/.test(h)) return true; // tailscale MagicDNS
+  if (OWN_NAMES.has(h)) return true;
+  return localIPs().has(h); // this machine's own IPs (incl. tailscale)
+}
+
+// Parity with meshd's isBrowserCrossSite. A page from another origin must not drive the
+// bridge: Sec-Fetch-Site is authoritative when the browser sends it, otherwise Origin is
+// compared to Host. Our own WKWebView is same-origin and passes; a cross-site page is
+// refused before it can reach /attach (cross-site WebSocket hijack -> keystroke injection).
+function isBrowserCrossSite(req: Request): boolean {
+  const site = req.headers.get("sec-fetch-site");
+  if (site) return site !== "same-origin" && site !== "none";
+  const origin = req.headers.get("origin");
+  if (origin === null) return false;
+  const host = req.headers.get("host");
+  return !host || origin.toLowerCase() !== `${new URL(req.url).protocol}//${host}`.toLowerCase();
+}
+
+// A proxied request carries a forwarding header; when present, loopback trust is withdrawn
+// because the peer IP is the proxy's, not the real client's. A header can only deny trust,
+// never grant it.
+function isProxied(req: Request): boolean {
+  return req.headers.has("x-forwarded-for") || req.headers.has("x-real-ip") || req.headers.has("forwarded");
+}
+
 function authorized(req: Request): boolean {
-  if (TRUST_LOOPBACK) {
+  if (TRUST_LOOPBACK && !isProxied(req)) {
     const ip = server.requestIP(req)?.address ?? "";
     if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1") return true;
   }
@@ -436,6 +485,17 @@ server = Bun.serve<WsData>({
     }
     if (url.pathname === "/health") {
       return new Response(JSON.stringify({ ok: true, auth: TOKEN ? "token" : "loopback-only" }), { headers: { "content-type": "application/json" } });
+    }
+    // DNS-rebinding guard (parity with meshd): a foreign Host addressing this bridge is a
+    // browser being steered at a service it should not reach.
+    if (!hostAllowed(req)) {
+      return new Response("bad host", { status: 421 });
+    }
+    // Cross-site guard (parity with meshd): without it, a malicious page open in any
+    // browser on this machine could open ws://127.0.0.1:7820/attach and type into a live
+    // shell (cross-site WebSocket hijack). Our own same-origin WKWebView still passes.
+    if (isBrowserCrossSite(req)) {
+      return new Response("Unauthorized: cross-site request refused", { status: 401 });
     }
     // Everything else — the page, its assets, and above all /attach — needs the token.
     if (!authorized(req)) {
