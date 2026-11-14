@@ -80,22 +80,37 @@ Everyone who opens the app, and every prospect I demo it to.
   third-party UI library.
 - Revenue first: the goal is a demo that closes clients, not a full redesign of every screen.
 
+## Decisions
+
+Answered by Arya in the plans session of 2026-09-27 (the 20-question script in
+`intents/INTERVIEW.md`).
+
+- 2026-09-27: who the app is made for: someone a little scared of Terminal, who has never
+  opened it. The app must feel safe and simple before anything else.
+- 2026-09-27: apps whose look I want: "Warp, CMUX, Raycast, Vercel, Notion" (Arya's own list;
+  none of the four example families was picked as-is).
+- 2026-09-27: light or dark: follow the phone's setting; both light and dark must look finished.
+  (Whether the website matches is asked separately, see item 3 below.)
+- 2026-09-27: closest existing look: the old brand (grey, all monospace; `web/brand/TOKENS.css`,
+  used by the privacy page).
+- 2026-09-27: brand colour: none. Black and white only; colour is reserved for status (needs
+  you, error, working).
+
+| Decision | Value |
+|---|---|
+| Audience | Someone a little scared of Terminal; safe and simple first |
+| Look-alike apps | Warp, CMUX, Raycast, Vercel, Notion |
+| Light or dark | Follow the phone's setting; both modes finished |
+| Closest existing look | Old brand: grey, all monospace (`web/brand/TOKENS.css`) |
+| Brand accent | None: black and white only; colour means status |
+
 ## Open questions
 
 Condensed from the 20-question design interview of 2026-09-27; the full script with example
 answers is the appendix of `intents/INTERVIEW.md`, which the plans session follows. Answer with a word, an
 app name, or a reference image; examples are only there to make answering easy.
 
-1. Who should feel "this was made for me" the first time they open it: someone scared of
-   Terminal, a developer who lives in it, a founder who runs agents but is not a coder, or both
-   with the scary parts hidden?
-2. Two or three apps whose look you wish this app had (for example Things 3 or Linear, Apple
-   Fitness, Warp or Ghostty, Arc or Raycast).
-3. Light, dark, or both? Same answer for the website?
-4. Which existing look is closest to what is in your head: the June mockups, the old grey
-   monospace brand, today's orange landing page, or the light editorial landing?
-5. One brand colour for "this is LeSearch" and the main button: blue, orange, green, or black and
-   white only with colour reserved for status?
+3. Website: same light-or-dark answer as the app (follow the phone's setting), or different?
 6. What should mean "an agent needs you right now", given that orange is also Claude's colour?
 7. Type: Apple's font with mono only in the terminal, mono everywhere, a bold headline font, or
    rounded and friendly?
