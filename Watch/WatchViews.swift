@@ -1,4 +1,5 @@
 import SwiftUI
+import ImageIO
 
 // MARK: - Root
 
@@ -72,6 +73,16 @@ struct SessionsView: View {
                     GaugeRow(label: "Disk", value: s.disk.pct, text: "\(Int(s.disk.usedGB))/\(Int(s.disk.totalGB))G")
                 }
             }
+            if snap?.stats?.capabilities?.contains("screen") == true,
+               let machine = store.machines.first(where: { $0.host == host }) {
+                Section {
+                    NavigationLink {
+                        ScreenView(machine: machine)
+                    } label: {
+                        Label("Screen", systemImage: "display")
+                    }
+                }
+            }
             Section("Sessions (\(snap?.agents.count ?? 0))") {
                 ForEach(snap?.agents ?? []) { a in
                     NavigationLink {
@@ -94,6 +105,107 @@ struct SessionsView: View {
             }
         }
         .navigationTitle(shortName(host))
+    }
+}
+
+// MARK: - Screen mirror
+
+struct ScreenView: View {
+    let machine: Machine
+
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var image: CGImage?
+    @State private var lastRefresh: Date?
+    @State private var error: String?
+    @State private var zoom = false
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Group {
+                if let image {
+                    screenImage(image)
+                        .contentShape(Rectangle())
+                        .onTapGesture { zoom = true }
+                } else if let error {
+                    ContentUnavailableView("No screen", systemImage: "display.trianglebadge.exclamationmark", description: Text(error))
+                } else {
+                    ProgressView("Connecting...")
+                }
+            }
+            Text(statusText)
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .navigationTitle("Screen")
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await poll()
+        }
+        .sheet(isPresented: $zoom) { zoomSheet }
+    }
+
+    private var statusText: String {
+        guard let lastRefresh else { return "waiting" }
+        return "live \(max(0, Int(Date().timeIntervalSince(lastRefresh))))s ago"
+    }
+
+    private func poll() async {
+        while !Task.isCancelled {
+            await load()
+            try? await Task.sleep(for: .seconds(3))
+        }
+    }
+
+    private func load() async {
+        do {
+            let data = try await MeshClient(machine: machine).screen()
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let next = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                error = "Image unavailable"
+                return
+            }
+            image = next
+            lastRefresh = Date()
+            error = nil
+        } catch is CancellationError {
+        } catch _ {
+            error = "Screen unavailable"
+        }
+    }
+
+    private func screenImage(_ image: CGImage) -> some View {
+        Image(decorative: image, scale: 1)
+            .resizable()
+            .interpolation(.medium)
+            .scaledToFit()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .accessibilityLabel("Screen")
+    }
+
+    private var zoomSheet: some View {
+        NavigationStack {
+            ScrollView([.vertical, .horizontal]) {
+                if let image {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .interpolation(.medium)
+                        .scaledToFit()
+                        .frame(width: 480)
+                        .padding(6)
+                        .accessibilityLabel("Screen")
+                }
+            }
+            .navigationTitle(shortName(machine.host))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .bottomBar) {
+                    Button("Done") { zoom = false }
+                }
+            }
+        }
     }
 }
 

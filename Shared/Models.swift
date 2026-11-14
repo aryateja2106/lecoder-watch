@@ -12,6 +12,7 @@ struct Machine: Codable, Identifiable, Hashable {
     var bridgeURL: String?    // rmux-bridge base (tailscale-serve https); nil = not deployed
 
     var baseURL: URL? { URL(string: "http://\(ip):\(port)") }
+    var vncURL: URL? { URL(string: "vnc://\(ip):5900") }
 
     /// Stored bridge URL, or a known default for the Mac (tailscale-serve host),
     /// so the Terminal tab works even for machines persisted before this field existed.
@@ -76,6 +77,7 @@ struct Stats: Codable, Hashable {
     var disk: DiskInfo
     var topProcs: [ProcInfo]
     var agentsCount: Int
+    var capabilities: [String]?
 }
 
 // MARK: - Agents

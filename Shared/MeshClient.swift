@@ -1,6 +1,6 @@
 import Foundation
 
-/// Talks to a single machine's `meshd` over Tailscale. iPhone-only (the watch never calls this).
+/// Talks to a single machine's `meshd` over Tailscale.
 struct MeshClient {
     let machine: Machine
 
@@ -45,20 +45,29 @@ struct MeshClient {
         return try JSONDecoder().decode(UsageSnapshot.self, from: data)
     }
 
+    func screen() async throws -> Data {
+        try await request("/screen.jpg")
+    }
+
     func panes(agent: String) async throws -> [Pane] {
         let data = try await request("/agents/\(agent)/panes")
         return try JSONDecoder().decode(PaneList.self, from: data).panes
     }
 
-    func output(agent: String, lines: Int = 80) async throws -> AgentOutput {
-        let data = try await request("/agents/\(agent)/output?lines=\(lines)")
+    func output(agent: String, lines: Int = 80, pane: String? = nil) async throws -> AgentOutput {
+        var path = "/agents/\(agent)/output?lines=\(lines)"
+        if let pane, !pane.isEmpty {
+            path += "&pane=\(pane.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? pane)"
+        }
+        let data = try await request(path)
         return try JSONDecoder().decode(AgentOutput.self, from: data)
     }
 
-    func send(agent: String, text: String? = nil, key: String? = nil) async throws {
+    func send(agent: String, text: String? = nil, key: String? = nil, pane: String? = nil) async throws {
         var payload: [String: String] = [:]
         if let text { payload["text"] = text }
         if let key { payload["key"] = key }
+        if let pane { payload["pane"] = pane }
         let body = try JSONSerialization.data(withJSONObject: payload)
         _ = try await request("/agents/\(agent)/send", method: "POST", body: body)
     }

@@ -1,21 +1,14 @@
 import SwiftUI
-import WebKit
 
 // MARK: - Terminal tab
 
-/// First-class rmux terminal on the phone. Lists every machine that has a bridge
-/// deployed, shows its live sessions, and opens a real interactive terminal
-/// (the proven rmux-bridge xterm) in a WKWebView. "+" creates a new session.
+/// First-class mesh terminal on the phone. Uses meshd's existing output/send
+/// endpoints, so it does not need a separate web terminal bridge.
 struct TerminalTab: View {
     @EnvironmentObject var store: MeshStore
     @State private var creatingOn: Machine?
 
-    private var bridged: [MachineSnapshot] {
-        let snaps = store.snapshot?.machines ?? []
-        return snaps.filter { snap in
-            store.machines.first(where: { $0.host == snap.host })?.resolvedBridge != nil
-        }
-    }
+    private var snaps: [MachineSnapshot] { store.snapshot?.machines ?? [] }
 
     private func machine(for host: String) -> Machine? {
         store.machines.first(where: { $0.host == host })
@@ -24,19 +17,19 @@ struct TerminalTab: View {
     var body: some View {
         NavigationStack {
             List {
-                if bridged.isEmpty {
+                if snaps.isEmpty {
                     ContentUnavailableView(
-                        "No terminal bridge",
+                        "No machines",
                         systemImage: "terminal",
-                        description: Text("Run rmux-bridge on a machine to open live terminals here.")
+                        description: Text("Refresh after meshd is running.")
                     )
                 }
-                ForEach(bridged) { snap in
+                ForEach(snaps) { snap in
                     if let m = machine(for: snap.host) {
                         Section {
                             ForEach(snap.agents) { agent in
                                 NavigationLink {
-                                    BridgeTerminalScreen(machine: m, session: agent.name)
+                                    AgentTerminalScreen(machine: m, session: agent.name)
                                 } label: {
                                     HStack {
                                         Image(systemName: "terminal.fill")
@@ -135,30 +128,37 @@ private struct NewSessionSheet: View {
     }
 }
 
-// MARK: - Terminal screen (WKWebView over the bridge)
+// MARK: - Terminal screen
 
-private struct BridgeTerminalScreen: View {
+private struct AgentTerminalScreen: View {
     let machine: Machine
     let session: String
 
     @State private var panes: [Pane] = []
     @State private var selectedPane: String?   // nil = whole session (default)
+    @State private var lines: [String] = []
+    @State private var command = ""
+    @State private var error: String?
+    @State private var busy = false
+    @FocusState private var commandFocused: Bool
+
+    private let presets = ["ls", "pwd", "git status", "clear"]
 
     var body: some View {
         VStack(spacing: 0) {
             if panes.count > 1 {
                 paneSwitcher
             }
-            if let url = machine.terminalURL(session: session, pane: selectedPane) {
-                BridgeWebView(url: url)
-                    .ignoresSafeArea(edges: .bottom)
-            } else {
-                ContentUnavailableView("No bridge", systemImage: "wifi.exclamationmark")
-            }
+            outputView
+            Divider()
+            presetRow
+            inputRow
         }
+        .background(Color.black)
         .navigationTitle(session)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadPanes() }
+        .task(id: selectedPane) { await pollOutput() }
     }
 
     private var paneSwitcher: some View {
@@ -184,6 +184,65 @@ private struct BridgeTerminalScreen: View {
         .background(.black)
     }
 
+    private var outputView: some View {
+        ScrollViewReader { proxy in
+            ScrollView([.vertical, .horizontal]) {
+                Text(displayText)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(lines.isEmpty ? Color.secondary : Color.green)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(12)
+                Color.clear.frame(height: 1).id("bottom")
+            }
+            .onChange(of: lines) { _, _ in
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+        }
+    }
+
+    private var displayText: String {
+        if !lines.isEmpty { return lines.joined(separator: "\n") }
+        if let error { return error }
+        return "waiting for output"
+    }
+
+    private var presetRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(presets, id: \.self) { preset in
+                    Button(preset) { send(text: preset + "\n") }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+                Button { send(key: "up") } label: { Image(systemName: "arrow.up") }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                Button(role: .destructive) { send(key: "ctrl-c") } label: { Image(systemName: "xmark.octagon") }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+        .background(Color(.secondarySystemBackground))
+    }
+
+    private var inputRow: some View {
+        HStack(spacing: 8) {
+            TextField("command", text: $command)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($commandFocused)
+                .onSubmit(sendCommand)
+            Button(action: sendCommand) {
+                Image(systemName: busy ? "hourglass" : "paperplane.fill")
+            }
+            .disabled(command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy)
+        }
+        .padding(10)
+        .background(.regularMaterial)
+    }
+
     private func loadPanes() async {
         do {
             let fetched = try await MeshClient(machine: machine).panes(agent: session)
@@ -194,32 +253,42 @@ private struct BridgeTerminalScreen: View {
             panes = []
         }
     }
-}
 
-/// WKWebView wrapper. The bridge page (xterm + keybar + splits) handles all
-/// touch input, scroll/select/copy, and the WebSocket stream itself.
-///
-/// BRIDGE CHANGE NEEDED (rmux-bridge, owned by another agent): the bridge today
-/// reads only `?session=`. To honor pane focus, after reading the session it must
-/// also read `pane` and pass it to its rmux target, e.g. add one line:
-///   const pane = new URL(req.url, "http://x").searchParams.get("pane");
-/// then target `pane ?? session` when attaching/capturing (rmux `-t <pane>`).
-private struct BridgeWebView: UIViewRepresentable {
-    let url: URL
-
-    func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.allowsInlineMediaPlayback = true
-        let web = WKWebView(frame: .zero, configuration: config)
-        web.isOpaque = false
-        web.backgroundColor = .black
-        web.scrollView.backgroundColor = .black
-        web.scrollView.bounces = false
-        web.load(URLRequest(url: url))
-        return web
+    private func pollOutput() async {
+        while !Task.isCancelled {
+            await loadOutput()
+            try? await Task.sleep(for: .seconds(1.5))
+        }
     }
 
-    func updateUIView(_ web: WKWebView, context: Context) {
-        if web.url != url { web.load(URLRequest(url: url)) }
+    private func loadOutput() async {
+        do {
+            let out = try await MeshClient(machine: machine).output(agent: session, lines: 160, pane: selectedPane)
+            lines = out.lines
+            error = nil
+        } catch is CancellationError {
+        } catch {
+            self.error = "output unavailable"
+        }
+    }
+
+    private func sendCommand() {
+        let text = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        command = ""
+        send(text: text + "\n")
+    }
+
+    private func send(text: String? = nil, key: String? = nil) {
+        busy = true
+        Task {
+            do {
+                try await MeshClient(machine: machine).send(agent: session, text: text, key: key, pane: selectedPane)
+                await loadOutput()
+            } catch {
+                self.error = "send failed"
+            }
+            busy = false
+        }
     }
 }

@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "bun run server.ts"
+    "start": "bun run server.ts",
+    "self-check": "sh ./mesh-self-check",
+    "mesh-self-check": "sh ./mesh-self-check"
   }
 }

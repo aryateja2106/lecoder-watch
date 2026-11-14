@@ -1,4 +1,5 @@
 import SwiftUI
+import Network
 
 struct ContentView: View {
     @EnvironmentObject var store: MeshStore
@@ -7,6 +8,7 @@ struct ContentView: View {
         TabView {
             MachinesTab().tabItem { Label("Machines", systemImage: "server.rack") }
             TerminalTab().tabItem { Label("Terminal", systemImage: "terminal") }
+            RemoteTab().tabItem { Label("Remote", systemImage: "rectangle.on.rectangle") }
             UsageTab().tabItem { Label("Usage", systemImage: "gauge.with.dots.needle.67percent") }
             SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }
         }
@@ -84,6 +86,72 @@ private struct UsageTab: View {
     }
 }
 
+private struct RemoteTab: View {
+    @EnvironmentObject var store: MeshStore
+    @Environment(\.openURL) private var openURL
+    @State private var reachable: [String: Bool] = [:]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Machines") {
+                    ForEach(store.machines) { machine in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Circle()
+                                    .fill(statusColor(for: machine))
+                                    .frame(width: 8, height: 8)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(machine.host).font(.headline)
+                                    Text("\(machine.ip):5900").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button {
+                                    if let url = machine.vncURL { openURL(url) }
+                                } label: {
+                                    Label("Open in RealVNC", systemImage: "arrow.up.forward.app")
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                    }
+                }
+                Section("RealVNC") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("This opens your existing RealVNC Viewer connection over Tailscale.")
+                        Text("Turn on Screen Sharing on the Mac in System Settings > General > Sharing. On Raspberry Pi, enable VNC, then keep Tailscale connected.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationTitle("Remote")
+            .task(id: store.machines) { await refreshReachability() }
+            .refreshable { await refreshReachability() }
+        }
+    }
+
+    private func statusColor(for machine: Machine) -> Color {
+        guard let ok = reachable[machine.host] else { return .secondary }
+        return ok ? .green : .red
+    }
+
+    private func refreshReachability() async {
+        let machines = store.machines
+        var next: [String: Bool] = [:]
+        await withTaskGroup(of: (String, Bool).self) { group in
+            for machine in machines {
+                group.addTask {
+                    (machine.host, await vncReachable(ip: machine.ip))
+                }
+            }
+            for await result in group {
+                next[result.0] = result.1
+            }
+        }
+        reachable = next
+    }
+}
+
 private struct SettingsTab: View {
     @EnvironmentObject var store: MeshStore
 
@@ -101,6 +169,47 @@ private struct SettingsTab: View {
             .navigationTitle("Machines")
             .toolbar { Button("Save") { store.save(); Task { await store.refresh() } } }
         }
+    }
+}
+
+private func vncReachable(ip: String) async -> Bool {
+    await withCheckedContinuation { continuation in
+        let connection = NWConnection(host: NWEndpoint.Host(ip), port: 5900, using: .tcp)
+        let queue = DispatchQueue(label: "vnc-\(ip)")
+        let probe = VNCProbe(connection: connection, continuation: continuation)
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                probe.finish(true)
+            case .failed, .cancelled:
+                probe.finish(false)
+            default:
+                break
+            }
+        }
+        connection.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + 5) { probe.finish(false) }
+    }
+}
+
+private final class VNCProbe: @unchecked Sendable {
+    let connection: NWConnection
+    let continuation: CheckedContinuation<Bool, Never>
+    private let lock = NSLock()
+    private var done = false
+
+    init(connection: NWConnection, continuation: CheckedContinuation<Bool, Never>) {
+        self.connection = connection
+        self.continuation = continuation
+    }
+
+    func finish(_ ok: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !done else { return }
+        done = true
+        connection.cancel()
+        continuation.resume(returning: ok)
     }
 }
 
