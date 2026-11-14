@@ -1,0 +1,503 @@
+<!doctype html>
+<!-- PROTOTYPE ONLY. Question: what should the iPhone Machines home prioritize?
+     Three structural variants share mock routes and state; no daemon requests or persistence. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>LeSearch AI · iPhone redesign prototype</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; color: #e9e9e8; background: #111316; }
+    * { box-sizing: border-box; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .workspace { max-width: 1430px; margin: 0 auto; padding: 28px 28px 110px; }
+    .intro { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+    .intro h1 { font-size: clamp(24px, 3vw, 38px); letter-spacing: -.035em; margin: 7px 0; font-weight: 670; }
+    .intro p { color: #a6a9ad; margin: 0; max-width: 720px; line-height: 1.45; }
+    .flag { color: #ffb667; font-size: 11px; letter-spacing: .15em; font-weight: 760; }
+    .intro .source-link { color: #c8d9f4; text-decoration: none; white-space: nowrap; font-size: 13px; border: 1px solid #414852; border-radius: 999px; padding: 9px 13px; }
+    .grid { display: grid; grid-template-columns: minmax(205px, 250px) minmax(340px, 430px) minmax(245px, 320px); justify-content: center; gap: 24px; align-items: start; }
+    .rail { background: #1a1d21; border: 1px solid #30353b; border-radius: 22px; padding: 20px; box-shadow: 0 15px 50px #0002; }
+    .rail h2 { font-size: 15px; margin: 0 0 16px; letter-spacing: -.01em; }
+    .rail h3 { font-size: 11px; color: #a3a8ad; letter-spacing: .12em; margin: 22px 0 9px; }
+    .rail p { font-size: 13px; color: #acb0b5; line-height: 1.5; }
+    .rail small { color: #8f969e; line-height: 1.5; display: block; }
+    .rail button { border: 1px solid #343a42; background: #23282e; color: #e8ebee; border-radius: 11px; padding: 10px 12px; text-align: left; }
+    .rail button:hover, .rail button:focus-visible { border-color: #6b96c9; outline: none; }
+    .rail button.active { border-color: #85b6ed; background: #223247; }
+    .scenario-list { display: grid; gap: 7px; }
+    .scenario-list button { display: flex; gap: 9px; justify-content: space-between; align-items: center; width: 100%; }
+    .scenario-list span { color: #919ba7; font-size: 11px; }
+    .rail .toggle { display: flex; gap: 9px; align-items: center; font-size: 13px; color: #d5d9dd; margin: 9px 0; }
+    .rail .toggle input { accent-color: #79b5f4; width: 16px; height: 16px; }
+    .variant-note { border-left: 2px solid #8eb7eb; padding-left: 12px; margin-top: 20px; }
+    .variant-note strong { font-size: 14px; }
+    .variant-note p { margin: 7px 0 0; }
+    .stage { display: grid; justify-items: center; gap: 10px; }
+    .device-note { color: #9da4ac; font-size: 12px; text-align: center; }
+    .phone { --bg: #f4f4f6; --surface: #fff; --surface-2: #ededf0; --text: #17181b; --muted: #737780; --line: #e2e3e7; --blue: #0878e8; --green: #1eaa5e; --orange: #cf7a11; --red: #cf3d3d; width: min(100%, 402px); height: 832px; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); color: var(--text); border: 8px solid #2b2e34; border-radius: 52px; box-shadow: 0 22px 80px #0009, inset 0 0 0 1px #fff7; position: relative; }
+    .phone.dark { --bg: #070809; --surface: #1c1d20; --surface-2: #2b2d32; --text: #f5f5f4; --muted: #9a9da4; --line: #35373b; --blue: #51a7ff; --green: #31d16d; --orange: #ffae45; --red: #ff6566; }
+    .statusbar { height: 43px; flex: none; padding: 12px 29px 0; display: flex; justify-content: space-between; align-items: start; font-size: 14px; font-weight: 650; }
+    .island { background: #090a0b; width: 103px; height: 28px; border-radius: 22px; position: absolute; top: 7px; left: calc(50% - 51px); }
+    .phone-header { flex: none; padding: 11px 18px 6px; }
+    .phone-header .tools { display: flex; justify-content: flex-end; gap: 5px; min-height: 38px; }
+    .phone-header h2 { font-size: 34px; line-height: 1.07; letter-spacing: -.045em; margin: 7px 0 3px; font-weight: 730; }
+    .phone-header.compact { display: flex; align-items: center; justify-content: space-between; min-height: 63px; padding-top: 4px; }
+    .phone-header.compact h2 { font-size: 18px; letter-spacing: -.015em; margin: 0; }
+    .icon-btn { width: 37px; height: 37px; border: 0; border-radius: 18px; background: var(--surface); color: var(--text); display: inline-grid; place-items: center; font-size: 19px; position: relative; }
+    .icon-btn:focus-visible, .phone button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .badge { position: absolute; top: 1px; right: 2px; min-width: 14px; height: 14px; border-radius: 9px; background: var(--orange); color: #111; font-size: 10px; line-height: 14px; }
+    .phone-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px 24px; scrollbar-width: thin; }
+    .section-label { color: var(--muted); font-size: 12px; font-weight: 720; letter-spacing: .055em; margin: 21px 4px 8px; text-transform: uppercase; }
+    .eyebrow { font-size: 11px; color: var(--muted); letter-spacing: .15em; font-weight: 730; }
+    .hero-text { padding: 8px 5px 12px; }
+    .hero-text h3 { font-size: 32px; letter-spacing: -.045em; line-height: 1.08; margin: 10px 0 6px; font-weight: 700; }
+    .hero-text p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.4; }
+    .group { background: var(--surface); border-radius: 20px; overflow: hidden; }
+    .divider { height: 1px; background: var(--line); margin-left: 16px; }
+    .row-btn { width: 100%; color: var(--text); background: none; border: 0; padding: 13px 15px; text-align: left; display: flex; align-items: center; gap: 11px; min-height: 56px; }
+    .row-btn:hover, .row-btn:focus-visible { background: var(--surface-2); }
+    .row-text { flex: 1; min-width: 0; }
+    .row-text strong { display: block; font-size: 15px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row-text small { color: var(--muted); display: block; line-height: 1.28; margin-top: 3px; font-size: 11px; }
+    .chev { color: var(--muted); font-size: 21px; flex: none; font-weight: 300; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+    .dot.ready, .state-ready { background: var(--green); color: var(--green); }
+    .dot.waiting, .state-waiting, .dot.auth { background: var(--orange); color: var(--orange); }
+    .dot.error, .state-error { background: var(--red); color: var(--red); }
+    .dot.offline, .dot.idle { background: var(--muted); color: var(--muted); }
+    .state-line { font-size: 11px; font-weight: 680; display: block; margin-top: 5px; }
+    .state-line.state-ready, .state-line.state-waiting, .state-line.state-error { background: none; }
+    .machine-line { display: flex; gap: 4px; align-items: stretch; padding-right: 11px; }
+    .machine-line .row-btn { flex: 1; min-width: 0; }
+    .screen-peek { align-self: center; flex: none; width: 75px; height: 53px; border: 1px solid var(--line); border-radius: 8px; background: #101521; color: #dbe2ed; padding: 5px; text-align: left; overflow: hidden; font-size: 7px; }
+    .screen-peek .topline { display: block; height: 5px; border-radius: 3px; background: #4d566b; margin-bottom: 6px; }
+    .screen-peek .code-line { display: block; width: 76%; height: 3px; margin: 4px 0; border-radius: 2px; background: #68798b; }
+    .screen-peek .code-line:nth-child(3) { width: 47%; background: #57c486; }
+    .screen-peek .code-line:nth-child(4) { width: 86%; }
+    .attention { border: 1px solid color-mix(in srgb, var(--orange) 40%, var(--line)); border-radius: 19px; padding: 15px; background: color-mix(in srgb, var(--orange) 9%, var(--surface)); }
+    .attention .top { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--orange); }
+    .attention strong { display: block; font-size: 16px; margin: 8px 0 3px; }
+    .attention p { color: var(--muted); font-size: 12px; margin: 0 0 11px; line-height: 1.38; }
+    .actions { display: flex; gap: 8px; }
+    .action-btn { border: 0; background: var(--surface-2); color: var(--text); border-radius: 10px; padding: 9px 12px; font-size: 12px; font-weight: 650; min-height: 36px; }
+    .action-btn.primary { background: var(--blue); color: white; }
+    .action-btn.warn { background: var(--orange); color: #1f1609; }
+    .action-btn.danger { background: var(--red); color: white; }
+    .action-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .all-clear { border: 1px solid var(--line); background: var(--surface); border-radius: 18px; padding: 15px; color: var(--muted); font-size: 13px; line-height: 1.4; }
+    .all-clear b { color: var(--text); }
+    .tabbar { flex: none; height: 74px; margin: 3px 10px 8px; border: 1px solid var(--line); border-radius: 33px; background: color-mix(in srgb, var(--surface) 88%, transparent); display: flex; align-items: stretch; padding: 4px; }
+    .tabbar button { flex: 1; border: 0; border-radius: 27px; background: transparent; color: var(--text); font-size: 10px; display: grid; place-content: center; gap: 3px; }
+    .tabbar button .symbol { font-size: 20px; line-height: 1; }
+    .tabbar button.active { background: var(--bg); color: var(--blue); font-weight: 720; }
+    .home-indicator { flex: none; width: 109px; height: 4px; border-radius: 5px; background: var(--text); margin: 0 auto 6px; opacity: .72; }
+    .feed-head { padding: 6px 4px 13px; }
+    .feed-head h3 { font-size: 29px; letter-spacing: -.04em; margin: 8px 0; line-height: 1.06; }
+    .feed-head p { color: var(--muted); font-size: 12px; margin: 0; }
+    .feed-machine { width: 100%; background: var(--surface); border: 0; border-radius: 13px; color: var(--text); padding: 11px 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; text-align: left; }
+    .feed-machine strong { font-size: 13px; flex: 1; }
+    .feed-machine span:last-child { font-size: 11px; color: var(--muted); }
+    .canvas-card { background: #111824; color: #f2f5f8; border-radius: 21px; overflow: hidden; min-height: 267px; position: relative; display: flex; flex-direction: column; }
+    .canvas-art { flex: 1; padding: 17px; background: radial-gradient(circle at 84% 21%, #2e5270, transparent 35%), linear-gradient(150deg, #101a2b, #161821 68%); }
+    .canvas-art .window { height: 122px; border-radius: 9px; background: #11131bdc; border: 1px solid #465166; padding: 10px; box-shadow: 0 14px 20px #0008; transform: rotate(-2deg); }
+    .canvas-art .window i { display: block; height: 5px; width: 45%; margin: 10px 0; border-radius: 3px; background: #6a7890; }
+    .canvas-art .window i:nth-child(2) { width: 65%; background: #4ec58c; }
+    .canvas-art .window i:nth-child(3) { width: 36%; }
+    .canvas-meta { padding: 14px; background: linear-gradient(transparent, #080b12 25%); display: flex; align-items: end; justify-content: space-between; gap: 8px; }
+    .canvas-meta strong { font-size: 18px; }
+    .canvas-meta small { display: block; color: #a8b2bf; margin-top: 3px; }
+    .machine-pills { display: flex; gap: 7px; overflow: auto; padding: 2px 0 8px; scrollbar-width: none; }
+    .machine-pills button { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); padding: 8px 11px; white-space: nowrap; font-size: 11px; }
+    .machine-pills button.active { border-color: var(--blue); color: var(--blue); }
+    .detail-actions { display: flex; gap: 8px; margin: 11px 0 17px; }
+    .detail-actions button { flex: 1; }
+    .terminal-preview { background: #171923; border-radius: 17px; color: #e5e6ee; padding: 14px; min-height: 230px; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; }
+    .terminal-preview .prompt { color: #56d78f; }
+    .terminal-preview .dim { color: #8991a0; }
+    .segmented { display: flex; background: var(--surface-2); border-radius: 10px; padding: 3px; margin: 7px 0 14px; }
+    .segmented button { flex: 1; border: 0; background: transparent; color: var(--muted); border-radius: 8px; padding: 7px; font-size: 12px; }
+    .segmented button.active { color: var(--text); background: var(--surface); font-weight: 700; box-shadow: 0 1px 3px #0002; }
+    .bubble { background: var(--surface); border-radius: 15px; padding: 12px; margin: 9px 0; font-size: 12px; line-height: 1.4; }
+    .bubble.you { background: color-mix(in srgb, var(--blue) 19%, var(--surface)); margin-left: 29px; }
+    .bubble small { display: block; color: var(--muted); margin-bottom: 5px; }
+    .composer { display: flex; gap: 7px; margin-top: 13px; }
+    .composer input, .sheet input, .sheet select { width: 100%; min-width: 0; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 12px; }
+    .composer button { flex: none; }
+    .phone .placeholder { color: var(--muted); padding: 20px 4px; font-size: 13px; line-height: 1.5; }
+    .sheet-scrim { position: absolute; inset: 0; background: #0007; display: flex; align-items: flex-end; z-index: 10; }
+    .sheet { width: 100%; min-height: 315px; background: var(--bg); color: var(--text); border-radius: 26px 26px 40px 40px; padding: 10px 18px 25px; box-shadow: 0 -10px 40px #0005; }
+    .grabber { width: 34px; height: 5px; background: var(--muted); opacity: .55; border-radius: 5px; margin: 0 auto 15px; }
+    .sheet-title { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+    .sheet-title h3 { font-size: 19px; margin: 0; }
+    .sheet-title button { background: none; border: 0; color: var(--blue); font-size: 12px; }
+    .sheet label { display: block; font-size: 11px; font-weight: 650; color: var(--muted); margin: 16px 0 5px; }
+    .sheet .action-btn { margin-top: 19px; width: 100%; }
+    .toast { position: absolute; left: 25px; right: 25px; bottom: 89px; background: var(--text); color: var(--bg); border-radius: 12px; padding: 9px 12px; text-align: center; font-size: 11px; z-index: 12; }
+    .mapping pre, .state-inspector { background: #111418; border: 1px solid #30363d; border-radius: 11px; color: #c9d5e4; font: 11px/1.48 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; padding: 11px; }
+    .state-inspector { max-height: 220px; overflow: auto; }
+    .mapping ul { padding-left: 18px; color: #afb5bc; font-size: 12px; line-height: 1.5; }
+    .mapping a { color: #a8ceff; }
+    .mapping .step { border-top: 1px solid #343a42; padding: 10px 0; font-size: 12px; color: #aeb5bc; }
+    .mapping .step b { color: #e9edf2; }
+    .show-mapping [data-map] { outline: 1px dashed #8b5cf6 !important; outline-offset: -2px; position: relative; }
+    .show-mapping [data-map]::before { content: attr(data-map); position: absolute; right: 2px; top: 2px; background: #442a76; color: white; border-radius: 4px; padding: 2px 3px; font: 8px/1.1 ui-monospace, monospace; z-index: 4; pointer-events: none; }
+    .switcher { display: flex; align-items: center; gap: 4px; width: max-content; margin: 8px auto 0; border: 1px solid #8692a0; border-radius: 999px; background: #f1f3f5; color: #15181d; padding: 5px; box-shadow: 0 10px 45px #0008; }
+    .switcher button { background: #dde4ed; color: #15181d; border: 0; border-radius: 999px; min-width: 38px; height: 34px; font-size: 19px; }
+    .switcher strong { font-size: 12px; min-width: 155px; text-align: center; padding: 0 4px; }
+    @media (max-width: 1050px) { .grid { grid-template-columns: minmax(210px, 275px) minmax(340px, 430px); } .mapping { grid-column: 1 / -1; } }
+    @media (max-width: 700px) { .workspace { padding: 20px 11px 20px; } .intro { display: block; } .intro .source-link { display: inline-block; margin-top: 13px; } .grid { grid-template-columns: 1fr; } .controls { order: 2; } .stage { order: 1; } .mapping { order: 3; grid-column: auto; } .phone { height: min(832px, calc(100dvh - 145px)); min-height: 560px; } .switcher { max-width: calc(100vw - 20px); } }
+    @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="workspace">
+    <header class="intro">
+      <div><div class="flag">THROWAWAY DESIGN PROTOTYPE · NO LIVE CONNECTION</div><h1>LeSearch AI, from phone to machine</h1><p>Compare three answers to one question: what should the Machines home show first? Use the phone, change its state, and inspect the real SwiftUI pattern behind each flow.</p></div>
+      <a class="source-link" href="./ContentView.swift" target="_blank" rel="noopener">Open current SwiftUI source ↗</a>
+    </header>
+    <div class="grid">
+      <aside class="rail controls" aria-label="Prototype controls">
+        <h2>Try the app states</h2>
+        <div id="scenarios" class="scenario-list"></div>
+        <h3>VIEW OPTIONS</h3>
+        <label class="toggle"><input id="theme-toggle" type="checkbox"> Dark appearance</label>
+        <label class="toggle"><input id="map-toggle" type="checkbox"> Show SwiftUI boundaries</label>
+        <div class="variant-note"><strong id="variant-title"></strong><p id="variant-description"></p></div>
+        <h3>WHAT TO TRY</h3>
+        <small>Open a machine. Tap its screen. Open a session and answer it. Start a mock session. Switch states while keeping the same layout.</small>
+      </aside>
+      <section class="stage" aria-label="Interactive iPhone mockup">
+        <div id="phone"></div>
+        <div class="device-note">HTML mockup of the iPhone flow · sample data · no commands sent</div>
+        <nav class="switcher" aria-label="Prototype variants">
+          <button type="button" data-action="previous-variant" aria-label="Previous variant">‹</button>
+          <strong id="variant-switch-label"></strong>
+          <button type="button" data-action="next-variant" aria-label="Next variant">›</button>
+        </nav>
+      </section>
+      <aside class="rail mapping" aria-label="SwiftUI mapping">
+        <h2>How this maps to SwiftUI</h2>
+        <div id="mapping"></div>
+        <h3>VISIBLE MOCK STATE</h3>
+        <pre id="state" class="state-inspector" aria-live="polite"></pre>
+      </aside>
+    </div>
+  </main>
+  <script>
+    "use strict";
+    var variants = {
+      A: { name: "Fleet first", description: "Closest to the current SwiftUI slice: fleet health above a grouped machine list, with a direct screen-control thumbnail." },
+      B: { name: "Attention first", description: "The agent asking for help owns the first viewport. Machines move into compact connection rows below the decision." },
+      C: { name: "Machine canvas", description: "A selected machine and its screen lead. Other machines become a quick switcher; sessions sit under the canvas." }
+    };
+    var scenarioNames = {
+      attention: ["Needs reply", "agent waiting"],
+      healthy: ["All clear", "everything reachable"],
+      auth: ["Pair again", "token rejected"],
+      offline: ["Offline", "one machine down"],
+      empty: ["First launch", "nothing paired"]
+    };
+    var state = {
+      variant: variants[new URL(location.href).searchParams.get("variant")] ? new URL(location.href).searchParams.get("variant") : "A",
+      scenario: "attention", theme: "light", showMapping: false, tab: "machines", page: "root", sheet: null,
+      selectedMachine: "studio", selectedAgent: "site", sessionMode: "chat", toast: "", lastAction: "Prototype opened", machines: [], agents: []
+    };
+    function esc(value) {
+      return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+    function fixture(which) {
+      state.scenario = which;
+      state.tab = "machines"; state.page = "root"; state.sheet = null; state.toast = "";
+      state.selectedMachine = "studio"; state.selectedAgent = "site";
+      state.machines = [
+        { id: "studio", name: "Studio Mac", status: "ready", sessions: 2, screen: true },
+        { id: "pi", name: "Build Pi", status: "ready", sessions: 1, screen: true },
+        { id: "home", name: "Home Server", status: "ready", sessions: 0, screen: false }
+      ];
+      state.agents = [
+        { id: "site", machine: "studio", name: "Website polish", source: "Codex", status: which === "attention" ? "waiting" : "working", messages: [{ from: "agent", text: "The landing page is updated. May I replace the published image?" }] },
+        { id: "api", machine: "studio", name: "API tests", source: "Claude", status: "working", messages: [{ from: "agent", text: "Running the focused checks now." }] },
+        { id: "backup", machine: "pi", name: "Nightly report", source: "Shell", status: "idle", messages: [{ from: "agent", text: "Last run completed at 01:42." }] }
+      ];
+      if (which === "auth") state.machines[0].status = "auth";
+      if (which === "offline") state.machines[0].status = "offline";
+      if (which === "empty") { state.machines = []; state.agents = []; }
+      state.lastAction = "Scenario changed to " + scenarioNames[which][0];
+      render();
+    }
+    function machine(id) { return state.machines.find(function (m) { return m.id === id; }); }
+    function agent(id) { return state.agents.find(function (a) { return a.id === id; }); }
+    function availableAgents() { return state.agents.filter(function (a) { return machine(a.machine) && machine(a.machine).status === "ready"; }); }
+    function waitingAgents() { return availableAgents().filter(function (a) { return a.status === "waiting"; }); }
+    function readyMachines() { return state.machines.filter(function (m) { return m.status === "ready"; }); }
+    function statusLabel(status) { return { ready: "Ready", auth: "Pair again", offline: "Offline", working: "Working", waiting: "Needs you", idle: "Idle", error: "Error" }[status] || status; }
+    function statusClass(status) { return status === "auth" ? "waiting" : status; }
+    function btn(label, action, extra, attrs) { return '<button type="button" class="' + (extra || "action-btn") + '" data-action="' + action + '" ' + (attrs || "") + '>' + label + '</button>'; }
+    function screenPeek(id) {
+      return '<button type="button" class="screen-peek" data-action="control" data-id="' + esc(id) + '" aria-label="Control screen of ' + esc(machine(id).name) + '"><span class="topline"></span><span class="code-line"></span><span class="code-line"></span><span class="code-line"></span></button>';
+    }
+    function attentionCard() {
+      var a = waitingAgents()[0];
+      if (!a) return '<div class="all-clear"><b>Nothing waiting on you.</b><br>Your agents can keep working while you are away.</div>';
+      return '<div class="attention" data-map="AttentionRow"><div class="top">● &nbsp; NEEDS YOU · ' + esc(machine(a.machine).name) + '</div><strong>' + esc(a.name) + '</strong><p>' + esc(a.messages[0].text) + '</p><div class="actions">' +
+        btn("Open session", "open-session", "action-btn", 'data-id="' + esc(a.id) + '"') +
+        btn("Answer in mockup", "answer", "action-btn warn", 'data-id="' + esc(a.id) + '"') + '</div></div>';
+    }
+    function machineRow(m) {
+      var secondary = m.status === "ready" ? m.sessions + (m.sessions === 1 ? " session" : " sessions") : m.status === "auth" ? "Token rejected · open to pair again" : "Open for connection details";
+      return '<div class="machine-line"><button type="button" class="row-btn" data-action="open-machine" data-id="' + esc(m.id) + '"><span class="dot ' + statusClass(m.status) + '"></span><span class="row-text"><strong>' + esc(m.name) + '</strong><span class="state-line state-' + statusClass(m.status) + '">' + statusLabel(m.status) + '</span><small>' + esc(secondary) + '</small></span><span class="chev">›</span></button>' +
+        (m.status === "ready" && m.screen ? screenPeek(m.id) : "") + '</div>';
+    }
+    function homeA() {
+      if (!state.machines.length) return emptyHome();
+      return (waitingAgents().length ? '<div class="section-label" style="color:var(--orange)">Needs you</div>' + attentionCard() : "") +
+        '<div class="hero-text" data-map="List + Section"><span class="eyebrow">FLEET STATUS</span><h3>' + readyMachines().length + ' of ' + state.machines.length + ' ready</h3><p>' + availableAgents().length + ' sessions across your machines</p></div>' +
+        '<div class="section-label">Paired machines</div><div class="group" data-map="NavigationLink">' + state.machines.map(function (m, i) { return (i ? '<div class="divider"></div>' : "") + machineRow(m); }).join("") + '</div>';
+    }
+    function homeB() {
+      if (!state.machines.length) return emptyHome();
+      var waiting = waitingAgents().length;
+      return '<div class="feed-head" data-map="List + Section"><span class="eyebrow">YOUR AGENTS</span><h3>' + (waiting ? waiting + ' decision' + (waiting === 1 ? "" : "s") + ' waiting' : "Everything can keep moving") + '</h3><p>' + readyMachines().length + ' machines ready · ' + availableAgents().length + ' sessions</p></div>' +
+        attentionCard() + '<div class="section-label">Your machines</div>' +
+        state.machines.map(function (m) { return '<button type="button" class="feed-machine" data-action="open-machine" data-id="' + esc(m.id) + '"><span class="dot ' + statusClass(m.status) + '"></span><strong>' + esc(m.name) + '</strong><span>' + statusLabel(m.status) + ' ›</span></button>'; }).join("") +
+        '<div class="section-label">Continue a session</div><div class="group">' + availableAgents().slice(0, 2).map(sessionRow).join("") + '</div>';
+    }
+    function homeC() {
+      if (!state.machines.length) return emptyHome();
+      var m = machine(state.selectedMachine) || state.machines[0];
+      return '<div class="machine-pills" data-map="@State selected machine">' + state.machines.map(function (x) {
+        return btn('<span class="dot ' + statusClass(x.status) + '"></span> ' + esc(x.name), "select-machine", x.id === m.id ? "active" : "", 'data-id="' + esc(x.id) + '"');
+      }).join("") + '</div>' +
+        '<div class="canvas-card" data-map="RemoteScreenView"><div class="canvas-art"><div class="window"><i></i><i></i><i></i></div></div><div class="canvas-meta"><div><strong>' + esc(m.name) + '</strong><small>' + statusLabel(m.status) + ' · ' + m.sessions + ' sessions</small></div>' +
+        btn("Control ›", "control", "action-btn primary", 'data-id="' + esc(m.id) + '"' + (m.status !== "ready" || !m.screen ? ' disabled' : '')) + '</div></div>' +
+        '<div class="detail-actions">' + btn("Machine details", "open-machine", "action-btn", 'data-id="' + esc(m.id) + '"') + btn("New session", "new-session", "action-btn", 'data-id="' + esc(m.id) + '"' + (m.status !== "ready" ? ' disabled' : '')) + '</div>' +
+        '<div class="section-label">On this machine</div><div class="group">' +
+        (state.agents.filter(function (a) { return a.machine === m.id; }).map(sessionRow).join("") || '<div class="placeholder">No sessions on this machine.</div>') +
+        '</div>' + (waitingAgents().length ? '<div class="section-label" style="color:var(--orange)">Needs you</div>' + attentionCard() : '');
+    }
+    function emptyHome() {
+      return '<div class="hero-text"><span class="eyebrow">FIRST LAUNCH</span><h3>Your machines, one tap away.</h3><p>Pair a Mac or Linux machine to see its sessions, screen, and agent requests here.</p></div>' +
+        btn("Pair a machine", "pair", "action-btn primary") + '<div class="section-label">How pairing works</div><div class="group"><div class="placeholder">On your machine, run the installer and ask it for a pairing code. Scan or type the code on this phone.</div></div>';
+    }
+    function sessionRow(a) {
+      return '<button type="button" class="row-btn" data-action="open-session" data-id="' + esc(a.id) + '"><span style="font-size:20px;width:22px;text-align:center">›_</span><span class="row-text"><strong>' + esc(a.name) + '</strong><small>' + esc(a.source) + ' · ' + esc(machine(a.machine) ? machine(a.machine).name : "Machine") + '</small><span class="state-line state-' + statusClass(a.status) + '">' + statusLabel(a.status) + '</span></span><span class="chev">›</span></button>';
+    }
+    function terminalHome() {
+      if (!state.machines.length) return '<div class="placeholder">Pair a machine on the Machines tab to see its sessions.</div>';
+      return '<div class="hero-text" data-map="TerminalTab"><span class="eyebrow">AGENT WORK</span><h3>' + availableAgents().length + ' sessions</h3><p>Read the work, answer an agent, or open a live terminal.</p></div>' +
+        state.machines.map(function (m) {
+          var list = state.agents.filter(function (a) { return a.machine === m.id; });
+          return '<div class="section-label"><span class="dot ' + statusClass(m.status) + '"></span> ' + esc(m.name) + '</div><div class="group">' +
+            (m.status === "ready" ? (list.map(sessionRow).join('<div class="divider"></div>') || '<div class="placeholder">No sessions</div>') : '<div class="placeholder">' + (m.status === "auth" ? "Pair again to list sessions." : "Machine is offline.") + '</div>') +
+            '<div class="divider"></div>' + btn("+  New session", "new-session", "row-btn", 'data-id="' + esc(m.id) + '"' + (m.status !== "ready" ? ' disabled' : '')) + '</div>';
+        }).join("");
+    }
+    function machineDetail() {
+      var m = machine(state.selectedMachine);
+      if (!m) return '<div class="placeholder">This machine is no longer paired.</div>';
+      return '<div class="hero-text"><span class="eyebrow">MACHINE</span><h3>' + esc(m.name) + '</h3><p><span class="dot ' + statusClass(m.status) + '"></span> ' + statusLabel(m.status) + '</p></div>' +
+        (m.status === "auth" ? '<div class="attention"><strong>Pair this machine again</strong><p>Its token was rejected. A new code replaces the saved grant.</p>' + btn("Open pairing", "pair", "action-btn warn") + '</div>' : "") +
+        (m.status === "offline" ? '<div class="all-clear">The machine did not answer. Check that it is awake and connected.</div>' : "") +
+        '<div class="section-label">Open</div><div class="group">' +
+        btn("▣  Screen & control", "control", "row-btn", 'data-id="' + esc(m.id) + '"' + (m.status !== "ready" || !m.screen ? ' disabled' : '')) +
+        '<div class="divider"></div>' + btn("▤  Files", "mock-action", "row-btn", 'data-label="Files"') +
+        '<div class="divider"></div>' + btn("◫  Machine load", "mock-action", "row-btn", 'data-label="Machine load"') + '</div>' +
+        '<div class="section-label">Sessions</div><div class="group">' +
+        (state.agents.filter(function (a) { return a.machine === m.id; }).map(sessionRow).join("") || '<div class="placeholder">No sessions.</div>') +
+        '</div>';
+    }
+    function controlView() {
+      var m = machine(state.selectedMachine);
+      return '<div class="canvas-card" style="height:365px" data-map="RemoteScreenView"><div class="canvas-art"><div class="window" style="height:180px"><i></i><i></i><i></i></div></div><div class="canvas-meta"><div><strong>' + esc(m ? m.name : "Machine") + '</strong><small>Screen preview · simulated</small></div></div></div>' +
+        '<div class="section-label">Control</div><div class="group"><div class="placeholder">The real view streams a screen image and sends pointer and key input. This canvas is a visual stand-in.</div></div>' +
+        '<div class="detail-actions">' + btn("Click", "mock-action", "action-btn", 'data-label="Click"') + btn("⌨  Type", "mock-action", "action-btn", 'data-label="Type"') + btn("Scroll", "mock-action", "action-btn", 'data-label="Scroll"') + '</div>';
+    }
+    function sessionView() {
+      var a = agent(state.selectedAgent);
+      if (!a) return '<div class="placeholder">Session not found.</div>';
+      var mode = state.sessionMode;
+      return '<div class="segmented" data-map="@State selected segment">' +
+        btn("Chat", "chat-mode", mode === "chat" ? "active" : "") + btn("Terminal", "terminal-mode", mode === "terminal" ? "active" : "") + '</div>' +
+        (mode === "terminal" ? '<div class="terminal-preview" data-map="NativeTerminalScreen"><span class="dim">Connected to ' + esc(machine(a.machine).name) + '</span><br><br><span class="prompt">➜</span>  pwd<br>/workspace/project<br><br><span class="prompt">➜</span>  agent status<br>' + esc(statusLabel(a.status)) + '<br><br><span class="prompt">➜</span>  ▌</div>' : a.messages.map(function (m) { return '<div class="bubble ' + (m.from === "you" ? "you" : "") + '"><small>' + (m.from === "you" ? "You" : esc(a.source)) + '</small>' + esc(m.text) + '</div>'; }).join("") +
+          (a.status === "waiting" ? '<div class="attention"><div class="top">● &nbsp; APPROVAL NEEDED</div><strong>Review before dispatch</strong><p>The agent is asking to replace an image. Open the real session for the full context before you approve.</p><div class="actions">' + btn("Continue in mockup", "answer", "action-btn warn", 'data-id="' + esc(a.id) + '"') + btn("Decline", "decline", "action-btn", 'data-id="' + esc(a.id) + '"') + '</div></div>' : "")) +
+        '<div class="composer"><input id="reply-input" aria-label="Mock reply" placeholder="Write a mock reply…" value="">' + btn("Add mock reply", "review-reply", "action-btn primary") + '</div>';
+    }
+    function monitorView() {
+      return '<div class="hero-text"><span class="eyebrow">MONITOR</span><h3>' + waitingAgents().length + ' need' + (waitingAgents().length === 1 ? "s" : "") + ' you</h3><p>Agent requests and recent events, across your machines.</p></div>' +
+        (waitingAgents().length ? attentionCard() : '<div class="all-clear">No agent is waiting for input.</div>') +
+        '<div class="section-label">Usage</div><div class="group"><div class="placeholder">Provider limits and recent events appear here in the real app.</div></div>';
+    }
+    function appsHome() {
+      return '<div class="hero-text"><span class="eyebrow">BUILT ON YOUR MACHINES</span><h3>Apps your agents made</h3><p>Browse and install native or web apps published from your machines.</p></div>' +
+        '<div class="section-label">Library</div><div class="group">' +
+        btn("▦  Field Notes · native app", "mock-action", "row-btn", 'data-label="Field Notes"') +
+        '<div class="divider"></div>' + btn("◫  Project Board · web app", "mock-action", "row-btn", 'data-label="Project Board"') + '</div>';
+    }
+    function settingsHome() {
+      return '<div class="section-label">Your mesh</div><div class="group">' +
+        btn("＋  Pair a machine", "pair", "row-btn") + '<div class="divider"></div>' +
+        btn("◌  Notifications", "mock-action", "row-btn", 'data-label="Notifications"') + '<div class="divider"></div>' +
+        btn("▣  App lock", "mock-action", "row-btn", 'data-label="App lock"') + '</div>' +
+        '<div class="section-label">About</div><div class="group"><div class="placeholder">Your machines talk directly to your phone. This prototype makes no network requests.</div></div>';
+    }
+    function sheetView() {
+      if (!state.sheet) return "";
+      var pair = state.sheet === "pair";
+      return '<div class="sheet-scrim" data-map=".sheet"><div class="sheet" role="dialog" aria-modal="true" aria-label="' + (pair ? "Pair a machine" : "New session") + '"><div class="grabber"></div><div class="sheet-title"><h3>' + (pair ? "Pair a machine" : "New session") + '</h3>' + btn("Done", "close-sheet", "") + '</div>' +
+        (pair ? '<p style="font-size:12px;color:var(--muted)">On the machine, run mesh pair. Enter its code here. This mockup only adds a sample row.</p><label for="machine-name">Machine name</label><input id="machine-name" placeholder="e.g. Laptop"><label for="pair-code">Pairing code</label><input id="pair-code" placeholder="Eight characters" maxlength="9">' +
+          btn("Add sample machine", "submit-pair", "action-btn primary") :
+          '<p style="font-size:12px;color:var(--muted)">Choose a machine and name the session. Nothing launches outside this page.</p><label for="session-machine">Machine</label><select id="session-machine">' + readyMachines().map(function (m) { return '<option value="' + esc(m.id) + '"' + (m.id === state.selectedMachine ? ' selected' : '') + '>' + esc(m.name) + '</option>'; }).join("") + '</select><label for="session-name">Session name</label><input id="session-name" placeholder="What will this agent do?">' +
+          btn("Create mock session", "submit-session", "action-btn primary")) + '</div></div>';
+    }
+    function phoneHeader() {
+      if (state.page !== "root") {
+        var title = state.page === "machine" ? machine(state.selectedMachine)?.name || "Machine" : state.page === "control" ? "Screen & control" : state.page === "session" ? agent(state.selectedAgent)?.name || "Session" : "Monitor";
+        return '<header class="phone-header compact" data-map="NavigationStack">' + btn("‹ Back", "back", "icon-btn", 'aria-label="Go back"') + '<h2>' + esc(title) + '</h2><div style="width:37px"></div></header>';
+      }
+      var title = { machines: "Machines", terminal: "Terminal", apps: "Apps", settings: "Settings" }[state.tab];
+      return '<header class="phone-header" data-map="NavigationStack"><div class="tools">' +
+        btn("♧" + (waitingAgents().length ? '<span class="badge">' + waitingAgents().length + '</span>' : ""), "monitor", "icon-btn", 'aria-label="Monitor"') +
+        btn("↻", "refresh", "icon-btn", 'aria-label="Refresh mock state"') +
+        (state.tab === "machines" ? btn("+", "pair", "icon-btn", 'aria-label="Pair a machine"') : state.tab === "terminal" ? btn("+", "new-session", "icon-btn", 'aria-label="New session"' + (!readyMachines().length ? ' disabled' : '')) : "") +
+        '</div><h2>' + title + '</h2></header>';
+    }
+    function phoneBody() {
+      if (state.page === "machine") return machineDetail();
+      if (state.page === "control") return controlView();
+      if (state.page === "session") return sessionView();
+      if (state.page === "monitor") return monitorView();
+      return state.tab === "machines" ? { A: homeA, B: homeB, C: homeC }[state.variant]() :
+        state.tab === "terminal" ? terminalHome() : state.tab === "apps" ? appsHome() : settingsHome();
+    }
+    function tabBar() {
+      return '<nav class="tabbar" data-map="TabView" aria-label="Mock app tabs">' +
+        [["machines", "▤", "Machines"], ["terminal", "›_", "Terminal"], ["apps", "▦", "Apps"], ["settings", "⚙", "Settings"]].map(function (item) {
+          return btn('<span class="symbol">' + item[1] + '</span><span>' + item[2] + '</span>', "tab", state.tab === item[0] ? "active" : "", 'data-id="' + item[0] + '" aria-label="' + item[2] + '"');
+        }).join("") + '</nav>';
+    }
+    function renderMapping() {
+      var route = state.page !== "root" ? state.page : state.tab;
+      var info = {
+        machines: { title: "MachinesTab", file: "ContentView.swift", excerpt: "@EnvironmentObject var store: MeshStore\n@State private var screenFor: Machine?\nNavigationStack { List { ... } }", text: "The production list reads snapshots from the shared store. Attention uses sessionsNeedingAttention(from:). A selected screen uses .navigationDestination(item:).", flows: ["Tab selection stays local in ContentView.", "Polling and machine grants remain in MeshStore.", "The HTML variants replace rendering only; they do not alter app state ownership."] },
+        terminal: { title: "TerminalTab", file: "TerminalView.swift", excerpt: "@EnvironmentObject var store: MeshStore\n@State private var creatingOn: Machine?\n.sheet(item: $creatingOn) { ... }", text: "Per-machine sections open SessionPeekScreen. New session is a selected Machine, so the real view uses an item-backed sheet.", flows: ["Session rows use SessionStatusLabel.", "The real screen owns chat and native terminal segments.", "The mock list never starts a real agent."] },
+        machine: { title: "MachineDetailView", file: "ContentView.swift", excerpt: "NavigationLink { RemoteScreenView(machine: machine) }\nNavigationLink { FileBrowserView(machine: machine) }", text: "A machine row pushes detail. Remote control, files, load, and diagnostics stay behind that machine's route.", flows: ["Reachability and auth are distinct visible states.", "The mock controls show the destination, without connecting."] },
+        control: { title: "RemoteScreenView", file: "RemoteScreenView.swift", excerpt: "RemoteScreenView(machine: machine)", text: "The real native screen uses the authenticated client for images and input. This mock canvas is deliberately static.", flows: ["No pointer or key event leaves this page.", "A live thumbnail is a separate action from machine details."] },
+        session: { title: "SessionPeekScreen", file: "TerminalView.swift", excerpt: "SessionPeekScreen(machine: m, session: agent)\nSessionStatusLabel(state: ...)", text: "Chat and Terminal are a local segment on one session. The real reply path reviews text before dispatch.", flows: ["Answer buttons here only mutate mock state.", "A real approval remains explicit and risk-aware."] },
+        monitor: { title: "MonitorView", file: "ContentView.swift", excerpt: "MonitorBell()\nNavigationLink { MonitorView() }", text: "The bell is available from every tab and reflects the shared attention interpretation.", flows: ["Needs-you status agrees with the Machines list.", "Events and usage are shared store snapshots."] },
+        apps: { title: "AppsLibraryView", file: "AppsLibraryView.swift", excerpt: "AppsLibraryView()", text: "The real Apps tab gathers agent-built apps from paired machines. The entries here are sample placeholders.", flows: ["No install request is sent.", "Built apps are a product surface for a later redesign slice."] },
+        settings: { title: "SettingsTab", file: "ContentView.swift", excerpt: "SettingsTab()", text: "Pairing, local preferences, guides, and feedback live under the existing Settings tab.", flows: ["Mock settings controls do not change device preferences.", "Pairing remains an explicit sheet."] }
+      }[route];
+      document.getElementById("mapping").innerHTML = '<strong>' + info.title + '</strong><p>' + info.text + '</p><pre>' + esc(info.excerpt) + '</pre><a href="./' + info.file + '" target="_blank" rel="noopener">View ' + info.file + ' ↗</a>' +
+        '<h3>INTERACTION CONTRACT</h3>' + info.flows.map(function (line) { return '<div class="step">• ' + esc(line) + '</div>'; }).join("") +
+        '<h3>PROTOTYPE LIMIT</h3><small>This is HTML, not a running SwiftUI view. Native layout, Dynamic Type, VoiceOver, Live Activities, and actual screen streaming still need simulator or device review.</small>';
+    }
+    function render() {
+      var phone = document.getElementById("phone");
+      phone.className = "phone " + state.theme + (state.showMapping ? " show-mapping" : "");
+      phone.setAttribute("role", "application");
+      phone.setAttribute("aria-label", "LeSearch AI interactive prototype");
+      phone.innerHTML = '<div class="island"></div><div class="statusbar"><span>9:41</span><span>●●● ◕ ▰</span></div>' +
+        phoneHeader() + '<div class="phone-scroll">' + phoneBody() + '</div>' + tabBar() + '<div class="home-indicator"></div>' + sheetView() +
+        (state.toast ? '<div class="toast" role="status">' + esc(state.toast) + '</div>' : "");
+      document.getElementById("scenarios").innerHTML = Object.keys(scenarioNames).map(function (key) {
+        return btn(esc(scenarioNames[key][0]) + '<span>' + esc(scenarioNames[key][1]) + '</span>', "scenario", state.scenario === key ? "active" : "", 'data-id="' + key + '"');
+      }).join("");
+      document.getElementById("theme-toggle").checked = state.theme === "dark";
+      document.getElementById("map-toggle").checked = state.showMapping;
+      document.getElementById("variant-title").textContent = state.variant + " · " + variants[state.variant].name;
+      document.getElementById("variant-description").textContent = variants[state.variant].description;
+      document.getElementById("variant-switch-label").textContent = state.variant + " · " + variants[state.variant].name;
+      renderMapping();
+      document.getElementById("state").textContent = JSON.stringify({
+        variant: state.variant, scenario: state.scenario, tab: state.tab, page: state.page, sheet: state.sheet,
+        selectedMachine: state.selectedMachine, selectedAgent: state.selectedAgent,
+        machines: state.machines.map(function (m) { return { name: m.name, status: m.status, sessions: m.sessions, screen: m.screen }; }),
+        agents: state.agents.map(function (a) { return { name: a.name, machine: a.machine, status: a.status }; }),
+        lastAction: state.lastAction
+      }, null, 2);
+    }
+    function changeVariant(direction) {
+      var keys = Object.keys(variants);
+      state.variant = keys[(keys.indexOf(state.variant) + direction + keys.length) % keys.length];
+      var url = new URL(location.href);
+      url.searchParams.set("variant", state.variant);
+      history.replaceState({}, "", url);
+      state.lastAction = "Variant changed to " + state.variant;
+      render();
+    }
+    document.addEventListener("click", function (event) {
+      var target = event.target.closest("[data-action]");
+      if (!target) return;
+      var action = target.dataset.action, id = target.dataset.id;
+      state.toast = "";
+      if (action === "previous-variant" || action === "next-variant") { changeVariant(action === "next-variant" ? 1 : -1); return; }
+      if (action === "scenario") { fixture(id); return; }
+      if (action === "tab") { state.tab = id; state.page = "root"; }
+      else if (action === "back") { state.page = state.page === "control" ? "machine" : "root"; }
+      else if (action === "monitor") { state.page = "monitor"; }
+      else if (action === "open-machine") { state.selectedMachine = id; state.page = "machine"; state.tab = "machines"; }
+      else if (action === "select-machine") { state.selectedMachine = id; }
+      else if (action === "control") { state.selectedMachine = id; state.page = "control"; state.tab = "machines"; }
+      else if (action === "open-session") { state.selectedAgent = id; state.page = "session"; state.tab = "terminal"; state.sessionMode = "chat"; }
+      else if (action === "chat-mode" || action === "terminal-mode") { state.sessionMode = action === "chat-mode" ? "chat" : "terminal"; }
+      else if (action === "pair") { state.sheet = "pair"; }
+      else if (action === "new-session") { if (readyMachines().length) { state.sheet = "session"; if (id) state.selectedMachine = id; } }
+      else if (action === "close-sheet") { state.sheet = null; }
+      else if (action === "answer" || action === "decline") {
+        var current = agent(id);
+        if (current) { current.status = action === "answer" ? "working" : "idle"; current.messages.push({ from: "you", text: action === "answer" ? "Continue (mock response)" : "Decline (mock response)" }); state.toast = "Mock response recorded. Nothing was sent."; }
+      }
+      else if (action === "submit-pair") {
+        var name = document.getElementById("machine-name").value.trim() || "New machine";
+        var mid = "sample-" + Date.now();
+        state.machines.push({ id: mid, name: name, status: "ready", sessions: 0, screen: true });
+        state.sheet = null; state.tab = "machines"; state.page = "root"; state.toast = "Sample machine added in memory.";
+      }
+      else if (action === "submit-session") {
+        var sid = "session-" + Date.now(), selected = document.getElementById("session-machine").value;
+        var title = document.getElementById("session-name").value.trim() || "New session";
+        if (machine(selected)?.status === "ready") {
+          state.agents.push({ id: sid, machine: selected, name: title, source: "Codex", status: "idle", messages: [{ from: "agent", text: "New mock session ready." }] });
+          machine(selected).sessions += 1; state.sheet = null; state.tab = "terminal"; state.page = "root"; state.toast = "Mock session created in memory.";
+        }
+      }
+      else if (action === "review-reply") {
+        var input = document.getElementById("reply-input");
+        var value = input && input.value.trim();
+        if (value) { agent(state.selectedAgent).messages.push({ from: "you", text: value + " (mock reply)" }); state.toast = "Reply kept inside this prototype."; }
+        else state.toast = "Write a reply first.";
+      }
+      else if (action === "refresh") { state.toast = "Mock refresh · no network request"; }
+      else if (action === "mock-action") { state.toast = target.dataset.label + " is a destination stub in this prototype."; }
+      state.lastAction = action;
+      render();
+    });
+    document.getElementById("theme-toggle").addEventListener("change", function (event) { state.theme = event.target.checked ? "dark" : "light"; state.lastAction = "Appearance changed"; render(); });
+    document.getElementById("map-toggle").addEventListener("change", function (event) { state.showMapping = event.target.checked; state.lastAction = "SwiftUI boundaries toggled"; render(); });
+    document.addEventListener("keydown", function (event) {
+      var tag = document.activeElement && document.activeElement.tagName;
+      if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && !["INPUT", "TEXTAREA", "SELECT"].includes(tag)) { event.preventDefault(); changeVariant(event.key === "ArrowRight" ? 1 : -1); }
+      if (event.key === "Escape" && state.sheet) { state.sheet = null; state.lastAction = "Sheet dismissed"; render(); }
+    });
+    window.addEventListener("popstate", function () { var key = new URL(location.href).searchParams.get("variant"); if (variants[key]) { state.variant = key; render(); } });
+    function selfTest() {
+      var originalVariant = state.variant;
+      function assert(ok, message) { if (!ok) throw new Error("Prototype check failed: " + message); }
+      fixture("attention");
+      assert(waitingAgents().length === 1 && readyMachines().length === 3, "attention fixture");
+      ["A", "B", "C"].forEach(function (variant) { state.variant = variant; render(); assert(document.querySelector({ A: ".hero-text", B: ".feed-head", C: ".canvas-card" }[variant]), variant + " layout"); });
+      fixture("empty"); state.tab = "terminal"; render();
+      assert(document.querySelector('.phone-header [data-action="new-session"]').disabled, "empty session guard");
+      state.variant = originalVariant; fixture("attention");
+      return "Prototype self-check passed";
+    }
+    fixture("attention");
+    if (new URL(location.href).searchParams.has("selftest")) { state.toast = selfTest(); render(); }
+  </script>
+</body>
+</html>

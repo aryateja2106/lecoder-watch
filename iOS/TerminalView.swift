@@ -17,6 +17,11 @@ struct TerminalTab: View {
         return terminalActiveFirst(snaps)
     }
 
+    private var sessionCount: Int {
+        machineRows.filter { $0.reachable && !$0.isStale && $0.authError == nil }
+            .reduce(0) { $0 + $1.agents.count }
+    }
+
     private func machine(for host: String) -> Machine? {
         store.machines.first(where: { $0.host == host })
     }
@@ -30,6 +35,24 @@ struct TerminalTab: View {
                         systemImage: "terminal",
                         description: Text("Add a machine in Settings.")
                     )
+                } else {
+                    Section {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("AGENT WORK")
+                                .font(.caption2.weight(.semibold))
+                                .tracking(1.5)
+                                .foregroundStyle(.secondary)
+                            Text("\(sessionCount) session\(sessionCount == 1 ? "" : "s")")
+                                .font(.largeTitle.weight(.semibold))
+                                .contentTransition(.numericText())
+                            Text("Read the work, answer an agent, or open a live terminal.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 14)
+                        .accessibilityElement(children: .combine)
+                        .listRowBackground(Color.clear)
+                    }
                 }
                 ForEach(machineRows) { snap in
                     if let m = machine(for: snap.host) {
@@ -59,26 +82,19 @@ struct TerminalTab: View {
                                 NavigationLink {
                                     SessionPeekScreen(machine: m, session: agent)
                                 } label: {
-                                    HStack {
-                                        Image(systemName: "terminal.fill")
-                                        VStack(alignment: .leading) {
-                                            Text(agent.displayName)
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "terminal")
+                                            .font(.body.weight(.medium))
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 30)
+                                        VStack(alignment: .leading, spacing: 5) {
+                                            Text(agent.displayName).font(.headline)
                                             Text([agent.isMuxGuest ? agent.kindLabel : nil, agent.agentType ?? "shell", agent.memLabel].compactMap { $0 }.joined(separator: " · "))
                                                 .font(.caption).foregroundStyle(.secondary)
-                                        }
-                                        Spacer()
-                                        if agent.status == "waiting" {
-                                            Label("needs you", systemImage: "hand.raised.fill")
-                                                .font(.caption)
-                                                .foregroundStyle(.orange)
-                                        } else if agent.status == "error" {
-                                            Image(systemName: "exclamationmark.triangle.fill")
-                                                .foregroundStyle(.red)
-                                        } else if agent.attached {
-                                            Image(systemName: "dot.radiowaves.left.and.right")
-                                                .foregroundStyle(.green)
+                                            SessionStatusLabel(state: agent.displayState().sessionState)
                                         }
                                     }
+                                    .padding(.vertical, 6)
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     if !agent.isMuxGuest {
@@ -103,7 +119,7 @@ struct TerminalTab: View {
                         } header: {
                             HStack {
                                 Circle().fill(snap.authError != nil ? .orange : (snap.reachable ? .green : .secondary)).frame(width: 7, height: 7)
-                                Text(snap.host)
+                                Text(snap.host).font(.subheadline.weight(.semibold))
                                 Spacer()
                                 // meshd 0.6+ ("apps"): an agent on this machine can
                                 // publish a PWA or build a native app — this is where

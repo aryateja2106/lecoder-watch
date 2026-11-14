@@ -278,6 +278,15 @@ private struct MachinesTab: View {
         return activeFirst(machines)
     }
 
+    private var readyCount: Int {
+        rows.filter { $0.reachable && !$0.isStale && $0.authError == nil }.count
+    }
+
+    private var sessionCount: Int {
+        rows.filter { $0.reachable && !$0.isStale && $0.authError == nil }
+            .reduce(0) { $0 + $1.agents.count }
+    }
+
     /// Before the first poll finishes there is nothing to say about any machine, and
     /// the list's fallback rows said "offline" — a claim about a fleet the app had not
     /// contacted once. This is the honest version of that moment, and it lasts until
@@ -348,37 +357,63 @@ private struct MachinesTab: View {
                     }
                 }
                 Section {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("FLEET STATUS")
+                            .font(.caption2.weight(.semibold))
+                            .tracking(1.5)
+                            .foregroundStyle(.secondary)
+                        Text("\(readyCount) of \(rows.count) ready")
+                            .font(.largeTitle.weight(.semibold))
+                            .contentTransition(.numericText())
+                        Text("\(sessionCount) session\(sessionCount == 1 ? "" : "s") across your machines")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 14)
+                    .accessibilityElement(children: .combine)
+                    .listRowBackground(Color.clear)
+                }
+                Section("Paired machines") {
                     ForEach(rows) { m in
                         NavigationLink {
                             MachineDetailView(host: m.host)
                         } label: {
-                            HStack(spacing: 10) {
+                            HStack(spacing: 12) {
                                 Circle()
-                                    .fill(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
-                                    .frame(width: 9, height: 9)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(machineShortName(m.host)).font(.headline)
+                                    .fill(m.authError != nil || m.isStale ? .orange : (m.reachable ? .green : .secondary))
+                                    .frame(width: 8, height: 8)
+                                    .accessibilityHidden(true)
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(machineShortName(m.host))
+                                        .font(.headline)
+                                        .lineLimit(2)
+                                    Text(m.authError != nil ? "Pair again" : m.isStale ? "Reconnecting" : m.reachable ? "Ready" : "Offline")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(m.authError != nil || m.isStale ? .orange : (m.reachable ? .green : .secondary))
                                     Text(machineSummary(m))
-                                        .font(.caption2)
+                                        .font(.caption)
                                         .foregroundStyle(.secondary)
+                                        .lineLimit(2)
                                 }
-                                Spacer()
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    Text(m.authError != nil ? "token"
-                                         : m.isStale ? m.statusLabel
-                                         : (m.reachable ? "\(m.agents.count) sess" : "offline"))
-                                        .font(.caption.monospacedDigit())
-                                        .foregroundStyle(m.authError != nil ? .orange : (m.reachable ? .green : .secondary))
-                                    // What is on that machine's screen right now; tap it to control.
-                                    if m.reachable, m.capabilities?.contains("screenPeek") == true,
-                                       let machine = store.machines.first(where: { $0.host == m.host }) {
-                                        Button { screenFor = machine } label: {
+                                Spacer(minLength: 0)
+                                // The live frame is a separate action from opening machine details.
+                                if m.reachable, !m.isStale, m.authError == nil,
+                                   m.capabilities?.contains("screenPeek") == true,
+                                   let machine = store.machines.first(where: { $0.host == m.host }) {
+                                    Button { screenFor = machine } label: {
+                                        VStack(spacing: 4) {
                                             MachineThumbnail(machine: machine)
+                                            Text("CONTROL")
+                                                .font(.caption2.weight(.semibold))
+                                                .tracking(0.7)
+                                                .foregroundStyle(.secondary)
                                         }
-                                        .buttonStyle(.plain)
                                     }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Control screen of \(m.host)")
                                 }
                             }
+                            .padding(.vertical, 8)
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
@@ -1055,17 +1090,12 @@ private func machineShortName(_ host: String) -> String {
 }
 
 private func machineSummary(_ machine: MachineSnapshot) -> String {
-    guard machine.reachable else { return machine.error ?? "unreachable" }
-    let version = machine.meshdVersion.map { "meshd \($0)" } ?? "meshd active"
-    if machine.authError != nil { return "\(version) · token rejected — pair again" }
-    let bridge = machine.bridgeReachable == true ? "bridge" : "no bridge"
-    // An out-of-date daemon earns the last slot ahead of "hooks". The row used to read
-    // "meshd 0.4.1 · no bridge · hooks" on a daemon missing seven capabilities, which
-    // is a sentence that says everything is fine while nothing is.
-    let gaps = DaemonCapabilities.gaps(in: machine.capabilities).count
-    if gaps > 0 { return "\(version) · \(bridge) · update available" }
-    let hooks = hasCap(machine, "events") == true ? "hooks" : "needs update"
-    return "\(version) · \(bridge) · \(hooks)"
+    guard machine.reachable else { return "Open for connection details" }
+    if machine.authError != nil { return "Token rejected — pair this machine again" }
+    if machine.isStale { return machine.statusLabel }
+    if !DaemonCapabilities.gaps(in: machine.capabilities).isEmpty { return "Update needed for some controls" }
+    let count = machine.agents.count
+    return count == 0 ? "No sessions" : "\(count) session\(count == 1 ? "" : "s")"
 }
 
 private func hasCap(_ machine: MachineSnapshot, _ cap: String) -> Bool? {
